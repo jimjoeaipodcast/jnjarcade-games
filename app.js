@@ -43,6 +43,27 @@ function showToast(title, sub) {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 3000);
 }
 
+// ── Real brand SVG logos ──────────────────────────────────────────────────
+
+const SOCIAL_LOGOS = {
+  YouTube: {
+    gradient: ['#FF0000','#CC0000'],
+    svg: `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>`,
+  },
+  TikTok: {
+    gradient: ['#010101','#1a1a2e'],
+    svg: `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M19.6 3a5.4 5.4 0 0 1-3.2-1.8A5.4 5.4 0 0 1 15 0h-3.8v16.3a2.6 2.6 0 0 1-2.6 2.2 2.6 2.6 0 0 1-2.6-2.6 2.6 2.6 0 0 1 2.6-2.6c.3 0 .5 0 .8.1V9.5a6.4 6.4 0 0 0-.8 0A6.4 6.4 0 0 0 2 15.9 6.4 6.4 0 0 0 8.6 22.3a6.4 6.4 0 0 0 6.4-6.4V8.1a9 9 0 0 0 5.3 1.7V6a5.4 5.4 0 0 1-.7 0 5.4 5.4 0 0 1-3.3-1v-2h3.3z"/></svg>`,
+  },
+  Patreon: {
+    gradient: ['#FF424D','#E02030'],
+    svg: `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M14.8 1a7.2 7.2 0 1 0 0 14.4A7.2 7.2 0 0 0 14.8 1zM1 23h3.8V1H1z"/></svg>`,
+  },
+  Shop: {
+    gradient: ['#FF9F0A','#E07000'],
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  },
+};
+
 // ── Icon builders ─────────────────────────────────────────────────────────
 
 function buildIconFace(emoji, gradient, extra = '') {
@@ -55,19 +76,33 @@ function buildIconFace(emoji, gradient, extra = '') {
   emojiEl.textContent = emoji;
   face.appendChild(emojiEl);
 
-  if (extra) {
-    face.insertAdjacentHTML('beforeend', extra);
-  }
+  if (extra) face.insertAdjacentHTML('beforeend', extra);
   return face;
 }
 
 function buildSocialIcon(app) {
   const wrap = document.createElement('div');
   wrap.className = 'icon-wrap unlocked social-icon';
-  wrap.addEventListener('click', () => {
-    window.open(app.url, '_blank', 'noopener');
-  });
-  wrap.appendChild(buildIconFace(app.emoji, app.gradient));
+  wrap.addEventListener('click', () => window.open(app.url, '_blank', 'noopener'));
+
+  const logo = SOCIAL_LOGOS[app.label];
+  const grad = logo ? logo.gradient : app.gradient;
+  const face = document.createElement('div');
+  face.className = 'icon-face';
+  face.style.background = `linear-gradient(145deg, ${grad[0]}, ${grad[1]})`;
+
+  if (logo) {
+    const svgWrap = document.createElement('div');
+    svgWrap.className = 'logo-svg';
+    svgWrap.innerHTML = logo.svg;
+    face.appendChild(svgWrap);
+  } else {
+    const em = document.createElement('span');
+    em.style.cssText = 'position:relative;z-index:1;line-height:1;display:block;';
+    em.textContent = app.emoji;
+    face.appendChild(em);
+  }
+  wrap.appendChild(face);
   return wrap;
 }
 

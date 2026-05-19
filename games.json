@@ -539,6 +539,16 @@
       "week": 50,
       "gradient": ["#FF375F", "#FF2D55"],
       "episode": "Episode 50"
+    },
+    {
+      "id": "mystery-app",
+      "name": "???",
+      "emoji": "❓",
+      "url": "/games/mystery-app.html",
+      "releaseDate": "2027-12-31",
+      "week": 52,
+      "gradient": ["#1c1c1e", "#0a0a0c"],
+      "episode": "???"
     }
   ]
 }
