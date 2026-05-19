@@ -40,3 +40,4 @@ Every game page should:
 - Store high score in `localStorage`
 
 See `games/snake.html` as the reference implementation.
+<!-- Trigger rebuild -->
