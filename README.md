@@ -42,3 +42,4 @@ Every game page should:
 See `games/snake.html` as the reference implementation.
 <!-- Trigger rebuild -->
 <!-- Trigger rebuild -->
+Webhook test
