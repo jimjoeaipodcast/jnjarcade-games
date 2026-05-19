@@ -88,6 +88,7 @@ function buildGameIcon(game) {
       wrap.classList.add('just-unlocked');
     }
     wrap.addEventListener('click', () => {
+      incrementPlayCount(game.id);
       navigate(game.url);
     });
   } else {
@@ -137,42 +138,46 @@ function navigate(url) {
   }, 200);
 }
 
+// ── Play count (localStorage) ─────────────────────────────────────────────
+
+function getPlayCount(gameId) {
+  return parseInt(localStorage.getItem(`jnj_plays_${gameId}`) || '0', 10);
+}
+
+function incrementPlayCount(gameId) {
+  localStorage.setItem(`jnj_plays_${gameId}`, getPlayCount(gameId) + 1);
+}
+
 // ── Build grid ────────────────────────────────────────────────────────────
 
 function buildGrid(data) {
   const grid = document.getElementById('appGrid');
 
-  // Section label for social
-  const socialLabel = document.createElement('div');
-  socialLabel.className = 'social-section-label';
-  socialLabel.textContent = 'Follow Us';
-  grid.appendChild(socialLabel);
-
-  // Social row
+  // Social row (no label, no divider)
   const socialRow = document.createElement('div');
   socialRow.className = 'icon-row';
   data.social.forEach(app => socialRow.appendChild(buildSocialIcon(app)));
   grid.appendChild(socialRow);
 
-  // Divider
-  const divider = document.createElement('div');
-  divider.className = 'section-divider';
-  grid.appendChild(divider);
-
   // Games label
   const gamesLabel = document.createElement('div');
   gamesLabel.className = 'social-section-label';
-
   const unlockCount = data.games.filter(g => isUnlocked(g.releaseDate)).length;
   gamesLabel.textContent = `Games  ·  ${unlockCount} of ${data.games.length} unlocked`;
   grid.appendChild(gamesLabel);
 
+  // Sort by play count desc, then by week order as tiebreaker
+  const sorted = [...data.games].sort((a, b) => {
+    const diff = getPlayCount(b.id) - getPlayCount(a.id);
+    return diff !== 0 ? diff : a.week - b.week;
+  });
+
   // Game rows (4 per row)
   const perRow = 4;
-  for (let i = 0; i < data.games.length; i += perRow) {
+  for (let i = 0; i < sorted.length; i += perRow) {
     const row = document.createElement('div');
     row.className = 'icon-row';
-    data.games.slice(i, i + perRow).forEach(game => row.appendChild(buildGameIcon(game)));
+    sorted.slice(i, i + perRow).forEach(game => row.appendChild(buildGameIcon(game)));
     grid.appendChild(row);
   }
 }
@@ -191,12 +196,8 @@ function startClock() {
     el.textContent = `${h}:${m}`;
   }
 
-  // On mobile use real time; on desktop keep aesthetic 9:41
-  const isMobile = window.innerWidth <= 430;
-  if (isMobile) {
-    update();
-    setInterval(update, 30000);
-  }
+  update();
+  setInterval(update, 60000);
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────
