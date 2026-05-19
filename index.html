@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0015">
+  <title>JnJ Arcade</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-bg">
+
+    <div class="phone-wrapper">
+      <div class="phone-body">
+
+        <!-- Side buttons (decorative) -->
+        <div class="btn-vol-up"></div>
+        <div class="btn-vol-down"></div>
+        <div class="btn-power"></div>
+
+        <!-- Dynamic Island -->
+        <div class="dynamic-island">
+          <div class="di-camera"></div>
+        </div>
+
+        <!-- Screen -->
+        <div class="phone-screen">
+
+          <!-- Status Bar -->
+          <div class="status-bar">
+            <span class="status-time" id="statusTime">9:41</span>
+            <div class="status-right">
+              <div class="signal-bars">
+                <span class="bar b1"></span>
+                <span class="bar b2"></span>
+                <span class="bar b3"></span>
+                <span class="bar b4"></span>
+              </div>
+              <svg class="wifi-svg" viewBox="0 0 24 16" fill="white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 13.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
+                <path d="M12 9a7.5 7.5 0 0 1 5.3 2.2l1.4-1.4A9.5 9.5 0 0 0 12 7a9.5 9.5 0 0 0-6.7 2.8l1.4 1.4A7.5 7.5 0 0 1 12 9z" opacity=".6"/>
+                <path d="M12 4a12.5 12.5 0 0 1 8.8 3.6l1.4-1.4A14.5 14.5 0 0 0 12 2 14.5 14.5 0 0 0 1.8 6.2l1.4 1.4A12.5 12.5 0 0 1 12 4z" opacity=".3"/>
+              </svg>
+              <div class="battery-wrap">
+                <div class="battery-body">
+                  <div class="battery-fill"></div>
+                </div>
+                <div class="battery-nub"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- App Grid -->
+          <div class="screen-scroll">
+            <div class="app-grid" id="appGrid">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+
+          <!-- Home Indicator -->
+          <div class="home-indicator"></div>
+
+        </div><!-- /phone-screen -->
+      </div><!-- /phone-body -->
+    </div><!-- /phone-wrapper -->
+
+  </div><!-- /page-bg -->
+
+  <!-- Locked toast notification -->
+  <div class="toast" id="toast">
+    <span class="toast-lock">🔒</span>
+    <div class="toast-text">
+      <strong id="toastTitle"></strong>
+      <span id="toastSub"></span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
