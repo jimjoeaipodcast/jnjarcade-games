@@ -67,14 +67,7 @@ function buildSocialIcon(app) {
   wrap.addEventListener('click', () => {
     window.open(app.url, '_blank', 'noopener');
   });
-
   wrap.appendChild(buildIconFace(app.emoji, app.gradient));
-
-  const label = document.createElement('div');
-  label.className = 'icon-label';
-  label.textContent = app.label;
-  wrap.appendChild(label);
-
   return wrap;
 }
 
@@ -120,11 +113,6 @@ function buildGameIcon(game) {
   if (extraHtml) face.insertAdjacentHTML('beforeend', extraHtml);
   wrap.appendChild(face);
 
-  const label = document.createElement('div');
-  label.className = 'icon-label';
-  label.textContent = game.name;
-  wrap.appendChild(label);
-
   return wrap;
 }
 
@@ -158,13 +146,6 @@ function buildGrid(data) {
   socialRow.className = 'icon-row';
   data.social.forEach(app => socialRow.appendChild(buildSocialIcon(app)));
   grid.appendChild(socialRow);
-
-  // Games label
-  const gamesLabel = document.createElement('div');
-  gamesLabel.className = 'social-section-label';
-  const unlockCount = data.games.filter(g => isUnlocked(g.releaseDate)).length;
-  gamesLabel.textContent = `Games  ·  ${unlockCount} of ${data.games.length} unlocked`;
-  grid.appendChild(gamesLabel);
 
   // Sort by play count desc, then by week order as tiebreaker
   const sorted = [...data.games].sort((a, b) => {
