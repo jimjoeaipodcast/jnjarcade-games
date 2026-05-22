@@ -2,552 +2,720 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "🛍️",
+      "emoji": "\ud83d\udecd\ufe0f",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "label": "Shop"
     },
     {
       "name": "YouTube",
-      "emoji": "▶",
+      "emoji": "\u25b6",
       "url": "https://www.youtube.com/@JnJAiStudio",
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "label": "YouTube"
     },
     {
       "name": "Patreon",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
-      "gradient": ["#FF6E4A", "#E0420B"],
+      "gradient": [
+        "#FF6E4A",
+        "#E0420B"
+      ],
       "label": "Patreon"
     },
     {
       "name": "TikTok",
-      "emoji": "♪",
+      "emoji": "\u266a",
       "url": "https://www.tiktok.com/@jimmy.and.joe.the.ai.pod",
-      "gradient": ["#111111", "#333333"],
+      "gradient": [
+        "#111111",
+        "#333333"
+      ],
       "label": "TikTok"
     }
   ],
   "games": [
     {
       "id": "snake",
-      "name": "Snake.io",
-      "emoji": "🐍",
+      "name": "Snake Blaster",
+      "emoji": "\ud83d\udc0d",
       "url": "/games/snake.html",
       "releaseDate": "2026-05-19",
       "week": 1,
-      "gradient": ["#30D158", "#00A884"],
+      "gradient": [
+        "#00ff88",
+        "#ff3355"
+      ],
       "episode": "Episode 1"
     },
     {
       "id": "doom-mario",
       "name": "Doom Mari-OH!",
-      "emoji": "🔫",
+      "emoji": "\ud83d\udd2b",
       "url": "/games/doom-mario.html",
       "releaseDate": "2026-05-19",
       "week": 1,
-      "gradient": ["#FF453A", "#8B0000"],
+      "gradient": [
+        "#FF453A",
+        "#8B0000"
+      ],
       "episode": "Bonus"
     },
     {
       "id": "prompt-panic",
       "name": "Prompt Panic",
-      "emoji": "💬",
+      "emoji": "\ud83d\udcac",
       "url": "/games/prompt-panic.html",
       "releaseDate": "2026-05-22",
       "week": 2,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 2"
     },
     {
       "id": "token-rush",
       "name": "Token Rush",
-      "emoji": "⚡",
+      "emoji": "\u26a1",
       "url": "/games/token-rush.html",
       "releaseDate": "2026-05-29",
       "week": 3,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 3"
     },
     {
       "id": "neural-ninja",
       "name": "Neural Ninja",
-      "emoji": "🥷",
+      "emoji": "\ud83e\udd77",
       "url": "/games/neural-ninja.html",
       "releaseDate": "2026-06-05",
       "week": 4,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 4"
     },
     {
       "id": "vector-void",
       "name": "Vector Void",
-      "emoji": "🌌",
+      "emoji": "\ud83c\udf0c",
       "url": "/games/vector-void.html",
       "releaseDate": "2026-06-12",
       "week": 5,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 5"
     },
     {
       "id": "cipher-hunt",
       "name": "Cipher Hunt",
-      "emoji": "🔐",
+      "emoji": "\ud83d\udd10",
       "url": "/games/cipher-hunt.html",
       "releaseDate": "2026-06-19",
       "week": 6,
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "episode": "Episode 6"
     },
     {
       "id": "gradient-drop",
       "name": "Gradient Drop",
-      "emoji": "💫",
+      "emoji": "\ud83d\udcab",
       "url": "/games/gradient-drop.html",
       "releaseDate": "2026-06-26",
       "week": 7,
-      "gradient": ["#FF375F", "#FF2D55"],
+      "gradient": [
+        "#FF375F",
+        "#FF2D55"
+      ],
       "episode": "Episode 7"
     },
     {
       "id": "matrix-match",
       "name": "Matrix Match",
-      "emoji": "🌀",
+      "emoji": "\ud83c\udf00",
       "url": "/games/matrix-match.html",
       "releaseDate": "2026-07-03",
       "week": 8,
-      "gradient": ["#30D158", "#248A3D"],
+      "gradient": [
+        "#30D158",
+        "#248A3D"
+      ],
       "episode": "Episode 8"
     },
     {
       "id": "attention-span",
       "name": "Attention Span",
-      "emoji": "🎯",
+      "emoji": "\ud83c\udfaf",
       "url": "/games/attention-span.html",
       "releaseDate": "2026-07-10",
       "week": 9,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 9"
     },
     {
       "id": "wrong-counter",
       "name": "Wrong Counter",
-      "emoji": "❌",
+      "emoji": "\u274c",
       "url": "/games/wrong-counter.html",
       "releaseDate": "2026-07-17",
       "week": 10,
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "episode": "Episode 10"
     },
     {
       "id": "hallucination",
       "name": "Hallucination",
-      "emoji": "👻",
+      "emoji": "\ud83d\udc7b",
       "url": "/games/hallucination.html",
       "releaseDate": "2026-07-24",
       "week": 11,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 11"
     },
     {
       "id": "context-win",
       "name": "Context Win",
-      "emoji": "🪟",
+      "emoji": "\ud83e\ude9f",
       "url": "/games/context-win.html",
       "releaseDate": "2026-07-31",
       "week": 12,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 12"
     },
     {
       "id": "embed-race",
       "name": "Embed Race",
-      "emoji": "🏎️",
+      "emoji": "\ud83c\udfce\ufe0f",
       "url": "/games/embed-race.html",
       "releaseDate": "2026-08-07",
       "week": 13,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 13"
     },
     {
       "id": "param-panic",
       "name": "Param Panic",
-      "emoji": "📊",
+      "emoji": "\ud83d\udcca",
       "url": "/games/param-panic.html",
       "releaseDate": "2026-08-14",
       "week": 14,
-      "gradient": ["#30D158", "#00A884"],
+      "gradient": [
+        "#30D158",
+        "#00A884"
+      ],
       "episode": "Episode 14"
     },
     {
       "id": "overfit-saga",
       "name": "Overfit Saga",
-      "emoji": "🎣",
+      "emoji": "\ud83c\udfa3",
       "url": "/games/overfit-saga.html",
       "releaseDate": "2026-08-21",
       "week": 15,
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "episode": "Episode 15"
     },
     {
       "id": "big-model",
       "name": "The Big Model",
-      "emoji": "🏆",
+      "emoji": "\ud83c\udfc6",
       "url": "/games/big-model.html",
       "releaseDate": "2026-08-28",
       "week": 16,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 16"
     },
     {
       "id": "tensor-tetris",
       "name": "Tensor Tetris",
-      "emoji": "🧮",
+      "emoji": "\ud83e\uddee",
       "url": "/games/tensor-tetris.html",
       "releaseDate": "2026-09-04",
       "week": 17,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 17"
     },
     {
       "id": "loss-labyrinth",
       "name": "Loss Labyrinth",
-      "emoji": "🌀",
+      "emoji": "\ud83c\udf00",
       "url": "/games/loss-labyrinth.html",
       "releaseDate": "2026-09-11",
       "week": 18,
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "episode": "Episode 18"
     },
     {
       "id": "fine-tune-frenzy",
       "name": "Fine-Tune Frenzy",
-      "emoji": "🎛️",
+      "emoji": "\ud83c\udf9b\ufe0f",
       "url": "/games/fine-tune-frenzy.html",
       "releaseDate": "2026-09-18",
       "week": 19,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 19"
     },
     {
       "id": "batch-blaster",
       "name": "Batch Blaster",
-      "emoji": "💥",
+      "emoji": "\ud83d\udca5",
       "url": "/games/batch-blaster.html",
       "releaseDate": "2026-09-25",
       "week": 20,
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "episode": "Episode 20"
     },
     {
       "id": "epoch-runner",
       "name": "Epoch Runner",
-      "emoji": "🏃",
+      "emoji": "\ud83c\udfc3",
       "url": "/games/epoch-runner.html",
       "releaseDate": "2026-10-02",
       "week": 21,
-      "gradient": ["#30D158", "#248A3D"],
+      "gradient": [
+        "#30D158",
+        "#248A3D"
+      ],
       "episode": "Episode 21"
     },
     {
       "id": "dropout-dash",
       "name": "Dropout Dash",
-      "emoji": "💨",
+      "emoji": "\ud83d\udca8",
       "url": "/games/dropout-dash.html",
       "releaseDate": "2026-10-09",
       "week": 22,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 22"
     },
     {
       "id": "regularize-it",
       "name": "Regularize It!",
-      "emoji": "⚖️",
+      "emoji": "\u2696\ufe0f",
       "url": "/games/regularize-it.html",
       "releaseDate": "2026-10-16",
       "week": 23,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 23"
     },
     {
       "id": "inference-wars",
       "name": "Inference Wars",
-      "emoji": "⚔️",
+      "emoji": "\u2694\ufe0f",
       "url": "/games/inference-wars.html",
       "releaseDate": "2026-10-23",
       "week": 24,
-      "gradient": ["#FF375F", "#FF2D55"],
+      "gradient": [
+        "#FF375F",
+        "#FF2D55"
+      ],
       "episode": "Episode 24"
     },
     {
       "id": "latent-leap",
       "name": "Latent Leap",
-      "emoji": "🌊",
+      "emoji": "\ud83c\udf0a",
       "url": "/games/latent-leap.html",
       "releaseDate": "2026-10-30",
       "week": 25,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 25"
     },
     {
       "id": "weight-watcher",
       "name": "Weight Watcher",
-      "emoji": "🏋️",
+      "emoji": "\ud83c\udfcb\ufe0f",
       "url": "/games/weight-watcher.html",
       "releaseDate": "2026-11-06",
       "week": 26,
-      "gradient": ["#30D158", "#00A884"],
+      "gradient": [
+        "#30D158",
+        "#00A884"
+      ],
       "episode": "Episode 26"
     },
     {
       "id": "activation-blast",
       "name": "Activation Blast",
-      "emoji": "⚡",
+      "emoji": "\u26a1",
       "url": "/games/activation-blast.html",
       "releaseDate": "2026-11-13",
       "week": 27,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 27"
     },
     {
       "id": "layer-climber",
       "name": "Layer Climber",
-      "emoji": "🧗",
+      "emoji": "\ud83e\uddd7",
       "url": "/games/layer-climber.html",
       "releaseDate": "2026-11-20",
       "week": 28,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 28"
     },
     {
       "id": "node-navigator",
       "name": "Node Navigator",
-      "emoji": "🗺️",
+      "emoji": "\ud83d\uddfa\ufe0f",
       "url": "/games/node-navigator.html",
       "releaseDate": "2026-11-27",
       "week": 29,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 29"
     },
     {
       "id": "backprop-blitz",
       "name": "Backprop Blitz",
-      "emoji": "🔁",
+      "emoji": "\ud83d\udd01",
       "url": "/games/backprop-blitz.html",
       "releaseDate": "2026-12-04",
       "week": 30,
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "episode": "Episode 30"
     },
     {
       "id": "chain-of-thought",
       "name": "Chain-of-Thought",
-      "emoji": "🧠",
+      "emoji": "\ud83e\udde0",
       "url": "/games/chain-of-thought.html",
       "releaseDate": "2026-12-11",
       "week": 31,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 31"
     },
     {
       "id": "turing-test",
       "name": "Turing Test",
-      "emoji": "🤖",
+      "emoji": "\ud83e\udd16",
       "url": "/games/turing-test.html",
       "releaseDate": "2026-12-18",
       "week": 32,
-      "gradient": ["#30D158", "#248A3D"],
+      "gradient": [
+        "#30D158",
+        "#248A3D"
+      ],
       "episode": "Episode 32"
     },
     {
       "id": "bias-buster",
       "name": "Bias Buster",
-      "emoji": "🎅",
+      "emoji": "\ud83c\udf85",
       "url": "/games/bias-buster.html",
       "releaseDate": "2026-12-25",
       "week": 33,
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "episode": "Episode 33"
     },
     {
       "id": "dataset-derby",
       "name": "Dataset Derby",
-      "emoji": "🐎",
+      "emoji": "\ud83d\udc0e",
       "url": "/games/dataset-derby.html",
       "releaseDate": "2027-01-01",
       "week": 34,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 34"
     },
     {
       "id": "model-madness",
       "name": "Model Madness",
-      "emoji": "🎲",
+      "emoji": "\ud83c\udfb2",
       "url": "/games/model-madness.html",
       "releaseDate": "2027-01-08",
       "week": 35,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 35"
     },
     {
       "id": "perceptron-pop",
       "name": "Perceptron Pop",
-      "emoji": "🫧",
+      "emoji": "\ud83e\udee7",
       "url": "/games/perceptron-pop.html",
       "releaseDate": "2027-01-15",
       "week": 36,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 36"
     },
     {
       "id": "sigmoid-surge",
       "name": "Sigmoid Surge",
-      "emoji": "📈",
+      "emoji": "\ud83d\udcc8",
       "url": "/games/sigmoid-surge.html",
       "releaseDate": "2027-01-22",
       "week": 37,
-      "gradient": ["#30D158", "#00A884"],
+      "gradient": [
+        "#30D158",
+        "#00A884"
+      ],
       "episode": "Episode 37"
     },
     {
       "id": "softmax-sprint",
       "name": "Softmax Sprint",
-      "emoji": "🏁",
+      "emoji": "\ud83c\udfc1",
       "url": "/games/softmax-sprint.html",
       "releaseDate": "2027-01-29",
       "week": 38,
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "episode": "Episode 38"
     },
     {
       "id": "token-tower",
       "name": "Token Tower",
-      "emoji": "🗼",
+      "emoji": "\ud83d\uddfc",
       "url": "/games/token-tower.html",
       "releaseDate": "2027-02-05",
       "week": 39,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 39"
     },
     {
       "id": "transformer-tilt",
       "name": "Transformer Tilt",
-      "emoji": "🤸",
+      "emoji": "\ud83e\udd38",
       "url": "/games/transformer-tilt.html",
       "releaseDate": "2027-02-12",
       "week": 40,
-      "gradient": ["#FF375F", "#FF2D55"],
+      "gradient": [
+        "#FF375F",
+        "#FF2D55"
+      ],
       "episode": "Episode 40"
     },
     {
       "id": "diffusion-dash",
       "name": "Diffusion Dash",
-      "emoji": "🎨",
+      "emoji": "\ud83c\udfa8",
       "url": "/games/diffusion-dash.html",
       "releaseDate": "2027-02-19",
       "week": 41,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 41"
     },
     {
       "id": "stable-storm",
       "name": "Stable Storm",
-      "emoji": "⛈️",
+      "emoji": "\u26c8\ufe0f",
       "url": "/games/stable-storm.html",
       "releaseDate": "2027-02-26",
       "week": 42,
-      "gradient": ["#5E5CE6", "#3634A3"],
+      "gradient": [
+        "#5E5CE6",
+        "#3634A3"
+      ],
       "episode": "Episode 42"
     },
     {
       "id": "rlhf-rumble",
       "name": "RLHF Rumble",
-      "emoji": "🥊",
+      "emoji": "\ud83e\udd4a",
       "url": "/games/rlhf-rumble.html",
       "releaseDate": "2027-03-05",
       "week": 43,
-      "gradient": ["#FF453A", "#FF2D55"],
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
       "episode": "Episode 43"
     },
     {
       "id": "safety-score",
       "name": "Safety Score",
-      "emoji": "🛡️",
+      "emoji": "\ud83d\udee1\ufe0f",
       "url": "/games/safety-score.html",
       "releaseDate": "2027-03-12",
       "week": 44,
-      "gradient": ["#30D158", "#248A3D"],
+      "gradient": [
+        "#30D158",
+        "#248A3D"
+      ],
       "episode": "Episode 44"
     },
     {
       "id": "red-team-run",
       "name": "Red Team Run",
-      "emoji": "🔴",
+      "emoji": "\ud83d\udd34",
       "url": "/games/red-team-run.html",
       "releaseDate": "2027-03-19",
       "week": 45,
-      "gradient": ["#FF453A", "#8B0000"],
+      "gradient": [
+        "#FF453A",
+        "#8B0000"
+      ],
       "episode": "Episode 45"
     },
     {
       "id": "jailbreak-judge",
       "name": "Jailbreak Judge",
-      "emoji": "⚖️",
+      "emoji": "\u2696\ufe0f",
       "url": "/games/jailbreak-judge.html",
       "releaseDate": "2027-03-26",
       "week": 46,
-      "gradient": ["#FFD60A", "#FF9F0A"],
+      "gradient": [
+        "#FFD60A",
+        "#FF9F0A"
+      ],
       "episode": "Episode 46"
     },
     {
       "id": "prompt-engineer",
       "name": "Prompt Engineer",
-      "emoji": "🔧",
+      "emoji": "\ud83d\udd27",
       "url": "/games/prompt-engineer.html",
       "releaseDate": "2027-04-02",
       "week": 47,
-      "gradient": ["#64D2FF", "#0A84FF"],
+      "gradient": [
+        "#64D2FF",
+        "#0A84FF"
+      ],
       "episode": "Episode 47"
     },
     {
       "id": "semantic-shift",
       "name": "Semantic Shift",
-      "emoji": "🌀",
+      "emoji": "\ud83c\udf00",
       "url": "/games/semantic-shift.html",
       "releaseDate": "2027-04-09",
       "week": 48,
-      "gradient": ["#BF5AF2", "#9B59B6"],
+      "gradient": [
+        "#BF5AF2",
+        "#9B59B6"
+      ],
       "episode": "Episode 48"
     },
     {
       "id": "cosine-chase",
       "name": "Cosine Chase",
-      "emoji": "📐",
+      "emoji": "\ud83d\udcd0",
       "url": "/games/cosine-chase.html",
       "releaseDate": "2027-04-16",
       "week": 49,
-      "gradient": ["#30D158", "#00A884"],
+      "gradient": [
+        "#30D158",
+        "#00A884"
+      ],
       "episode": "Episode 49"
     },
     {
       "id": "recall-race",
       "name": "Recall Race",
-      "emoji": "🧠",
+      "emoji": "\ud83e\udde0",
       "url": "/games/recall-race.html",
       "releaseDate": "2027-04-23",
       "week": 50,
-      "gradient": ["#FF375F", "#FF2D55"],
+      "gradient": [
+        "#FF375F",
+        "#FF2D55"
+      ],
       "episode": "Episode 50"
     },
     {
       "id": "mystery-app",
       "name": "???",
-      "emoji": "❓",
+      "emoji": "\u2753",
       "url": "/games/mystery-app.html",
       "releaseDate": "2027-12-31",
       "week": 52,
-      "gradient": ["#1c1c1e", "#0a0a0c"],
+      "gradient": [
+        "#1c1c1e",
+        "#0a0a0c"
+      ],
       "episode": "???"
     }
   ]
