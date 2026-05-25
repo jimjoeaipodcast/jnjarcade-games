@@ -66,15 +66,23 @@ const SOCIAL_LOGOS = {
 
 // ── Icon builders ─────────────────────────────────────────────────────────
 
-function buildIconFace(emoji, gradient, extra = '') {
+function buildIconFace(emoji, gradient, extra = '', imgSrc = null) {
   const face = document.createElement('div');
   face.className = 'icon-face';
   face.style.background = `linear-gradient(145deg, ${gradient[0]}, ${gradient[1]})`;
 
-  const emojiEl = document.createElement('span');
-  emojiEl.style.cssText = 'position:relative;z-index:1;line-height:1;display:block;';
-  emojiEl.textContent = emoji;
-  face.appendChild(emojiEl);
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.src = imgSrc;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;border-radius:inherit;';
+    face.style.overflow = 'hidden';
+    face.appendChild(img);
+  } else {
+    const emojiEl = document.createElement('span');
+    emojiEl.style.cssText = 'position:relative;z-index:1;line-height:1;display:block;';
+    emojiEl.textContent = emoji;
+    face.appendChild(emojiEl);
+  }
 
   if (extra) face.insertAdjacentHTML('beforeend', extra);
   return face;
@@ -143,7 +151,9 @@ function buildGameIcon(game) {
 
   const face = buildIconFace(
     unlocked ? game.emoji : '·',
-    unlocked ? game.gradient : ['#2c2c2e', '#1c1c1e']
+    unlocked ? game.gradient : ['#2c2c2e', '#1c1c1e'],
+    '',
+    unlocked && game.icon ? game.icon : null
   );
   if (extraHtml) face.insertAdjacentHTML('beforeend', extraHtml);
   wrap.appendChild(face);

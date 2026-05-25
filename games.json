@@ -2,7 +2,7 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "\ud83d\udecd\ufe0f",
+      "emoji": "🛍️",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
       "gradient": [
         "#FF9F0A",
@@ -12,7 +12,7 @@
     },
     {
       "name": "YouTube",
-      "emoji": "\u25b6",
+      "emoji": "▶",
       "url": "https://www.youtube.com/@JnJAiStudio",
       "gradient": [
         "#FF453A",
@@ -22,7 +22,7 @@
     },
     {
       "name": "Patreon",
-      "emoji": "\u2615",
+      "emoji": "☕",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
       "gradient": [
         "#FF6E4A",
@@ -32,7 +32,7 @@
     },
     {
       "name": "TikTok",
-      "emoji": "\u266a",
+      "emoji": "♪",
       "url": "https://www.tiktok.com/@jimmy.and.joe.the.ai.pod",
       "gradient": [
         "#111111",
@@ -45,7 +45,7 @@
     {
       "id": "snake",
       "name": "Snake Blaster",
-      "emoji": "\ud83d\udc0d",
+      "emoji": "🐍",
       "url": "/games/snake.html",
       "releaseDate": "2026-05-19",
       "week": 1,
@@ -53,12 +53,13 @@
         "#00ff88",
         "#ff3355"
       ],
-      "episode": "Episode 1"
+      "episode": "Episode 1",
+      "icon": "assets/icons/snake-blaster.jpg"
     },
     {
       "id": "doom-mario",
       "name": "Doom Mari-OH!",
-      "emoji": "\ud83d\udd2b",
+      "emoji": "🔫",
       "url": "/games/doom-mario.html",
       "releaseDate": "2026-05-19",
       "week": 1,
@@ -71,7 +72,7 @@
     {
       "id": "token-rush",
       "name": "Token Rush",
-      "emoji": "\u26a1",
+      "emoji": "⚡",
       "url": "/games/token-rush.html",
       "releaseDate": "2026-05-29",
       "week": 3,
@@ -84,7 +85,7 @@
     {
       "id": "neural-ninja",
       "name": "Neural Ninja",
-      "emoji": "\ud83e\udd77",
+      "emoji": "🥷",
       "url": "/games/neural-ninja.html",
       "releaseDate": "2026-06-05",
       "week": 4,
@@ -97,7 +98,7 @@
     {
       "id": "vector-void",
       "name": "Vector Void",
-      "emoji": "\ud83c\udf0c",
+      "emoji": "🌌",
       "url": "/games/vector-void.html",
       "releaseDate": "2026-06-12",
       "week": 5,
@@ -110,7 +111,7 @@
     {
       "id": "cipher-hunt",
       "name": "Cipher Hunt",
-      "emoji": "\ud83d\udd10",
+      "emoji": "🔐",
       "url": "/games/cipher-hunt.html",
       "releaseDate": "2026-06-19",
       "week": 6,
@@ -123,7 +124,7 @@
     {
       "id": "gradient-drop",
       "name": "Gradient Drop",
-      "emoji": "\ud83d\udcab",
+      "emoji": "💫",
       "url": "/games/gradient-drop.html",
       "releaseDate": "2026-06-26",
       "week": 7,
@@ -136,7 +137,7 @@
     {
       "id": "matrix-match",
       "name": "Matrix Match",
-      "emoji": "\ud83c\udf00",
+      "emoji": "🌀",
       "url": "/games/matrix-match.html",
       "releaseDate": "2026-07-03",
       "week": 8,
@@ -149,7 +150,7 @@
     {
       "id": "attention-span",
       "name": "Attention Span",
-      "emoji": "\ud83c\udfaf",
+      "emoji": "🎯",
       "url": "/games/attention-span.html",
       "releaseDate": "2026-07-10",
       "week": 9,
@@ -162,7 +163,7 @@
     {
       "id": "wrong-counter",
       "name": "Wrong Counter",
-      "emoji": "\u274c",
+      "emoji": "❌",
       "url": "/games/wrong-counter.html",
       "releaseDate": "2026-07-17",
       "week": 10,
@@ -175,7 +176,7 @@
     {
       "id": "hallucination",
       "name": "Hallucination",
-      "emoji": "\ud83d\udc7b",
+      "emoji": "👻",
       "url": "/games/hallucination.html",
       "releaseDate": "2026-07-24",
       "week": 11,
@@ -188,7 +189,7 @@
     {
       "id": "context-win",
       "name": "Context Win",
-      "emoji": "\ud83e\ude9f",
+      "emoji": "🪟",
       "url": "/games/context-win.html",
       "releaseDate": "2026-07-31",
       "week": 12,
@@ -201,7 +202,7 @@
     {
       "id": "embed-race",
       "name": "Embed Race",
-      "emoji": "\ud83c\udfce\ufe0f",
+      "emoji": "🏎️",
       "url": "/games/embed-race.html",
       "releaseDate": "2026-08-07",
       "week": 13,
@@ -214,7 +215,7 @@
     {
       "id": "param-panic",
       "name": "Param Panic",
-      "emoji": "\ud83d\udcca",
+      "emoji": "📊",
       "url": "/games/param-panic.html",
       "releaseDate": "2026-08-14",
       "week": 14,
@@ -227,7 +228,7 @@
     {
       "id": "overfit-saga",
       "name": "Overfit Saga",
-      "emoji": "\ud83c\udfa3",
+      "emoji": "🎣",
       "url": "/games/overfit-saga.html",
       "releaseDate": "2026-08-21",
       "week": 15,
@@ -240,7 +241,7 @@
     {
       "id": "big-model",
       "name": "The Big Model",
-      "emoji": "\ud83c\udfc6",
+      "emoji": "🏆",
       "url": "/games/big-model.html",
       "releaseDate": "2026-08-28",
       "week": 16,
@@ -253,7 +254,7 @@
     {
       "id": "tensor-tetris",
       "name": "Tensor Tetris",
-      "emoji": "\ud83e\uddee",
+      "emoji": "🧮",
       "url": "/games/tensor-tetris.html",
       "releaseDate": "2026-09-04",
       "week": 17,
@@ -266,7 +267,7 @@
     {
       "id": "loss-labyrinth",
       "name": "Loss Labyrinth",
-      "emoji": "\ud83c\udf00",
+      "emoji": "🌀",
       "url": "/games/loss-labyrinth.html",
       "releaseDate": "2026-09-11",
       "week": 18,
@@ -279,7 +280,7 @@
     {
       "id": "fine-tune-frenzy",
       "name": "Fine-Tune Frenzy",
-      "emoji": "\ud83c\udf9b\ufe0f",
+      "emoji": "🎛️",
       "url": "/games/fine-tune-frenzy.html",
       "releaseDate": "2026-09-18",
       "week": 19,
@@ -292,7 +293,7 @@
     {
       "id": "batch-blaster",
       "name": "Batch Blaster",
-      "emoji": "\ud83d\udca5",
+      "emoji": "💥",
       "url": "/games/batch-blaster.html",
       "releaseDate": "2026-09-25",
       "week": 20,
@@ -305,7 +306,7 @@
     {
       "id": "epoch-runner",
       "name": "Epoch Runner",
-      "emoji": "\ud83c\udfc3",
+      "emoji": "🏃",
       "url": "/games/epoch-runner.html",
       "releaseDate": "2026-10-02",
       "week": 21,
@@ -318,7 +319,7 @@
     {
       "id": "dropout-dash",
       "name": "Dropout Dash",
-      "emoji": "\ud83d\udca8",
+      "emoji": "💨",
       "url": "/games/dropout-dash.html",
       "releaseDate": "2026-10-09",
       "week": 22,
@@ -331,7 +332,7 @@
     {
       "id": "regularize-it",
       "name": "Regularize It!",
-      "emoji": "\u2696\ufe0f",
+      "emoji": "⚖️",
       "url": "/games/regularize-it.html",
       "releaseDate": "2026-10-16",
       "week": 23,
@@ -344,7 +345,7 @@
     {
       "id": "inference-wars",
       "name": "Inference Wars",
-      "emoji": "\u2694\ufe0f",
+      "emoji": "⚔️",
       "url": "/games/inference-wars.html",
       "releaseDate": "2026-10-23",
       "week": 24,
@@ -357,7 +358,7 @@
     {
       "id": "latent-leap",
       "name": "Latent Leap",
-      "emoji": "\ud83c\udf0a",
+      "emoji": "🌊",
       "url": "/games/latent-leap.html",
       "releaseDate": "2026-10-30",
       "week": 25,
@@ -370,7 +371,7 @@
     {
       "id": "weight-watcher",
       "name": "Weight Watcher",
-      "emoji": "\ud83c\udfcb\ufe0f",
+      "emoji": "🏋️",
       "url": "/games/weight-watcher.html",
       "releaseDate": "2026-11-06",
       "week": 26,
@@ -383,7 +384,7 @@
     {
       "id": "activation-blast",
       "name": "Activation Blast",
-      "emoji": "\u26a1",
+      "emoji": "⚡",
       "url": "/games/activation-blast.html",
       "releaseDate": "2026-11-13",
       "week": 27,
@@ -396,7 +397,7 @@
     {
       "id": "layer-climber",
       "name": "Layer Climber",
-      "emoji": "\ud83e\uddd7",
+      "emoji": "🧗",
       "url": "/games/layer-climber.html",
       "releaseDate": "2026-11-20",
       "week": 28,
@@ -409,7 +410,7 @@
     {
       "id": "node-navigator",
       "name": "Node Navigator",
-      "emoji": "\ud83d\uddfa\ufe0f",
+      "emoji": "🗺️",
       "url": "/games/node-navigator.html",
       "releaseDate": "2026-11-27",
       "week": 29,
@@ -422,7 +423,7 @@
     {
       "id": "backprop-blitz",
       "name": "Backprop Blitz",
-      "emoji": "\ud83d\udd01",
+      "emoji": "🔁",
       "url": "/games/backprop-blitz.html",
       "releaseDate": "2026-12-04",
       "week": 30,
@@ -435,7 +436,7 @@
     {
       "id": "chain-of-thought",
       "name": "Chain-of-Thought",
-      "emoji": "\ud83e\udde0",
+      "emoji": "🧠",
       "url": "/games/chain-of-thought.html",
       "releaseDate": "2026-12-11",
       "week": 31,
@@ -448,7 +449,7 @@
     {
       "id": "turing-test",
       "name": "Turing Test",
-      "emoji": "\ud83e\udd16",
+      "emoji": "🤖",
       "url": "/games/turing-test.html",
       "releaseDate": "2026-12-18",
       "week": 32,
@@ -461,7 +462,7 @@
     {
       "id": "bias-buster",
       "name": "Bias Buster",
-      "emoji": "\ud83c\udf85",
+      "emoji": "🎅",
       "url": "/games/bias-buster.html",
       "releaseDate": "2026-12-25",
       "week": 33,
@@ -474,7 +475,7 @@
     {
       "id": "dataset-derby",
       "name": "Dataset Derby",
-      "emoji": "\ud83d\udc0e",
+      "emoji": "🐎",
       "url": "/games/dataset-derby.html",
       "releaseDate": "2027-01-01",
       "week": 34,
@@ -487,7 +488,7 @@
     {
       "id": "model-madness",
       "name": "Model Madness",
-      "emoji": "\ud83c\udfb2",
+      "emoji": "🎲",
       "url": "/games/model-madness.html",
       "releaseDate": "2027-01-08",
       "week": 35,
@@ -500,7 +501,7 @@
     {
       "id": "perceptron-pop",
       "name": "Perceptron Pop",
-      "emoji": "\ud83e\udee7",
+      "emoji": "🫧",
       "url": "/games/perceptron-pop.html",
       "releaseDate": "2027-01-15",
       "week": 36,
@@ -513,7 +514,7 @@
     {
       "id": "sigmoid-surge",
       "name": "Sigmoid Surge",
-      "emoji": "\ud83d\udcc8",
+      "emoji": "📈",
       "url": "/games/sigmoid-surge.html",
       "releaseDate": "2027-01-22",
       "week": 37,
@@ -526,7 +527,7 @@
     {
       "id": "softmax-sprint",
       "name": "Softmax Sprint",
-      "emoji": "\ud83c\udfc1",
+      "emoji": "🏁",
       "url": "/games/softmax-sprint.html",
       "releaseDate": "2027-01-29",
       "week": 38,
@@ -539,7 +540,7 @@
     {
       "id": "token-tower",
       "name": "Token Tower",
-      "emoji": "\ud83d\uddfc",
+      "emoji": "🗼",
       "url": "/games/token-tower.html",
       "releaseDate": "2027-02-05",
       "week": 39,
@@ -552,7 +553,7 @@
     {
       "id": "transformer-tilt",
       "name": "Transformer Tilt",
-      "emoji": "\ud83e\udd38",
+      "emoji": "🤸",
       "url": "/games/transformer-tilt.html",
       "releaseDate": "2027-02-12",
       "week": 40,
@@ -565,7 +566,7 @@
     {
       "id": "diffusion-dash",
       "name": "Diffusion Dash",
-      "emoji": "\ud83c\udfa8",
+      "emoji": "🎨",
       "url": "/games/diffusion-dash.html",
       "releaseDate": "2027-02-19",
       "week": 41,
@@ -578,7 +579,7 @@
     {
       "id": "stable-storm",
       "name": "Stable Storm",
-      "emoji": "\u26c8\ufe0f",
+      "emoji": "⛈️",
       "url": "/games/stable-storm.html",
       "releaseDate": "2027-02-26",
       "week": 42,
@@ -591,7 +592,7 @@
     {
       "id": "rlhf-rumble",
       "name": "RLHF Rumble",
-      "emoji": "\ud83e\udd4a",
+      "emoji": "🥊",
       "url": "/games/rlhf-rumble.html",
       "releaseDate": "2027-03-05",
       "week": 43,
@@ -604,7 +605,7 @@
     {
       "id": "safety-score",
       "name": "Safety Score",
-      "emoji": "\ud83d\udee1\ufe0f",
+      "emoji": "🛡️",
       "url": "/games/safety-score.html",
       "releaseDate": "2027-03-12",
       "week": 44,
@@ -617,7 +618,7 @@
     {
       "id": "red-team-run",
       "name": "Red Team Run",
-      "emoji": "\ud83d\udd34",
+      "emoji": "🔴",
       "url": "/games/red-team-run.html",
       "releaseDate": "2027-03-19",
       "week": 45,
@@ -630,7 +631,7 @@
     {
       "id": "jailbreak-judge",
       "name": "Jailbreak Judge",
-      "emoji": "\u2696\ufe0f",
+      "emoji": "⚖️",
       "url": "/games/jailbreak-judge.html",
       "releaseDate": "2027-03-26",
       "week": 46,
@@ -643,7 +644,7 @@
     {
       "id": "prompt-engineer",
       "name": "Prompt Engineer",
-      "emoji": "\ud83d\udd27",
+      "emoji": "🔧",
       "url": "/games/prompt-engineer.html",
       "releaseDate": "2027-04-02",
       "week": 47,
@@ -656,7 +657,7 @@
     {
       "id": "semantic-shift",
       "name": "Semantic Shift",
-      "emoji": "\ud83c\udf00",
+      "emoji": "🌀",
       "url": "/games/semantic-shift.html",
       "releaseDate": "2027-04-09",
       "week": 48,
@@ -669,7 +670,7 @@
     {
       "id": "cosine-chase",
       "name": "Cosine Chase",
-      "emoji": "\ud83d\udcd0",
+      "emoji": "📐",
       "url": "/games/cosine-chase.html",
       "releaseDate": "2027-04-16",
       "week": 49,
@@ -682,7 +683,7 @@
     {
       "id": "recall-race",
       "name": "Recall Race",
-      "emoji": "\ud83e\udde0",
+      "emoji": "🧠",
       "url": "/games/recall-race.html",
       "releaseDate": "2027-04-23",
       "week": 50,
@@ -695,7 +696,7 @@
     {
       "id": "mystery-app",
       "name": "???",
-      "emoji": "\u2753",
+      "emoji": "❓",
       "url": "/games/mystery-app.html",
       "releaseDate": "2027-12-31",
       "week": 52,
