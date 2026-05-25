@@ -1,0 +1,17 @@
+{
+  "name": "JnJ Arcade",
+  "short_name": "JnJ Arcade",
+  "description": "Jimmy & Joe AI Podcast Arcade",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0a0015",
+  "theme_color": "#0a0015",
+  "icons": [
+    {
+      "src": "assets/icons/snake-blaster.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    }
+  ]
+}

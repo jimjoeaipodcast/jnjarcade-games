@@ -248,4 +248,17 @@ async function init() {
   }
 }
 
+// Request fullscreen on first touch to hide browser chrome on mobile
+(function() {
+  function goFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) req.call(el);
+    document.removeEventListener('touchstart', goFullscreen);
+    document.removeEventListener('click', goFullscreen);
+  }
+  document.addEventListener('touchstart', goFullscreen, { once: true, passive: true });
+  document.addEventListener('click', goFullscreen, { once: true });
+})();
+
 document.addEventListener('DOMContentLoaded', init);
