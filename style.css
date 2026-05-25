@@ -75,33 +75,18 @@ body {
 .phone-screen {
   position: absolute; inset: 8px;
   border-radius: calc(var(--body-radius) - 6px);
-  background: #04091a;          /* fallback while video loads */
+  background:
+    radial-gradient(ellipse 110% 38% at 50% 0%,   rgba(0,230,180,0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 75%  50% at 8%  40%,  rgba(140,0,255,0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 65%  45% at 92% 35%,  rgba(0,140,255,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 90%  40% at 50% 105%, rgba(220,0,130,0.18) 0%, transparent 50%),
+    #04091a;
   overflow: hidden;
   display: flex; flex-direction: column;
 }
 
-/* Aurora tint overlay sits above video, below content */
-.phone-screen::before {
-  content: ''; position: absolute; inset: 0; z-index: 1;
-  border-radius: inherit; pointer-events: none;
-  background:
-    radial-gradient(ellipse 110% 38% at 50% 0%,   rgba(0,230,180,0.14) 0%, transparent 50%),
-    radial-gradient(ellipse 75%  50% at 8%  40%,  rgba(140,0,255,0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 65%  45% at 92% 35%,  rgba(0,140,255,0.14) 0%, transparent 55%),
-    radial-gradient(ellipse 90%  40% at 50% 105%, rgba(220,0,130,0.12) 0%, transparent 50%),
-    rgba(4,9,26,0.52);
-}
-
-/* ── Video wallpaper ── */
-#wallpaper {
-  position: absolute; inset: 0; z-index: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; border-radius: inherit; opacity: 0.7;
-}
-
 /* ── Status Bar ── */
 .status-bar {
-  position: relative; z-index: 2;
   flex-shrink: 0; height: var(--status-h);
   padding: 14px 28px 4px;
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -120,7 +105,6 @@ body {
 
 /* ── Scrollable area ── */
 .screen-scroll {
-  position: relative; z-index: 2;
   flex: 1; overflow-y:auto; overflow-x:hidden;
   -webkit-overflow-scrolling:touch; scrollbar-width:none;
   padding: 18px 10px 12px;
@@ -214,7 +198,6 @@ body {
 
 /* ── Home indicator ── */
 .home-indicator {
-  position:relative; z-index:2;
   flex-shrink:0; height:34px; display:flex; align-items:center; justify-content:center;
 }
 .home-indicator::before {
