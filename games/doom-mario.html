@@ -48,12 +48,8 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 #kill { background:rgba(255,215,0,.20); }
 #dmg.on,#kill.on { opacity:1; }
 
-/* ── Gun flash ── */
-#gf {
-  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-  pointer-events:none; z-index:10; font-size:68px; opacity:0; transition:opacity .05s;
-}
-#gf.on { opacity:1; }
+/* ── Gun flash (hidden — projectiles shown in world instead) ── */
+#gf { display:none; }
 
 /* ── Centre banner (wave/prize/life messages) ── */
 #banner {
@@ -228,12 +224,12 @@ const PRIZES = [
 ];
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const FOV=Math.PI/3, MSPD=0.055, RSPD=0.044;
-let p, ens, prz, wave, gstate, score, animT, cooldown, lastHit, lifeAt, banTimer, przTimer;
+const FOV=Math.PI/3, MSPD=0.055, RSPD=0.044, BSPD=0.22;
+let p, ens, prz, bullets, wave, gstate, score, animT, cooldown, lastHit, lifeAt, banTimer, przTimer;
 
 function init() {
   p        = {x:8,y:8,ang:0,hp:3};
-  ens      = []; prz = null; wave = 0;
+  ens      = []; prz = null; bullets = []; wave = 0;
   score    = 0; animT=0; cooldown=0; lastHit=0; lifeAt=100000;
   document.getElementById('ov').classList.remove('on');
   startWave(1);
@@ -396,6 +392,11 @@ function render() {
     const dx=prz.x-p.x, dy=prz.y-p.y;
     sprites.push({...prz, dx, dy, dist2:dx*dx+dy*dy, isPrize:true});
   }
+  // Add bullets as sprites
+  for(const b of bullets) {
+    const dx=b.x-p.x, dy=b.y-p.y;
+    sprites.push({...b, dx, dy, dist2:dx*dx+dy*dy, isBullet:true, alive:true});
+  }
   sprites.sort((a,b)=>b.dist2-a.dist2);
 
   for(const sp of sprites) {
@@ -413,6 +414,24 @@ function render() {
     const x0  = cx-Math.floor(sw/2);
     const bob = Math.sin(animT*(sp.isPrize?4:3)+sp.phase)*3;
     const y0  = Math.floor((CH-sh)/2)+(sp.isPrize?-sh*.2:0);
+
+    if(sp.isBullet) {
+      // Green shell projectile
+      const bsh = Math.min(CH, Math.floor(CH / dist * 0.25));
+      const bcx = Math.floor((0.5+rel/FOV)*CW);
+      if(dist < zb[Math.max(0,Math.min(CW-1,bcx))]) {
+        ctx.save();
+        ctx.shadowColor='#22ff44'; ctx.shadowBlur=18;
+        ctx.fillStyle='#22ff44';
+        ctx.beginPath();
+        ctx.ellipse(bcx, Math.floor(CH/2), Math.max(3,bsh*.7), Math.max(3,bsh), 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.2; ctx.globalAlpha=0.6;
+        ctx.stroke();
+        ctx.restore();
+      }
+      continue;
+    }
 
     if(sp.isPrize) {
       // Golden glow behind prize
@@ -469,25 +488,34 @@ function shoot() {
   if(gstate!=='play'&&gstate!=='prize') return;
   if(cooldown>0) return;
   cooldown=14;
-  flash('gf',80);
+  bullets.push({ x:p.x, y:p.y, ang:p.ang, life:90 });
+}
 
-  let hit=null, best=Infinity;
-  for(const e of ens) {
-    if(!e.alive) continue;
-    const dx=e.x-p.x, dy=e.y-p.y;
-    const d=Math.sqrt(dx*dx+dy*dy);
-    if(d>11) continue;
-    let rel=Math.atan2(dy,dx)-p.ang;
-    while(rel> Math.PI)rel-=2*Math.PI; while(rel<-Math.PI)rel+=2*Math.PI;
-    if(Math.abs(rel)<.14&&d<best){best=d;hit=e;}
-  }
-  if(hit) {
-    hit.alive=false;
-    score += hit.t==='k'?200:100;
-    flash('kill',200); hitCross();
-    checkScore();
-    hud();
-    if(ens.every(e=>!e.alive)) onWaveEnd();
+function stepBullets(dt) {
+  for(let i=bullets.length-1; i>=0; i--) {
+    const b=bullets[i];
+    b.x += Math.cos(b.ang)*BSPD;
+    b.y += Math.sin(b.ang)*BSPD;
+    b.life--;
+
+    // Wall hit
+    if(wall(b.x,b.y)) { bullets.splice(i,1); continue; }
+
+    // Enemy hit
+    let killed=false;
+    for(const e of ens) {
+      if(!e.alive) continue;
+      const dx=e.x-b.x, dy=e.y-b.y;
+      if(dx*dx+dy*dy < 0.28) {
+        e.alive=false;
+        score += e.t==='k'?200:100;
+        flash('kill',200); hitCross();
+        checkScore(); hud();
+        if(ens.every(e=>!e.alive)) onWaveEnd();
+        killed=true; break;
+      }
+    }
+    if(killed||b.life<=0) { bullets.splice(i,1); continue; }
   }
 }
 
@@ -697,7 +725,7 @@ function loop(ts) {
   if(cooldown>0) cooldown--;
   else if(gstate==='play'||gstate==='prize') shoot(); // auto-fire
   checkOrient();
-  move(); stepEns(dt); tickPrize(dt);
+  move(); stepEns(dt); stepBullets(dt); tickPrize(dt);
   render(); minimap();
 }
 

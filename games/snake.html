@@ -323,9 +323,11 @@ function updateHUD() {
     gunPips.appendChild(p);
   }
 
-  // Level progress
-  const pct = Math.min(100, Math.round(levelScore / levelTarget * 100));
-  progLabel.textContent = levelScore + '/' + levelTarget;
+  // Level progress — snake length toward filling screen
+  const maxLen = (cols && rows) ? maxSnakeLength() : 1;
+  const curLen = snake ? snake.length : 0;
+  const pct = Math.min(100, Math.round(curLen / maxLen * 100));
+  progLabel.textContent = curLen + '/' + maxLen;
   progFill.style.width  = pct + '%';
   progFill.style.background = theme.snake;
 }
@@ -496,8 +498,12 @@ function eatFood(idx) {
 }
 
 // ─── LEVEL ────────────────────────────────────────────────────────────────────
+function maxSnakeLength() {
+  return cols * rows - FOOD_COUNT - 4;
+}
+
 function checkLevelComplete() {
-  if (levelScore < levelTarget) return;
+  if (snake.length < maxSnakeLength()) return;
 
   lives = Math.min(lives + 5, MAX_LIVES);
   levelStartGun = gunTier;
@@ -562,8 +568,7 @@ function handleHit(reason) {
   gunTier = levelStartGun;
 
   if (lives <= 0) {
-    showMsg('💀 Out of lives — restarting…', 1800);
-    setTimeout(() => startGame(), 1800);
+    setTimeout(() => endGame(), 900);
     return;
   }
 
