@@ -230,7 +230,7 @@ function startClock() {
 
 async function init() {
   try {
-    const resp = await fetch('games.json');
+    const resp = await fetch('games.json?v=' + Date.now());
     const data = await resp.json();
     buildGrid(data);
     startClock();

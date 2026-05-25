@@ -99,32 +99,36 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 }
 #rbtn:hover { background:#E8332A; transform:scale(1.04); }
 
-/* ── Mobile d-pad ── */
+/* ── Mobile joysticks (CoD-style) ── */
 #mc {
-  position:fixed; bottom:0; left:0; right:0; height:170px;
+  position:fixed; bottom:0; left:0; right:0; height:180px;
   display:none; justify-content:space-between; align-items:center;
-  padding:0 12px 12px; z-index:20;
+  padding:0 24px 24px; z-index:20; pointer-events:none;
 }
 @media (max-width:1200px) and (orientation:landscape) { #mc { display:flex; } }
-.dp-wrap { position:relative; width:160px; height:160px; }
-.dp {
-  position:absolute; width:54px; height:54px;
-  background:rgba(255,255,255,.12); border-radius:50%;
-  border:1.5px solid rgba(255,255,255,.22); display:flex;
-  align-items:center; justify-content:center; font-size:20px;
-  color:rgba(255,255,255,.8); user-select:none; cursor:pointer;
-  backdrop-filter:blur(4px); transition:background .08s;
+.js-zone {
+  position:relative; width:140px; height:140px;
+  pointer-events:all; user-select:none;
 }
-.dp.on { background:rgba(255,255,255,.35); }
-#du{top:6px;left:53px} #dd{bottom:6px;left:53px} #dl{left:6px;top:53px} #dr{right:6px;top:53px}
-#fbtn {
-  width:88px; height:88px; background:rgba(255,69,58,.55);
-  border-radius:50%; border:2.5px solid rgba(255,69,58,.9);
-  font-size:30px; display:flex; align-items:center; justify-content:center;
-  cursor:pointer; user-select:none; backdrop-filter:blur(4px);
-  transition:transform .08s,background .08s;
+.js-base {
+  position:absolute; inset:0;
+  background:rgba(255,255,255,.07);
+  border:2px solid rgba(255,255,255,.18);
+  border-radius:50%; backdrop-filter:blur(4px);
 }
-#fbtn.on { background:rgba(255,69,58,.95); transform:scale(.9); }
+.js-thumb {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:58px; height:58px;
+  background:rgba(255,255,255,.22);
+  border:2px solid rgba(255,255,255,.45);
+  border-radius:50%; pointer-events:none;
+  will-change:transform;
+}
+.js-label {
+  position:absolute; bottom:-20px; left:50%; transform:translateX(-50%);
+  font-size:10px; color:rgba(255,255,255,.35); white-space:nowrap; letter-spacing:.5px;
+}
 
 /* Back link */
 #bk {
@@ -163,8 +167,16 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 </div>
 
 <div id="mc">
-  <div class="dp-wrap"><div class="dp" id="du">↑</div><div class="dp" id="dd">↓</div><div class="dp" id="dl">←</div><div class="dp" id="dr">→</div></div>
-  <div id="fbtn">🔫</div>
+  <div class="js-zone" id="js-left">
+    <div class="js-base"></div>
+    <div class="js-thumb" id="js-left-thumb"></div>
+    <div class="js-label">MOVE</div>
+  </div>
+  <div class="js-zone" id="js-right">
+    <div class="js-base"></div>
+    <div class="js-thumb" id="js-right-thumb"></div>
+    <div class="js-label">LOOK</div>
+  </div>
 </div>
 
 <script>
@@ -259,27 +271,74 @@ function resize() {
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const K={};
-window.addEventListener('keydown',e=>{ K[e.code]=true;  if(e.code==='Space'){e.preventDefault();shoot();} });
+window.addEventListener('keydown',e=>{ K[e.code]=true; e.code==='Space'&&e.preventDefault(); });
 window.addEventListener('keyup',  e=>{ K[e.code]=false; });
 
 canvas.addEventListener('click',()=>{ if(gstate==='play') canvas.requestPointerLock?.(); });
 document.addEventListener('mousemove',e=>{ if(document.pointerLockElement===canvas&&gstate==='play') p.ang+=e.movementX*.0018; });
-document.addEventListener('mousedown',e=>{ if(document.pointerLockElement===canvas&&e.button===0) shoot(); });
 
-const D={u:0,d:0,l:0,r:0};
-function bindDp(id,k,act) {
-  const el=document.getElementById(id);
-  const on =()=>{ D[k]=1; el.classList.add('on');    if(act)act(); };
-  const off=()=>{ D[k]=0; el.classList.remove('on'); };
-  el.addEventListener('touchstart', on,  {passive: !act});
-  el.addEventListener('touchend',   off, {passive:true});
-  el.addEventListener('touchcancel',off, {passive:true});
-  el.addEventListener('mousedown',  on);
-  window.addEventListener('mouseup',off);
-}
-bindDp('du','u',null); bindDp('dd','d',null); bindDp('dl','l',null); bindDp('dr','r',null);
-bindDp('fbtn',null,shoot);
 document.getElementById('rbtn').addEventListener('click',init);
+
+// ── Dual joysticks (CoD-style) ────────────────────────────────────────────────
+const JS_R = 52;
+const JS = {
+  left:  { active:false, touchId:-1, cx:0, cy:0, dx:0, dy:0 },
+  right: { active:false, touchId:-1, cx:0, cy:0, dx:0, dy:0 },
+};
+
+function setupJoysticks() {
+  const sides = [
+    { zone: document.getElementById('js-left'),  thumb: document.getElementById('js-left-thumb'),  side: 'left'  },
+    { zone: document.getElementById('js-right'), thumb: document.getElementById('js-right-thumb'), side: 'right' },
+  ];
+  for (const { zone, side } of sides) {
+    zone.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      const r = zone.getBoundingClientRect();
+      JS[side].active  = true;
+      JS[side].touchId = t.identifier;
+      JS[side].cx = r.left + r.width  / 2;
+      JS[side].cy = r.top  + r.height / 2;
+      JS[side].dx = 0; JS[side].dy = 0;
+    }, { passive: false });
+  }
+  window.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      for (const side of ['left','right']) {
+        if (t.identifier !== JS[side].touchId) continue;
+        const rdx = t.clientX - JS[side].cx;
+        const rdy = t.clientY - JS[side].cy;
+        const dist = Math.sqrt(rdx*rdx + rdy*rdy) || 1;
+        const s = Math.min(1, JS_R / dist);
+        JS[side].dx = rdx * s;
+        JS[side].dy = rdy * s;
+        const thumb = document.getElementById(`js-${side}-thumb`);
+        thumb.style.transform = `translate(calc(-50% + ${JS[side].dx}px), calc(-50% + ${JS[side].dy}px))`;
+      }
+    }
+  }, { passive: false });
+  window.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      for (const side of ['left','right']) {
+        if (t.identifier !== JS[side].touchId) continue;
+        JS[side].active = false; JS[side].touchId = -1;
+        JS[side].dx = 0; JS[side].dy = 0;
+        document.getElementById(`js-${side}-thumb`).style.transform = 'translate(-50%,-50%)';
+      }
+    }
+  });
+  window.addEventListener('touchcancel', e => {
+    for (const t of e.changedTouches) {
+      for (const side of ['left','right']) {
+        if (t.identifier !== JS[side].touchId) continue;
+        JS[side].active = false; JS[side].touchId = -1;
+        JS[side].dx = 0; JS[side].dy = 0;
+        document.getElementById(`js-${side}-thumb`).style.transform = 'translate(-50%,-50%)';
+      }
+    }
+  });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function wall(x,y) {
@@ -508,19 +567,30 @@ function stepEns(dt) {
 // ── Move ──────────────────────────────────────────────────────────────────────
 function move() {
   if(gstate!=='play'&&gstate!=='prize') return;
-  const fw=(K.KeyW||K.ArrowUp   ||D.u)?1:0;
-  const bk=(K.KeyS||K.ArrowDown ||D.d)?1:0;
-  const lt=(K.KeyA||K.ArrowLeft ||D.l)?1:0;
-  const rt=(K.KeyD||K.ArrowRight||D.r)?1:0;
-  p.ang+=(rt-lt)*RSPD;
-  const spd=MSPD*(fw-bk);
-  const nx=p.x+Math.cos(p.ang)*spd;
-  const ny=p.y+Math.sin(p.ang)*spd;
-  const sg=Math.sign(spd)||1, pad=.28;
-  if(!wall(nx+Math.cos(p.ang)*pad*sg,p.y))p.x=nx;
-  if(!wall(p.x,ny+Math.sin(p.ang)*pad*sg))p.y=ny;
 
-  // Prize collection proximity check
+  // Keyboard
+  const kFw=(K.KeyW||K.ArrowUp   )?1:0;
+  const kBk=(K.KeyS||K.ArrowDown )?1:0;
+  const kLt=(K.KeyA||K.ArrowLeft )?1:0;
+  const kRt=(K.KeyD||K.ArrowRight)?1:0;
+
+  // Right joystick → look (x-axis only; no vertical look in raycaster)
+  const jLook  = JS.right.dx / JS_R;
+  p.ang += (kRt - kLt + jLook) * RSPD;
+
+  // Left joystick → fwd/back (y inverted) + strafe (x)
+  const jFwd    = -JS.left.dy / JS_R;
+  const jStrafe =  JS.left.dx / JS_R;
+
+  const fwdSpd    = MSPD * (kFw - kBk + jFwd);
+  const strafeSpd = MSPD * jStrafe;
+
+  const nx = p.x + Math.cos(p.ang)*fwdSpd - Math.sin(p.ang)*strafeSpd;
+  const ny = p.y + Math.sin(p.ang)*fwdSpd + Math.cos(p.ang)*strafeSpd;
+
+  if(!wall(nx, p.y)) p.x = nx;
+  if(!wall(p.x, ny)) p.y = ny;
+
   if(prz) {
     const pdx=prz.x-p.x, pdy=prz.y-p.y;
     if(pdx*pdx+pdy*pdy<.55) collectPrize();
@@ -625,12 +695,13 @@ function loop(ts) {
   const dt=Math.min(.05,(ts-lastTs)/1000);
   lastTs=ts; animT+=dt;
   if(cooldown>0) cooldown--;
+  else if(gstate==='play'||gstate==='prize') shoot(); // auto-fire
   checkOrient();
   move(); stepEns(dt); tickPrize(dt);
   render(); minimap();
 }
 
-resize(); checkOrient(); init(); requestAnimationFrame(loop);
+resize(); checkOrient(); setupJoysticks(); init(); requestAnimationFrame(loop);
 </script>
 </body>
 </html>
