@@ -242,11 +242,11 @@ const THEMES = [
 
 // Gun tiers: [name, color, pellet count, spread deg, pixel speed, cooldown ms]
 const GUNS = [
-  { name:'Basic',   color:'#ffff55', count:1, spread:0,  spd:7,  cd:480 },
-  { name:'Double',  color:'#ffbb00', count:2, spread:18, spd:8,  cd:380 },
-  { name:'Triple',  color:'#ff7700', count:3, spread:26, spd:9,  cd:300 },
-  { name:'Rapid',   color:'#ff3300', count:1, spread:0,  spd:12, cd:140 },
-  { name:'Blaster', color:'#ff44ff', count:3, spread:26, spd:14, cd:90, auto:true },
+  { name:'Basic',   color:'#ffff55', count:1, spread:0,  spd:7,  cd:480, auto:true },
+  { name:'Double',  color:'#ffbb00', count:2, spread:18, spd:8,  cd:380, auto:true },
+  { name:'Triple',  color:'#ff7700', count:3, spread:26, spd:9,  cd:300, auto:true },
+  { name:'Rapid',   color:'#ff3300', count:1, spread:0,  spd:12, cd:140, auto:true },
+  { name:'Blaster', color:'#ff44ff', count:3, spread:26, spd:14, cd:90,  auto:true },
 ];
 
 const PU_TYPES = ['gun','gun','gun','life','rapid']; // gun drops more common
@@ -562,7 +562,8 @@ function handleHit(reason) {
   gunTier = levelStartGun;
 
   if (lives <= 0) {
-    setTimeout(() => endGame(), 400);
+    showMsg('💀 Out of lives — restarting…', 1800);
+    setTimeout(() => startGame(), 1800);
     return;
   }
 

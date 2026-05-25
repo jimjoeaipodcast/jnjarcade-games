@@ -69,19 +69,6 @@
       "episode": "Bonus"
     },
     {
-      "id": "prompt-panic",
-      "name": "Prompt Panic",
-      "emoji": "\ud83d\udcac",
-      "url": "/games/prompt-panic.html",
-      "releaseDate": "2026-05-22",
-      "week": 2,
-      "gradient": [
-        "#64D2FF",
-        "#0A84FF"
-      ],
-      "episode": "Episode 2"
-    },
-    {
       "id": "token-rush",
       "name": "Token Rush",
       "emoji": "\u26a1",
