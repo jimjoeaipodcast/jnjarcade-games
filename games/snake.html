@@ -176,9 +176,9 @@
       <div class="overlay-emoji">🐍💥</div>
       <div class="overlay-title">Snake Blaster</div>
       <div class="overlay-sub">
-        Snake × Arcanoid mashup!<br>
-        Shoot dots from a distance · Collect power-ups<br>
-        5 lives · Wall = glitch &amp; shrink
+        Snake × Shooter mashup!<br>
+        Shoot pellets to grow · Collect power-ups<br>
+        5 lives · Wall = snake halved · Self = -1 life
       </div>
       <button class="play-btn" id="startBtn">▶ Play</button>
       <div style="font-size:11px;color:rgba(255,255,255,0.35)" id="startBest"></div>
@@ -281,6 +281,7 @@ let rapidFireEnd = 0;
 let running = false, animId;
 let msgTimer = null;
 let theme;
+let growPending = 0;
 
 // ─── SIZING ───────────────────────────────────────────────────────────────────
 function resize() {
@@ -355,7 +356,7 @@ function resetLevel() {
   snake   = [{x:cx,y:cy},{x:cx-1,y:cy},{x:cx-2,y:cy}];
   dir     = {x:1,y:0};
   nextDir = {x:1,y:0};
-  food = []; powerUps = []; pellets = [];
+  food = []; powerUps = []; pellets = []; growPending = 0;
   for (let i = 0; i < FOOD_COUNT; i++) placeFood();
   lastTick = 0; snakeTicker = 0;
   lastFireTime = 0; rapidFireEnd = 0;
@@ -489,6 +490,7 @@ function updatePellets() {
 
 function eatFood(idx) {
   score++; levelScore++;
+  growPending++;
   scoreEl.textContent = score;
   if (Math.random() < 0.35) spawnPowerUp(food[idx].x, food[idx].y);
   food.splice(idx, 1);
@@ -559,20 +561,40 @@ function snakeTick() {
       eatFood(i); ate = true; break;
     }
   }
-  if (!ate) snake.pop();
+  if (!ate) {
+    if (growPending > 0) growPending--;
+    else snake.pop();
+  }
 }
 
 function handleHit(reason) {
-  lives--;
   glitching = true; glitchFrames = 18;
   gunTier = levelStartGun;
 
+  if (reason === 'wall') {
+    // Wall: halve length only, no life lost
+    const newLen = Math.max(3, Math.floor(snake.length / 2));
+    const newHead = randomFreeCell();
+    snake = [];
+    for (let i = 0; i < newLen; i++) {
+      const nx = Math.max(1, Math.min(cols-2, newHead.x - dir.x * i));
+      const ny = Math.max(1, Math.min(rows-2, newHead.y - dir.y * i));
+      snake.push({x:nx, y:ny});
+    }
+    growPending = 0;
+    showMsg('💥 Wall! Snake halved', 1600);
+    updateHUD();
+    return;
+  }
+
+  // Self-hit: costs a life
+  lives--;
   if (lives <= 0) {
     setTimeout(() => endGame(), 900);
     return;
   }
 
-  showMsg(reason === 'wall' ? '💥 Glitch! -1 Life' : '🐍 Self! -1 Life', 1600);
+  showMsg('🐍 Self! -1 Life', 1600);
 
   // Teleport + shorten to 50%
   const newLen = Math.max(3, Math.floor(snake.length / 2));
@@ -583,6 +605,7 @@ function handleHit(reason) {
     const ny = Math.max(1, Math.min(rows-2, newHead.y - dir.y * i));
     snake.push({x:nx, y:ny});
   }
+  growPending = 0;
 
   updateHUD();
 }

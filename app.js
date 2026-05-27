@@ -66,10 +66,23 @@ const SOCIAL_LOGOS = {
 
 // ── Icon builders ─────────────────────────────────────────────────────────
 
+// Convert a hex color to an rgba glow string
+function hexToGlow(hex, alpha = 0.55) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0,2),16);
+  const g = parseInt(h.slice(2,4),16);
+  const b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function buildIconFace(emoji, gradient, extra = '', imgSrc = null) {
   const face = document.createElement('div');
   face.className = 'icon-face';
   face.style.background = `linear-gradient(145deg, ${gradient[0]}, ${gradient[1]})`;
+  // Inject per-icon color glow for hover effect
+  if (gradient[0] && gradient[0].startsWith('#')) {
+    face.style.setProperty('--glow', hexToGlow(gradient[0]));
+  }
 
   if (imgSrc) {
     const img = document.createElement('img');
@@ -98,6 +111,9 @@ function buildSocialIcon(app) {
   const face = document.createElement('div');
   face.className = 'icon-face';
   face.style.background = `linear-gradient(145deg, ${grad[0]}, ${grad[1]})`;
+  if (grad[0] && grad[0].startsWith('#')) {
+    face.style.setProperty('--glow', hexToGlow(grad[0]));
+  }
 
   if (logo) {
     const svgWrap = document.createElement('div');

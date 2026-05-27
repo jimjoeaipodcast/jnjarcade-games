@@ -129,33 +129,50 @@ body {
 }
 .icon-wrap:active { transform: scale(0.82); }
 
-/* ── Icon face — cartoonish Apple squircle ── */
+/* ── Icon face — polished Apple squircle ── */
 .icon-face {
   width: var(--icon-size); height: var(--icon-size);
   border-radius: var(--icon-radius);
   display: flex; align-items: center; justify-content: center;
-  font-size: 30px; position: relative; overflow: hidden;
-  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease;
+  font-size: 32px; position: relative; overflow: hidden;
+  transition:
+    transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+    box-shadow 0.22s ease;
   box-shadow:
-    0 0 0 2.5px rgba(0,0,0,0.6),
-    0 0 0 4px   rgba(255,255,255,0.10),
-    inset 0 2px 0 rgba(255,255,255,0.30),
-    inset 0 -2px 0 rgba(0,0,0,0.25),
-    0 8px 28px rgba(0,0,0,0.75),
-    0 2px 8px  rgba(0,0,0,0.50);
+    /* inner rim — top highlight */
+    inset 0 1.5px 0 rgba(255,255,255,0.38),
+    /* inner rim — bottom depth */
+    inset 0 -2px 0 rgba(0,0,0,0.32),
+    /* outer ring */
+    0 0 0 1px rgba(0,0,0,0.70),
+    /* soft color glow — keyed per icon via --glow */
+    0 4px 18px 0 var(--glow, rgba(0,0,0,0)),
+    /* main drop shadow */
+    0 8px 32px rgba(0,0,0,0.80),
+    0 2px 8px  rgba(0,0,0,0.55);
 }
 
-/* Cartoon gloss overlay */
+/* Top-half gloss */
 .icon-face::after {
   content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
   background: linear-gradient(
-    172deg,
-    rgba(255,255,255,0.44) 0%,
-    rgba(255,255,255,0.18) 18%,
-    rgba(255,255,255,0.04) 46%,
-    transparent 56%,
-    rgba(0,0,0,0.10) 100%
+    178deg,
+    rgba(255,255,255,0.52)  0%,
+    rgba(255,255,255,0.26) 22%,
+    rgba(255,255,255,0.06) 44%,
+    transparent            54%,
+    rgba(0,0,0,0.08)      100%
   );
+  z-index: 2;
+}
+
+/* Specular highlight — small oval at top-left */
+.icon-face::before {
+  content:''; position:absolute;
+  top: 8%; left: 12%; width: 36%; height: 28%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,255,255,0.30) 0%, transparent 70%);
+  pointer-events: none; z-index: 3;
 }
 
 /* SVG logo sizing inside icon-face */
@@ -167,7 +184,14 @@ body {
 .icon-face .logo-svg svg { width: 100%; height: 100%; }
 
 /* ── Locked state ── */
-.icon-wrap.locked .icon-face { filter: grayscale(1) brightness(0.4); }
+.icon-wrap.locked .icon-face {
+  filter: grayscale(1) brightness(0.35) contrast(0.85);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.12),
+    inset 0 -2px 0 rgba(0,0,0,0.50),
+    0 0 0 1px rgba(0,0,0,0.80),
+    0 4px 14px rgba(0,0,0,0.70);
+}
 .icon-wrap.locked:active { transform: scale(0.9); }
 
 .lock-overlay {
@@ -284,19 +308,19 @@ body {
   .toast { bottom:max(60px,env(safe-area-inset-bottom,60px)); width:calc(100% - 48px); max-width:none; }
 }
 
-/* Desktop hover — cartoon bounce */
+/* Desktop hover — polished lift */
 @media (hover: hover) {
   .icon-wrap:hover .icon-face {
-    transform: scale(1.12) translateY(-5px);
+    transform: scale(1.13) translateY(-6px);
     box-shadow:
-      0 0 0 2.5px rgba(0,0,0,0.6),
-      0 0 0 4px   rgba(255,255,255,0.18),
-      inset 0 2px 0 rgba(255,255,255,0.40),
-      inset 0 -2px 0 rgba(0,0,0,0.25),
-      0 16px 40px rgba(0,0,0,0.85),
-      0 4px 12px  rgba(0,0,0,0.60);
+      inset 0 1.5px 0 rgba(255,255,255,0.42),
+      inset 0 -2px 0 rgba(0,0,0,0.35),
+      0 0 0 1px rgba(0,0,0,0.70),
+      0 6px 28px 4px var(--glow, rgba(0,0,0,0.15)),
+      0 18px 48px rgba(0,0,0,0.90),
+      0 6px 16px rgba(0,0,0,0.65);
   }
   .icon-wrap.locked:hover .icon-face {
-    transform:scale(1.04); filter:grayscale(.8) brightness(.45);
+    transform: scale(1.05); filter: grayscale(.7) brightness(.50);
   }
 }
