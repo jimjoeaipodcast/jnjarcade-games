@@ -79,5 +79,64 @@
   </div>
 
   <script src="app.js"></script>
+  <script>
+  // ── Fullscreen handling ──────────────────────────────────────────────────
+  const FS_KEY = 'jnj_fs_prompted';
+
+  function requestFS() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen
+              || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) {
+      req.call(el).catch(() => {});
+      return true;
+    }
+    return false; // iOS Safari — no API
+  }
+
+  function isIOS() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  }
+
+  function isStandalone() {
+    return window.navigator.standalone === true
+        || window.matchMedia('(display-mode: standalone)').matches;
+  }
+
+  // Show "Add to Home Screen" tip on iOS once, or auto-fullscreen on Android
+  window.addEventListener('DOMContentLoaded', () => {
+    if (isStandalone()) return; // already fullscreen PWA
+
+    if (isIOS() && !localStorage.getItem(FS_KEY)) {
+      // Show iOS tip banner after 2s
+      setTimeout(() => {
+        const banner = document.createElement('div');
+        banner.id = 'fs-banner';
+        banner.innerHTML = `
+          <span>📱 Add to Home Screen for fullscreen</span>
+          <button onclick="document.getElementById('fs-banner').remove();localStorage.setItem('${FS_KEY}','1')">✕</button>
+        `;
+        banner.style.cssText = `
+          position:fixed;bottom:0;left:0;right:0;z-index:9999;
+          background:rgba(20,20,28,0.96);backdrop-filter:blur(12px);
+          color:#fff;font-size:13px;font-family:-apple-system,sans-serif;
+          padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
+          border-top:1px solid rgba(255,255,255,0.1);
+        `;
+        banner.querySelector('button').style.cssText = `
+          background:none;border:none;color:rgba(255,255,255,0.6);
+          font-size:18px;cursor:pointer;padding:0 4px;
+        `;
+        document.body.appendChild(banner);
+        localStorage.setItem(FS_KEY, '1');
+      }, 2000);
+    } else if (!isIOS()) {
+      // Android / desktop — request on first interaction
+      const go = () => { requestFS(); document.removeEventListener('touchstart', go); document.removeEventListener('click', go); };
+      document.addEventListener('touchstart', go, { once: true, passive: true });
+      document.addEventListener('click', go, { once: true });
+    }
+  });
+  </script>
 </body>
 </html>

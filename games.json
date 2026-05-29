@@ -31,14 +31,14 @@
       "label": "Patreon"
     },
     {
-      "name": "TikTok",
-      "emoji": "♪",
-      "url": "https://www.tiktok.com/@jimmy.and.joe.the.ai.pod",
+      "name": "Ko-fi",
+      "emoji": "☕",
+      "url": "https://ko-fi.com/jimmyandjoeai",
       "gradient": [
-        "#111111",
-        "#333333"
+        "#FF5E5B",
+        "#E03030"
       ],
-      "label": "TikTok"
+      "label": "KoFi"
     }
   ],
   "games": [
@@ -74,7 +74,7 @@
       "name": "Token Rush",
       "emoji": "⚡",
       "url": "/games/token-rush.html",
-      "releaseDate": "2026-05-29",
+      "releaseDate": "2026-06-12",
       "week": 3,
       "gradient": [
         "#FFD60A",

@@ -571,32 +571,17 @@ function handleHit(reason) {
   glitching = true; glitchFrames = 18;
   gunTier = levelStartGun;
 
-  if (reason === 'wall') {
-    // Wall: halve length only, no life lost
-    const newLen = Math.max(3, Math.floor(snake.length / 2));
-    const newHead = randomFreeCell();
-    snake = [];
-    for (let i = 0; i < newLen; i++) {
-      const nx = Math.max(1, Math.min(cols-2, newHead.x - dir.x * i));
-      const ny = Math.max(1, Math.min(rows-2, newHead.y - dir.y * i));
-      snake.push({x:nx, y:ny});
-    }
-    growPending = 0;
-    showMsg('💥 Wall! Snake halved', 1600);
-    updateHUD();
-    return;
-  }
-
-  // Self-hit: costs a life
+  // Both wall and self: lose a life
   lives--;
   if (lives <= 0) {
     setTimeout(() => endGame(), 900);
     return;
   }
 
-  showMsg('🐍 Self! -1 Life', 1600);
+  const isWall = reason === 'wall';
+  showMsg(isWall ? '💥 Wall! -1 Life · Halved' : '🐍 Self! -1 Life · Halved', 1600);
 
-  // Teleport + shorten to 50%
+  // Halve snake + teleport
   const newLen = Math.max(3, Math.floor(snake.length / 2));
   const newHead = randomFreeCell();
   snake = [];
@@ -606,7 +591,6 @@ function handleHit(reason) {
     snake.push({x:nx, y:ny});
   }
   growPending = 0;
-
   updateHUD();
 }
 
@@ -914,8 +898,15 @@ canvas.addEventListener('touchend', e => {
   else changeDir(dy > 0 ? 'DOWN' : 'UP');
 }, {passive:true});
 
-document.getElementById('startBtn').addEventListener('click', startGame);
-document.getElementById('retryBtn').addEventListener('click', startGame);
+function tryFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen
+            || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (req) req.call(el).catch(() => {});
+}
+
+document.getElementById('startBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
+document.getElementById('retryBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 highScore = parseInt(localStorage.getItem('jnj_snakeblaster_hs') || '0', 10);
