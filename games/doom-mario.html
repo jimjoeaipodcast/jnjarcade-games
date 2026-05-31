@@ -445,17 +445,17 @@ function cast(px,py,ang) {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
-  // ── Castle ceiling (dark stone)
+  // ── Castle ceiling (Bowser's castle — near black with green tint)
   const ceil=ctx.createLinearGradient(0,0,0,CH*.5);
-  ceil.addColorStop(0,'#080808');
-  ceil.addColorStop(1,'#1a1510');
+  ceil.addColorStop(0,'#060806');
+  ceil.addColorStop(1,'#111a0e');
   ctx.fillStyle=ceil;
   ctx.fillRect(0,0,CW,CH*.5);
 
-  // ── Castle floor (dark stone)
+  // ── Castle floor (Bowser's red carpet)
   const flr=ctx.createLinearGradient(0,CH*.5,0,CH);
-  flr.addColorStop(0,'#1a1510');
-  flr.addColorStop(1,'#0c0a07');
+  flr.addColorStop(0,'#7a0808');
+  flr.addColorStop(1,'#3d0404');
   ctx.fillStyle=flr;
   ctx.fillRect(0,CH*.5,CW,CH*.5);
 
@@ -470,10 +470,10 @@ function render() {
     const y0=Math.floor((CH-lh)/2);
     const fog=Math.max(0,1-cd/14), sh=side===0?1:.68;
 
-    // Stone gray base
-    const wr=Math.floor((108+fog*42)*sh);
-    const wg=Math.floor((97+fog*34)*sh);
-    const wb=Math.floor((82+fog*22)*sh);
+    // Bowser's castle — green-gray stone blocks
+    const wr=Math.floor((72+fog*32)*sh);
+    const wg=Math.floor((96+fog*42)*sh);
+    const wb=Math.floor((62+fog*24)*sh);
     ctx.fillStyle=`rgb(${wr},${wg},${wb})`;
     ctx.fillRect(x,y0,1,lh);
 
