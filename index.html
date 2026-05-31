@@ -9,35 +9,72 @@
   <link rel="manifest" href="manifest.json">
   <title>JnJ Arcade</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Fullscreen splash ── */
+    #fs-splash {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,200,180,0.08) 0%, transparent 60%),
+                  linear-gradient(160deg, #020912 0%, #060c22 50%, #040110 100%);
+      cursor: pointer; user-select: none;
+      transition: opacity 0.4s ease;
+    }
+    #fs-splash.hidden { opacity: 0; pointer-events: none; }
+    #fs-logo {
+      font-size: clamp(32px, 8vw, 64px);
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: #fff;
+      font-family: -apple-system, 'SF Pro Display', sans-serif;
+      margin-bottom: 8px;
+    }
+    #fs-logo span { color: rgba(0,200,180,0.9); }
+    #fs-tap {
+      font-size: clamp(11px, 2.5vw, 15px);
+      color: rgba(255,255,255,0.45);
+      font-family: -apple-system, sans-serif;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      animation: fspulse 1.8s ease-in-out infinite;
+    }
+    @keyframes fspulse {
+      0%, 100% { opacity: 0.45; transform: translateY(0); }
+      50%       { opacity: 0.9;  transform: translateY(-3px); }
+    }
+    #fs-ios-tip {
+      position: absolute; bottom: 24px;
+      font-size: 12px; color: rgba(255,255,255,0.3);
+      font-family: -apple-system, sans-serif;
+      text-align: center; max-width: 260px; line-height: 1.5;
+      display: none;
+    }
+    #fs-ios-tip.show { display: block; }
+  </style>
 </head>
 <body>
-  <div class="page-bg">
 
+  <!-- Fullscreen splash — first thing visible, dismissed on tap -->
+  <div id="fs-splash">
+    <div id="fs-logo">JnJ <span>Arcade</span></div>
+    <div id="fs-tap">Tap anywhere to enter</div>
+    <div id="fs-ios-tip">📱 For true fullscreen: Share → Add to Home Screen</div>
+  </div>
+
+  <div class="page-bg">
     <div class="phone-wrapper">
       <div class="phone-body">
-
-        <!-- Side buttons (decorative) -->
         <div class="btn-vol-up"></div>
         <div class="btn-vol-down"></div>
         <div class="btn-power"></div>
-
-        <!-- Dynamic Island -->
-        <div class="dynamic-island">
-          <div class="di-camera"></div>
-        </div>
-
-        <!-- Screen -->
+        <div class="dynamic-island"><div class="di-camera"></div></div>
         <div class="phone-screen">
-
-          <!-- Status Bar -->
           <div class="status-bar">
             <span class="status-time" id="statusTime">9:41</span>
             <div class="status-right">
               <div class="signal-bars">
-                <span class="bar b1"></span>
-                <span class="bar b2"></span>
-                <span class="bar b3"></span>
-                <span class="bar b4"></span>
+                <span class="bar b1"></span><span class="bar b2"></span>
+                <span class="bar b3"></span><span class="bar b4"></span>
               </div>
               <svg class="wifi-svg" viewBox="0 0 24 16" fill="white" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 13.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
@@ -45,31 +82,20 @@
                 <path d="M12 4a12.5 12.5 0 0 1 8.8 3.6l1.4-1.4A14.5 14.5 0 0 0 12 2 14.5 14.5 0 0 0 1.8 6.2l1.4 1.4A12.5 12.5 0 0 1 12 4z" opacity=".3"/>
               </svg>
               <div class="battery-wrap">
-                <div class="battery-body">
-                  <div class="battery-fill"></div>
-                </div>
+                <div class="battery-body"><div class="battery-fill"></div></div>
                 <div class="battery-nub"></div>
               </div>
             </div>
           </div>
-
-          <!-- App Grid -->
           <div class="screen-scroll">
-            <div class="app-grid" id="appGrid">
-              <!-- Populated by app.js -->
-            </div>
+            <div class="app-grid" id="appGrid"></div>
           </div>
-
-          <!-- Home Indicator -->
           <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        </div><!-- /phone-screen -->
-      </div><!-- /phone-body -->
-    </div><!-- /phone-wrapper -->
-
-  </div><!-- /page-bg -->
-
-  <!-- Locked toast notification -->
   <div class="toast" id="toast">
     <span class="toast-lock">🔒</span>
     <div class="toast-text">
@@ -80,63 +106,47 @@
 
   <script src="app.js"></script>
   <script>
-  // ── Fullscreen handling ──────────────────────────────────────────────────
-  const FS_KEY = 'jnj_fs_prompted';
+  (function() {
+    const splash = document.getElementById('fs-splash');
+    const iosTip = document.getElementById('fs-ios-tip');
 
-  function requestFS() {
-    const el = document.documentElement;
-    const req = el.requestFullscreen || el.webkitRequestFullscreen
-              || el.mozRequestFullScreen || el.msRequestFullscreen;
-    if (req) {
-      req.call(el).catch(() => {});
-      return true;
+    function isIOS() {
+      return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
     }
-    return false; // iOS Safari — no API
-  }
-
-  function isIOS() {
-    return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-  }
-
-  function isStandalone() {
-    return window.navigator.standalone === true
-        || window.matchMedia('(display-mode: standalone)').matches;
-  }
-
-  // Show "Add to Home Screen" tip on iOS once, or auto-fullscreen on Android
-  window.addEventListener('DOMContentLoaded', () => {
-    if (isStandalone()) return; // already fullscreen PWA
-
-    if (isIOS() && !localStorage.getItem(FS_KEY)) {
-      // Show iOS tip banner after 2s
-      setTimeout(() => {
-        const banner = document.createElement('div');
-        banner.id = 'fs-banner';
-        banner.innerHTML = `
-          <span>📱 Add to Home Screen for fullscreen</span>
-          <button onclick="document.getElementById('fs-banner').remove();localStorage.setItem('${FS_KEY}','1')">✕</button>
-        `;
-        banner.style.cssText = `
-          position:fixed;bottom:0;left:0;right:0;z-index:9999;
-          background:rgba(20,20,28,0.96);backdrop-filter:blur(12px);
-          color:#fff;font-size:13px;font-family:-apple-system,sans-serif;
-          padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
-          border-top:1px solid rgba(255,255,255,0.1);
-        `;
-        banner.querySelector('button').style.cssText = `
-          background:none;border:none;color:rgba(255,255,255,0.6);
-          font-size:18px;cursor:pointer;padding:0 4px;
-        `;
-        document.body.appendChild(banner);
-        localStorage.setItem(FS_KEY, '1');
-      }, 2000);
-    } else if (!isIOS()) {
-      // Android / desktop — request on first interaction
-      const go = () => { requestFS(); document.removeEventListener('touchstart', go); document.removeEventListener('click', go); };
-      document.addEventListener('touchstart', go, { once: true, passive: true });
-      document.addEventListener('click', go, { once: true });
+    function isStandalone() {
+      return window.navigator.standalone === true
+          || window.matchMedia('(display-mode: standalone)').matches;
     }
-  });
+    function requestFS() {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen
+                || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (req) req.call(el).catch(() => {});
+    }
+
+    if (isStandalone()) {
+      // Already fullscreen — skip splash
+      splash.classList.add('hidden');
+      setTimeout(() => splash.remove(), 500);
+      return;
+    }
+
+    if (isIOS()) {
+      iosTip.classList.add('show');
+    }
+
+    function dismiss(e) {
+      e.preventDefault();
+      requestFS();
+      splash.classList.add('hidden');
+      setTimeout(() => splash.remove(), 450);
+      splash.removeEventListener('touchstart', dismiss);
+      splash.removeEventListener('click', dismiss);
+    }
+
+    splash.addEventListener('touchstart', dismiss, { passive: false });
+    splash.addEventListener('click', dismiss);
+  })();
   </script>
 </body>
 </html>

@@ -48,10 +48,10 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 #kill { background:rgba(255,215,0,.20); }
 #dmg.on,#kill.on { opacity:1; }
 
-/* ── Gun flash (hidden — projectiles shown in world instead) ── */
+/* ── Gun flash (hidden) ── */
 #gf { display:none; }
 
-/* ── Centre banner (wave/prize/life messages) ── */
+/* ── Centre banner ── */
 #banner {
   position:fixed; top:38%; left:50%; transform:translate(-50%,-50%);
   pointer-events:none; z-index:30; text-align:center;
@@ -178,38 +178,99 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 <script>
 'use strict';
 
-// ── Map ───────────────────────────────────────────────────────────────────────
-const MAP = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,1,1,0,0,0,1,0,0,1,1,0,0,0,1],
-  [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1],
-  [1,0,0,0,0,1,1,0,0,1,0,0,0,1,0,1],
-  [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
-  [1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1],
-  [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
-  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
-  [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
-  [1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1],
-  [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
-  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
-  [1,0,1,1,0,0,0,0,0,0,0,1,1,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-];
+// ── Maps ──────────────────────────────────────────────────────────────────────
+// MAP1: open arena (waves 1-3)
+// MAP2: castle halls with corridors (waves 4-6)
+// MAP3: narrow maze (waves 7+)
+const MAPS = {
+  MAP1: [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ],
+  MAP2: [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,1,1,0,1,1,1,1,0,1,1,0,1],
+    [1,0,1,0,0,1,0,0,0,0,1,0,0,1,0,1],
+    [1,0,1,0,1,1,1,0,1,0,1,1,0,1,0,1],
+    [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+    [1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1],
+    [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+    [1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1],
+    [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+    [1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1],
+    [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+    [1,0,1,0,1,1,1,0,1,0,1,1,0,1,0,1],
+    [1,0,1,0,0,1,0,0,0,0,1,0,0,1,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ],
+  MAP3: [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,1,0,1,0,0,0,0,0,0,1,0,1,0,1],
+    [1,0,1,0,1,0,1,1,1,1,0,1,0,1,0,1],
+    [1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1],
+    [1,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+    [1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1],
+    [1,0,1,0,0,1,0,0,0,0,1,0,0,1,0,1],
+    [1,0,1,0,1,0,0,0,0,0,0,1,0,1,0,1],
+    [1,0,0,0,1,0,1,0,0,1,0,0,0,0,0,1],
+    [1,1,0,1,1,0,1,1,1,1,0,1,1,0,1,1],
+    [1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,1,1,0,1,1,0,1,1,0,1,1,0,0,1],
+    [1,0,1,0,0,0,0,0,1,0,0,0,0,1,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ],
+};
 const MW=16, MH=16;
 
-// Verified-open spawn positions spread around the map
-const POOL = [
-  {x:1.5,y:1.5},{x:5.5,y:1.5},{x:8.5,y:1.5},{x:12.5,y:1.5},{x:14.5,y:1.5},
-  {x:1.5,y:5.5},{x:14.5,y:5.5},{x:1.5,y:8.5},{x:14.5,y:8.5},
-  {x:1.5,y:12.5},{x:5.5,y:14.5},{x:8.5,y:14.5},{x:12.5,y:14.5},{x:14.5,y:14.5},
-  {x:4.5,y:4.5},{x:11.5,y:4.5},{x:4.5,y:11.5},{x:11.5,y:11.5},
-  {x:6.5,y:7.5},{x:9.5,y:7.5},{x:7.5,y:6.5},{x:7.5,y:9.5},
-  {x:3.5,y:7.5},{x:12.5,y:7.5},{x:7.5,y:3.5},{x:7.5,y:12.5},
-  {x:5.5,y:5.5},{x:10.5,y:5.5},{x:5.5,y:10.5},{x:10.5,y:10.5},
-  {x:2.5,y:10.5},{x:13.5,y:10.5},{x:2.5,y:4.5},{x:13.5,y:4.5},
-];
+const MAP_NAMES = { MAP1:'OPEN ARENA', MAP2:'CASTLE HALLS', MAP3:'THE MAZE' };
+
+let currentMapKey = 'MAP1';
+let currentMap    = MAPS.MAP1;
+
+function buildPool(mapData) {
+  const pool = [];
+  for (let r=1; r<MH-1; r++)
+    for (let c=1; c<MW-1; c++)
+      if (mapData[r][c] === 0) pool.push({x:c+0.5, y:r+0.5});
+  return pool;
+}
+
+let POOL = buildPool(currentMap);
+
+function getMapForWave(w) {
+  if (w <= 3) return 'MAP1';
+  if (w <= 6) return 'MAP2';
+  return 'MAP3';
+}
+
+function safeSpawn(mapData) {
+  // Try centre first
+  const cy = Math.floor(MH/2), cx = Math.floor(MW/2);
+  if (mapData[cy][cx] === 0) return {x:cx+0.5, y:cy+0.5};
+  // Spiral out from centre
+  for (let r=1; r<MH-1; r++)
+    for (let c=1; c<MW-1; c++)
+      if (mapData[r][c] === 0) return {x:c+0.5, y:r+0.5};
+  return {x:8, y:8};
+}
 
 // ── Prize types ───────────────────────────────────────────────────────────────
 const PRIZES = [
@@ -228,6 +289,9 @@ const FOV=Math.PI/3, MSPD=0.055, RSPD=0.044, BSPD=0.22;
 let p, ens, prz, bullets, wave, gstate, score, animT, cooldown, lastHit, lifeAt, banTimer, przTimer;
 
 function init() {
+  currentMapKey = 'MAP1';
+  currentMap    = MAPS.MAP1;
+  POOL          = buildPool(currentMap);
   p        = {x:8,y:8,ang:0,hp:3};
   ens      = []; prz = null; bullets = []; wave = 0;
   score    = 0; animT=0; cooldown=0; lastHit=0; lifeAt=100000;
@@ -235,22 +299,39 @@ function init() {
   startWave(1);
 }
 
-function waveCount(w) { return 4+w; }            // wave 1→5, wave 2→6 ...
-function waveSpd(w)   { return 1+2.8*Math.min(1,(w-1)/10); } // 1.0→3.8
+function waveCount(w) { return 4+w; }
+function waveSpd(w)   { return 1+2.8*Math.min(1,(w-1)/10); }
 
 function startWave(w) {
   wave = w; gstate = 'play';
+
+  // Switch map every 3 waves
+  const newMapKey = getMapForWave(w);
+  let mapChanged = false;
+  if (newMapKey !== currentMapKey) {
+    currentMapKey = newMapKey;
+    currentMap    = MAPS[newMapKey];
+    POOL          = buildPool(currentMap);
+    const spawn   = safeSpawn(currentMap);
+    p.x = spawn.x; p.y = spawn.y; p.ang = 0;
+    mapChanged = true;
+  }
+
   const count = waveCount(w), spd = waveSpd(w);
   const shuffled = [...POOL].sort(()=>Math.random()-.5);
   ens = shuffled.slice(0, count).map((pos,i) => ({
     x: pos.x, y: pos.y,
-    t: (w>=4 && i%3===0) ? 'k' : 'g',   // koopas from wave 4
+    t: (w>=4 && i%3===0) ? 'k' : 'g',
     alive: true,
     phase: Math.random()*Math.PI*2,
     spd,
   }));
   prz = null;
-  showBanner(`WAVE ${w}`, `${count} enemies incoming!`, '#FFD60A', 2200);
+
+  const subMsg = mapChanged
+    ? `${count} enemies · ${MAP_NAMES[newMapKey]}`
+    : `${count} enemies incoming!`;
+  showBanner(`WAVE ${w}`, subMsg, '#FFD60A', 2200);
   hud();
 }
 
@@ -275,7 +356,7 @@ document.addEventListener('mousemove',e=>{ if(document.pointerLockElement===canv
 
 document.getElementById('rbtn').addEventListener('click',init);
 
-// ── Dual joysticks (CoD-style) ────────────────────────────────────────────────
+// ── Dual joysticks ────────────────────────────────────────────────────────────
 const JS_R = 52;
 const JS = {
   left:  { active:false, touchId:-1, cx:0, cy:0, dx:0, dy:0 },
@@ -339,9 +420,10 @@ function setupJoysticks() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function wall(x,y) {
   const mx=Math.floor(x), my=Math.floor(y);
-  return mx<0||mx>=MW||my<0||my>=MH||MAP[my][mx]===1;
+  return mx<0||mx>=MW||my<0||my>=MH||currentMap[my][mx]===1;
 }
 
+// Returns dist, side (0=EW, 1=NS), u (0-1 texture coordinate)
 function cast(px,py,ang) {
   const cos=Math.cos(ang), sin=Math.sin(ang);
   let mx=Math.floor(px), my=Math.floor(py);
@@ -352,37 +434,76 @@ function cast(px,py,ang) {
   let side=0;
   for(let i=0;i<64;i++) {
     if(sx<sy){sx+=dx;mx+=stx;side=0;}else{sy+=dy;my+=sty;side=1;}
-    if(MAP[my]?.[mx]===1)break;
+    if(currentMap[my]?.[mx]===1) break;
   }
-  return {dist:Math.max(.001,side===0?sx-dx:sy-dy),side};
+  const dist=Math.max(.001,side===0?sx-dx:sy-dy);
+  // Texture U coordinate (0-1 along the hit wall face)
+  let wallX = side===0 ? py + dist*sin : px + dist*cos;
+  wallX -= Math.floor(wallX);
+  return {dist, side, u:wallX};
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
-  // Sky
-  const sky=ctx.createLinearGradient(0,0,0,CH*.5);
-  sky.addColorStop(0,'#1E40AF'); sky.addColorStop(1,'#3B82F6');
-  ctx.fillStyle=sky; ctx.fillRect(0,0,CW,CH*.5);
-  // Ground
-  const gnd=ctx.createLinearGradient(0,CH*.5,0,CH);
-  gnd.addColorStop(0,'#14532D'); gnd.addColorStop(1,'#052E16');
-  ctx.fillStyle=gnd; ctx.fillRect(0,CH*.5,CW,CH*.5);
+  // ── Castle ceiling (dark stone)
+  const ceil=ctx.createLinearGradient(0,0,0,CH*.5);
+  ceil.addColorStop(0,'#080808');
+  ceil.addColorStop(1,'#1a1510');
+  ctx.fillStyle=ceil;
+  ctx.fillRect(0,0,CW,CH*.5);
 
-  // Walls
+  // ── Castle floor (dark stone)
+  const flr=ctx.createLinearGradient(0,CH*.5,0,CH);
+  flr.addColorStop(0,'#1a1510');
+  flr.addColorStop(1,'#0c0a07');
+  ctx.fillStyle=flr;
+  ctx.fillRect(0,CH*.5,CW,CH*.5);
+
+  // ── Walls with brick texture
   const zb=new Float32Array(CW);
   for(let x=0;x<CW;x++){
     const ra=p.ang-FOV/2+(x/CW)*FOV;
-    const {dist,side}=cast(p.x,p.y,ra);
+    const {dist,side,u}=cast(p.x,p.y,ra);
     const cd=dist*Math.cos(ra-p.ang);
     zb[x]=cd;
     const lh=Math.min(CH*4,Math.floor(CH/cd));
     const y0=Math.floor((CH-lh)/2);
-    const fog=Math.max(0,1-cd/14), sh=side===0?1:.63;
-    const r=Math.floor((168+fog*50)*sh), g=Math.floor((55+fog*20)*sh), b=Math.floor((35+fog*10)*sh);
-    ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(x,y0,1,lh);
+    const fog=Math.max(0,1-cd/14), sh=side===0?1:.68;
+
+    // Stone gray base
+    const wr=Math.floor((108+fog*42)*sh);
+    const wg=Math.floor((97+fog*34)*sh);
+    const wb=Math.floor((82+fog*22)*sh);
+    ctx.fillStyle=`rgb(${wr},${wg},${wb})`;
+    ctx.fillRect(x,y0,1,lh);
+
+    // Brick mortar overlay
+    const BRICK_ROWS=4;
+    const brickH=lh/BRICK_ROWS;
+    if(brickH>1.5){
+      const BRICK_W=0.4; // brick width in u-space (2.5 bricks per wall unit)
+      ctx.fillStyle='rgba(10,8,5,0.52)';
+
+      // Horizontal mortar lines
+      for(let k=1;k<BRICK_ROWS;k++){
+        const ly=Math.floor(y0+k*brickH);
+        if(ly>=0&&ly<CH) ctx.fillRect(x,ly,1,1);
+      }
+
+      // Vertical mortar lines (staggered per row)
+      for(let k=0;k<BRICK_ROWS;k++){
+        const rowOff=(k%2===0)?0:BRICK_W*0.5;
+        const uMod=((u-rowOff)%BRICK_W+BRICK_W)%BRICK_W;
+        if(uMod<0.055||uMod>BRICK_W-0.055){
+          const ry0=Math.max(0,Math.floor(y0+k*brickH));
+          const ry1=Math.min(CH-1,Math.ceil(y0+(k+1)*brickH));
+          if(ry1>ry0) ctx.fillRect(x,ry0,1,ry1-ry0);
+        }
+      }
+    }
   }
 
-  // Collect sprites: enemies + prize
+  // ── Sprites: enemies + prize + bullets
   const sprites=[];
   for(const e of ens) if(e.alive) {
     const dx=e.x-p.x, dy=e.y-p.y;
@@ -392,7 +513,6 @@ function render() {
     const dx=prz.x-p.x, dy=prz.y-p.y;
     sprites.push({...prz, dx, dy, dist2:dx*dx+dy*dy, isPrize:true});
   }
-  // Add bullets as sprites
   for(const b of bullets) {
     const dx=b.x-p.x, dy=b.y-p.y;
     sprites.push({...b, dx, dy, dist2:dx*dx+dy*dy, isBullet:true, alive:true});
@@ -407,26 +527,26 @@ function render() {
     while(rel<-Math.PI) rel+=2*Math.PI;
     if(Math.abs(rel)>FOV*.72) continue;
 
-    const scale = sp.isPrize ? 0.55 : 1;
-    const sh  = Math.min(CH*2, Math.floor(CH/dist*scale));
-    const sw  = sh;
-    const cx  = Math.floor((0.5+rel/FOV)*CW);
-    const x0  = cx-Math.floor(sw/2);
-    const bob = Math.sin(animT*(sp.isPrize?4:3)+sp.phase)*3;
-    const y0  = Math.floor((CH-sh)/2)+(sp.isPrize?-sh*.2:0);
+    const scale=sp.isPrize?0.55:1;
+    const sh =Math.min(CH*2,Math.floor(CH/dist*scale));
+    const sw =sh;
+    const cx =Math.floor((0.5+rel/FOV)*CW);
+    const x0 =cx-Math.floor(sw/2);
+    const bob=Math.sin(animT*(sp.isPrize?4:3)+sp.phase)*3;
+    const y0 =Math.floor((CH-sh)/2)+(sp.isPrize?-sh*.2:0);
 
     if(sp.isBullet) {
-      // Green shell projectile
-      const bsh = Math.min(CH, Math.floor(CH / dist * 0.25));
-      const bcx = Math.floor((0.5+rel/FOV)*CW);
-      if(dist < zb[Math.max(0,Math.min(CW-1,bcx))]) {
+      // Small green shell projectile
+      const bsh=Math.min(CH,Math.floor(CH/dist*0.12));
+      const bcx=Math.floor((0.5+rel/FOV)*CW);
+      if(dist<zb[Math.max(0,Math.min(CW-1,bcx))]) {
         ctx.save();
-        ctx.shadowColor='#22ff44'; ctx.shadowBlur=18;
+        ctx.shadowColor='#22ff44'; ctx.shadowBlur=10;
         ctx.fillStyle='#22ff44';
         ctx.beginPath();
-        ctx.ellipse(bcx, Math.floor(CH/2), Math.max(3,bsh*.7), Math.max(3,bsh), 0, 0, Math.PI*2);
+        ctx.ellipse(bcx,Math.floor(CH/2),Math.max(2,bsh*.5),Math.max(2,bsh*.8),0,0,Math.PI*2);
         ctx.fill();
-        ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.2; ctx.globalAlpha=0.6;
+        ctx.strokeStyle='#aaffaa'; ctx.lineWidth=0.8; ctx.globalAlpha=0.5;
         ctx.stroke();
         ctx.restore();
       }
@@ -434,10 +554,8 @@ function render() {
     }
 
     if(sp.isPrize) {
-      // Golden glow behind prize
       const glow=ctx.createRadialGradient(cx,y0+sh*.5,0,cx,y0+sh*.5,sh*.7);
       glow.addColorStop(0,'rgba(255,215,0,0.35)'); glow.addColorStop(1,'rgba(255,215,0,0)');
-      // Only draw if in front of walls
       if(dist<zb[Math.max(0,Math.min(CW-1,cx))]) {
         ctx.fillStyle=glow; ctx.fillRect(cx-sh*.7,y0,sh*1.4,sh);
       }
@@ -497,11 +615,7 @@ function stepBullets(dt) {
     b.x += Math.cos(b.ang)*BSPD;
     b.y += Math.sin(b.ang)*BSPD;
     b.life--;
-
-    // Wall hit
     if(wall(b.x,b.y)) { bullets.splice(i,1); continue; }
-
-    // Enemy hit
     let killed=false;
     for(const e of ens) {
       if(!e.alive) continue;
@@ -539,7 +653,7 @@ function findSpot() {
     const dx=pos.x-p.x, dy=pos.y-p.y;
     return dx*dx+dy*dy>9;
   });
-  return cands.length ? cands[Math.floor(Math.random()*cands.length)] : {x:3.5,y:3.5};
+  return cands.length ? cands[Math.floor(Math.random()*cands.length)] : safeSpawn(currentMap);
 }
 
 function collectPrize() {
@@ -586,8 +700,8 @@ function stepEns(dt) {
     } else if(d<7.5) {
       const base=(e.t==='k'?.009:.006)*e.spd*(d<3?1.6:1);
       const nx=e.x+(dx/d)*base, ny=e.y+(dy/d)*base;
-      if(!wall(nx,e.y))e.x=nx;
-      if(!wall(e.x,ny))e.y=ny;
+      if(!wall(nx,e.y)) e.x=nx;
+      if(!wall(e.x,ny)) e.y=ny;
     }
   }
 }
@@ -596,17 +710,14 @@ function stepEns(dt) {
 function move() {
   if(gstate!=='play'&&gstate!=='prize') return;
 
-  // Keyboard
   const kFw=(K.KeyW||K.ArrowUp   )?1:0;
   const kBk=(K.KeyS||K.ArrowDown )?1:0;
   const kLt=(K.KeyA||K.ArrowLeft )?1:0;
   const kRt=(K.KeyD||K.ArrowRight)?1:0;
 
-  // Right joystick → look (x-axis only; no vertical look in raycaster)
   const jLook  = JS.right.dx / JS_R;
   p.ang += (kRt - kLt + jLook) * RSPD;
 
-  // Left joystick → fwd/back (y inverted) + strafe (x)
   const jFwd    = -JS.left.dy / JS_R;
   const jStrafe =  JS.left.dx / JS_R;
 
@@ -625,32 +736,113 @@ function move() {
   }
 }
 
-// ── Minimap ───────────────────────────────────────────────────────────────────
+// ── Rotating circular radar (half off-screen, bottom-left) ───────────────────
 function minimap() {
-  const S=100, cs=S/MW;
-  const ox=8/DIV, oy=(window.innerHeight-S-8)/DIV;
-  ctx.save(); ctx.globalAlpha=.72;
-  for(let r=0;r<MH;r++) for(let c=0;c<MW;c++) {
-    ctx.fillStyle=MAP[r][c]?'#374151':'#111827';
-    ctx.fillRect(ox+c*cs,oy+r*cs,cs-.4,cs-.4);
+  const R  = 54;              // circle radius in canvas coords
+  const cx = R + 3;           // x-centre: just inside left edge
+  const cy = CH;              // y-centre: at bottom edge → top half visible
+
+  ctx.save();
+
+  // Clip to circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.clip();
+
+  // Dark radar background
+  ctx.fillStyle = 'rgba(0,18,0,0.90)';
+  ctx.fillRect(cx-R, cy-R, R*2, R*2);
+
+  // Rotating map layer (player always at centre, facing up)
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-p.ang - Math.PI*0.5); // rotate so player forward = screen up
+  const scale = R / 5.2;            // world units → canvas pixels
+
+  for(let r=0;r<MH;r++) {
+    for(let c=0;c<MW;c++) {
+      const wx=(c+0.5-p.x)*scale;
+      const wy=(r+0.5-p.y)*scale;
+      // Cull cells clearly outside radius
+      if(Math.abs(wx)>R+scale*2 && Math.abs(wy)>R+scale*2) continue;
+      ctx.fillStyle = currentMap[r][c]===1
+        ? 'rgba(0,155,0,0.65)'
+        : 'rgba(0,40,0,0.35)';
+      const ts=scale*0.92;
+      ctx.fillRect(wx-ts*0.5, wy-ts*0.5, ts, ts);
+    }
   }
+
+  // Enemy dots (in rotated map space)
   for(const e of ens) {
     if(!e.alive) continue;
-    ctx.fillStyle=e.t==='g'?'#F59E0B':'#22C55E';
-    ctx.fillRect(ox+e.x*cs-cs*.3,oy+e.y*cs-cs*.3,cs*.65,cs*.65);
+    const wx=(e.x-p.x)*scale, wy=(e.y-p.y)*scale;
+    ctx.fillStyle = e.t==='g' ? '#F59E0B' : '#22C55E';
+    ctx.beginPath();
+    ctx.arc(wx, wy, 2.5, 0, Math.PI*2);
+    ctx.fill();
   }
+
+  // Prize dot
   if(prz) {
+    const wx=(prz.x-p.x)*scale, wy=(prz.y-p.y)*scale;
     ctx.fillStyle='#FFD700';
-    ctx.beginPath(); ctx.arc(ox+prz.x*cs,oy+prz.y*cs,cs*.5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(wx, wy, 3.5, 0, Math.PI*2);
+    ctx.fill();
   }
-  ctx.fillStyle='#60A5FA';
-  ctx.beginPath(); ctx.arc(ox+p.x*cs,oy+p.y*cs,cs*.55,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#93C5FD'; ctx.lineWidth=cs*.2;
+
+  ctx.restore(); // undo rotation
+
+  // Radar sweep (screen-space, animates in screen coords)
+  const sweepAng = (animT*0.75)%(Math.PI*2) - Math.PI*0.5;
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = '#00ff44';
   ctx.beginPath();
-  ctx.moveTo(ox+p.x*cs,oy+p.y*cs);
-  ctx.lineTo(ox+(p.x+Math.cos(p.ang)*1.5)*cs,oy+(p.y+Math.sin(p.ang)*1.5)*cs);
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, R, sweepAng, sweepAng + Math.PI/5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Range rings
+  ctx.strokeStyle='rgba(0,160,0,0.18)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R*0.38, 0, Math.PI*2);
   ctx.stroke();
-  ctx.globalAlpha=1; ctx.restore();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R*0.72, 0, Math.PI*2);
+  ctx.stroke();
+
+  // Cross-hair
+  ctx.strokeStyle='rgba(0,160,0,0.15)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx-R, cy); ctx.lineTo(cx+R, cy);
+  ctx.moveTo(cx, cy-R); ctx.lineTo(cx, cy+R);
+  ctx.stroke();
+
+  // Player dot (fixed centre, pointing up)
+  ctx.fillStyle='#5f9ef5';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle='#93C5FD';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy-9);
+  ctx.stroke();
+
+  ctx.restore(); // remove clip
+
+  // Border ring (drawn after clip removal so it's crisp)
+  ctx.strokeStyle='rgba(0,210,0,0.55)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.stroke();
 }
 
 // ── End game ──────────────────────────────────────────────────────────────────
@@ -669,7 +861,7 @@ function hud() {
   document.getElementById('hp').textContent='❤️'.repeat(Math.max(0,p.hp))+'🖤'.repeat(Math.max(0,5-p.hp));
   document.getElementById('sc').textContent=`⭐ ${score.toLocaleString()}`;
   document.getElementById('el').textContent=`👾 ${ens.filter(e=>e.alive).length}`;
-  document.getElementById('wv').textContent=`WAVE ${wave}`;
+  document.getElementById('wv').textContent=`WAVE ${wave} · ${MAP_NAMES[currentMapKey]}`;
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
@@ -709,7 +901,7 @@ function checkOrient() {
 window.addEventListener('resize',()=>{ resize(); checkOrient(); });
 window.addEventListener('orientationchange',()=>setTimeout(()=>{ resize(); checkOrient(); },200));
 
-// ── Prize timer in game loop ──────────────────────────────────────────────────
+// ── Prize timer ───────────────────────────────────────────────────────────────
 function tickPrize(dt) {
   if(!prz||gstate!=='prize') return;
   prz.timer-=dt; prz.animT+=dt;
@@ -723,7 +915,7 @@ function loop(ts) {
   const dt=Math.min(.05,(ts-lastTs)/1000);
   lastTs=ts; animT+=dt;
   if(cooldown>0) cooldown--;
-  else if(gstate==='play'||gstate==='prize') shoot(); // auto-fire
+  else if(gstate==='play'||gstate==='prize') shoot();
   checkOrient();
   move(); stepEns(dt); stepBullets(dt); tickPrize(dt);
   render(); minimap();
