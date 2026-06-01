@@ -1,0 +1,6 @@
+name = "jnjarcade-games"
+account_id = "06fad62fb7c0863dffda64a95cfe0675"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "jnjarcade-games"
