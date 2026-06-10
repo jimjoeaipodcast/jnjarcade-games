@@ -48,10 +48,11 @@ Tested on iOS Safari + Android Chrome.
 
 - Fonts: Bungee (titles/marquee), Barlow Condensed (body/HUD).
 - Per-game accent colour drives theme; pass it to ArcadeScores as `accent`.
-- **Arcade pushbutton CSS pattern** (see `.coin-btn .dome` in style.css): 90s Happ-style CONCAVE
-  dish (Tekken cab), not a dome — radial gradient dark in the dished centre, top inner shadow,
-  light catch on the bottom rim, 7px near-black border (screw collar) + collar ring box-shadows
-  + 4px translateY press that deepens the dish. Reuse for any physical-button UI.
+- **Arcade pushbutton CSS pattern** (see `.coin-btn .dome` in style.css): Sanwa-style, locked by
+  Osimo against a photo reference 2026-06-10 — wide glossy bezel ring in the button colour
+  (NOT a black collar), dark seam gap (`::before`), slightly recessed glossy plunger (`::after`)
+  with top sheen. Press sinks the plunger into the seam (translateY 7% + scale 0.95); release
+  follows the link (native anchor behaviour). Reuse for any physical-button UI.
 - Pulsing perimeter glow on the play field; level themes cycle per level.
 
 ## Cache / deploy (non-negotiable)
