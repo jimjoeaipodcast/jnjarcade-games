@@ -268,7 +268,8 @@ let growPending = 0;
 function resize() {
   const wrap = document.getElementById('canvasWrap');
   const w = wrap.clientWidth  - 12;
-  const h = wrap.clientHeight - 28;
+  // one-cell buffer top + bottom: fullscreen on mobile clips the edges
+  const h = wrap.clientHeight - 28 - CELL * 2;
   cols = Math.floor(w / CELL);
   rows = Math.floor(h / CELL);
   canvas.width  = cols * CELL;
