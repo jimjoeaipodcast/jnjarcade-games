@@ -4,102 +4,76 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#04020e">
+  <meta name="apple-mobile-web-app-title" content="JnJ Arcade">
+  <meta name="theme-color" content="#16120c">
+  <meta name="description" content="Free browser games from the Jimmy &amp; Joe AI Podcast. A new cabinet every episode.">
+  <meta property="og:title" content="JnJ Arcade">
+  <meta property="og:description" content="Free plays. Two cabinets live: Snake Blaster and Doom Mari-OH! New game every episode.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://jnjarcade.win/">
   <link rel="manifest" href="manifest.json">
-  <title>JnJ Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet">
+  <title>JnJ Arcade — Games from the Jimmy &amp; Joe AI Podcast</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Fullscreen splash / attract mode — dismissed on tap -->
-  <div id="fs-splash">
-    <div class="splash-presents">JIMMY &amp; JOE AI PODCAST PRESENTS</div>
-    <h1 class="splash-logo"><span class="m-jnj">JnJ</span><br><span class="m-arcade">ARCADE</span></h1>
-    <div class="coin-slot"><div class="coin-slit"></div></div>
-    <div id="fs-tap">&#9658; INSERT COIN &#9668;</div>
-    <div class="splash-hiscore">HI-SCORE 999999 &#183; 1 CREDIT</div>
-    <div id="fs-ios-tip">&#128247; iPhone can't go fullscreen in Safari.<br><strong>Tap Share &rarr; Add to Home Screen</strong><br>then open from your home screen.</div>
-  </div>
-
-  <!-- Ambience layers -->
-  <div class="stars" aria-hidden="true"></div>
-  <div class="grid-floor" aria-hidden="true"></div>
-
-  <div class="hall">
-    <header class="hall-header">
-      <div class="presents">JIMMY &amp; JOE AI PODCAST PRESENTS</div>
-      <h1 class="marquee"><span class="m-jnj">JnJ</span> <span class="m-arcade">ARCADE</span></h1>
-      <div class="hall-sub">ONE NEW GAME EVERY EPISODE &#183; FREE&nbsp;PLAY</div>
-    </header>
-
-    <div class="ticker" aria-hidden="true">
-      <div class="ticker-track" id="tickerTrack"></div>
+  <!-- ── Marquee ─────────────────────────────────────────── -->
+  <header class="marquee">
+    <div class="bulb-row" aria-hidden="true"></div>
+    <h1 class="sign" id="sign" aria-label="JnJ Arcade">
+      <span class="sign-jnj">JnJ</span>
+      <span class="sign-arcade" aria-hidden="true">
+        <span>A</span><span>R</span><span class="dying">C</span><span>A</span><span>D</span><span>E</span>
+      </span>
+    </h1>
+    <div class="bulb-row" aria-hidden="true"></div>
+    <p class="marquee-sub">FREE PLAYS &middot; FROM THE
+      <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">JIMMY &amp; JOE AI PODCAST</a>
+    </p>
+    <div class="fs-zone">
+      <button id="fsBtn" class="fs-pill" hidden>&#x26F6;&nbsp; GO FULLSCREEN</button>
+      <button id="a2hsBtn" class="fs-pill" hidden aria-expanded="false" aria-controls="a2hsSheet">&#128241;&nbsp; FULLSCREEN ON iPHONE</button>
     </div>
+    <div id="a2hsSheet" class="a2hs-sheet" hidden>
+      <p>Safari keeps its bars on. The cabinet deserves better.</p>
+      <ol>
+        <li>Tap <strong>Share</strong> <span class="share-glyph" aria-hidden="true">&#x2B06;&#xFE0E;</span></li>
+        <li>Tap <strong>Add to Home Screen</strong></li>
+        <li>Open <strong>JnJ Arcade</strong> from your home screen</li>
+      </ol>
+      <p class="a2hs-payoff">Full screen. No bars. Like nature intended.</p>
+    </div>
+  </header>
 
-    <nav class="social-row" id="socialRow"></nav>
+  <!-- ── Cabinets (built by app.js) ──────────────────────── -->
+  <main id="cabinets" aria-label="Playable games"></main>
 
-    <main class="cab-grid" id="appGrid"></main>
+  <!-- ── Next release strip ──────────────────────────────── -->
+  <section class="next-strip" id="nextStrip" hidden>
+    <div class="caution-trim" aria-hidden="true"></div>
+    <p class="next-line">
+      <span class="next-label">NEXT CABINET</span>
+      <span class="next-name" id="nextName"></span>
+      <span class="next-date" id="nextDate"></span>
+    </p>
+    <p class="next-note">A NEW GAME EVERY EPISODE</p>
+    <div class="caution-trim" aria-hidden="true"></div>
+  </section>
 
-    <footer class="hall-footer">
-      &copy; 2026 JIMMY &amp; JOE AI PODCAST<br>
-      <span class="ft-coin">NO QUARTERS REQUIRED &#183; PRESS START</span>
-    </footer>
-  </div>
+  <!-- ── Footer / lobby exit ─────────────────────────────── -->
+  <footer class="lobby-end">
+    <div class="coin-row" id="socialRow" aria-label="Links"></div>
+    <p class="footer-line">A fan arcade for the <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">Jimmy &amp; Joe AI Podcast</a>. Two AI hosts. Real arguments.</p>
+    <p class="footer-egg" id="egg" title="You know what to do">&uarr;&uarr;&darr;&darr;&larr;&rarr;&larr;&rarr;&nbsp;B&nbsp;A</p>
+  </footer>
 
-  <!-- CRT scanlines + vignette, sits above everything incl. splash -->
-  <div class="crt" aria-hidden="true"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
-  <script>
-  (function() {
-    const splash = document.getElementById('fs-splash');
-    const iosTip = document.getElementById('fs-ios-tip');
-
-    function isIOS() {
-      return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-    }
-    function isStandalone() {
-      return window.navigator.standalone === true
-          || window.matchMedia('(display-mode: standalone)').matches;
-    }
-    function requestFS() {
-      const el = document.documentElement;
-      const req = el.requestFullscreen || el.webkitRequestFullscreen
-                || el.mozRequestFullScreen || el.msRequestFullscreen;
-      if (req) {
-        const p = req.call(el);
-        if (p && p.catch) p.catch(() => {});
-      } else if (isIOS()) {
-        // iOS Safari: no fullscreen API — scroll trick hides address bar
-        setTimeout(() => window.scrollTo(0, 1), 100);
-      }
-    }
-
-    if (isStandalone()) {
-      // Already fullscreen (PWA / Add to Home Screen) — skip splash
-      splash.classList.add('hidden');
-      setTimeout(() => splash.remove(), 500);
-      return;
-    }
-
-    if (isIOS()) {
-      iosTip.classList.add('show');
-    }
-
-    function dismiss(e) {
-      e.preventDefault();
-      // Small delay ensures user gesture context is preserved for fullscreen API
-      setTimeout(requestFS, 50);
-      splash.classList.add('hidden');
-      setTimeout(() => splash.remove(), 450);
-      splash.removeEventListener('touchstart', dismiss);
-      splash.removeEventListener('click', dismiss);
-    }
-
-    splash.addEventListener('touchstart', dismiss, { passive: false });
-    splash.addEventListener('click', dismiss);
-  })();
-  </script>
 </body>
 </html>

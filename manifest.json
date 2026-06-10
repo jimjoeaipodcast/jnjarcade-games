@@ -5,8 +5,8 @@
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "portrait",
-  "background_color": "#0a0015",
-  "theme_color": "#0a0015",
+  "background_color": "#16120c",
+  "theme_color": "#16120c",
   "icons": [
     {
       "src": "assets/icons/snake-blaster.jpg",
