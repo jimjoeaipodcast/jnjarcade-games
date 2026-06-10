@@ -4,20 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#0a000f">
+  <meta name="theme-color" content="#0a1405">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
   <title>Snake Blaster — JnJ Arcade</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* landing-cabinet world: acid green on warm pit */
     :root {
-      --accent: #00ff88;
-      --bg: #0a000f;
-      --border: rgba(255,255,255,0.08);
+      --accent: #5af23a;
+      --dim:    #1d4a12;
+      --bg:     #0a1405;
+      --shell:  #0e0b07;
+      --cream:  #f2e9d8;
+      --cream-dim: #b8ad97;
+      --fire:   #ff6a3d;
+      --border: rgba(90,242,58,0.22);
     }
 
     html, body {
-      height: 100%; background: var(--bg); color: #fff;
-      font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+      height: 100%; background: var(--bg); color: var(--cream);
+      font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
       overflow: hidden; -webkit-tap-highlight-color: transparent; user-select: none;
     }
 
@@ -29,25 +38,28 @@
                env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
     }
 
-    /* Header */
+    /* Header — cabinet marquee strip */
     .game-header {
       flex-shrink: 0; display: flex; align-items: center;
       justify-content: space-between; padding: 10px 14px 8px;
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border); gap: 8px;
+      background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.2));
+      border-bottom: 2px solid var(--dim); gap: 8px;
     }
     .back-btn {
       display: flex; align-items: center; gap: 3px; color: var(--accent);
-      font-size: 14px; font-weight: 500; padding: 5px 8px 5px 2px;
-      border-radius: 8px; cursor: pointer; text-decoration: none; flex-shrink: 0;
+      font-size: 15px; font-weight: 700; letter-spacing: 0.08em;
+      padding: 5px 8px 5px 2px; cursor: pointer; text-decoration: none; flex-shrink: 0;
     }
     .back-chevron { font-size: 18px; }
     .hdr-center { flex: 1; text-align: center; }
-    .game-name { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
-    .game-level { font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+    .game-name {
+      font-family: 'Bungee', cursive; font-size: 13px; letter-spacing: 0.18em;
+      color: var(--accent); text-shadow: 0 0 12px rgba(90,242,58,0.4);
+    }
+    .game-level { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--cream-dim); margin-top: 2px; }
     .hdr-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 80px; }
-    .score-label { font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; }
-    .score-val { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .score-label { font-size: 10px; font-weight: 800; color: var(--cream-dim); text-transform: uppercase; letter-spacing: 0.16em; }
+    .score-val { font-size: 19px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
     .lives-row { display: flex; gap: 2px; margin-top: 2px; }
     .life-heart { font-size: 10px; transition: opacity 0.3s; }
     .life-heart.dead { opacity: 0.15; }
@@ -55,16 +67,16 @@
     /* HUD bar under header */
     .hud-bar {
       flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 14px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 5px 14px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);
     }
-    .gun-display { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+    .gun-display { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; }
     .gun-icon { font-size: 13px; }
-    .gun-name { font-weight: 600; }
+    .gun-name { font-weight: 800; color: var(--cream); }
     .gun-pips { display: flex; gap: 2px; }
-    .gun-pip { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); }
-    .gun-pip.active { background: #ffaa00; box-shadow: 0 0 4px #ffaa00; }
-    .level-progress { display: flex; align-items: center; gap: 5px; font-size: 10px; color: rgba(255,255,255,0.5); }
-    .prog-bar { width: 70px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+    .gun-pip { width: 6px; height: 6px; border-radius: 50%; background: rgba(242,233,216,0.15); }
+    .gun-pip.active { background: #ffd23d; box-shadow: 0 0 4px #ffd23d; }
+    .level-progress { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: var(--cream-dim); }
+    .prog-bar { width: 70px; height: 5px; background: rgba(242,233,216,0.1); border-radius: 2px; overflow: hidden; }
     .prog-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
 
     /* Canvas */
@@ -80,61 +92,71 @@
       display: flex; flex-direction: column; align-items: center; gap: 4px;
     }
     .ctrl-row { display: flex; gap: 4px; }
+    /* cabinet buttons: chunky, physical press */
     .ctrl-btn {
-      width: 52px; height: 52px; background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.12); border-radius: 13px;
+      width: 54px; height: 54px; background: rgba(90,242,58,0.08);
+      border: 2px solid var(--dim); border-radius: 13px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 20px; cursor: pointer; transition: background 0.1s, transform 0.08s;
-      -webkit-tap-highlight-color: transparent; color: #fff;
+      font-size: 20px; cursor: pointer; transition: transform 0.06s, box-shadow 0.06s;
+      -webkit-tap-highlight-color: transparent; color: var(--cream);
+      box-shadow: 0 4px 0 rgba(0,0,0,0.55);
     }
     .ctrl-btn:active, .ctrl-btn.pressed {
-      background: rgba(0,255,136,0.2); border-color: rgba(0,255,136,0.4);
-      transform: scale(0.91);
+      background: rgba(90,242,58,0.22); border-color: var(--accent);
+      transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.55);
     }
     .fire-btn {
-      background: rgba(255,80,0,0.2); border-color: rgba(255,120,0,0.4); font-size: 22px;
+      background: rgba(255,106,61,0.16); border-color: #571508; font-size: 22px;
     }
     .fire-btn:active, .fire-btn.pressed {
-      background: rgba(255,80,0,0.5); border-color: rgba(255,160,0,0.7);
+      background: rgba(255,106,61,0.45); border-color: var(--fire);
     }
     .ctrl-spacer { width: 52px; height: 52px; }
 
-    /* Overlays */
+    /* Overlays — attract-screen style */
     .overlay {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 12px;
-      background: rgba(10,0,15,0.88); backdrop-filter: blur(8px);
+      background: rgba(10,20,5,0.92);
       border-radius: 10px; padding: 20px; text-align: center;
     }
     .overlay.hidden { display: none; }
     .overlay-emoji { font-size: 52px; line-height: 1; }
-    .overlay-title { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
-    .overlay-sub { font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.6; max-width: 260px; }
-    .overlay-score { font-size: 44px; font-weight: 800; color: var(--accent); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+    .overlay-title {
+      font-family: 'Bungee', cursive; font-size: 22px; color: var(--cream);
+      text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 0 26px rgba(90,242,58,0.25);
+    }
+    .overlay-sub { font-size: 16px; font-weight: 600; color: var(--cream-dim); line-height: 1.55; max-width: 270px; }
+    .overlay-score { font-size: 46px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
     .play-btn {
       display: flex; align-items: center; justify-content: center; gap: 6px;
-      background: var(--accent); color: #000; font-size: 14px; font-weight: 700;
-      padding: 13px 32px; border-radius: 50px; cursor: pointer; border: none;
-      transition: transform 0.1s; -webkit-tap-highlight-color: transparent; letter-spacing: -0.2px;
+      background: var(--accent); color: var(--shell);
+      font-family: 'Bungee', cursive; font-size: 15px;
+      padding: 15px 34px 12px; border-radius: 12px; cursor: pointer; border: none;
+      transition: transform 0.06s, box-shadow 0.06s; -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 6px 0 var(--dim);
     }
-    .play-btn:active { transform: scale(0.95); }
+    .play-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--dim); }
     .hs-badge {
       display: inline-flex; align-items: center; gap: 4px;
-      background: rgba(255,204,0,0.15); border: 1px solid rgba(255,204,0,0.3);
-      color: #ffcc00; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+      background: rgba(255,210,61,0.14); border: 1px solid rgba(255,210,61,0.35);
+      color: #ffd23d; font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 4px 11px; border-radius: 20px;
     }
 
     /* Level complete overlay */
     .level-badge {
-      background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.3);
-      color: #00ff88; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px;
+      background: rgba(90,242,58,0.12); border: 1px solid rgba(90,242,58,0.35);
+      color: var(--accent); font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 5px 13px; border-radius: 20px;
     }
 
     /* HUD message flash */
     .hud-msg {
       position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.75); color: #fff; font-size: 13px; font-weight: 700;
-      padding: 5px 14px; border-radius: 20px; pointer-events: none;
+      background: rgba(0,0,0,0.78); color: var(--cream); font-size: 14px; font-weight: 800;
+      letter-spacing: 0.08em;
+      padding: 6px 15px; border-radius: 20px; pointer-events: none;
       transition: opacity 0.4s; white-space: nowrap; z-index: 10;
     }
     .hud-msg.hidden { opacity: 0; }
@@ -144,9 +166,9 @@
 <div class="game-shell">
 
   <header class="game-header">
-    <a class="back-btn" href="../index.html"><span class="back-chevron">‹</span>Arcade</a>
+    <a class="back-btn" href="../index.html"><span class="back-chevron">‹</span>ARCADE</a>
     <div class="hdr-center">
-      <div class="game-name">🐍 Snake Blaster</div>
+      <div class="game-name">SNAKE BLASTER</div>
       <div class="game-level" id="levelLabel">Level 1</div>
     </div>
     <div class="hdr-right">
@@ -174,13 +196,13 @@
 
     <div class="overlay" id="startOverlay">
       <div class="overlay-emoji">🐍💥</div>
-      <div class="overlay-title">Snake Blaster</div>
+      <div class="overlay-title">SNAKE BLASTER</div>
       <div class="overlay-sub">
-        Snake × Shooter mashup!<br>
+        SNAKE × ARKANOID<br>
         Shoot pellets to grow · Collect power-ups<br>
-        5 lives · Wall = snake halved · Self = -1 life
+        5 lives · Wall = snake halved · Self = &minus;1 life
       </div>
-      <button class="play-btn" id="startBtn">▶ Play</button>
+      <button class="play-btn" id="startBtn">INSERT COIN</button>
       <div style="font-size:11px;color:rgba(255,255,255,0.35)" id="startBest"></div>
     </div>
 
@@ -232,12 +254,13 @@ const MAX_LIVES  = 9;
 const GUN_MAX    = 5;
 
 // Color themes per level (cycles)
+// Level themes cycle; theme 1 matches the landing-page cabinet world
 const THEMES = [
-  { bg:'#0a000f', grid:'rgba(255,255,255,0.03)', snake:'#00ff88', head:'#00ffcc', food:'#ff3355', wall:'#00ff88', wallGlow:'rgba(0,255,136,0.7)' },
-  { bg:'#00050f', grid:'rgba(0,150,255,0.04)',   snake:'#00ccff', head:'#80eeff', food:'#ffdd00', wall:'#00aaff', wallGlow:'rgba(0,170,255,0.7)' },
-  { bg:'#150500', grid:'rgba(255,100,0,0.04)',    snake:'#ff6600', head:'#ffaa44', food:'#eeeeee', wall:'#ff6600', wallGlow:'rgba(255,100,0,0.7)'  },
-  { bg:'#0a0015', grid:'rgba(200,0,255,0.04)',    snake:'#cc44ff', head:'#ee99ff', food:'#ff44aa', wall:'#cc44ff', wallGlow:'rgba(200,0,255,0.7)'  },
-  { bg:'#001515', grid:'rgba(0,255,200,0.04)',    snake:'#00ffcc', head:'#80ffee', food:'#ff0088', wall:'#00ffcc', wallGlow:'rgba(0,255,200,0.7)'  },
+  { bg:'#0a1405', grid:'rgba(90,242,58,0.05)',   snake:'#5af23a', head:'#9cff7a', food:'#f2e9d8', wall:'#5af23a', wallGlow:'rgba(90,242,58,0.7)'  },
+  { bg:'#160806', grid:'rgba(255,106,61,0.05)',  snake:'#ff6a3d', head:'#ffa07a', food:'#f2e9d8', wall:'#ff6a3d', wallGlow:'rgba(255,106,61,0.7)' },
+  { bg:'#14100a', grid:'rgba(255,210,61,0.05)',  snake:'#ffd23d', head:'#ffe48a', food:'#f2e9d8', wall:'#ffd23d', wallGlow:'rgba(255,210,61,0.7)' },
+  { bg:'#0a0f14', grid:'rgba(74,215,255,0.05)',  snake:'#4ad7ff', head:'#9ae8ff', food:'#f2e9d8', wall:'#4ad7ff', wallGlow:'rgba(74,215,255,0.7)' },
+  { bg:'#120a14', grid:'rgba(191,90,242,0.05)',  snake:'#bf5af2', head:'#d99af7', food:'#f2e9d8', wall:'#bf5af2', wallGlow:'rgba(191,90,242,0.7)' },
 ];
 
 // Gun tiers: [name, color, pellet count, spread deg, pixel speed, cooldown ms]

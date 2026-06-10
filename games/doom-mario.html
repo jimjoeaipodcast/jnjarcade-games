@@ -3,22 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Doom Mari-OH!</title>
+<title>Doom Mari-OH! — JnJ Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; touch-action:none; -webkit-tap-highlight-color:transparent; }
+:root {
+  --ink:#ff6a3d; --dim:#571508; --pit:#160806;
+  --cream:#f2e9d8; --cream-dim:#b8ad97;
+}
+body { background:var(--pit); overflow:hidden; font-family:'Barlow Condensed','Arial Narrow',sans-serif; touch-action:none; -webkit-tap-highlight-color:transparent; color:var(--cream); }
 #c  { display:block; width:100vw; height:100vh; image-rendering:pixelated; }
 
 /* ── Portrait lock ── */
 #portrait {
-  position:fixed; inset:0; background:linear-gradient(160deg,#0d0020,#05092e);
+  position:fixed; inset:0; background:linear-gradient(160deg,#1a0c08,#0a0503);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  z-index:200; color:#fff; text-align:center; gap:20px;
+  z-index:200; color:var(--cream); text-align:center; gap:20px;
 }
 #portrait .ri { font-size:72px; animation:rotpulse 2s ease-in-out infinite; }
 @keyframes rotpulse { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(90deg)} }
-#portrait h2 { font-size:22px; font-weight:700; }
-#portrait p  { font-size:14px; color:rgba(255,255,255,.6); max-width:240px; }
+#portrait h2 { font-family:'Bungee',cursive; font-size:19px; color:var(--ink); }
+#portrait p  { font-size:16px; font-weight:600; color:var(--cream-dim); max-width:240px; }
 #portrait.hidden { display:none; }
 
 /* ── HUD ── */
@@ -30,9 +37,9 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 }
 #hp  { font-size:18px; letter-spacing:2px; }
 #mid { display:flex; flex-direction:column; align-items:center; gap:1px; }
-#wv  { color:#FFD60A; font-size:13px; font-weight:800; letter-spacing:1px; font-family:monospace; }
-#sc  { color:#fff;    font-size:15px; font-weight:700; font-family:monospace; }
-#el  { color:#FF453A; font-size:14px; font-weight:600; }
+#wv  { color:#ffd23d; font-family:'Bungee',cursive; font-size:12px; letter-spacing:.14em; }
+#sc  { color:var(--cream); font-size:16px; font-weight:800; letter-spacing:.08em; font-variant-numeric:tabular-nums; }
+#el  { color:var(--ink); font-size:15px; font-weight:700; }
 
 /* ── Crosshair ── */
 #ch {
@@ -58,14 +65,14 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
   opacity:0; transition:opacity .3s;
 }
 #banner.on { opacity:1; }
-#bm { font-size:30px; font-weight:800; text-shadow:0 2px 14px rgba(0,0,0,.9); white-space:nowrap; }
-#bs { font-size:15px; margin-top:4px; color:rgba(255,255,255,.8); }
+#bm { font-family:'Bungee',cursive; font-size:26px; color:var(--cream); text-shadow:0 3px 0 rgba(0,0,0,.6),0 0 26px rgba(255,106,61,.35); white-space:nowrap; }
+#bs { font-size:17px; font-weight:600; margin-top:5px; color:var(--cream-dim); }
 
 /* ── Prize pickup toast ── */
 #ptag {
   position:fixed; bottom:140px; left:50%; transform:translateX(-50%) translateY(12px);
-  background:rgba(20,20,24,.96); backdrop-filter:blur(16px);
-  border:1px solid rgba(255,255,255,.12); border-radius:18px;
+  background:#0e0b07;
+  border:2px solid var(--dim); border-radius:14px;
   padding:10px 22px; pointer-events:none; z-index:25;
   display:flex; align-items:center; gap:10px;
   opacity:0; transition:opacity .25s,transform .25s;
@@ -73,8 +80,8 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 #ptag.on { opacity:1; transform:translateX(-50%) translateY(0); }
 #ptag .pem { font-size:28px; }
 #ptag .ptx { display:flex; flex-direction:column; }
-#ptag .ptx strong { font-size:14px; font-weight:700; color:#fff; }
-#ptag .ptx span   { font-size:12px; color:rgba(255,255,255,.6); }
+#ptag .ptx strong { font-size:16px; font-weight:800; letter-spacing:.06em; color:var(--cream); }
+#ptag .ptx span   { font-size:14px; font-weight:600; color:var(--cream-dim); }
 
 /* ── Game over / win ── */
 #ov {
@@ -85,15 +92,16 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 }
 #ov.on { opacity:1; pointer-events:all; }
 #ov .oem { font-size:54px; }
-#ov h1   { font-size:38px; font-weight:800; letter-spacing:-1px; }
-#ov p    { font-size:16px; color:rgba(255,255,255,.65); }
-#ov .osub{ font-size:13px; color:rgba(255,255,255,.45); margin-top:-6px; }
+#ov h1   { font-family:'Bungee',cursive; font-size:30px; color:var(--cream); text-shadow:0 3px 0 rgba(0,0,0,.6),0 0 30px rgba(255,106,61,.3); }
+#ov p    { font-size:18px; font-weight:600; color:var(--cream-dim); }
+#ov .osub{ font-size:15px; color:var(--cream-dim); margin-top:-6px; opacity:.8; }
 #rbtn {
-  padding:14px 44px; background:#FF453A; color:#fff; border:none;
-  border-radius:30px; font-size:18px; font-weight:700; cursor:pointer; margin-top:6px;
-  transition:transform .1s,background .1s;
+  padding:16px 44px 13px; background:var(--ink); color:#0e0b07; border:none;
+  border-radius:12px; font-family:'Bungee',cursive; font-size:16px; cursor:pointer; margin-top:6px;
+  transition:transform .06s,box-shadow .06s; box-shadow:0 6px 0 var(--dim);
 }
-#rbtn:hover { background:#E8332A; transform:scale(1.04); }
+#rbtn:hover { filter:brightness(1.07); }
+#rbtn:active { transform:translateY(4px); box-shadow:0 2px 0 var(--dim); }
 
 /* ── Mobile joysticks (CoD-style) ── */
 #mc {
@@ -129,10 +137,10 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 /* Back link */
 #bk {
   position:fixed; top:10px; right:14px; z-index:30;
-  background:rgba(0,0,0,.5); color:#fff;
-  border:1px solid rgba(255,255,255,.2); border-radius:20px;
-  padding:6px 14px; font-size:13px; cursor:pointer;
-  backdrop-filter:blur(8px); text-decoration:none;
+  background:rgba(14,11,7,.75); color:var(--ink);
+  border:2px solid var(--dim); border-radius:20px;
+  padding:6px 14px; font-size:14px; font-weight:700; letter-spacing:.08em; cursor:pointer;
+  text-decoration:none;
 }
 </style>
 </head>
@@ -140,7 +148,7 @@ body { background:#000; overflow:hidden; font-family:-apple-system,sans-serif; t
 
 <div id="portrait"><div class="ri">📱</div><h2>Rotate to Landscape</h2><p>Doom Mari-OH! needs landscape mode</p></div>
 <canvas id="c"></canvas>
-<a id="bk" href="/">← Arcade</a>
+<a id="bk" href="/">‹ ARCADE</a>
 
 <div id="hud">
   <div id="hp">❤️❤️❤️</div>
@@ -452,10 +460,10 @@ function cast(px,py,ang) {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
-  // ── Castle ceiling (Bowser's castle — near black with green tint)
+  // ── Castle ceiling (warm near-black, matches the landing cabinet world)
   const ceil=ctx.createLinearGradient(0,0,0,CH*.5);
-  ceil.addColorStop(0,'#060806');
-  ceil.addColorStop(1,'#111a0e');
+  ceil.addColorStop(0,'#0a0503');
+  ceil.addColorStop(1,'#1a0c08');
   ctx.fillStyle=ceil;
   ctx.fillRect(0,0,CW,CH*.5);
 
@@ -477,10 +485,10 @@ function render() {
     const y0=Math.floor((CH-lh)/2);
     const fog=Math.max(0,1-cd/14), sh=side===0?1:.68;
 
-    // Bowser's castle — green-gray stone blocks
-    const wr=Math.floor((72+fog*32)*sh);
-    const wg=Math.floor((96+fog*42)*sh);
-    const wb=Math.floor((62+fog*24)*sh);
+    // Bowser's castle — warm red-brown stone (landing cabinet palette)
+    const wr=Math.floor((104+fog*46)*sh);
+    const wg=Math.floor((46+fog*22)*sh);
+    const wb=Math.floor((32+fog*16)*sh);
     ctx.fillStyle=`rgb(${wr},${wg},${wb})`;
     ctx.fillRect(x,y0,1,lh);
 
@@ -745,9 +753,9 @@ function move() {
 
 // ── Rotating circular radar (fully visible, bottom-centre) ───────────────────
 function minimap() {
-  const R  = 54;              // circle radius in canvas coords
-  const cx = CW / 2;          // x-centre: middle of the screen
-  const cy = CH - R - 6;      // y-centre: sits just above the bottom edge
+  const R  = Math.round(CH * 0.16);  // scales with the low-res canvas
+  const cx = CW / 2;                 // x-centre: middle of the screen
+  const cy = CH - R - 4;             // y-centre: sits just above the bottom edge
 
   ctx.save();
 
