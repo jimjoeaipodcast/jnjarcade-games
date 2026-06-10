@@ -354,7 +354,14 @@ window.addEventListener('keyup',  e=>{ K[e.code]=false; });
 canvas.addEventListener('click',()=>{ if(gstate==='play') canvas.requestPointerLock?.(); });
 document.addEventListener('mousemove',e=>{ if(document.pointerLockElement===canvas&&gstate==='play') p.ang+=e.movementX*.0018; });
 
-document.getElementById('rbtn').addEventListener('click',init);
+function tryFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req) { const p = req.call(el); if (p && p.catch) p.catch(()=>{}); }
+}
+document.getElementById('rbtn').addEventListener('click',()=>{ tryFullscreen(); init(); });
+// first touch anywhere also claims fullscreen (mobile)
+document.addEventListener('touchend',function fsOnce(){ tryFullscreen(); document.removeEventListener('touchend',fsOnce); });
 
 // ── Dual joysticks ────────────────────────────────────────────────────────────
 const JS_R = 52;
@@ -736,11 +743,11 @@ function move() {
   }
 }
 
-// ── Rotating circular radar (half off-screen, bottom-left) ───────────────────
+// ── Rotating circular radar (fully visible, bottom-centre) ───────────────────
 function minimap() {
   const R  = 54;              // circle radius in canvas coords
-  const cx = R + 3;           // x-centre: just inside left edge
-  const cy = CH;              // y-centre: at bottom edge → top half visible
+  const cx = CW / 2;          // x-centre: middle of the screen
+  const cy = CH - R - 6;      // y-centre: sits just above the bottom edge
 
   ctx.save();
 
@@ -848,6 +855,7 @@ function minimap() {
 // ── End game ──────────────────────────────────────────────────────────────────
 function endGame(won) {
   gstate=won?'win':'dead';
+  if(score > parseInt(localStorage.getItem('jnj_doommario_hs')||'0',10)) localStorage.setItem('jnj_doommario_hs', score);
   document.getElementById('oem').textContent   =won?'🏆':'💀';
   document.getElementById('otitle').textContent=won?'YOU WIN!':'GAME OVER';
   document.getElementById('osub').textContent  =`Score: ${score.toLocaleString()}`;

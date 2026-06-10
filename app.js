@@ -109,14 +109,32 @@ function buildCabinet(game) {
   cab.style.setProperty('--pit', world.pit);
   cab.style.setProperty('--glowsoft', world.glowsoft);
 
+  const strip = document.createElement('div');
+  strip.className = 'cab-marquee';
+  strip.textContent = game.name.toUpperCase();
+  cab.appendChild(strip);
+
   const attract = document.createElement('div');
   attract.className = 'cab-attract';
+  const glass = document.createElement('div');
+  glass.className = 'screen-glass';
   const canvas = document.createElement('canvas');
-  attract.appendChild(canvas);
+  glass.appendChild(canvas);
+
   const tag = document.createElement('span');
   tag.className = 'attract-tag';
   tag.textContent = 'ATTRACT MODE';
-  attract.appendChild(tag);
+  glass.appendChild(tag);
+
+  // your real best score lives on the cabinet; 999999 until you earn one
+  const HS_KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-mario': 'jnj_doommario_hs' };
+  const hs = parseInt(localStorage.getItem(HS_KEYS[game.id] || '') || '0', 10);
+  const hsTag = document.createElement('span');
+  hsTag.className = 'hiscore-tag';
+  hsTag.textContent = 'HI-SCORE ' + (hs > 0 ? hs.toLocaleString('en-GB') : '999999');
+  glass.appendChild(hsTag);
+
+  attract.appendChild(glass);
   cab.appendChild(attract);
 
   const info = document.createElement('div');

@@ -907,6 +907,8 @@ function tryFullscreen() {
 
 document.getElementById('startBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
 document.getElementById('retryBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
+// first touch anywhere also claims fullscreen (mobile)
+document.addEventListener('touchend', function fsOnce() { tryFullscreen(); document.removeEventListener('touchend', fsOnce); });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 highScore = parseInt(localStorage.getItem('jnj_snakeblaster_hs') || '0', 10);

@@ -81,6 +81,20 @@ button { font: inherit; cursor: pointer; }
     0 0 90px rgba(255, 160, 30, 0.25);
 }
 
+/* sign switch-on: JNJ letters thunk in, ARCADE lights up after */
+.sign-jnj > span {
+  display: inline-block;
+  animation: signdrop 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.sign-jnj > span:nth-child(1) { animation-delay: 0.08s; }
+.sign-jnj > span:nth-child(2) { animation-delay: 0.2s; }
+.sign-jnj > span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes signdrop {
+  from { transform: translateY(-0.45em); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
 .sign-arcade {
   display: block;
   font-family: 'Bungee', cursive;
@@ -92,6 +106,46 @@ button { font: inherit; cursor: pointer; }
     0 2px 0 var(--red-deep),
     0 0 22px rgba(232, 68, 46, 0.5);
   margin-top: clamp(6px, 1.4vh, 14px);
+}
+
+.sign-arcade > span { animation: lightup 0.3s steps(2) backwards; }
+.sign-arcade > span:nth-child(1) { animation-delay: 0.62s; }
+.sign-arcade > span:nth-child(2) { animation-delay: 0.72s; }
+.sign-arcade > span:nth-child(3) { animation-delay: 0.82s; }
+.sign-arcade > span:nth-child(4) { animation-delay: 0.92s; }
+.sign-arcade > span:nth-child(5) { animation-delay: 1.02s; }
+.sign-arcade > span:nth-child(6) { animation-delay: 1.12s; }
+
+@keyframes lightup {
+  from { opacity: 0.12; text-shadow: none; }
+  to   { opacity: 1; }
+}
+
+/* dust motes drifting in the marquee light */
+.motes { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+
+.motes i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 210, 110, 0.5);
+  filter: blur(0.5px);
+  animation: drift 9s ease-in-out infinite alternate;
+}
+
+.motes i:nth-child(1) { left: 16%; top: 30%; animation-duration: 11s; }
+.motes i:nth-child(2) { left: 28%; top: 64%; animation-duration: 8s;  animation-delay: -3s; width: 2px; height: 2px; }
+.motes i:nth-child(3) { left: 44%; top: 22%; animation-duration: 13s; animation-delay: -6s; }
+.motes i:nth-child(4) { left: 58%; top: 70%; animation-duration: 9s;  animation-delay: -2s; width: 2px; height: 2px; }
+.motes i:nth-child(5) { left: 71%; top: 38%; animation-duration: 12s; animation-delay: -8s; }
+.motes i:nth-child(6) { left: 84%; top: 56%; animation-duration: 10s; animation-delay: -4s; width: 2px; height: 2px; }
+.motes i:nth-child(7) { left: 36%; top: 82%; animation-duration: 14s; animation-delay: -10s; }
+
+@keyframes drift {
+  from { transform: translate(0, 0); opacity: 0.25; }
+  50%  { opacity: 0.7; }
+  to   { transform: translate(26px, -34px); opacity: 0.3; }
 }
 
 /* one tired bulb in the sign — every real arcade has one */
@@ -178,36 +232,90 @@ button { font: inherit; cursor: pointer; }
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.6),
     0 18px 50px -18px rgba(0, 0, 0, 0.85);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
 }
 
+@media (hover: hover) {
+  .cab:hover {
+    transform: translateY(-5px);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6),
+      0 30px 60px -18px rgba(0, 0, 0, 0.9),
+      0 0 60px -16px var(--glowsoft);
+  }
+}
+
+/* mini-marquee strip across the top of each cabinet */
+.cab-marquee {
+  font-family: 'Bungee', cursive;
+  font-size: clamp(13px, 3.2vw, 16px);
+  letter-spacing: 0.3em;
+  text-align: center;
+  color: var(--ink);
+  text-shadow: 0 0 14px var(--glowsoft), 0 0 4px var(--ink);
+  background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.15));
+  padding: 12px 8px 10px;
+  border-bottom: 2px solid var(--dim);
+}
+
+/* CRT bezel around the screen */
 .cab-attract {
   position: relative;
   aspect-ratio: 4 / 3;
-  background: var(--pit);
+  background: #0a0805;
+  padding: clamp(10px, 2.6vw, 18px);
   overflow: hidden;
 }
 
-.cab-attract canvas { display: block; width: 100%; height: 100%; }
+.screen-glass {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--pit);
+  border-radius: clamp(8px, 2vw, 14px);
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.8),
+    inset 0 6px 24px rgba(0, 0, 0, 0.65),
+    inset 0 -4px 16px rgba(0, 0, 0, 0.5),
+    0 0 24px -6px var(--glowsoft);
+}
 
-/* glass reflection on the "screen" */
-.cab-attract::after {
+.screen-glass canvas { display: block; width: 100%; height: 100%; }
+
+/* curved-glass reflection */
+.screen-glass::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(112deg, transparent 38%, rgba(255, 255, 255, 0.045) 42%, rgba(255, 255, 255, 0.085) 46%, transparent 52%);
+  background:
+    radial-gradient(ellipse 130% 90% at 50% -30%, rgba(255, 255, 255, 0.07), transparent 55%),
+    linear-gradient(112deg, transparent 38%, rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0.07) 46%, transparent 52%);
+  border-radius: inherit;
   pointer-events: none;
 }
 
 .attract-tag {
   position: absolute;
-  top: 12px;
-  left: 14px;
+  top: 10px;
+  left: 12px;
   font-family: 'Bungee', cursive;
   font-size: 11px;
   letter-spacing: 0.18em;
   color: var(--ink);
   opacity: 0.85;
   animation: attractblink 2.2s steps(1) infinite;
+}
+
+.hiscore-tag {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  opacity: 0.9;
 }
 
 @keyframes attractblink {
