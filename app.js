@@ -167,7 +167,8 @@ function buildCabinet(game) {
 
   const play = document.createElement('a');
   play.className = 'cab-play';
-  play.href = game.url;
+  // play=1 skips the game's own start screen; v busts any stale cached copy
+  play.href = game.url + '?play=1&v=7';
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
     bumpPlays(game.id);

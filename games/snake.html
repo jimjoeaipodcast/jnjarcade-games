@@ -243,7 +243,7 @@
   </div>
 
 </div>
-<script src="arcade-scores.js"></script>
+<script src="arcade-scores.js?v=7"></script>
 <script>
 (function () {
 'use strict';
@@ -960,6 +960,11 @@ ctx.fillStyle = THEMES[0].bg;
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 window.addEventListener('resize', () => { if (!running) { resize(); } });
+
+// Coming from the landing page INSERT COIN? Straight into the game.
+if (new URLSearchParams(location.search).get('play') === '1') {
+  startGame();
+}
 
 })();
 </script>

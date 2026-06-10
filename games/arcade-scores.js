@@ -29,12 +29,13 @@ var CSS = `
 #as-root { position: fixed; inset: 0; z-index: 9000; display: flex;
   align-items: flex-start; justify-content: center;
   background: radial-gradient(ellipse 90% 70% at 50% 110%, rgba(60,40,20,0.35), transparent 60%), #060403;
-  font-family: 'Barlow Condensed','Arial Narrow',sans-serif; }
+  font-family: 'Barlow Condensed','Arial Narrow',sans-serif;
+  touch-action: manipulation; }
 #as-root * { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* the cabinet — deliberately taller than the viewport so the box is
-   cropped top and bottom: you're standing in front of a real machine */
-.as-cab { width: min(94vw, 460px); height: 112vh; display: flex; flex-direction: column;
+/* the cabinet fills the view; the control deck at the bottom edge is
+   what sells "standing at a real machine" */
+.as-cab { width: min(94vw, 460px); height: 100dvh; display: flex; flex-direction: column;
   background: linear-gradient(90deg, #0c0805 0 4%, #1a120a 4% 7%, #120c07 7% 93%, #1a120a 93% 96%, #0c0805 96%);
   border-left: 10px solid #070402; border-right: 10px solid #070402;
   box-shadow: 0 0 80px rgba(0,0,0,0.9), inset 0 0 40px rgba(0,0,0,0.6); }
@@ -72,7 +73,11 @@ var CSS = `
   border-bottom: 3px solid var(--as-accent); outline: none; text-align: center;
   font-family: 'Bungee', cursive; font-size: clamp(20px, 6vw, 26px);
   letter-spacing: 0.3em; color: #f2e9d8; text-transform: uppercase;
-  caret-color: var(--as-accent); padding: 6px 0; border-radius: 0; }
+  caret-color: var(--as-accent); padding: 6px 0; border-radius: 0;
+  /* games set user-select:none on body — iOS refuses focus unless the
+     input opts back in */
+  -webkit-user-select: text; user-select: text; touch-action: auto;
+  -webkit-appearance: none; appearance: none; }
 .as-err { font-weight: 800; font-size: 14px; letter-spacing: 0.12em; color: #ff5a5a;
   min-height: 18px; }
 .as-btn { font-family: 'Bungee', cursive; font-size: 15px; color: #060403;
@@ -101,18 +106,19 @@ var CSS = `
 .as-note { text-align: center; font-weight: 700; font-size: 11px; letter-spacing: 0.18em;
   color: #b8ad97; opacity: 0.7; padding-top: 6px; }
 
-/* control deck, cropped by the viewport bottom — the "partial cabinet" */
-.as-deck { flex: 0 0 auto; height: 120px;
+/* control deck along the bottom edge — fully visible */
+.as-deck { flex: 0 0 auto; height: 84px;
   background: linear-gradient(#1a120a, #0c0805);
-  border-top: 6px solid #070402; display: flex; align-items: flex-start;
-  justify-content: center; gap: 46px; padding-top: 22px; }
-.as-stick { width: 16px; height: 52px; background: #0a0705; border-radius: 8px; position: relative; }
-.as-stick::before { content: ''; position: absolute; top: -22px; left: 50%;
-  transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%;
+  border-top: 6px solid #070402; display: flex; align-items: center;
+  justify-content: center; gap: 46px;
+  padding-bottom: env(safe-area-inset-bottom, 0px); }
+.as-stick { width: 13px; height: 34px; background: #0a0705; border-radius: 7px; position: relative; margin-top: 14px; }
+.as-stick::before { content: ''; position: absolute; top: -19px; left: 50%;
+  transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%;
   background: radial-gradient(circle at 32% 28%, #ff7a6a, #a01b0c 70%);
   box-shadow: 0 4px 10px rgba(0,0,0,0.7); }
-.as-buttons { display: flex; gap: 18px; padding-top: 6px; }
-.as-pbtn { width: 38px; height: 38px; border-radius: 50%;
+.as-buttons { display: flex; gap: 16px; }
+.as-pbtn { width: 32px; height: 32px; border-radius: 50%;
   background: radial-gradient(circle at 32% 28%, rgba(255,255,255,0.6), transparent 40%), var(--as-accent);
   box-shadow: 0 4px 0 rgba(0,0,0,0.65), inset 0 -3px 6px rgba(0,0,0,0.4); }
 
@@ -187,8 +193,10 @@ function show(opts) {
 
     var entry = el('div', 'as-entry');
     var input = el('input', 'as-input');
-    input.maxLength = 12; input.placeholder = 'AAA';
+    input.type = 'text'; input.maxLength = 12; input.placeholder = 'AAA';
     input.autocapitalize = 'characters'; input.autocomplete = 'off'; input.spellcheck = false;
+    input.setAttribute('enterkeyhint', 'done');
+    input.setAttribute('autocorrect', 'off');
     var err = el('div', 'as-err', '');
     var submit = el('button', 'as-btn', 'SUBMIT SCORE');
     var skip = el('button', 'as-skip', 'SKIP');
@@ -250,10 +258,22 @@ function show(opts) {
     screen.appendChild(el('div', 'as-note',
       localOnly ? 'LOCAL BOARD — GLOBAL SCORES COMING ONLINE' : 'GLOBAL BOARD — ALL PLAYERS'));
 
-    var back = el('button', 'as-btn', 'CONTINUE');
-    back.style.margin = '10px auto 0';
-    back.addEventListener('click', close);
-    screen.appendChild(back);
+    // back to the arcade after 3s; touching the board buys 3 more
+    var ticker = el('div', 'as-note', '');
+    ticker.style.color = '#ffd23d';
+    ticker.style.fontSize = '13px';
+    screen.appendChild(ticker);
+
+    var left = 3, timer = null;
+    function tick() {
+      ticker.textContent = 'BACK TO THE ARCADE IN ' + left + '…';
+      if (left <= 0) { window.location.href = '/'; return; }
+      left--;
+      timer = setTimeout(tick, 1000);
+    }
+    tick();
+    list.addEventListener('touchstart', function () { left = 3; }, { passive: true });
+    list.addEventListener('scroll', function () { left = Math.max(left, 2); }, { passive: true });
 
     if (meRow) setTimeout(function () {
       meRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
