@@ -33,7 +33,7 @@
     .game-shell {
       display: flex; flex-direction: column;
       height: 100vh; height: 100dvh;
-      max-width: 500px; margin: 0 auto;
+      width: 100%;
       padding: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
                env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
     }
@@ -85,33 +85,6 @@
       padding: 6px; position: relative; overflow: hidden;
     }
     canvas { display: block; border-radius: 10px; image-rendering: pixelated; touch-action: none; }
-
-    /* Controls */
-    .controls {
-      flex-shrink: 0; padding: 6px 20px max(12px, env(safe-area-inset-bottom,12px));
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-    }
-    .ctrl-row { display: flex; gap: 4px; }
-    /* cabinet buttons: chunky, physical press */
-    .ctrl-btn {
-      width: 54px; height: 54px; background: rgba(90,242,58,0.08);
-      border: 2px solid var(--dim); border-radius: 13px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; cursor: pointer; transition: transform 0.06s, box-shadow 0.06s;
-      -webkit-tap-highlight-color: transparent; color: var(--cream);
-      box-shadow: 0 4px 0 rgba(0,0,0,0.55);
-    }
-    .ctrl-btn:active, .ctrl-btn.pressed {
-      background: rgba(90,242,58,0.22); border-color: var(--accent);
-      transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.55);
-    }
-    .fire-btn {
-      background: rgba(255,106,61,0.16); border-color: #571508; font-size: 22px;
-    }
-    .fire-btn:active, .fire-btn.pressed {
-      background: rgba(255,106,61,0.45); border-color: var(--fire);
-    }
-    .ctrl-spacer { width: 52px; height: 52px; }
 
     /* Overlays — attract-screen style */
     .overlay {
@@ -199,7 +172,7 @@
       <div class="overlay-title">SNAKE BLASTER</div>
       <div class="overlay-sub">
         SNAKE × ARKANOID<br>
-        Shoot pellets to grow · Blast the brick wall (+2)<br>
+        Swipe to steer · Auto-fire blasts the brick wall (+2)<br>
         5 lives · Wall, brick or self = &minus;1 life + halved
       </div>
       <button class="play-btn" id="startBtn">INSERT COIN</button>
@@ -222,24 +195,6 @@
       <div class="overlay-sub" id="loSub"></div>
     </div>
 
-  </div>
-
-  <div class="controls">
-    <div class="ctrl-row">
-      <div class="ctrl-spacer"></div>
-      <button class="ctrl-btn" data-dir="UP">▲</button>
-      <div class="ctrl-spacer"></div>
-    </div>
-    <div class="ctrl-row">
-      <button class="ctrl-btn" data-dir="LEFT">◀</button>
-      <button class="ctrl-btn fire-btn" id="fireBtn">🔥</button>
-      <button class="ctrl-btn" data-dir="RIGHT">▶</button>
-    </div>
-    <div class="ctrl-row">
-      <div class="ctrl-spacer"></div>
-      <button class="ctrl-btn" data-dir="DOWN">▼</button>
-      <div class="ctrl-spacer"></div>
-    </div>
   </div>
 
 </div>
@@ -661,6 +616,7 @@ function startGame() {
   startOverlay.classList.add('hidden');
   gameOverOverlay.classList.add('hidden');
   levelOverlay.classList.add('hidden');
+  resize();
   resetAll();
   updateHUD();
   running = true;
@@ -891,49 +847,22 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); if (!running) startGame(); }
 });
 
-document.querySelectorAll('.ctrl-btn[data-dir]').forEach(btn => {
-  const d = btn.dataset.dir;
-  function press() { btn.classList.add('pressed'); if (!running) { startGame(); return; } changeDir(d); }
-  function release() { btn.classList.remove('pressed'); }
-  btn.addEventListener('touchstart', e => { e.preventDefault(); press(); }, {passive:false});
-  btn.addEventListener('touchend', release);
-  btn.addEventListener('mousedown', press);
-  btn.addEventListener('mouseup', release);
-});
-
-const fireBtn = document.getElementById('fireBtn');
-function pressFireBtn() { fireBtn.classList.add('pressed'); if (!running) startGame(); else fire(); }
-function releaseFireBtn() { fireBtn.classList.remove('pressed'); }
-fireBtn.addEventListener('touchstart', e => { e.preventDefault(); pressFireBtn(); }, {passive:false});
-fireBtn.addEventListener('touchend', releaseFireBtn);
-fireBtn.addEventListener('mousedown', pressFireBtn);
-fireBtn.addEventListener('mouseup', releaseFireBtn);
-
-// Hold-to-fire support
-let fireholding = false, fireHoldInterval;
-fireBtn.addEventListener('touchstart', () => {
-  fireholding = true;
-  fireHoldInterval = setInterval(() => { if (fireholding && running) fire(); }, 80);
-}, {passive:true});
-fireBtn.addEventListener('touchend', () => { fireholding = false; clearInterval(fireHoldInterval); });
-fireBtn.addEventListener('mousedown', () => {
-  fireholding = true;
-  fireHoldInterval = setInterval(() => { if (fireholding && running) fire(); }, 80);
-});
-fireBtn.addEventListener('mouseup', () => { fireholding = false; clearInterval(fireHoldInterval); });
-
-// Swipe on canvas
+// Swipe anywhere on the play area to steer (mobile — no D-pad)
+const canvasWrap = document.getElementById('canvasWrap');
 let swipeStart = null;
-canvas.addEventListener('touchstart', e => {
+canvasWrap.addEventListener('touchstart', e => {
   swipeStart = {x:e.changedTouches[0].clientX, y:e.changedTouches[0].clientY};
-  if (!running) startGame();
 }, {passive:true});
-canvas.addEventListener('touchend', e => {
-  if (!swipeStart || !running) return;
+canvasWrap.addEventListener('touchmove', e => {
+  if (running) e.preventDefault(); // stop Safari rubber-band scroll mid-game
+}, {passive:false});
+canvasWrap.addEventListener('touchend', e => {
+  if (!swipeStart) return;
   const dx = e.changedTouches[0].clientX - swipeStart.x;
   const dy = e.changedTouches[0].clientY - swipeStart.y;
   swipeStart = null;
-  if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+  if (!running) return;
+  if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return; // tap, not swipe
   if (Math.abs(dx) > Math.abs(dy)) changeDir(dx > 0 ? 'RIGHT' : 'LEFT');
   else changeDir(dy > 0 ? 'DOWN' : 'UP');
 }, {passive:true});
@@ -959,7 +888,20 @@ theme = THEMES[0];
 ctx.fillStyle = THEMES[0].bg;
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-window.addEventListener('resize', () => { if (!running) { resize(); } });
+window.addEventListener('resize', () => {
+  if (!running) { resize(); return; }
+  // Live resize (Safari toolbar collapse / fullscreen kick-in): keep state, refit grid
+  const oldCols = cols, oldRows = rows;
+  resize();
+  if (cols === oldCols && rows === oldRows) return;
+  snake.forEach(s => { s.x = Math.min(s.x, cols - 1); s.y = Math.min(s.y, rows - 1); });
+  food = food.filter(f => f.x < cols && f.y < rows);
+  while (food.length < FOOD_COUNT) placeFood();
+  bricks = new Set([...bricks].filter(k => Number(k.split(',')[0]) < cols));
+  for (let r = 0; r < BRICK_ROWS; r++)
+    for (let c = oldCols; c < cols; c++) bricks.add(c + ',' + r);
+  updateHUD();
+});
 
 // Coming from the landing page INSERT COIN? Straight into the game.
 if (new URLSearchParams(location.search).get('play') === '1') {

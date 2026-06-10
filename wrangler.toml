@@ -2,8 +2,6 @@ name = "jnjarcade-games"
 pages_build_output_dir = "."
 compatibility_date = "2024-01-01"
 
-# Uncomment once the API token has Workers KV permission and the
-# namespace exists (npx wrangler kv namespace create PLAYS):
-# [[kv_namespaces]]
-# binding = "PLAYS"
-# id = "<namespace-id>"
+[[kv_namespaces]]
+binding = "PLAYS"
+id = "11903ac73e9146b7b79ca26773efc54c"
