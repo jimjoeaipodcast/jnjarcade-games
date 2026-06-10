@@ -88,6 +88,16 @@ function setupFullscreenUI() {
       btn.setAttribute('aria-expanded', String(open));
     });
   } else if (canFullscreen()) {
+    // go fullscreen on the very first gesture, no button required
+    const claim = () => {
+      if (!document.fullscreenElement) tryFullscreen();
+      document.removeEventListener('touchend', claim);
+      document.removeEventListener('click', claim);
+    };
+    document.addEventListener('touchend', claim);
+    document.addEventListener('click', claim);
+
+    // pill stays as a manual fallback (e.g. after pressing Esc)
     const btn = document.getElementById('fsBtn');
     btn.hidden = false;
     btn.addEventListener('click', () => {
@@ -161,6 +171,7 @@ function buildCabinet(game) {
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
     bumpPlays(game.id);
+    reportPlay(game.id);
     // Fullscreen persists across same-origin navigation on Android Chrome,
     // so the game itself opens chrome-free. Harmless elsewhere.
     if (!isIOS && !isStandalone) tryFullscreen();
@@ -169,9 +180,13 @@ function buildCabinet(game) {
 
   const meta = document.createElement('div');
   meta.className = 'cab-meta';
-  const plays = getPlays(game.id);
+  const worldwide = GLOBAL_PLAYS[game.id] || 0;
+  const mine = getPlays(game.id);
+  const playLine = worldwide > 0
+    ? worldwide.toLocaleString('en-GB') + ' PLAYS WORLDWIDE'
+    : (mine > 0 ? 'YOU PLAYED ' + mine + '×' : 'NEVER PLAYED. FIX THAT.');
   meta.innerHTML = '<span>' + (game.episode || '').toUpperCase() + '</span>'
-    + '<span class="plays">' + (plays > 0 ? 'YOU PLAYED ' + plays + '×' : 'NEVER PLAYED. FIX THAT.') + '</span>';
+    + '<span class="plays">' + playLine + '</span>';
   info.appendChild(meta);
 
   cab.appendChild(info);
@@ -496,6 +511,26 @@ function setupTurbo() {
   }
 }
 
+/* ── Global play stats (all visitors, via /api/plays) ─────── */
+
+let GLOBAL_PLAYS = {};
+
+async function fetchGlobalPlays() {
+  try {
+    const r = await fetch('/api/plays', { cache: 'no-store' });
+    if (r.ok) GLOBAL_PLAYS = await r.json();
+  } catch { /* stats are decoration; the arcade works without them */ }
+}
+
+function reportPlay(id) {
+  const payload = new Blob([JSON.stringify({ id })], { type: 'application/json' });
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon('/api/plays', payload);
+  } else {
+    fetch('/api/plays', { method: 'POST', body: JSON.stringify({ id }), keepalive: true }).catch(() => {});
+  }
+}
+
 /* ── Init ─────────────────────────────────────────────────── */
 
 async function init() {
@@ -503,12 +538,17 @@ async function init() {
   setupTurbo();
 
   try {
-    const resp = await fetch('games.json?v=' + Date.now());
+    const [resp] = await Promise.all([
+      fetch('games.json?v=' + Date.now()),
+      fetchGlobalPlays(),
+    ]);
     const data = await resp.json();
 
+    // most played worldwide on top; week order as tiebreaker
     const live = data.games
       .filter(g => isUnlocked(g.releaseDate))
-      .sort((a, b) => a.week - b.week);
+      .sort((a, b) =>
+        (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0) || a.week - b.week);
 
     const hall = document.getElementById('cabinets');
     if (live.length === 0) {

@@ -1,6 +1,22 @@
+# HTML always revalidates so deploys show up instantly
+/
+  Cache-Control: no-cache, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
+# Styles + script: versioned via ?v= in index.html, but keep TTL short
+# so a missed bump can't strand phones on a stale version for hours
+/style.css
+  Cache-Control: no-cache, must-revalidate
+
+/app.js
+  Cache-Control: no-cache, must-revalidate
+
 /games.json
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache
 
-/app.js
-  Cache-Control: no-cache, no-store, must-revalidate
+# Game pages change every release
+/games/*
+  Cache-Control: no-cache, must-revalidate
