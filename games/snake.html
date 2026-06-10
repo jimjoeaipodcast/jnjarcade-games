@@ -82,7 +82,7 @@
     /* Canvas */
     .canvas-wrap {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      padding: 6px; position: relative; overflow: hidden;
+      padding: 14px 6px; position: relative; overflow: hidden;
     }
     canvas { display: block; border-radius: 10px; image-rendering: pixelated; touch-action: none; }
 
@@ -198,7 +198,7 @@
   </div>
 
 </div>
-<script src="arcade-scores.js?v=7"></script>
+<script src="arcade-scores.js?v=8"></script>
 <script>
 (function () {
 'use strict';
@@ -268,7 +268,7 @@ let growPending = 0;
 function resize() {
   const wrap = document.getElementById('canvasWrap');
   const w = wrap.clientWidth  - 12;
-  const h = wrap.clientHeight - 12;
+  const h = wrap.clientHeight - 28;
   cols = Math.floor(w / CELL);
   rows = Math.floor(h / CELL);
   canvas.width  = cols * CELL;

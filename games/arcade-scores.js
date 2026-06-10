@@ -40,7 +40,8 @@ var CSS = `
   border-left: 10px solid #070402; border-right: 10px solid #070402;
   box-shadow: 0 0 80px rgba(0,0,0,0.9), inset 0 0 40px rgba(0,0,0,0.6); }
 
-.as-marquee { flex: 0 0 auto; text-align: center; padding: 16px 10px 12px;
+.as-marquee { flex: 0 0 auto; text-align: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 28px) 10px 12px;
   background: linear-gradient(#241608, #120a04);
   border-bottom: 6px solid #070402;
   font-family: 'Bungee', cursive; font-size: clamp(17px, 5vw, 24px);
@@ -106,21 +107,17 @@ var CSS = `
 .as-note { text-align: center; font-weight: 700; font-size: 11px; letter-spacing: 0.18em;
   color: #b8ad97; opacity: 0.7; padding-top: 6px; }
 
-/* control deck along the bottom edge — fully visible */
-.as-deck { flex: 0 0 auto; height: 84px;
+/* control deck along the bottom edge — exit button lives here */
+.as-deck { flex: 0 0 auto; min-height: 84px;
   background: linear-gradient(#1a120a, #0c0805);
   border-top: 6px solid #070402; display: flex; align-items: center;
-  justify-content: center; gap: 46px;
-  padding-bottom: env(safe-area-inset-bottom, 0px); }
-.as-stick { width: 13px; height: 34px; background: #0a0705; border-radius: 7px; position: relative; margin-top: 14px; }
-.as-stick::before { content: ''; position: absolute; top: -19px; left: 50%;
-  transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ff7a6a, #a01b0c 70%);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.7); }
-.as-buttons { display: flex; gap: 16px; }
-.as-pbtn { width: 32px; height: 32px; border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, rgba(255,255,255,0.6), transparent 40%), var(--as-accent);
-  box-shadow: 0 4px 0 rgba(0,0,0,0.65), inset 0 -3px 6px rgba(0,0,0,0.4); }
+  justify-content: center;
+  padding: 14px 10px calc(env(safe-area-inset-bottom, 0px) + 14px); }
+.as-back { font-family: 'Bungee', cursive; font-size: 14px;
+  letter-spacing: 0.1em; color: #060403; background: var(--as-accent);
+  border: none; border-radius: 10px; padding: 13px 28px 10px; cursor: pointer;
+  box-shadow: 0 5px 0 rgba(0,0,0,0.6); -webkit-tap-highlight-color: transparent; }
+.as-back:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,0.6); }
 
 @media (prefers-reduced-motion: reduce) { .as-h1, .as-row.me { animation: none; } }
 `;
@@ -173,10 +170,9 @@ function show(opts) {
   crt.appendChild(screen); bezel.appendChild(crt); cab.appendChild(bezel);
 
   var deck = el('div', 'as-deck');
-  deck.appendChild(el('div', 'as-stick'));
-  var btns = el('div', 'as-buttons');
-  btns.appendChild(el('div', 'as-pbtn')); btns.appendChild(el('div', 'as-pbtn'));
-  deck.appendChild(btns);
+  var backBtn = el('button', 'as-back', 'BACK TO ARCADE');
+  backBtn.addEventListener('click', function () { window.location.href = '/'; });
+  deck.appendChild(backBtn);
   cab.appendChild(deck);
 
   root.appendChild(cab);
