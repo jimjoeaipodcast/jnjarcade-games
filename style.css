@@ -505,7 +505,9 @@ button { font: inherit; cursor: pointer; }
   -webkit-tap-highlight-color: transparent;
 }
 
-/* classic arcade pushbutton: coloured plunger in a black screw-in collar */
+/* 90s Happ-style concave pushbutton (Tekken cab): dished plunger in a
+   black screw-in collar — shadow falls into the top of the dish, light
+   catches the bottom rim */
 .coin-btn .dome {
   position: relative;
   display: block;
@@ -513,31 +515,32 @@ button { font: inherit; cursor: pointer; }
   height: clamp(54px, 14vw, 70px);
   border-radius: 50%;
   border: 7px solid #100b07;
-  background: radial-gradient(circle at 50% 30%,
-    color-mix(in srgb, var(--c) 60%, #fff) 0 12%,
-    var(--c) 48%,
-    color-mix(in srgb, var(--c) 50%, #000) 100%);
+  background: radial-gradient(circle at 50% 48%,
+    color-mix(in srgb, var(--c) 52%, #000) 0 26%,
+    color-mix(in srgb, var(--c) 80%, #000) 52%,
+    var(--c) 70%,
+    color-mix(in srgb, var(--c) 65%, #fff) 84%,
+    color-mix(in srgb, var(--c) 55%, #000) 100%);
   box-shadow:
     0 0 0 3px #36291a,
     0 0 0 4px rgba(0, 0, 0, 0.85),
     0 6px 0 rgba(0, 0, 0, 0.85),
     0 14px 22px -8px rgba(0, 0, 0, 0.8),
-    inset 0 -7px 12px rgba(0, 0, 0, 0.5),
-    inset 0 5px 8px rgba(255, 255, 255, 0.3);
+    inset 0 8px 12px rgba(0, 0, 0, 0.55),
+    inset 0 -3px 6px rgba(255, 255, 255, 0.22);
   transition: transform 0.06s ease, box-shadow 0.06s ease;
 }
 
+/* soft light pooling on the lower inside of the dish */
 .coin-btn .dome::before {
   content: '';
   position: absolute;
-  top: 9%;
-  left: 17%;
-  width: 38%;
-  height: 24%;
+  left: 16%;
+  right: 16%;
+  bottom: 8%;
+  height: 34%;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.55);
-  filter: blur(2px);
-  transform: rotate(-20deg);
+  background: radial-gradient(ellipse at 50% 100%, rgba(255, 255, 255, 0.3), transparent 70%);
 }
 
 .coin-btn:active .dome {
@@ -547,8 +550,8 @@ button { font: inherit; cursor: pointer; }
     0 0 0 4px rgba(0, 0, 0, 0.85),
     0 2px 0 rgba(0, 0, 0, 0.85),
     0 6px 12px -8px rgba(0, 0, 0, 0.8),
-    inset 0 -4px 8px rgba(0, 0, 0, 0.55),
-    inset 0 3px 6px rgba(255, 255, 255, 0.25);
+    inset 0 10px 14px rgba(0, 0, 0, 0.65),
+    inset 0 -2px 5px rgba(255, 255, 255, 0.18);
 }
 
 .coin-btn .tag {

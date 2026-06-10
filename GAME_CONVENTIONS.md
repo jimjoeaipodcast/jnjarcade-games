@@ -48,15 +48,16 @@ Tested on iOS Safari + Android Chrome.
 
 - Fonts: Bungee (titles/marquee), Barlow Condensed (body/HUD).
 - Per-game accent colour drives theme; pass it to ArcadeScores as `accent`.
-- **Arcade pushbutton CSS pattern** (see `.coin-btn .dome` in style.css): coloured radial-gradient
-  plunger + 7px near-black border (screw collar) + collar ring box-shadows + blurred white gloss
-  `::before` + 4px translateY press. Reuse for any physical-button UI.
+- **Arcade pushbutton CSS pattern** (see `.coin-btn .dome` in style.css): 90s Happ-style CONCAVE
+  dish (Tekken cab), not a dome — radial gradient dark in the dished centre, top inner shadow,
+  light catch on the bottom rim, 7px near-black border (screw collar) + collar ring box-shadows
+  + 4px translateY press that deepens the dish. Reuse for any physical-button UI.
 - Pulsing perimeter glow on the play field; level themes cycle per level.
 
 ## Cache / deploy (non-negotiable)
 
 - Bump `?v=N` on EVERY CSS/JS change (`style.css?v=N`, `app.js?v=N`, `arcade-scores.js?v=N`).
-  Currently at **v=8**.
+  Versions move independently per file; check the current N in index.html before bumping.
 - NO GitHub auto-deploy: `git push` then
   `npx wrangler pages deploy . --project-name jnjarcade-games --commit-dirty=true`
   (token in `~/.jnj-secrets/cloudflare.env`).
