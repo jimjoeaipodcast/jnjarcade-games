@@ -505,26 +505,50 @@ button { font: inherit; cursor: pointer; }
   -webkit-tap-highlight-color: transparent;
 }
 
+/* classic arcade pushbutton: coloured plunger in a black screw-in collar */
 .coin-btn .dome {
-  width: clamp(52px, 13vw, 66px);
-  height: clamp(52px, 13vw, 66px);
+  position: relative;
+  display: block;
+  width: clamp(54px, 14vw, 70px);
+  height: clamp(54px, 14vw, 70px);
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 38%),
-    var(--c);
+  border: 7px solid #100b07;
+  background: radial-gradient(circle at 50% 30%,
+    color-mix(in srgb, var(--c) 60%, #fff) 0 12%,
+    var(--c) 48%,
+    color-mix(in srgb, var(--c) 50%, #000) 100%);
   box-shadow:
-    0 5px 0 color-mix(in srgb, var(--c) 45%, #000),
-    0 10px 18px -6px rgba(0, 0, 0, 0.7),
-    inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+    0 0 0 3px #36291a,
+    0 0 0 4px rgba(0, 0, 0, 0.85),
+    0 6px 0 rgba(0, 0, 0, 0.85),
+    0 14px 22px -8px rgba(0, 0, 0, 0.8),
+    inset 0 -7px 12px rgba(0, 0, 0, 0.5),
+    inset 0 5px 8px rgba(255, 255, 255, 0.3);
   transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+.coin-btn .dome::before {
+  content: '';
+  position: absolute;
+  top: 9%;
+  left: 17%;
+  width: 38%;
+  height: 24%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(2px);
+  transform: rotate(-20deg);
 }
 
 .coin-btn:active .dome {
   transform: translateY(4px);
   box-shadow:
-    0 1px 0 color-mix(in srgb, var(--c) 45%, #000),
-    0 5px 10px -6px rgba(0, 0, 0, 0.7),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.35);
+    0 0 0 3px #36291a,
+    0 0 0 4px rgba(0, 0, 0, 0.85),
+    0 2px 0 rgba(0, 0, 0, 0.85),
+    0 6px 12px -8px rgba(0, 0, 0, 0.8),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.55),
+    inset 0 3px 6px rgba(255, 255, 255, 0.25);
 }
 
 .coin-btn .tag {
