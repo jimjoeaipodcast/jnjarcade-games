@@ -1,10 +1,9 @@
 /* JnJ Arcade — app.js
-   Builds the icon grid from games.json, handles unlock logic & interactions */
+   Builds the cartridge grid from games.json, handles unlock logic & interactions */
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 
 function isUnlocked(releaseDateStr) {
   const d = new Date(releaseDateStr + 'T00:00:00');
@@ -14,6 +13,11 @@ function isUnlocked(releaseDateStr) {
 function formatReleaseDate(releaseDateStr) {
   const d = new Date(releaseDateStr + 'T00:00:00');
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatShortDate(releaseDateStr) {
+  const d = new Date(releaseDateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
 }
 
 function daysUntil(releaseDateStr) {
@@ -28,168 +32,131 @@ function wasJustUnlocked(releaseDateStr) {
   return daysSince <= 1;
 }
 
-// ── Toast notification ────────────────────────────────────────────────────
 
-let toastTimer = null;
-const toast = document.getElementById('toast');
-const toastTitle = document.getElementById('toastTitle');
-const toastSub = document.getElementById('toastSub');
+/* ── Social pixel buttons ─────────────────────────────────── */
 
-function showToast(title, sub) {
-  toastTitle.textContent = title;
-  toastSub.textContent = sub;
-  toast.classList.add('visible');
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('visible'), 3000);
-}
-
-// ── Real brand SVG logos ──────────────────────────────────────────────────
-
-const SOCIAL_LOGOS = {
-  YouTube: {
-    gradient: ['#FF0000','#CC0000'],
-    svg: `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>`,
-  },
-  TikTok: {
-    gradient: ['#010101','#1a1a2e'],
-    svg: `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M19.6 3a5.4 5.4 0 0 1-3.2-1.8A5.4 5.4 0 0 1 15 0h-3.8v16.3a2.6 2.6 0 0 1-2.6 2.2 2.6 2.6 0 0 1-2.6-2.6 2.6 2.6 0 0 1 2.6-2.6c.3 0 .5 0 .8.1V9.5a6.4 6.4 0 0 0-.8 0A6.4 6.4 0 0 0 2 15.9 6.4 6.4 0 0 0 8.6 22.3a6.4 6.4 0 0 0 6.4-6.4V8.1a9 9 0 0 0 5.3 1.7V6a5.4 5.4 0 0 1-.7 0 5.4 5.4 0 0 1-3.3-1v-2h3.3z"/></svg>`,
-  },
-  Patreon: {
-    gradient: ['#ffffff','#f5f0ff'],
-    imgSrc: 'assets/icons/patreon.png',
-  },
-  KoFi: {
-    gradient: ['#fff8f2','#ffede0'],
-    imgSrc: 'assets/icons/kofi.png',
-  },
-  Shop: {
-    gradient: ['#FF9F0A','#E07000'],
-    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-  },
+const SOCIAL_COLORS = {
+  Shop:    '#ffe600',
+  YouTube: '#ff4040',
+  Patreon: '#ff2bd6',
+  KoFi:    '#00f0ff',
 };
 
-// ── Icon builders ─────────────────────────────────────────────────────────
-
-// Convert a hex color to an rgba glow string
-function hexToGlow(hex, alpha = 0.55) {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0,2),16);
-  const g = parseInt(h.slice(2,4),16);
-  const b = parseInt(h.slice(4,6),16);
-  return `rgba(${r},${g},${b},${alpha})`;
+function buildSocialBtn(app) {
+  const a = document.createElement('a');
+  a.className = 'social-btn';
+  a.href = app.url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.style.setProperty('--c', SOCIAL_COLORS[app.label] || '#00f0ff');
+  a.textContent = app.name.toUpperCase();
+  return a;
 }
 
-function buildIconFace(emoji, gradient, extra = '', imgSrc = null) {
-  const face = document.createElement('div');
-  face.className = 'icon-face';
-  face.style.background = `linear-gradient(145deg, ${gradient[0]}, ${gradient[1]})`;
-  // Inject per-icon color glow for hover effect
-  if (gradient[0] && gradient[0].startsWith('#')) {
-    face.style.setProperty('--glow', hexToGlow(gradient[0]));
-  }
 
-  if (imgSrc) {
-    const img = document.createElement('img');
-    img.src = imgSrc;
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;border-radius:inherit;';
-    face.style.overflow = 'hidden';
-    face.appendChild(img);
-  } else {
-    const emojiEl = document.createElement('span');
-    emojiEl.style.cssText = 'position:relative;z-index:1;line-height:1;display:block;';
-    emojiEl.textContent = emoji;
-    face.appendChild(emojiEl);
-  }
+/* ── Game cartridges ──────────────────────────────────────── */
 
-  if (extra) face.insertAdjacentHTML('beforeend', extra);
-  return face;
-}
-
-function buildSocialIcon(app) {
-  const wrap = document.createElement('div');
-  wrap.className = 'icon-wrap unlocked social-icon';
-  wrap.addEventListener('click', () => window.open(app.url, '_blank', 'noopener'));
-
-  const logo = SOCIAL_LOGOS[app.label];
-  const grad = logo ? logo.gradient : app.gradient;
-  const face = document.createElement('div');
-  face.className = 'icon-face';
-  face.style.background = `linear-gradient(145deg, ${grad[0]}, ${grad[1]})`;
-  if (grad[0] && grad[0].startsWith('#')) {
-    face.style.setProperty('--glow', hexToGlow(grad[0]));
-  }
-
-  if (logo) {
-    if (logo.imgSrc) {
-      const img = document.createElement('img');
-      img.src = logo.imgSrc;
-      img.style.cssText = 'width:72%;height:72%;object-fit:contain;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);';
-      face.style.overflow = 'hidden';
-      face.appendChild(img);
-    } else {
-      const svgWrap = document.createElement('div');
-      svgWrap.className = 'logo-svg';
-      svgWrap.innerHTML = logo.svg;
-      face.appendChild(svgWrap);
-    }
-  } else {
-    const em = document.createElement('span');
-    em.style.cssText = 'position:relative;z-index:1;line-height:1;display:block;';
-    em.textContent = app.emoji;
-    face.appendChild(em);
-  }
-  wrap.appendChild(face);
-  return wrap;
-}
-
-function buildGameIcon(game) {
+function buildGameCard(game) {
   const unlocked = isUnlocked(game.releaseDate);
-  const wrap = document.createElement('div');
-  wrap.className = `icon-wrap ${unlocked ? 'unlocked' : 'locked'}`;
 
+  const wrap = document.createElement('div');
+  wrap.className = `cart-wrap ${unlocked ? 'unlocked' : 'locked'}`;
+
+  const cart = document.createElement('article');
+  cart.className = 'cart';
+
+  // Inline --c would beat the locked-state CSS override, so only set it when unlocked
   if (unlocked) {
-    if (wasJustUnlocked(game.releaseDate)) {
-      wrap.classList.add('just-unlocked');
-    }
+    const c = game.gradient && game.gradient[0] ? game.gradient[0] : '#00f0ff';
+    wrap.style.setProperty('--c', c);
+    cart.style.setProperty('--c', c);
+  }
+
+  // Top strip: week + episode
+  const top = document.createElement('div');
+  top.className = 'cart-top';
+  top.innerHTML = `<span>WK ${String(game.week).padStart(2, '0')}</span><span class="ep">${game.episode.toUpperCase()}</span>`;
+  cart.appendChild(top);
+
+  // Screen: artwork / emoji / padlock
+  const screen = document.createElement('div');
+  screen.className = 'cart-screen';
+  if (unlocked && game.icon) {
+    const img = document.createElement('img');
+    img.src = game.icon;
+    img.alt = game.name;
+    img.loading = 'lazy';
+    screen.appendChild(img);
+  } else if (unlocked) {
+    const em = document.createElement('span');
+    em.className = 'cart-emoji';
+    em.textContent = game.emoji || '\u{1F579}️';
+    screen.appendChild(em);
+  } else {
+    const lock = document.createElement('span');
+    lock.className = 'cart-lock';
+    lock.textContent = '\u{1F512}';
+    screen.appendChild(lock);
+  }
+  cart.appendChild(screen);
+
+  // Name
+  const name = document.createElement('h3');
+  name.className = 'cart-name';
+  name.textContent = game.name.toUpperCase();
+  cart.appendChild(name);
+
+  // Status line
+  const status = document.createElement('div');
+  status.className = 'cart-status';
+  if (unlocked) {
+    status.innerHTML = '&#9658; PLAY';
+  } else {
+    status.textContent = 'LOCKED';
+    const date = document.createElement('div');
+    date.className = 'cart-date';
+    const days = daysUntil(game.releaseDate);
+    date.textContent = days === 1 ? 'UNLOCKS TOMORROW' : `UNLOCKS ${formatShortDate(game.releaseDate)}`;
+    cart.appendChild(status);
+    cart.appendChild(date);
+  }
+  if (unlocked) cart.appendChild(status);
+
+  // NEW! badge
+  if (unlocked && wasJustUnlocked(game.releaseDate)) {
+    const badge = document.createElement('div');
+    badge.className = 'new-badge';
+    badge.textContent = 'NEW!';
+    cart.appendChild(badge);
+  }
+
+  // Deny sweep overlay (locked click feedback)
+  const sweep = document.createElement('div');
+  sweep.className = 'deny-sweep';
+  cart.appendChild(sweep);
+
+  wrap.appendChild(cart);
+
+  // Interactions
+  if (unlocked) {
     wrap.addEventListener('click', () => {
       incrementPlayCount(game.id);
       navigate(game.url);
     });
   } else {
-    wrap.addEventListener('click', () => {
-      const days = daysUntil(game.releaseDate);
-      const dateStr = formatReleaseDate(game.releaseDate);
-      showToast(
-        `${game.name} is locked`,
-        `Unlocks ${days === 1 ? 'tomorrow' : `on ${dateStr}`} — Week ${game.week}`
-      );
-    });
+    wrap.addEventListener('click', () => denied(wrap));
   }
-
-  // Build icon face
-  let extraHtml = '';
-  if (!unlocked) {
-    extraHtml = `
-      <div class="lock-overlay">🔒</div>
-      <div class="week-badge">Wk ${game.week}</div>
-    `;
-  } else if (wasJustUnlocked(game.releaseDate)) {
-    extraHtml = `<div class="new-badge">NEW</div>`;
-  }
-
-  const face = buildIconFace(
-    unlocked ? game.emoji : '·',
-    unlocked ? game.gradient : ['#2c2c2e', '#1c1c1e'],
-    '',
-    unlocked && game.icon ? game.icon : null
-  );
-  if (extraHtml) face.insertAdjacentHTML('beforeend', extraHtml);
-  wrap.appendChild(face);
 
   return wrap;
 }
 
-// ── Navigate with iOS-style fade ────────────────────────────────────────
+// Scanline flash + shake on locked cartridge
+function denied(wrap) {
+  if (wrap.classList.contains('denied')) return;
+  wrap.classList.add('denied');
+  setTimeout(() => wrap.classList.remove('denied'), 550);
+}
+
 
 function navigate(url) {
   document.body.style.transition = 'opacity 0.2s ease';
@@ -199,7 +166,8 @@ function navigate(url) {
   }, 200);
 }
 
-// ── Play count (localStorage) ─────────────────────────────────────────────
+
+/* ── Play counts (localStorage) ───────────────────────────── */
 
 function getPlayCount(gameId) {
   return parseInt(localStorage.getItem(`jnj_plays_${gameId}`) || '0', 10);
@@ -209,16 +177,42 @@ function incrementPlayCount(gameId) {
   localStorage.setItem(`jnj_plays_${gameId}`, getPlayCount(gameId) + 1);
 }
 
-// ── Build grid ────────────────────────────────────────────────────────────
+
+/* ── Marquee ticker ───────────────────────────────────────── */
+
+function buildTicker(data) {
+  const track = document.getElementById('tickerTrack');
+  if (!track) return;
+
+  const SEP = '<span class="tk-sep">&#9733;</span>';
+  const parts = [];
+
+  data.games
+    .filter(g => isUnlocked(g.releaseDate))
+    .forEach(g => parts.push(`<span class="tk-live">${g.name.toUpperCase()} &#8212; NOW PLAYING</span>`));
+
+  parts.push('<span>INSERT COIN</span>');
+
+  data.games
+    .filter(g => !isUnlocked(g.releaseDate))
+    .sort((a, b) => a.week - b.week)
+    .slice(0, 6)
+    .forEach(g => parts.push(`<span class="tk-soon">COMING ${formatShortDate(g.releaseDate)}: ${g.name.toUpperCase()}</span>`));
+
+  parts.push('<span>NEW GAME EVERY EPISODE</span>');
+
+  const seq = SEP + parts.join(SEP) + SEP;
+  // Duplicate sequence for a seamless -50% translateX loop
+  track.innerHTML = seq + seq;
+}
+
+
+/* ── Grid build ───────────────────────────────────────────── */
 
 function buildGrid(data) {
-  const grid = document.getElementById('appGrid');
-
-  // Social row (no label, no divider)
-  const socialRow = document.createElement('div');
-  socialRow.className = 'icon-row';
-  data.social.forEach(app => socialRow.appendChild(buildSocialIcon(app)));
-  grid.appendChild(socialRow);
+  // Social pixel buttons
+  const socialRow = document.getElementById('socialRow');
+  data.social.forEach(app => socialRow.appendChild(buildSocialBtn(app)));
 
   // Sort by play count desc, then by week order as tiebreaker
   const sorted = [...data.games].sort((a, b) => {
@@ -226,42 +220,17 @@ function buildGrid(data) {
     return diff !== 0 ? diff : a.week - b.week;
   });
 
-  // Game rows (4 per row)
-  const perRow = 4;
-  for (let i = 0; i < sorted.length; i += perRow) {
-    const row = document.createElement('div');
-    row.className = 'icon-row';
-    sorted.slice(i, i + perRow).forEach(game => row.appendChild(buildGameIcon(game)));
-    grid.appendChild(row);
-  }
+  const grid = document.getElementById('appGrid');
+  sorted.forEach(game => grid.appendChild(buildGameCard(game)));
 }
 
-// ── Clock update ─────────────────────────────────────────────────────────
-// The status bar shows the real time on mobile for authenticity
-
-function startClock() {
-  const el = document.getElementById('statusTime');
-  if (!el) return;
-
-  function update() {
-    const now = new Date();
-    const h = now.getHours().toString().padStart(2, '0');
-    const m = now.getMinutes().toString().padStart(2, '0');
-    el.textContent = `${h}:${m}`;
-  }
-
-  update();
-  setInterval(update, 60000);
-}
-
-// ── Init ─────────────────────────────────────────────────────────────────
 
 async function init() {
   try {
     const resp = await fetch('games.json?v=' + Date.now());
     const data = await resp.json();
     buildGrid(data);
-    startClock();
+    buildTicker(data);
 
     // Fade in
     document.body.style.opacity = '0';
@@ -272,7 +241,7 @@ async function init() {
   } catch (err) {
     console.error('Failed to load games.json:', err);
     document.getElementById('appGrid').innerHTML =
-      '<p style="color:rgba(255,255,255,0.5);padding:20px;font-size:13px;font-family:system-ui">Failed to load arcade data.</p>';
+      '<p class="load-error">GAME OVER<br>FAILED TO LOAD ARCADE DATA<br>PRESS F5 TO CONTINUE</p>';
   }
 }
 

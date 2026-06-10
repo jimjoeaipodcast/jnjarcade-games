@@ -5,108 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0a0015">
+  <meta name="theme-color" content="#04020e">
   <link rel="manifest" href="manifest.json">
   <title>JnJ Arcade</title>
   <link rel="stylesheet" href="style.css">
-  <style>
-    /* ── Fullscreen splash ── */
-    #fs-splash {
-      position: fixed; inset: 0; z-index: 9999;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,200,180,0.08) 0%, transparent 60%),
-                  linear-gradient(160deg, #020912 0%, #060c22 50%, #040110 100%);
-      cursor: pointer; user-select: none;
-      transition: opacity 0.4s ease;
-    }
-    #fs-splash.hidden { opacity: 0; pointer-events: none; }
-    #fs-logo {
-      font-size: clamp(32px, 8vw, 64px);
-      font-weight: 900;
-      letter-spacing: -1px;
-      color: #fff;
-      font-family: -apple-system, 'SF Pro Display', sans-serif;
-      margin-bottom: 8px;
-    }
-    #fs-logo span { color: rgba(0,200,180,0.9); }
-    #fs-tap {
-      font-size: clamp(11px, 2.5vw, 15px);
-      color: rgba(255,255,255,0.45);
-      font-family: -apple-system, sans-serif;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      animation: fspulse 1.8s ease-in-out infinite;
-    }
-    @keyframes fspulse {
-      0%, 100% { opacity: 0.45; transform: translateY(0); }
-      50%       { opacity: 0.9;  transform: translateY(-3px); }
-    }
-    #fs-ios-tip {
-      position: absolute; bottom: 32px;
-      font-size: 13px; color: rgba(255,255,255,0.75);
-      font-family: -apple-system, sans-serif;
-      text-align: center; max-width: 280px; line-height: 1.7;
-      display: none; padding: 12px 16px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 12px;
-    }
-    #fs-ios-tip.show { display: block; }
-    #fs-ios-tip strong { color: rgba(0,200,180,0.9); }
-  </style>
 </head>
 <body>
 
-  <!-- Fullscreen splash — first thing visible, dismissed on tap -->
+  <!-- Fullscreen splash / attract mode — dismissed on tap -->
   <div id="fs-splash">
-    <div id="fs-logo">JnJ <span>Arcade</span></div>
-    <div id="fs-tap">Tap anywhere to enter</div>
-    <div id="fs-ios-tip">📱 iPhone can't go fullscreen in Safari.<br><strong>Tap Share → Add to Home Screen</strong><br>then open from your home screen.</div>
+    <div class="splash-presents">JIMMY &amp; JOE AI PODCAST PRESENTS</div>
+    <h1 class="splash-logo"><span class="m-jnj">JnJ</span><br><span class="m-arcade">ARCADE</span></h1>
+    <div class="coin-slot"><div class="coin-slit"></div></div>
+    <div id="fs-tap">&#9658; INSERT COIN &#9668;</div>
+    <div class="splash-hiscore">HI-SCORE 999999 &#183; 1 CREDIT</div>
+    <div id="fs-ios-tip">&#128247; iPhone can't go fullscreen in Safari.<br><strong>Tap Share &rarr; Add to Home Screen</strong><br>then open from your home screen.</div>
   </div>
 
-  <div class="page-bg">
-    <div class="phone-wrapper">
-      <div class="phone-body">
-        <div class="btn-vol-up"></div>
-        <div class="btn-vol-down"></div>
-        <div class="btn-power"></div>
-        <div class="dynamic-island"><div class="di-camera"></div></div>
-        <div class="phone-screen">
-          <div class="status-bar">
-            <span class="status-time" id="statusTime">9:41</span>
-            <div class="status-right">
-              <div class="signal-bars">
-                <span class="bar b1"></span><span class="bar b2"></span>
-                <span class="bar b3"></span><span class="bar b4"></span>
-              </div>
-              <svg class="wifi-svg" viewBox="0 0 24 16" fill="white" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 13.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
-                <path d="M12 9a7.5 7.5 0 0 1 5.3 2.2l1.4-1.4A9.5 9.5 0 0 0 12 7a9.5 9.5 0 0 0-6.7 2.8l1.4 1.4A7.5 7.5 0 0 1 12 9z" opacity=".6"/>
-                <path d="M12 4a12.5 12.5 0 0 1 8.8 3.6l1.4-1.4A14.5 14.5 0 0 0 12 2 14.5 14.5 0 0 0 1.8 6.2l1.4 1.4A12.5 12.5 0 0 1 12 4z" opacity=".3"/>
-              </svg>
-              <div class="battery-wrap">
-                <div class="battery-body"><div class="battery-fill"></div></div>
-                <div class="battery-nub"></div>
-              </div>
-            </div>
-          </div>
-          <div class="screen-scroll">
-            <div class="app-grid" id="appGrid"></div>
-          </div>
-          <div class="home-indicator"></div>
-        </div>
-      </div>
+  <!-- Ambience layers -->
+  <div class="stars" aria-hidden="true"></div>
+  <div class="grid-floor" aria-hidden="true"></div>
+
+  <div class="hall">
+    <header class="hall-header">
+      <div class="presents">JIMMY &amp; JOE AI PODCAST PRESENTS</div>
+      <h1 class="marquee"><span class="m-jnj">JnJ</span> <span class="m-arcade">ARCADE</span></h1>
+      <div class="hall-sub">ONE NEW GAME EVERY EPISODE &#183; FREE&nbsp;PLAY</div>
+    </header>
+
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track" id="tickerTrack"></div>
     </div>
+
+    <nav class="social-row" id="socialRow"></nav>
+
+    <main class="cab-grid" id="appGrid"></main>
+
+    <footer class="hall-footer">
+      &copy; 2026 JIMMY &amp; JOE AI PODCAST<br>
+      <span class="ft-coin">NO QUARTERS REQUIRED &#183; PRESS START</span>
+    </footer>
   </div>
 
-  <div class="toast" id="toast">
-    <span class="toast-lock">🔒</span>
-    <div class="toast-text">
-      <strong id="toastTitle"></strong>
-      <span id="toastSub"></span>
-    </div>
-  </div>
+  <!-- CRT scanlines + vignette, sits above everything incl. splash -->
+  <div class="crt" aria-hidden="true"></div>
 
   <script src="app.js"></script>
   <script>
