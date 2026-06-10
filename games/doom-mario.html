@@ -183,6 +183,7 @@ body { background:var(--pit); overflow:hidden; font-family:'Barlow Condensed','A
   </div>
 </div>
 
+<script src="arcade-scores.js"></script>
 <script>
 'use strict';
 
@@ -869,7 +870,17 @@ function endGame(won) {
   document.getElementById('osub').textContent  =`Score: ${score.toLocaleString()}`;
   document.getElementById('owaves').textContent=`Waves cleared: ${wave-1}`;
   document.getElementById('rbtn').textContent  ='Play Again';
-  document.getElementById('ov').classList.add('on');
+
+  // hi-score cabinet first, then the retry overlay
+  if (window.ArcadeScores && score > 0) {
+    ArcadeScores.show({
+      game: 'doom-mario', title: 'DOOM MARI-OH!', score: score,
+      accent: '#ff6a3d',
+      onClose: () => document.getElementById('ov').classList.add('on'),
+    });
+  } else {
+    document.getElementById('ov').classList.add('on');
+  }
 }
 
 // ── HUD ───────────────────────────────────────────────────────────────────────

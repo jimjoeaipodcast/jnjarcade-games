@@ -243,6 +243,7 @@
   </div>
 
 </div>
+<script src="arcade-scores.js"></script>
 <script>
 (function () {
 'use strict';
@@ -673,11 +674,21 @@ function endGame() {
   if (isHS) { highScore = score; localStorage.setItem('jnj_snakeblaster_hs', score); }
 
   document.getElementById('goEmoji').textContent = lives <= 0 ? '💀' : '😵';
-  document.getElementById('goTitle').textContent = 'Game Over';
+  document.getElementById('goTitle').textContent = 'GAME OVER';
   document.getElementById('goScore').textContent = score;
   document.getElementById('goBest').style.display = (isHS && score > 0) ? 'inline-flex' : 'none';
   document.getElementById('goSub').textContent = 'Reached Level ' + level + ' · Best: ' + highScore;
-  gameOverOverlay.classList.remove('hidden');
+
+  // hi-score cabinet first, then the retry overlay
+  if (window.ArcadeScores && score > 0) {
+    ArcadeScores.show({
+      game: 'snake', title: 'SNAKE BLASTER', score: score,
+      accent: theme.snake,
+      onClose: () => gameOverOverlay.classList.remove('hidden'),
+    });
+  } else {
+    gameOverOverlay.classList.remove('hidden');
+  }
 }
 
 // ─── DRAW ─────────────────────────────────────────────────────────────────────
