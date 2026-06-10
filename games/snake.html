@@ -199,8 +199,8 @@
       <div class="overlay-title">SNAKE BLASTER</div>
       <div class="overlay-sub">
         SNAKE × ARKANOID<br>
-        Shoot pellets to grow · Collect power-ups<br>
-        5 lives · Wall = snake halved · Self = &minus;1 life
+        Shoot pellets to grow · Blast the brick wall (+2)<br>
+        5 lives · Wall, brick or self = &minus;1 life + halved
       </div>
       <button class="play-btn" id="startBtn">INSERT COIN</button>
       <div style="font-size:11px;color:rgba(255,255,255,0.35)" id="startBest"></div>
@@ -293,6 +293,8 @@ const levelOverlay    = document.getElementById('levelOverlay');
 let cols, rows;
 let snake, dir, nextDir;
 let food, powerUps, pellets;
+let bricks;                    // Set("c,r") — arkanoid wall, rows 0-2
+const BRICK_ROWS = 3;
 let score, highScore, lives;
 let level, levelScore, levelTarget;
 let gunTier, levelStartGun;
@@ -380,6 +382,9 @@ function resetLevel() {
   dir     = {x:1,y:0};
   nextDir = {x:1,y:0};
   food = []; powerUps = []; pellets = []; growPending = 0;
+  bricks = new Set();
+  for (let r = 0; r < BRICK_ROWS; r++)
+    for (let c = 0; c < cols; c++) bricks.add(c + ',' + r);
   for (let i = 0; i < FOOD_COUNT; i++) placeFood();
   lastTick = 0; snakeTicker = 0;
   lastFireTime = 0; rapidFireEnd = 0;
@@ -398,7 +403,7 @@ function placeFood() {
   let fx, fy, tries = 0;
   do {
     fx = 1 + Math.floor(Math.random() * (cols - 2));
-    fy = 1 + Math.floor(Math.random() * (rows - 2));
+    fy = BRICK_ROWS + 1 + Math.floor(Math.random() * (rows - BRICK_ROWS - 2));
     tries++;
   } while (occ.has(fx+','+fy) && tries < 200);
   food.push({x:fx, y:fy});
@@ -491,6 +496,15 @@ function updatePellets() {
     const px = Math.floor(p.x / CELL), py = Math.floor(p.y / CELL);
     let hit = false;
 
+    // Hit a brick — blast it (the arkanoid bit)
+    if (bricks.has(px + ',' + py)) {
+      bricks.delete(px + ',' + py);
+      score += 2;
+      scoreEl.textContent = score;
+      pellets.splice(i, 1);
+      continue;
+    }
+
     // Hit food
     for (let j = food.length - 1; j >= 0; j--) {
       if (food[j].x === px && food[j].y === py) {
@@ -524,7 +538,8 @@ function eatFood(idx) {
 
 // ─── LEVEL ────────────────────────────────────────────────────────────────────
 function maxSnakeLength() {
-  return cols * rows - FOOD_COUNT - 4;
+  // brick rows aren't playable space
+  return cols * (rows - BRICK_ROWS) - FOOD_COUNT - 4;
 }
 
 function checkLevelComplete() {
@@ -563,16 +578,28 @@ function snakeTick() {
   dir = {...nextDir};
   const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
 
-  // Wall collision → glitch
+  // Wall collision → -1 life
   if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
     handleHit('wall'); return;
   }
 
-  // Self collision → glitch
+  // Brick collision → same as wall
+  if (bricks.has(head.x + ',' + head.y)) {
+    handleHit('brick'); return;
+  }
+
+  // Self collision → -1 life
   for (let i = 0; i < snake.length - 1; i++) {
     if (snake[i].x === head.x && snake[i].y === head.y) {
       handleHit('self'); return;
     }
+  }
+
+  // The wall slowly rebuilds itself (attract-mode rule)
+  if (Math.random() < 0.05 && bricks.size < cols * BRICK_ROWS) {
+    const c = Math.floor(Math.random() * cols), r = Math.floor(Math.random() * BRICK_ROWS);
+    const key = c + ',' + r;
+    if (!bricks.has(key) && !snake.some(s => s.x === c && s.y === r)) bricks.add(key);
   }
 
   snake.unshift(head);
@@ -601,8 +628,8 @@ function handleHit(reason) {
     return;
   }
 
-  const isWall = reason === 'wall';
-  showMsg(isWall ? '💥 Wall! -1 Life · Halved' : '🐍 Self! -1 Life · Halved', 1600);
+  const msgs = { wall: '💥 Wall! -1 Life · Halved', brick: '🧱 Brick! -1 Life · Halved', self: '🐍 Self! -1 Life · Halved' };
+  showMsg(msgs[reason] || msgs.wall, 1600);
 
   // Halve snake + teleport
   const newLen = Math.max(3, Math.floor(snake.length / 2));
@@ -622,7 +649,7 @@ function randomFreeCell() {
   let x, y, tries = 0;
   do {
     x = 2 + Math.floor(Math.random() * (cols - 4));
-    y = 2 + Math.floor(Math.random() * (rows - 4));
+    y = BRICK_ROWS + 1 + Math.floor(Math.random() * (rows - BRICK_ROWS - 3));
     tries++;
   } while (occ.has(x+','+y) && tries < 150);
   return {x, y};
@@ -702,24 +729,23 @@ function draw(ts) {
   ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
   ctx.restore();
 
-  // Food
+  // Brick wall (attract style: crisp dim squares)
+  const bpad = Math.max(1, Math.round(CELL * 0.1));
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = t.snake;
+  bricks.forEach(key => {
+    const [bc, br] = key.split(',').map(Number);
+    ctx.fillRect(bc*CELL + bpad, br*CELL + bpad, CELL - bpad*2, CELL - bpad*2);
+  });
+  ctx.restore();
+
+  // Food — crisp pulsing squares (attract style)
   food.forEach(f => {
-    ctx.save();
-    ctx.shadowColor = t.food;
-    ctx.shadowBlur = 14;
+    const pulse = 0.72 + 0.28 * Math.sin(ts * 0.005 + f.x + f.y);
+    const fs = CELL * 0.6 * pulse;
     ctx.fillStyle = t.food;
-    const wobble = Math.sin(ts * 0.003 + f.x + f.y) * 1.2;
-    const r = CELL * 0.38 + wobble;
-    ctx.beginPath();
-    ctx.arc(f.x*CELL + CELL/2, f.y*CELL + CELL/2, r, 0, Math.PI*2);
-    ctx.fill();
-    // inner shine
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(f.x*CELL + CELL/2 - r*0.25, f.y*CELL + CELL/2 - r*0.25, r*0.3, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
+    ctx.fillRect(f.x*CELL + (CELL - fs)/2, f.y*CELL + (CELL - fs)/2, fs, fs);
   });
 
   // Power-ups
@@ -746,48 +772,28 @@ function draw(ts) {
     ctx.restore();
   });
 
-  // Pellets
+  // Pellets — crisp pixel bullets (attract style)
   pellets.forEach(p => {
     const g = GUNS[Math.min(p.tier - 1, GUNS.length - 1)];
-    ctx.save();
-    ctx.shadowColor = g.color;
-    ctx.shadowBlur = 10;
     ctx.fillStyle = g.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 3.5, 0, Math.PI*2);
-    ctx.fill();
-    // trail
-    ctx.globalAlpha = 0.35;
-    ctx.beginPath();
-    ctx.arc(p.x - p.vx * 1.5, p.y - p.vy * 1.5, 2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
+    ctx.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 4, 4, 8);
   });
 
-  // Snake body
-  ctx.save();
-  ctx.shadowColor = t.snake;
-  ctx.shadowBlur = 6;
+  // Snake body — flat chunky squares, fading like the attract demo
+  const pad = Math.max(1, Math.round(CELL * 0.1));
   for (let i = snake.length - 1; i >= 1; i--) {
     const seg = snake[i];
-    const alpha = 0.45 + 0.55 * (1 - i / snake.length);
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = Math.max(0.35, 1 - i * 0.07);
     ctx.fillStyle = t.snake;
-    const pad = 2.5;
-    roundRect(ctx, seg.x*CELL + pad, seg.y*CELL + pad, CELL - pad*2, CELL - pad*2, 4);
-    ctx.fill();
+    ctx.fillRect(seg.x*CELL + pad, seg.y*CELL + pad, CELL - pad*2, CELL - pad*2);
   }
-  ctx.restore();
+  ctx.globalAlpha = 1;
 
-  // Snake head
+  // Snake head — brighter, crisp
   const h = snake[0];
   ctx.save();
-  ctx.shadowColor = t.head;
-  ctx.shadowBlur = 14;
   ctx.fillStyle = t.head;
-  ctx.globalAlpha = 1;
-  roundRect(ctx, h.x*CELL + 1, h.y*CELL + 1, CELL - 2, CELL - 2, 5);
-  ctx.fill();
+  ctx.fillRect(h.x*CELL + pad, h.y*CELL + pad, CELL - pad*2, CELL - pad*2);
   // Eyes
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#000';
