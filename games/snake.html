@@ -34,8 +34,9 @@
       display: flex; flex-direction: column;
       height: 100vh; height: 100dvh;
       width: 100%;
+      /* no bottom inset — the play area runs to the screen edge (Safari) */
       padding: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
-               env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+               0 env(safe-area-inset-left,0);
     }
 
     /* Header — cabinet marquee strip */
@@ -81,8 +82,9 @@
 
     /* Canvas */
     .canvas-wrap {
-      flex: 1; display: flex; align-items: center; justify-content: center;
-      padding: 14px 6px; position: relative; overflow: hidden;
+      /* canvas sits at the BOTTOM — any leftover space collects at the top */
+      flex: 1; display: flex; align-items: flex-end; justify-content: center;
+      padding: 6px 6px 4px; position: relative; overflow: hidden;
     }
     canvas { display: block; border-radius: 10px; image-rendering: pixelated; touch-action: none; }
 
@@ -231,7 +233,7 @@ const GUNS = [
 // gun upgrades come from blasting the brick wall (arcanoid-style);
 // food only drops support items, with a rare magnet
 const PU_BRICK = ['gun','gun','gun','rapid'];
-const PU_FOOD  = ['life','rapid','rapid','magnet'];
+const PU_FOOD  = ['life','rapid','rapid','rapid','rapid','rapid','rapid','magnet']; // life kept rare
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const canvas     = document.getElementById('gameCanvas');
@@ -277,7 +279,7 @@ function resize() {
   // edges there). iOS Safari never gets true fullscreen — give it the space.
   const fs = document.fullscreenElement || window.navigator.standalone === true
     || window.matchMedia('(display-mode: fullscreen)').matches;
-  const h = wrap.clientHeight - 16 - (fs ? CELL * 2 : 0);
+  const h = wrap.clientHeight - 10 - (fs ? CELL * 2 : 0);
   cols = Math.floor(w / CELL);
   rows = Math.floor(h / CELL);
   canvas.width  = cols * CELL;
@@ -584,9 +586,10 @@ function maxSnakeLength() {
 }
 
 function checkLevelComplete() {
-  if (levelScore < levelTarget) return;
+  // a level is complete ONLY when the snake occupies every playable square
+  if (snake.length < maxSnakeLength()) return;
 
-  lives = Math.min(lives + 2, MAX_LIVES);
+  lives = Math.min(lives + 1, MAX_LIVES);
   levelStartGun = gunTier;
   level++;
   levelScore = 0;
@@ -600,7 +603,7 @@ function checkLevelComplete() {
   cancelAnimationFrame(animId);
   const lo = levelOverlay;
   document.getElementById('loTitle').textContent = 'Level ' + (level-1) + ' Complete!';
-  document.getElementById('loBadge').textContent = '+2 Lives · Speed +20%';
+  document.getElementById('loBadge').textContent = '+1 Life · Speed +20%';
   document.getElementById('loSub').textContent =
     GUNS[gunTier-1].name + ' gun locked in for Level ' + level + '. Colors shifting…';
   lo.classList.remove('hidden');
