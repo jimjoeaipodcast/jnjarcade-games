@@ -70,6 +70,19 @@
       "episode": "Bonus"
     },
     {
+      "id": "doom-3d",
+      "name": "Doom Mari-OH 3D",
+      "emoji": "👹",
+      "url": "/games/doom-3d.html",
+      "releaseDate": "2026-06-11",
+      "week": 2,
+      "gradient": [
+        "#FF3355",
+        "#8B0000"
+      ],
+      "episode": "Bonus II"
+    },
+    {
       "id": "token-rush",
       "name": "Token Rush",
       "emoji": "\u26a1",

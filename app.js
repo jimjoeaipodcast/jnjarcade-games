@@ -43,6 +43,13 @@ const WORLDS = {
     by: 'JOE',
     attract: doomAttract,
   },
+  'doom-3d': {
+    ink: '#ff3355', dim: '#5c0f1c', pit: '#160508', glowsoft: 'rgba(255,51,85,0.22)',
+    genre: 'FULL 3D RAYCASTER',
+    quote: '“Rip and tear... into the Mushroom Kingdom.”',
+    by: 'JIMMY',
+    attract: doomAttract,
+  },
 };
 
 const DEFAULT_WORLD = {

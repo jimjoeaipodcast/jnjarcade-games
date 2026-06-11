@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#160508">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <title>Doom Mari-OH 3D — JnJ Arcade</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #ff3355;
+      --dim:    #5c0f1c;
+      --bg:     #160508;
+      --shell:  #0e0b07;
+      --cream:  #f2e9d8;
+      --cream-dim: #b8ad97;
+      --border: rgba(255,51,85,0.22);
+    }
+
+    html, body {
+      height: 100%; background: var(--bg); color: var(--cream);
+      font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+      overflow: hidden; -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+
+    .game-shell {
+      display: flex; flex-direction: column;
+      height: 100vh; height: 100dvh;
+      width: 100%;
+      padding: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
+               env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+    }
+
+    .game-header {
+      flex-shrink: 0; display: flex; align-items: center;
+      justify-content: space-between; padding: 10px 14px 8px;
+      background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.2));
+      border-bottom: 2px solid var(--dim); gap: 8px;
+    }
+    .back-btn {
+      display: flex; align-items: center; gap: 3px; color: var(--accent);
+      font-size: 15px; font-weight: 700; letter-spacing: 0.08em;
+      padding: 5px 8px 5px 2px; cursor: pointer; text-decoration: none; flex-shrink: 0;
+    }
+    .back-chevron { font-size: 18px; }
+    .hdr-center { flex: 1; text-align: center; }
+    .game-name {
+      font-family: 'Bungee', cursive; font-size: 13px; letter-spacing: 0.14em;
+      color: var(--accent); text-shadow: 0 0 12px rgba(255,51,85,0.4);
+    }
+    .game-level { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--cream-dim); margin-top: 2px; }
+    .hdr-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 80px; }
+    .score-label { font-size: 10px; font-weight: 800; color: var(--cream-dim); text-transform: uppercase; letter-spacing: 0.16em; }
+    .score-val { font-size: 19px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .lives-row { display: flex; gap: 2px; margin-top: 2px; }
+    .life-heart { font-size: 10px; transition: opacity 0.3s; }
+    .life-heart.dead { opacity: 0.15; }
+
+    .hud-bar {
+      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 14px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);
+    }
+    .gun-display { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; }
+    .gun-name { font-weight: 800; color: #ffd23d; }
+    .kills-display { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: var(--cream-dim); }
+
+    .canvas-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 14px 6px; position: relative; overflow: hidden; background: #000;
+    }
+    canvas { display: block; image-rendering: pixelated; touch-action: none; }
+
+    .overlay {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+      background: rgba(22,5,8,0.92);
+      padding: 20px; text-align: center; z-index: 20;
+    }
+    .overlay.hidden { display: none; }
+    .overlay-emoji { font-size: 52px; line-height: 1; }
+    .overlay-title {
+      font-family: 'Bungee', cursive; font-size: 22px; color: var(--cream);
+      text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 0 26px rgba(255,51,85,0.25);
+    }
+    .overlay-sub { font-size: 16px; font-weight: 600; color: var(--cream-dim); line-height: 1.55; max-width: 290px; }
+    .overlay-score { font-size: 46px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .play-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--accent); color: var(--shell);
+      font-family: 'Bungee', cursive; font-size: 15px;
+      padding: 15px 34px 12px; border-radius: 12px; cursor: pointer; border: none;
+      transition: transform 0.06s, box-shadow 0.06s; -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 6px 0 var(--dim);
+    }
+    .play-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--dim); }
+    .hs-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,210,61,0.14); border: 1px solid rgba(255,210,61,0.35);
+      color: #ffd23d; font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 4px 11px; border-radius: 20px;
+    }
+    .level-badge {
+      background: rgba(255,51,85,0.12); border: 1px solid rgba(255,51,85,0.35);
+      color: var(--accent); font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+      padding: 5px 13px; border-radius: 20px;
+    }
+
+    .hud-msg {
+      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.78); color: var(--cream); font-size: 14px; font-weight: 800;
+      letter-spacing: 0.08em;
+      padding: 6px 15px; border-radius: 20px; pointer-events: none;
+      transition: opacity 0.4s; white-space: nowrap; z-index: 10;
+    }
+    .hud-msg.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+<div class="game-shell">
+
+  <header class="game-header">
+    <a class="back-btn" href="../index.html"><span class="back-chevron">‹</span>ARCADE</a>
+    <div class="hdr-center">
+      <div class="game-name">DOOM MARI-OH 3D</div>
+      <div class="game-level" id="levelLabel">World 1-1</div>
+    </div>
+    <div class="hdr-right">
+      <div class="score-label">Score</div>
+      <div class="score-val" id="scoreDisplay">0</div>
+      <div class="lives-row" id="livesRow"></div>
+    </div>
+  </header>
+
+  <div class="hud-bar">
+    <div class="gun-display">🔥 <span class="gun-name" id="gunName">FIREBALL</span></div>
+    <div class="kills-display" id="killsLabel">KILLS 0 · COINS 0</div>
+  </div>
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="gameCanvas" width="320" height="200"></canvas>
+    <div class="hud-msg hidden" id="hudMsg"></div>
+
+    <div class="overlay" id="startOverlay">
+      <div class="overlay-emoji">👹🍄</div>
+      <div class="overlay-title">DOOM MARI-OH 3D</div>
+      <div class="overlay-sub">
+        FULL 3D · RIP &amp; TEAR INTO THE MUSHROOM KINGDOM<br>
+        Drag to move &amp; steer · Tap to fire · Shoot ? blocks<br>
+        Find the flag · Goombas bite · 5 lives
+      </div>
+      <button class="play-btn" id="startBtn">INSERT COIN</button>
+      <div style="font-size:11px;color:rgba(255,255,255,0.35)" id="startBest"></div>
+    </div>
+
+    <div class="overlay hidden" id="gameOverOverlay">
+      <div class="overlay-emoji" id="goEmoji">💀</div>
+      <div class="overlay-title">GAME OVER</div>
+      <div class="overlay-score" id="goScore">0</div>
+      <div class="hs-badge" id="goBest" style="display:none">🏆 New High Score!</div>
+      <div class="overlay-sub" id="goSub"></div>
+      <button class="play-btn" id="retryBtn">↺ Try Again</button>
+    </div>
+
+    <div class="overlay hidden" id="levelOverlay">
+      <div class="overlay-emoji">🚩</div>
+      <div class="overlay-title" id="loTitle">World Clear!</div>
+      <div class="level-badge" id="loBadge">+500</div>
+      <div class="overlay-sub" id="loSub"></div>
+    </div>
+  </div>
+
+</div>
+<script src="arcade-scores.js?v=8"></script>
+<script>
+(function () {
+'use strict';
+
+/* ── internal render resolution (CSS-scaled, pixelated) ── */
+const W = 320, H = 200, HALF = H / 2;
+const FOV = 66 * Math.PI / 180;
+const TEX = 64;
+const MAX_LIVES = 5;
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl   = document.getElementById('scoreDisplay');
+const livesRow  = document.getElementById('livesRow');
+const levelLabel= document.getElementById('levelLabel');
+const gunName   = document.getElementById('gunName');
+const killsEl   = document.getElementById('killsLabel');
+const hudMsg    = document.getElementById('hudMsg');
+const startOverlay    = document.getElementById('startOverlay');
+const gameOverOverlay = document.getElementById('gameOverOverlay');
+const levelOverlay    = document.getElementById('levelOverlay');
+
+/* ── tile codes ──
+   0 floor · 1 brick · 2 pipe · 3 ?-block · 4 used block · 5 EXIT flag · 6 stone */
+const MAPS = [
+[ // World 1-1 — pipes and a coin yard
+"6666666666666666",
+"6..............6",
+"6.11.3.22.3.11.6",
+"6.1..........1.6",
+"6....g....c....6",
+"6.2..1111..c.2.6",
+"6.2..1ff1....2.6",
+"6....1551......6",
+"6.c..1111..g...6",
+"6....c.....k...6",
+"6.11......11.3.6",
+"6.1..g..c..1...6",
+"6.3............6",
+"6...k....m.....6",
+"6..............6",
+"6666666666666666"],
+[ // World 1-2 — the brick maze
+"1111111111111111",
+"1..............1",
+"1.6.331.6.13.6.1",
+"1.6...g....k.6.1",
+"1.6.1.222.1..6.1",
+"1...1..c..1.f..1",
+"1.g.1.616.1.5..1",
+"1...1.6c6.1.f..1",
+"1.1.1.6.6.1..1.1",
+"1.c.....g....3.1",
+"1.331.k....1...1",
+"1......c...1.m.1",
+"1.g..1111..1...1",
+"1....1..p..1.k.1",
+"1..............1",
+"1111111111111111"],
+[ // World 1-3 — the castle
+"6666666666666666",
+"6..............6",
+"6.k..6.33.6..k.6",
+"6....6....6....6",
+"6.66.6.66.6.66.6",
+"6.6...g....k.6.6",
+"6.6.66.cc.66.6.6",
+"6.g.6..pp..6.g.6",
+"6...6..cc..6...6",
+"6.6.66....66.6.6",
+"6.6....mm....6.6",
+"6.66.6.ff.6.66.6",
+"6.k..6.55.6..k.6",
+"6....6.ff.6....6",
+"6......g.......6",
+"6666666666666666"],
+];
+
+/* ── pixel-art textures, drawn once ── */
+function tex(draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = TEX;
+  const g = c.getContext('2d');
+  draw(g);
+  return c;
+}
+const T_BRICK = tex(g => {
+  g.fillStyle = '#9c3a1e'; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = '#claret';
+  g.fillStyle = '#0d0604';
+  for (let r = 0; r < 4; r++) {
+    g.fillRect(0, r*16, TEX, 2);
+    const off = (r % 2) * 16;
+    for (let b = 0; b < 3; b++) g.fillRect((off + b*32) % TEX, r*16, 2, 16);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.10)';
+  for (let r = 0; r < 4; r++) g.fillRect(0, r*16+2, TEX, 2);
+});
+const T_PIPE = tex(g => {
+  const grad = g.createLinearGradient(0,0,TEX,0);
+  grad.addColorStop(0,'#0c4a12'); grad.addColorStop(0.25,'#39b54a');
+  grad.addColorStop(0.5,'#7ee787'); grad.addColorStop(0.75,'#39b54a');
+  grad.addColorStop(1,'#0c4a12');
+  g.fillStyle = grad; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0,0,TEX,4); g.fillRect(0,TEX-4,TEX,4);
+});
+const T_QUESTION = tex(g => {
+  g.fillStyle = '#e8a410'; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = '#ffd23d'; g.fillRect(4,4,TEX-8,TEX-8);
+  g.fillStyle = '#7a4a00';
+  g.font = 'bold 36px monospace'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText('?', TEX/2, TEX/2+2);
+  g.fillStyle = '#7a4a00';
+  [[6,6],[TEX-10,6],[6,TEX-10],[TEX-10,TEX-10]].forEach(([x,y]) => g.fillRect(x,y,4,4));
+});
+const T_USED = tex(g => {
+  g.fillStyle = '#5a4632'; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = '#3d2f20'; g.fillRect(4,4,TEX-8,TEX-8);
+  g.fillStyle = '#2a1f14';
+  [[6,6],[TEX-10,6],[6,TEX-10],[TEX-10,TEX-10]].forEach(([x,y]) => g.fillRect(x,y,4,4));
+});
+const T_FLAG = tex(g => {
+  g.fillStyle = '#d8d0c0'; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = '#222'; g.fillRect(TEX/2-2, 6, 4, TEX-12);
+  g.fillStyle = '#30d158';
+  g.beginPath(); g.moveTo(TEX/2+2, 8); g.lineTo(TEX/2+26, 16); g.lineTo(TEX/2+2, 24); g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0,TEX-8,TEX,8);
+});
+const T_STONE = tex(g => {
+  g.fillStyle = '#4a4440'; g.fillRect(0,0,TEX,TEX);
+  g.fillStyle = '#0d0a08';
+  for (let r = 0; r < 2; r++) {
+    g.fillRect(0, r*32, TEX, 3);
+    const off = (r % 2) * 32;
+    g.fillRect(off % TEX, r*32, 3, 32);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.07)';
+  for (let r = 0; r < 2; r++) g.fillRect(0, r*32+3, TEX, 3);
+});
+const WALL_TEX = { 1: T_BRICK, 2: T_PIPE, 3: T_QUESTION, 4: T_USED, 5: T_FLAG, 6: T_STONE };
+
+/* ── sprite art ── */
+function sprite(draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  draw(g);
+  return c;
+}
+const S_GOOMBA = sprite(g => {
+  g.fillStyle = '#8b4a1e';
+  g.beginPath(); g.ellipse(16, 14, 12, 10, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#5c2f10';
+  g.fillRect(6, 24, 8, 6); g.fillRect(18, 24, 8, 6);
+  g.fillStyle = '#fff';
+  g.beginPath(); g.ellipse(11,12,4,5,0,0,Math.PI*2); g.ellipse(21,12,4,5,0,0,Math.PI*2); g.fill();
+  g.fillStyle = '#000';
+  g.beginPath(); g.ellipse(12,14,2,3,0,0,Math.PI*2); g.ellipse(20,14,2,3,0,0,Math.PI*2); g.fill();
+  g.strokeStyle = '#3a1f0a'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(7,5); g.lineTo(13,9); g.moveTo(25,5); g.lineTo(19,9); g.stroke();
+});
+const S_KOOPA = sprite(g => {
+  g.fillStyle = '#1f8a3a';
+  g.beginPath(); g.ellipse(16, 16, 11, 12, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#7ee787';
+  g.beginPath(); g.ellipse(16, 16, 7, 8, 0, 0, Math.PI*2); g.fill();
+  g.strokeStyle = '#0c4a12'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(16,8); g.lineTo(16,24); g.moveTo(9,16); g.lineTo(23,16); g.stroke();
+  g.fillStyle = '#ffe0a0';
+  g.beginPath(); g.ellipse(16, 5, 5, 4, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#c00'; g.fillRect(13,3,2,2); g.fillRect(18,3,2,2);
+});
+const S_COIN = sprite(g => {
+  g.fillStyle = '#e8a410';
+  g.beginPath(); g.ellipse(16,16,9,12,0,0,Math.PI*2); g.fill();
+  g.fillStyle = '#ffd23d';
+  g.beginPath(); g.ellipse(16,16,6,9,0,0,Math.PI*2); g.fill();
+  g.fillStyle = '#a06800'; g.fillRect(14,10,4,12);
+});
+const S_SHROOM = sprite(g => {
+  g.fillStyle = '#e23b3b';
+  g.beginPath(); g.ellipse(16,12,12,9,0,0,Math.PI*2); g.fill();
+  g.fillStyle = '#fff';
+  [[9,8],[20,6],[15,14]].forEach(([x,y]) => { g.beginPath(); g.arc(x,y,3,0,Math.PI*2); g.fill(); });
+  g.fillStyle = '#ffe0c0'; g.fillRect(10,18,12,10);
+  g.fillStyle = '#000'; g.fillRect(13,20,2,4); g.fillRect(18,20,2,4);
+});
+const S_FLOWER = sprite(g => {
+  g.fillStyle = '#39b54a'; g.fillRect(14,18,4,12);
+  g.fillStyle = '#ff6a3d';
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    g.beginPath(); g.ellipse(16 + Math.cos(a)*7, 11 + Math.sin(a)*7, 5, 5, 0, 0, Math.PI*2); g.fill();
+  }
+  g.fillStyle = '#ffd23d';
+  g.beginPath(); g.arc(16,11,5,0,Math.PI*2); g.fill();
+});
+const S_STAR = sprite(g => {
+  g.fillStyle = '#ffd23d';
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 6 : 13;
+    const a = -Math.PI/2 + i * Math.PI / 5;
+    g[i ? 'lineTo' : 'moveTo'](16 + Math.cos(a)*r, 15 + Math.sin(a)*r);
+  }
+  g.fill();
+  g.fillStyle = '#000'; g.fillRect(12,12,2,4); g.fillRect(18,12,2,4);
+});
+const SPRITES = { g: S_GOOMBA, k: S_KOOPA, c: S_COIN, m: S_SHROOM, f: S_FLOWER, p: S_STAR };
+
+/* ── state ── */
+let map, mapW, mapH, ents, fireballs = [];
+let px, py, pa;                 // player pos + angle
+let score, hi, lives, level, kills, coins;
+let tripleUntil = 0, starUntil = 0, hurtUntil = 0, hitFlash = 0, graceUntil = 0;
+let lastFire = 0;
+let running = false, animId, lastTs = 0;
+let msgTimer = null;
+
+function parseMap(rows) {
+  mapH = rows.length; mapW = rows[0].length;
+  map = [];
+  ents = [];
+  let spawn = { x: 1.5, y: 1.5 };
+  for (let y = 0; y < mapH; y++) {
+    map.push([]);
+    for (let x = 0; x < mapW; x++) {
+      const ch = rows[y][x];
+      if (ch >= '1' && ch <= '9') { map[y].push(Number(ch)); continue; }
+      map[y].push(0);
+      const cx = x + 0.5, cy = y + 0.5;
+      if ('gkcmfp'.includes(ch)) ents.push(makeEnt(ch, cx, cy));
+      if (ch === '.') { /* floor */ }
+    }
+  }
+  // player spawns at the first open tile from top-left that has space
+  outer: for (let y = 1; y < mapH-1; y++) for (let x = 1; x < mapW-1; x++) {
+    if (map[y][x] === 0 && !ents.some(e => e.hostile && Math.hypot(e.x-(x+0.5), e.y-(y+0.5)) < 3.5)) {
+      spawn = { x: x+0.5, y: y+0.5 }; break outer;
+    }
+  }
+  px = spawn.x; py = spawn.y; pa = 0.0001;
+  graceUntil = performance.now() + 1800;   // breathing room before the kingdom bites
+}
+
+function makeEnt(t, x, y) {
+  const base = { type: t, x, y, dead: false, bob: Math.random()*6 };
+  if (t === 'g') return { ...base, hp: 1, speed: 1.0, hostile: true };
+  if (t === 'k') return { ...base, hp: 2, speed: 1.5, hostile: true };
+  return base; // pickups
+}
+
+function tileAt(x, y) {
+  if (x < 0 || y < 0 || x >= mapW || y >= mapH) return 6;
+  return map[y|0][x|0];
+}
+function solid(x, y) { return tileAt(x, y) !== 0; }
+
+/* ── HUD ── */
+function updateHUD() {
+  scoreEl.textContent = score;
+  levelLabel.textContent = 'World 1-' + level;
+  killsEl.textContent = 'KILLS ' + kills + ' · COINS ' + coins;
+  gunName.textContent = performance.now() < tripleUntil ? 'TRIPLE FIRE' : 'FIREBALL';
+  livesRow.innerHTML = '';
+  for (let i = 0; i < MAX_LIVES; i++) {
+    const h = document.createElement('span');
+    h.className = 'life-heart' + (i >= lives ? ' dead' : '');
+    h.textContent = '❤️';
+    livesRow.appendChild(h);
+  }
+}
+function showMsg(text, dur) {
+  hudMsg.textContent = text;
+  hudMsg.classList.remove('hidden');
+  if (msgTimer) clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => hudMsg.classList.add('hidden'), dur || 1700);
+}
+
+/* ── movement + combat ── */
+function tryMove(nx, ny) {
+  const R = 0.28;
+  if (!solid(nx + R, py) && !solid(nx - R, py)) px = nx;
+  if (!solid(px, ny + R) && !solid(px, ny - R)) py = ny;
+  // walked into the flag?
+  const ahead = tileAt(px + Math.cos(pa)*0.45, py + Math.sin(pa)*0.45);
+  if (ahead === 5) levelClear();
+}
+
+function fire() {
+  const now = performance.now();
+  if (now - lastFire < 240) return;
+  lastFire = now;
+  const triple = now < tripleUntil;
+  const angles = triple ? [pa - 0.12, pa, pa + 0.12] : [pa];
+  angles.forEach(a => fireballs.push({ x: px, y: py, dx: Math.cos(a)*9, dy: Math.sin(a)*9 }));
+  hitFlash = Math.max(hitFlash, 2); // muzzle flash
+}
+
+function updateFireballs(dt) {
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    const f = fireballs[i];
+    f.x += f.dx * dt; f.y += f.dy * dt;
+    const t = tileAt(f.x, f.y);
+    if (t !== 0) {
+      if (t === 3) { // ? block pays out
+        map[f.y|0][f.x|0] = 4;
+        score += 50; coins++;
+        showMsg('💰 +50');
+        updateHUD();
+      }
+      fireballs.splice(i, 1); continue;
+    }
+    let hit = false;
+    for (const e of ents) {
+      if (e.dead || !e.hostile) continue;
+      if (Math.hypot(e.x - f.x, e.y - f.y) < 0.42) {
+        e.hp--;
+        if (e.hp <= 0) {
+          e.dead = true; kills++;
+          score += e.type === 'k' ? 200 : 100;
+          showMsg(e.type === 'k' ? '🐢 +200' : '👹 +100');
+        }
+        hit = true; break;
+      }
+    }
+    if (hit) { fireballs.splice(i, 1); continue; }
+    if (Math.hypot(f.x - px, f.y - py) > 24) fireballs.splice(i, 1);
+  }
+}
+
+function updateEnts(dt) {
+  const now = performance.now();
+  const starred = now < starUntil;
+  for (const e of ents) {
+    if (e.dead) continue;
+    const dx = px - e.x, dy = py - e.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (e.hostile) {
+      if (now < graceUntil) continue;
+      if (dist < 6.5 && dist > 0.1) {
+        const sp = e.speed * (1 + (level-1)*0.25) * dt;
+        const nx = e.x + dx/dist * sp, ny = e.y + dy/dist * sp;
+        if (!solid(nx, e.y)) e.x = nx;
+        if (!solid(e.x, ny)) e.y = ny;
+      }
+      if (dist < 0.55) {
+        if (starred) {
+          e.dead = true; kills++; score += 150; showMsg('⭐ SPLAT +150');
+          updateHUD();
+        } else if (now > hurtUntil) {
+          lives--; hurtUntil = now + 1300; hitFlash = 14;
+          showMsg('💥 -1 LIFE', 1300);
+          // knockback
+          const kx = px + dx/dist * -1.6, ky = py + dy/dist * -1.6;
+          if (!solid(kx, py)) px = kx;
+          if (!solid(px, ky)) py = ky;
+          updateHUD();
+          if (lives <= 0) { endGame(); return; }
+        }
+      }
+    } else if (dist < 0.55) {
+      e.dead = true;
+      if (e.type === 'c') { coins++; score += 10; showMsg('🪙 +10'); }
+      if (e.type === 'm') { lives = Math.min(lives+1, MAX_LIVES); score += 25; showMsg('🍄 +1 LIFE'); }
+      if (e.type === 'f') { tripleUntil = now + 20000; showMsg('🌸 TRIPLE FIRE 20s'); }
+      if (e.type === 'p') { starUntil = now + 8000; showMsg('⭐ INVINCIBLE 8s'); }
+      updateHUD();
+    }
+  }
+}
+
+function levelClear() {
+  if (!running) return;
+  running = false;
+  cancelAnimationFrame(animId);
+  score += 500;
+  document.getElementById('loTitle').textContent = 'World 1-' + level + ' Clear!';
+  document.getElementById('loBadge').textContent = '+500';
+  document.getElementById('loSub').textContent =
+    level < 99 ? 'Deeper into the kingdom. They know you’re coming.' : '';
+  levelOverlay.classList.remove('hidden');
+  updateHUD();
+  setTimeout(() => {
+    levelOverlay.classList.add('hidden');
+    level++;
+    parseMap(MAPS[(level-1) % MAPS.length]);
+    fireballs = [];
+    running = true; lastTs = 0;
+    animId = requestAnimationFrame(loop);
+  }, 2600);
+}
+
+/* ── raycast render ── */
+const zbuf = new Float32Array(W);
+
+function render() {
+  const now = performance.now();
+
+  // sky + floor
+  const sky = ctx.createLinearGradient(0, 0, 0, HALF);
+  sky.addColorStop(0, '#3d0a12'); sky.addColorStop(1, '#1a0508');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, HALF);
+  const flr = ctx.createLinearGradient(0, HALF, 0, H);
+  flr.addColorStop(0, '#171007'); flr.addColorStop(1, '#2b1d0e');
+  ctx.fillStyle = flr; ctx.fillRect(0, HALF, W, HALF);
+
+  // walls — DDA per column
+  for (let col = 0; col < W; col++) {
+    const camX = 2 * col / W - 1;
+    const rdx = Math.cos(pa) + Math.cos(pa + Math.PI/2) * camX * Math.tan(FOV/2);
+    const rdy = Math.sin(pa) + Math.sin(pa + Math.PI/2) * camX * Math.tan(FOV/2);
+
+    let mapX = px | 0, mapY = py | 0;
+    const ddx = Math.abs(1 / rdx), ddy = Math.abs(1 / rdy);
+    let stepX, stepY, sideX, sideY;
+    if (rdx < 0) { stepX = -1; sideX = (px - mapX) * ddx; }
+    else         { stepX = 1;  sideX = (mapX + 1 - px) * ddx; }
+    if (rdy < 0) { stepY = -1; sideY = (py - mapY) * ddy; }
+    else         { stepY = 1;  sideY = (mapY + 1 - py) * ddy; }
+
+    let side = 0, tile = 0, guard = 0;
+    while (guard++ < 64) {
+      if (sideX < sideY) { sideX += ddx; mapX += stepX; side = 0; }
+      else               { sideY += ddy; mapY += stepY; side = 1; }
+      tile = tileAt(mapX + 0.5, mapY + 0.5);
+      if (tile !== 0) break;
+    }
+
+    const dist = side === 0 ? sideX - ddx : sideY - ddy;
+    const corrected = Math.max(0.01, dist);
+    zbuf[col] = corrected;
+
+    const lineH = Math.min(H * 3, H / corrected);
+    const y0 = HALF - lineH / 2;
+
+    let wallX = side === 0 ? py + corrected * rdy : px + corrected * rdx;
+    wallX -= wallX | 0;
+    let texX = (wallX * TEX) | 0;
+    if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = TEX - texX - 1;
+
+    const t = WALL_TEX[tile] || T_STONE;
+    ctx.drawImage(t, texX, 0, 1, TEX, col, y0, 1, lineH);
+
+    // distance + side shading
+    const shade = Math.min(0.78, corrected * 0.075 + (side === 1 ? 0.18 : 0));
+    if (shade > 0.02) {
+      ctx.fillStyle = 'rgba(8,2,4,' + shade.toFixed(3) + ')';
+      ctx.fillRect(col, y0, 1, lineH);
+    }
+  }
+
+  // sprites — sort far → near
+  const drawables = [];
+  for (const e of ents) if (!e.dead) drawables.push(e);
+  for (const f of fireballs) drawables.push({ x: f.x, y: f.y, type: '*' });
+  drawables.sort((a, b) =>
+    ((b.x-px)**2 + (b.y-py)**2) - ((a.x-px)**2 + (a.y-py)**2));
+
+  const planeX = Math.cos(pa + Math.PI/2) * Math.tan(FOV/2);
+  const planeY = Math.sin(pa + Math.PI/2) * Math.tan(FOV/2);
+  const dirX = Math.cos(pa), dirY = Math.sin(pa);
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+
+  for (const s of drawables) {
+    const sx = s.x - px, sy = s.y - py;
+    const tx = invDet * (dirY * sx - dirX * sy);
+    const ty = invDet * (-planeY * sx + planeX * sy);
+    if (ty <= 0.1) continue;
+
+    const screenX = ((W / 2) * (1 + tx / ty)) | 0;
+    let size = Math.abs((H / ty)) | 0;
+    if (s.type === '*') size = (size * 0.25) | 0;
+    else if (s.type === 'c' || s.type === 'p') size = (size * 0.5) | 0;
+    else size = (size * 0.7) | 0;
+    if (size < 2) continue;
+
+    const bob = s.bob !== undefined ? Math.sin(now * 0.004 + s.bob) * size * 0.06 : 0;
+    const top = HALF - size/2 + (s.type === '*' ? 0 : size * 0.22) + bob;
+    const x0 = screenX - size/2;
+
+    if (s.type === '*') {
+      // fireball: glowing ball, no texture
+      for (let x = Math.max(0, x0); x < Math.min(W, x0 + size); x++) {
+        if (ty >= zbuf[x | 0]) continue;
+        const g = ctx.createRadialGradient(screenX, top + size/2, 0, screenX, top + size/2, size/2);
+        g.addColorStop(0, '#fff7c0'); g.addColorStop(0.5, '#ff9a3d'); g.addColorStop(1, 'rgba(255,80,30,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, top, 1, size);
+      }
+      continue;
+    }
+
+    const img = SPRITES[s.type];
+    for (let x = Math.max(0, x0 | 0); x < Math.min(W, (x0 + size) | 0); x++) {
+      if (ty >= zbuf[x]) continue;
+      const u = ((x - x0) / size * 32) | 0;
+      ctx.drawImage(img, u, 0, 1, 32, x, top, 1, size);
+    }
+  }
+
+  // star tint / damage flash
+  if (now < starUntil) {
+    ctx.fillStyle = 'rgba(255,210,61,' + (0.10 + 0.06*Math.sin(now*0.02)) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (hitFlash > 0) {
+    ctx.fillStyle = 'rgba(255,30,40,' + (hitFlash * 0.03) + ')';
+    ctx.fillRect(0, 0, W, H);
+    hitFlash--;
+  }
+
+  // weapon: fireball hand at bottom centre
+  const sway = Math.sin(now * 0.006) * 4;
+  ctx.drawImage(S_FLOWER, W/2 - 14 + sway, H - 30, 28, 28);
+}
+
+/* ── input ── */
+const keys = {};
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['arrowup','arrowdown','arrowleft','arrowright',' ','w','a','s','d'].includes(k) || k === ' ') e.preventDefault();
+  if (!running && (k === 'enter' || k === ' ')) { startGame(); return; }
+  keys[k] = true;
+  if (k === ' ' && running) fire();
+});
+document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+/* touch: hold + drag = move/steer, tap = fire */
+let touch = null;
+const wrap = document.getElementById('canvasWrap');
+wrap.addEventListener('touchstart', e => {
+  const t = e.changedTouches[0];
+  touch = { id: t.identifier, x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, t0: performance.now(), moved: false };
+}, { passive: true });
+wrap.addEventListener('touchmove', e => {
+  if (running) e.preventDefault();
+  if (!touch) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === touch.id) {
+      touch.x = t.clientX; touch.y = t.clientY;
+      if (Math.hypot(t.clientX - touch.x0, t.clientY - touch.y0) > 12) touch.moved = true;
+    }
+  }
+}, { passive: false });
+wrap.addEventListener('touchend', e => {
+  if (!touch) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === touch.id) {
+      if (!touch.moved && performance.now() - touch.t0 < 260 && running) fire();
+      touch = null;
+    }
+  }
+}, { passive: true });
+
+function updatePlayer(dt) {
+  const turn = 2.6 * dt, walk = 3.2 * dt;
+  if (keys['arrowleft'] || keys['a'])  pa -= turn;
+  if (keys['arrowright'] || keys['d']) pa += turn;
+  if (keys['arrowup'] || keys['w'])    tryMove(px + Math.cos(pa)*walk, py + Math.sin(pa)*walk);
+  if (keys['arrowdown'] || keys['s'])  tryMove(px - Math.cos(pa)*walk*0.7, py - Math.sin(pa)*walk*0.7);
+
+  if (touch && touch.moved) {
+    const dx = touch.x - touch.x0, dy = touch.y - touch.y0;
+    pa += dx * 0.000045 * (dt * 60000); // horizontal drag steers
+    const fwd = Math.max(-1, Math.min(1, -dy / 90)); // drag up = forward
+    if (Math.abs(fwd) > 0.12) tryMove(px + Math.cos(pa)*walk*fwd, py + Math.sin(pa)*walk*fwd);
+  }
+}
+
+/* ── lifecycle ── */
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  const availW = r.width - 12, availH = r.height - 28;
+  const scale = Math.min(availW / W, availH / H);
+  canvas.style.width  = (W * scale) + 'px';
+  canvas.style.height = (H * scale) + 'px';
+}
+window.addEventListener('resize', resize);
+
+function startGame() {
+  startOverlay.classList.add('hidden');
+  gameOverOverlay.classList.add('hidden');
+  levelOverlay.classList.add('hidden');
+  resize();
+  score = 0; lives = MAX_LIVES; level = 1; kills = 0; coins = 0;
+  tripleUntil = 0; starUntil = 0; hurtUntil = 0; hitFlash = 0;
+  fireballs = [];
+  parseMap(MAPS[0]);
+  updateHUD();
+  running = true; lastTs = 0;
+  animId = requestAnimationFrame(loop);
+}
+
+function endGame() {
+  running = false;
+  cancelAnimationFrame(animId);
+  const isHS = score > hi;
+  if (isHS) { hi = score; localStorage.setItem('jnj_doom3d_hs', score); }
+  document.getElementById('goScore').textContent = score;
+  document.getElementById('goBest').style.display = (isHS && score > 0) ? 'inline-flex' : 'none';
+  document.getElementById('goSub').textContent =
+    'World 1-' + level + ' · ' + kills + ' kills · Best: ' + hi;
+
+  if (window.ArcadeScores && score > 0) {
+    ArcadeScores.show({
+      game: 'doom-3d', title: 'DOOM MARI-OH 3D', score: score,
+      accent: '#ff3355',
+      onClose: () => gameOverOverlay.classList.remove('hidden'),
+    });
+  } else {
+    gameOverOverlay.classList.remove('hidden');
+  }
+}
+
+function loop(ts) {
+  if (!running) return;
+  if (!lastTs) lastTs = ts;
+  const dt = Math.min(0.05, (ts - lastTs) / 1000);
+  lastTs = ts;
+
+  updatePlayer(dt);
+  updateFireballs(dt);
+  updateEnts(dt);
+  if (!running) return; // endGame mid-update
+  render();
+  animId = requestAnimationFrame(loop);
+}
+
+function tryFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req) { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
+}
+document.getElementById('startBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
+document.getElementById('retryBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
+document.addEventListener('touchend', function fsOnce() { tryFullscreen(); document.removeEventListener('touchend', fsOnce); });
+
+hi = parseInt(localStorage.getItem('jnj_doom3d_hs') || '0', 10);
+if (hi > 0) document.getElementById('startBest').textContent = 'Best: ' + hi;
+resize();
+parseMap(MAPS[0]);
+render(); // idle frame behind the start overlay
+
+if (new URLSearchParams(location.search).get('play') === '1') {
+  startGame();
+}
+
+})();
+</script>
+</body>
+</html>
