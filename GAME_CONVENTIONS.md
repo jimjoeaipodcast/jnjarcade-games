@@ -48,11 +48,14 @@ Tested on iOS Safari + Android Chrome.
 
 - Fonts: Bungee (titles/marquee), Barlow Condensed (body/HUD).
 - Per-game accent colour drives theme; pass it to ArcadeScores as `accent`.
-- **Arcade pushbutton CSS pattern** (see `.coin-btn .dome` in style.css): Sanwa-style, locked by
-  Osimo against a photo reference 2026-06-10 — wide glossy bezel ring in the button colour
-  (NOT a black collar), dark seam gap (`::before`), slightly recessed glossy plunger (`::after`)
-  with top sheen. Press sinks the plunger into the seam (translateY 7% + scale 0.95); release
-  follows the link (native anchor behaviour). Reuse for any physical-button UI.
+- **Arcade pushbuttons = real photo assets**, approved by Osimo 2026-06-11 ("amazing").
+  CSS-gradient buttons were rejected repeatedly (the twin-highlight + bottom-arc combo reads
+  as a smiley face). Canonical assets: `assets/buttons/btn-{yellow,red,orange,blue}.png`,
+  cut from Osimo's reference photo with an elliptical mask and recoloured via PIL
+  `ImageOps.colorize` (black=22% colour, mid=colour @ midpoint 232, white stays white —
+  preserves photo speculars). Generator script pattern lives in git history (/tmp/make_buttons2.py,
+  session 2026-06-11). New colour = one `make('name', '#hex')` call. CSS: plain `<img class="dome">`,
+  drop-shadow filter, `:active` translateY(4px) + brightness(0.94); release follows the link.
 - Pulsing perimeter glow on the play field; level themes cycle per level.
 
 ## Cache / deploy (non-negotiable)
