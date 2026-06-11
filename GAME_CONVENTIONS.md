@@ -15,7 +15,11 @@ Tested on iOS Safari + Android Chrome.
 
 ## Controls (mobile)
 
-- **No on-screen D-pad, no fire button.** Swipe anywhere on the play area to steer.
+- **No on-screen D-pad, no fire button** for 2D games — swipe anywhere on the play area to steer.
+  **Exception (Osimo, 2026-06-11): first-person/3D games use the v1 control scheme** — full-bleed
+  landscape canvas, CoD-style twin translucent joysticks (left move/strafe, right turn), floating
+  FIRE button + tap-view-to-fire, rotate-to-landscape prompt in portrait, and the translucent
+  semicircle radar dome at bottom-centre (rotating map, enemy dots, sweep). See doom-3d.html.
 - Swipe threshold: **18px** (below that it's a tap, ignore it — stops accidental turns).
 - `touchmove` → `preventDefault()` while game running (kills Safari rubber-band scroll).
 - Auto-fire where the game shoots; never make mobile players hold a button.
