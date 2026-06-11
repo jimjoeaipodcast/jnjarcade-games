@@ -86,7 +86,7 @@
       padding: 0 22px calc(env(safe-area-inset-bottom,0px) + 20px);
       z-index: 20; pointer-events: none;
     }
-    .js-zone { position: relative; width: 132px; height: 132px; pointer-events: all; user-select: none; }
+    .js-zone { position: relative; width: 156px; height: 156px; pointer-events: all; user-select: none; }
     .js-base {
       position: absolute; inset: 0;
       background: rgba(255,255,255,0.07);
@@ -288,7 +288,7 @@ const MAPS = [
 "6.11.3.22.3.11.6",
 "6.1..........1.6",
 "6....g....c....6",
-"6.2..1111..c.2.6",
+"6.2..1..1..c.2.6",
 "6.2..1ff1....2.6",
 "6....1551......6",
 "6.c..1111..g...6",
@@ -869,7 +869,7 @@ document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 /* ── v1 CoD-style twin joysticks: left = move/strafe, right = turn ── */
 const wrap = document.getElementById('canvasWrap');
-const JS_R = 50;
+const JS_R = 64;   // bigger usable stick travel = finer control
 const JS = {
   left:  { active: false, touchId: -1, cx: 0, cy: 0, dx: 0, dy: 0 },
   right: { active: false, touchId: -1, cx: 0, cy: 0, dx: 0, dy: 0 },
@@ -964,8 +964,12 @@ function updatePlayer(dt) {
       tryMove(px + Math.cos(sa)*walk*0.8*s, py + Math.sin(sa)*walk*0.8*s);
     }
   }
-  // right stick: turn
-  if (JS.right.active) pa += (JS.right.dx / JS_R) * 2.4 * dt;
+  // right stick: turn — squared response curve (fine aim near centre,
+  // capped max rate so you can't snap 180° instantly)
+  if (JS.right.active) {
+    const x = JS.right.dx / JS_R;
+    pa += Math.sign(x) * x * x * 1.7 * dt;
+  }
 }
 
 /* ── lifecycle ── */
