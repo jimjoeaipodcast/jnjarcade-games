@@ -13,6 +13,11 @@ Tested on iOS Safari + Android Chrome.
 - **Every cabinet intro automatically becomes merch** (Osimo, 2026-06-11): the cabinet
   art + Jimmy/Joe quote is a poster/tee design for the Fourthwall shop. When a new game
   ships, generate the merch asset from its cabinet card and queue it for the shop.
+- **Quote rule** (Osimo, 2026-06-11): cabinet quotes must be funny with pure Jimmy/Joe
+  soul — in-character reactions, never marketing slogans. "Rip and tear into the Mushroom
+  Kingdom" was rejected as slogan-speak; Joe's "I died four times. In my day pipes led to
+  coins, not whatever that was." is the gold standard. Run new quotes past the
+  personality-consistency-guard standard: could ONLY Jimmy or ONLY Joe have said it?
 
 ## Layout / shell
 

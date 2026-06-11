@@ -273,8 +273,11 @@ let growPending = 0;
 function resize() {
   const wrap = document.getElementById('canvasWrap');
   const w = wrap.clientWidth  - 12;
-  // one-cell buffer top + bottom: fullscreen on mobile clips the edges
-  const h = wrap.clientHeight - 28 - CELL * 2;
+  // one-cell buffer top + bottom ONLY in real fullscreen (Android clips the
+  // edges there). iOS Safari never gets true fullscreen — give it the space.
+  const fs = document.fullscreenElement || window.navigator.standalone === true
+    || window.matchMedia('(display-mode: fullscreen)').matches;
+  const h = wrap.clientHeight - 16 - (fs ? CELL * 2 : 0);
   cols = Math.floor(w / CELL);
   rows = Math.floor(h / CELL);
   canvas.width  = cols * CELL;
@@ -575,8 +578,9 @@ function magnetFood() {
 
 // ─── LEVEL ────────────────────────────────────────────────────────────────────
 function maxSnakeLength() {
-  // brick rows aren't playable space
-  return cols * (rows - wallRows) - FOOD_COUNT - 4;
+  // level clears only when the snake occupies EVERY playable square
+  // (whole arena below the wall, minus the cells the food sits on)
+  return cols * (rows - wallRows) - FOOD_COUNT;
 }
 
 function checkLevelComplete() {
