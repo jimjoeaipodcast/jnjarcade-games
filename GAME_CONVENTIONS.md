@@ -3,6 +3,17 @@
 Locked-in parameters from the June 2026 revamp. Every new cabinet follows these.
 Tested on iOS Safari + Android Chrome.
 
+## Non-negotiables (Osimo, 2026-06-11)
+
+- **Every game is full screen** like Snake and Doom 3D — no letterboxing, no wasted chrome.
+- **Every cabinet gets the landing-page intro treatment**: attract-mode demo canvas + a
+  Jimmy or Joe quote in the cabinet card (`WORLDS` map in app.js — ink/dim/pit colours,
+  genre line, quote, attribution). The quotes are part of the product. Never ship a
+  cabinet with the default placeholder.
+- **Every cabinet intro automatically becomes merch** (Osimo, 2026-06-11): the cabinet
+  art + Jimmy/Joe quote is a poster/tee design for the Fourthwall shop. When a new game
+  ships, generate the merch asset from its cabinet card and queue it for the shop.
+
 ## Layout / shell
 
 - `.game-shell`: flex column, `height: 100vh; height: 100dvh; width: 100%` — **no max-width cap**, game fills the screen.

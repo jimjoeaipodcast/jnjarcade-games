@@ -228,7 +228,10 @@ const GUNS = [
   { name:'Blaster', color:'#ff44ff', count:3, spread:26, spd:14, cd:90,  auto:true },
 ];
 
-const PU_TYPES = ['gun','gun','gun','life','rapid']; // gun drops more common
+// gun upgrades come from blasting the brick wall (arcanoid-style);
+// food only drops support items, with a rare magnet
+const PU_BRICK = ['gun','gun','gun','rapid'];
+const PU_FOOD  = ['life','rapid','rapid','magnet'];
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const canvas     = document.getElementById('gameCanvas');
@@ -249,8 +252,10 @@ const levelOverlay    = document.getElementById('levelOverlay');
 let cols, rows;
 let snake, dir, nextDir;
 let food, powerUps, pellets;
-let bricks;                    // Set("c,r") — arkanoid wall, rows 0-2
-const BRICK_ROWS = 3;
+let bricks;                    // Set("c,r") — arkanoid wall
+let wallRows = 3;              // wall thickness — grows by 1 row every 2 min
+let nextWallGrow = 0;
+let magnetEnd = 0;             // 🧲 rare power: snake hoovers nearby pickups
 let score, highScore, lives;
 let level, levelScore, levelTarget;
 let gunTier, levelStartGun;
@@ -332,6 +337,34 @@ function resetAll() {
   resetLevel();
 }
 
+function buildWall() {
+  bricks = new Set();
+  for (let r = 0; r < wallRows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (snake && snake.some(s => s.x === c && s.y === r)) continue;
+      bricks.add(c + ',' + r);
+    }
+}
+
+function growWall() {
+  wallRows = Math.min(wallRows + 1, Math.floor(rows / 2));
+  // remaining bricks drop one row; fresh full line appears at the top
+  const dropped = new Set();
+  bricks.forEach(key => {
+    const [c, r] = key.split(',').map(Number);
+    if (r + 1 < rows && !snake.some(s => s.x === c && s.y === r + 1)) dropped.add(c + ',' + (r + 1));
+  });
+  for (let c = 0; c < cols; c++) {
+    if (!snake.some(s => s.x === c && s.y === 0)) dropped.add(c + ',0');
+  }
+  bricks = dropped;
+  // food crushed by the wall respawns lower down
+  for (let i = food.length - 1; i >= 0; i--) {
+    if (bricks.has(food[i].x + ',' + food[i].y)) { food.splice(i, 1); placeFood(); }
+  }
+  showMsg('🧱 THE WALL GROWS', 1600);
+}
+
 function resetLevel() {
   const cx = Math.floor(cols / 2);
   const cy = Math.floor(rows / 2);
@@ -339,9 +372,10 @@ function resetLevel() {
   dir     = {x:1,y:0};
   nextDir = {x:1,y:0};
   food = []; powerUps = []; pellets = []; growPending = 0;
-  bricks = new Set();
-  for (let r = 0; r < BRICK_ROWS; r++)
-    for (let c = 0; c < cols; c++) bricks.add(c + ',' + r);
+  wallRows = 3;
+  nextWallGrow = performance.now() + 120000;
+  magnetEnd = 0;
+  buildWall();
   for (let i = 0; i < FOOD_COUNT; i++) placeFood();
   lastTick = 0; snakeTicker = 0;
   lastFireTime = 0; rapidFireEnd = 0;
@@ -360,15 +394,15 @@ function placeFood() {
   let fx, fy, tries = 0;
   do {
     fx = 1 + Math.floor(Math.random() * (cols - 2));
-    fy = BRICK_ROWS + 1 + Math.floor(Math.random() * (rows - BRICK_ROWS - 2));
+    fy = wallRows + 1 + Math.floor(Math.random() * (rows - wallRows - 2));
     tries++;
   } while (occ.has(fx+','+fy) && tries < 200);
   food.push({x:fx, y:fy});
 }
 
 // ─── POWER-UPS ────────────────────────────────────────────────────────────────
-function spawnPowerUp(cx, cy) {
-  const type = PU_TYPES[Math.floor(Math.random() * PU_TYPES.length)];
+function spawnPowerUp(cx, cy, pool) {
+  const type = pool[Math.floor(Math.random() * pool.length)];
   const angle = Math.random() * Math.PI * 2;
   const spd = 1.2 + Math.random() * 0.8;
   powerUps.push({
@@ -388,13 +422,38 @@ function collectPowerUp(type) {
   } else if (type === 'rapid') {
     rapidFireEnd = performance.now() + 5000;
     showMsg('⚡ Rapid Fire! 5s');
+  } else if (type === 'magnet') {
+    magnetEnd = performance.now() + 10000;
+    showMsg('🧲 MAGNET! 10s', 2200);
   }
   updateHUD();
 }
 
+function nearestSegment(pxx, pyy, maxDist) {
+  let best = null, bestD = maxDist;
+  for (const s of snake) {
+    const sx = s.x * CELL + CELL/2, sy = s.y * CELL + CELL/2;
+    const d = Math.hypot(sx - pxx, sy - pyy);
+    if (d < bestD) { bestD = d; best = { x: sx, y: sy, d }; }
+  }
+  return best;
+}
+
 function updatePowerUps() {
+  const magnet = performance.now() < magnetEnd;
   for (let i = powerUps.length - 1; i >= 0; i--) {
     const pu = powerUps[i];
+
+    // 🧲 magnetised: anything within 3 tiles of ANY segment gets sucked in
+    if (magnet) {
+      const near = nearestSegment(pu.x, pu.y, CELL * 3.5);
+      if (near) {
+        const pull = 4.5;
+        pu.vx = (near.x - pu.x) / (near.d || 1) * pull;
+        pu.vy = (near.y - pu.y) / (near.d || 1) * pull;
+      }
+    }
+
     pu.x += pu.vx; pu.y += pu.vy;
     pu.timer--; pu.pulse++;
 
@@ -406,9 +465,11 @@ function updatePowerUps() {
 
     if (pu.timer <= 0) { powerUps.splice(i, 1); continue; }
 
-    // Snake head picks it up
+    // head always collects; during magnet ANY segment collects
     const hpx = snake[0].x * CELL + CELL/2, hpy = snake[0].y * CELL + CELL/2;
-    if (Math.hypot(hpx - pu.x, hpy - pu.y) < CELL * 0.9) {
+    const grabbed = Math.hypot(hpx - pu.x, hpy - pu.y) < CELL * 0.9
+      || (magnet && nearestSegment(pu.x, pu.y, CELL * 0.9));
+    if (grabbed) {
       collectPowerUp(pu.type);
       powerUps.splice(i, 1);
     }
@@ -453,11 +514,12 @@ function updatePellets() {
     const px = Math.floor(p.x / CELL), py = Math.floor(p.y / CELL);
     let hit = false;
 
-    // Hit a brick — blast it (the arkanoid bit)
+    // Hit a brick — blast it (the arkanoid bit); top-row hits can drop guns
     if (bricks.has(px + ',' + py)) {
       bricks.delete(px + ',' + py);
       score += 2;
       scoreEl.textContent = score;
+      if (Math.random() < 0.14) spawnPowerUp(px, py, PU_BRICK);
       pellets.splice(i, 1);
       continue;
     }
@@ -486,23 +548,41 @@ function eatFood(idx) {
   score++; levelScore++;
   growPending++;
   scoreEl.textContent = score;
-  if (Math.random() < 0.35) spawnPowerUp(food[idx].x, food[idx].y);
+  if (Math.random() < 0.16) spawnPowerUp(food[idx].x, food[idx].y, PU_FOOD);
   food.splice(idx, 1);
   placeFood();
   updateHUD();
   checkLevelComplete();
 }
 
+// 🧲 food within 3 tiles of any segment crawls toward the snake, one cell per tick
+function magnetFood() {
+  if (performance.now() >= magnetEnd) return;
+  for (let i = food.length - 1; i >= 0; i--) {
+    const f = food[i];
+    let best = null, bestD = 3.6;
+    for (const s of snake) {
+      const d = Math.hypot(s.x - f.x, s.y - f.y);
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    if (!best) continue;
+    if (bestD <= 1.01) { eatFood(i); continue; }   // reached the body — gulp
+    const stepX = Math.sign(best.x - f.x), stepY = Math.sign(best.y - f.y);
+    const nx = f.x + stepX, ny = f.y + stepY;
+    if (!bricks.has(nx + ',' + ny)) { f.x = nx; f.y = ny; }
+  }
+}
+
 // ─── LEVEL ────────────────────────────────────────────────────────────────────
 function maxSnakeLength() {
   // brick rows aren't playable space
-  return cols * (rows - BRICK_ROWS) - FOOD_COUNT - 4;
+  return cols * (rows - wallRows) - FOOD_COUNT - 4;
 }
 
 function checkLevelComplete() {
-  if (snake.length < maxSnakeLength()) return;
+  if (levelScore < levelTarget) return;
 
-  lives = Math.min(lives + 5, MAX_LIVES);
+  lives = Math.min(lives + 2, MAX_LIVES);
   levelStartGun = gunTier;
   level++;
   levelScore = 0;
@@ -516,7 +596,7 @@ function checkLevelComplete() {
   cancelAnimationFrame(animId);
   const lo = levelOverlay;
   document.getElementById('loTitle').textContent = 'Level ' + (level-1) + ' Complete!';
-  document.getElementById('loBadge').textContent = '+5 Lives · Speed +20%';
+  document.getElementById('loBadge').textContent = '+2 Lives · Speed +20%';
   document.getElementById('loSub').textContent =
     GUNS[gunTier-1].name + ' gun locked in for Level ' + level + '. Colors shifting…';
   lo.classList.remove('hidden');
@@ -552,13 +632,6 @@ function snakeTick() {
     }
   }
 
-  // The wall slowly rebuilds itself (attract-mode rule)
-  if (Math.random() < 0.05 && bricks.size < cols * BRICK_ROWS) {
-    const c = Math.floor(Math.random() * cols), r = Math.floor(Math.random() * BRICK_ROWS);
-    const key = c + ',' + r;
-    if (!bricks.has(key) && !snake.some(s => s.x === c && s.y === r)) bricks.add(key);
-  }
-
   snake.unshift(head);
 
   // Eat food
@@ -588,6 +661,9 @@ function handleHit(reason) {
   const msgs = { wall: '💥 Wall! -1 Life · Halved', brick: '🧱 Brick! -1 Life · Halved', self: '🐍 Self! -1 Life · Halved' };
   showMsg(msgs[reason] || msgs.wall, 1600);
 
+  // every death fully replenishes the brick wall
+  buildWall();
+
   // Halve snake + teleport
   const newLen = Math.max(3, Math.floor(snake.length / 2));
   const newHead = randomFreeCell();
@@ -606,7 +682,7 @@ function randomFreeCell() {
   let x, y, tries = 0;
   do {
     x = 2 + Math.floor(Math.random() * (cols - 4));
-    y = BRICK_ROWS + 1 + Math.floor(Math.random() * (rows - BRICK_ROWS - 3));
+    y = wallRows + 1 + Math.floor(Math.random() * (rows - wallRows - 3));
     tries++;
   } while (occ.has(x+','+y) && tries < 150);
   return {x, y};
@@ -720,8 +796,8 @@ function draw(ts) {
   powerUps.forEach(pu => {
     const fade = Math.min(1, pu.timer / 80);
     const pulse = 0.65 + 0.35 * Math.sin(pu.pulse * 0.18);
-    const colors = {gun:'#ff8800', life:'#ff3355', rapid:'#00ccff'};
-    const labels = {gun:'🔫', life:'❤️', rapid:'⚡'};
+    const colors = {gun:'#ff8800', life:'#ff3355', rapid:'#00ccff', magnet:'#bf5af2'};
+    const labels = {gun:'🔫', life:'❤️', rapid:'⚡', magnet:'🧲'};
     const r = CELL * 0.52;
     ctx.save();
     ctx.globalAlpha = fade * pulse;
@@ -747,14 +823,22 @@ function draw(ts) {
     ctx.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 4, 4, 8);
   });
 
-  // Snake body — flat chunky squares, fading like the attract demo
+  // Snake body — flat chunky squares, fading like the attract demo.
+  // During 🧲 magnet the whole snake glows.
+  const magnetOn = ts < magnetEnd || performance.now() < magnetEnd;
   const pad = Math.max(1, Math.round(CELL * 0.1));
+  ctx.save();
+  if (magnetOn) {
+    ctx.shadowColor = '#bf5af2';
+    ctx.shadowBlur = 10 + 5 * Math.sin(ts * 0.012);
+  }
   for (let i = snake.length - 1; i >= 1; i--) {
     const seg = snake[i];
     ctx.globalAlpha = Math.max(0.35, 1 - i * 0.07);
-    ctx.fillStyle = t.snake;
+    ctx.fillStyle = magnetOn ? '#d99af7' : t.snake;
     ctx.fillRect(seg.x*CELL + pad, seg.y*CELL + pad, CELL - pad*2, CELL - pad*2);
   }
+  ctx.restore();
   ctx.globalAlpha = 1;
 
   // Snake head — brighter, crisp
@@ -812,6 +896,13 @@ function loop(ts) {
     snakeTicker -= effectiveInterval;
     snakeTick();
     if (!running) return; // endGame may have been called
+    magnetFood();
+  }
+
+  // the wall presses down: new line on top every 2 minutes
+  if (ts >= nextWallGrow) {
+    nextWallGrow = ts + 120000;
+    growWall();
   }
 
   // Auto-fire for gun tier 5
@@ -899,7 +990,7 @@ window.addEventListener('resize', () => {
   food = food.filter(f => f.x < cols && f.y < rows);
   while (food.length < FOOD_COUNT) placeFood();
   bricks = new Set([...bricks].filter(k => Number(k.split(',')[0]) < cols));
-  for (let r = 0; r < BRICK_ROWS; r++)
+  for (let r = 0; r < wallRows; r++)
     for (let c = oldCols; c < cols; c++) bricks.add(c + ',' + r);
   updateHUD();
 });
