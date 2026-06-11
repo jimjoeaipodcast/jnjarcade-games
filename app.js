@@ -36,13 +36,6 @@ const WORLDS = {
     by: 'JIMMY',
     attract: snakeAttract,
   },
-  'doom-mario': {
-    ink: '#ff6a3d', dim: '#571508', pit: '#160806', glowsoft: 'rgba(255,106,61,0.22)',
-    genre: 'DOOM × MARIO',
-    quote: '“I died four times. In my day pipes led to coins, not whatever that was.”',
-    by: 'JOE',
-    attract: doomAttract,
-  },
   'doom-3d': {
     ink: '#ff3355', dim: '#5c0f1c', pit: '#160508', glowsoft: 'rgba(255,51,85,0.22)',
     genre: 'FULL 3D RAYCASTER',
@@ -144,7 +137,7 @@ function buildCabinet(game) {
   glass.appendChild(tag);
 
   // your real best score lives on the cabinet; 999999 until you earn one
-  const HS_KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-mario': 'jnj_doommario_hs' };
+  const HS_KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-3d': 'jnj_doom3d_hs' };
   const hs = parseInt(localStorage.getItem(HS_KEYS[game.id] || '') || '0', 10);
   const hsTag = document.createElement('span');
   hsTag.className = 'hiscore-tag';

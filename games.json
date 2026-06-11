@@ -57,30 +57,17 @@
       "icon": "assets/icons/snake-blaster.jpg"
     },
     {
-      "id": "doom-mario",
-      "name": "Doom Mari-OH!",
-      "emoji": "\ud83d\udd2b",
-      "url": "/games/doom-mario.html",
-      "releaseDate": "2026-05-19",
-      "week": 1,
-      "gradient": [
-        "#FF453A",
-        "#8B0000"
-      ],
-      "episode": "Bonus"
-    },
-    {
       "id": "doom-3d",
       "name": "Doom Mari-OH 3D",
       "emoji": "👹",
       "url": "/games/doom-3d.html",
-      "releaseDate": "2026-06-11",
-      "week": 2,
+      "releaseDate": "2026-05-19",
+      "week": 1,
       "gradient": [
         "#FF3355",
         "#8B0000"
       ],
-      "episode": "Bonus II"
+      "episode": "Bonus"
     },
     {
       "id": "token-rush",
