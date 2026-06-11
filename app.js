@@ -462,7 +462,8 @@ function buildNextStrip(games) {
 
 /* ── Socials ──────────────────────────────────────────────── */
 
-const COIN_COLORS = { Shop: '#ffd23d', YouTube: '#ff4040', Patreon: '#ff6e4a', KoFi: '#4ad7ff' };
+// real arcade-button photos (cut from Osimo's reference, recoloured)
+const COIN_IMGS = { Shop: 'yellow', YouTube: 'red', Patreon: 'orange', KoFi: 'blue' };
 
 function buildSocials(social) {
   const row = document.getElementById('socialRow');
@@ -472,8 +473,9 @@ function buildSocials(social) {
     a.href = app.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.style.setProperty('--c', COIN_COLORS[app.label] || '#ffd23d');
-    a.innerHTML = '<span class="dome"></span><span class="tag">' + app.name.toUpperCase() + '</span>';
+    const img = COIN_IMGS[app.label] || 'yellow';
+    a.innerHTML = '<img class="dome" alt="" src="assets/buttons/btn-' + img + '.png">' +
+                  '<span class="tag">' + app.name.toUpperCase() + '</span>';
     row.appendChild(a);
   });
 }
