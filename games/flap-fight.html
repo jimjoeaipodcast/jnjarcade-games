@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#060d14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<title>FLAP FIGHT — JnJ Arcade</title>
+<!--
+  FLAP FIGHT — the Game Mashup: BALLOON FIGHT × FLAPPY BIRD (Jimmy & Joe).
+  Tap to flap through pipe gaps (Flappy Bird) WHILE popping balloon fighters mid-air (Balloon Fight).
+  • Tap anywhere to flap — gravity pulls you down constantly.
+  • Thread the gaps between pipes — one touch to a pipe = instant death.
+  • Balloon enemy fighters float right-to-left — pop them by touching for +25 pts.
+  • Chain pops within 2s for a combo multiplier (×2, ×3…).
+  Difficulty curve:
+    L1-4: speed 2.1, gap 155px, enemies fly horizontal only.
+    L5-9: speed 2.6, gap 140px, enemies oscillate vertically.
+    L10+: speed 3.0+, gap 125px, dual-enemy waves.
+  Conventions: full-screen shell, tap-only, INSERT COIN overlay, cell-buffer in resize().
+-->
+<style>
+  :root {
+    --ink:#4dd9f5; --dim:#0d4a5c; --pit:#030f18;
+    --glow:rgba(77,217,245,.22); --bg:#060d14;
+  }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    height:100%; background:var(--bg); color:#fff;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .game-shell {
+    display:flex; flex-direction:column;
+    height:100vh; height:100dvh; width:100%;
+    padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0)
+            env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+  }
+  .game-header {
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:9px 14px;
+    background:linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.2));
+    border-bottom:2px solid var(--dim);
+  }
+  .back-btn { color:var(--ink); text-decoration:none; font-weight:700; font-size:13px; letter-spacing:.05em; opacity:.85; }
+  .game-name {
+    font-family:'Bungee',cursive; letter-spacing:.14em;
+    color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px;
+  }
+  .hdr-right { text-align:right; }
+  .score-label { font-size:9px; letter-spacing:.18em; opacity:.55; }
+  .score-val { font-size:19px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .hud-bar {
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px 5px; font-size:12px;
+    border-bottom:1px solid rgba(77,217,245,.1);
+  }
+  .combo-display { color:var(--ink); font-weight:700; font-size:13px; opacity:0; transition:opacity .3s; letter-spacing:.06em; }
+  .combo-display.on { opacity:1; }
+  .lvl { opacity:.65; letter-spacing:.1em; font-size:11px; }
+  .canvas-wrap {
+    flex:1; position:relative; padding:14px 6px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas {
+    display:block; border:2px solid var(--dim); border-radius:10px;
+    box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
+    background:var(--pit); touch-action:none;
+  }
+  .overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px;
+    background:rgba(6,13,20,.88); backdrop-filter:blur(4px);
+    text-align:center; padding:24px; z-index:5; border-radius:10px;
+  }
+  .overlay.hidden { display:none; }
+  .overlay-emoji { font-size:48px; }
+  .overlay-title {
+    font-family:'Bungee',cursive; font-size:28px; font-weight:900;
+    letter-spacing:.1em; color:var(--ink); text-shadow:0 0 18px var(--glow);
+  }
+  .overlay-sub { font-size:13px; line-height:1.6; opacity:.85; max-width:320px; }
+  .board { font-size:12px; opacity:.8; line-height:1.7; margin-top:2px; }
+  .board b { color:var(--ink); }
+  .play-btn {
+    margin-top:4px; background:var(--ink); color:#021518; border:none;
+    border-radius:28px; padding:13px 28px; font-size:15px; font-weight:800;
+    letter-spacing:.08em; cursor:pointer; box-shadow:0 0 24px var(--glow);
+    font-family:'Bungee',cursive;
+    transition:transform .06s, box-shadow .06s;
+  }
+  .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+</style>
+</head>
+<body>
+<div class="game-shell">
+  <header class="game-header">
+    <a class="back-btn" href="../index.html">‹ ARCADE</a>
+    <div class="game-name">FLAP FIGHT</div>
+    <div class="hdr-right"><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+  </header>
+  <div class="hud-bar">
+    <div class="combo-display" id="combo"></div>
+    <div class="lvl" id="lvl">LEVEL 1</div>
+  </div>
+  <div class="canvas-wrap" id="wrap">
+    <canvas id="c"></canvas>
+    <div class="overlay" id="ov">
+      <div class="overlay-emoji" id="ovEmoji">🎈💨</div>
+      <div class="overlay-title" id="ovTitle">FLAP FIGHT</div>
+      <div class="overlay-sub" id="ovsub">
+        Tap to flap through the gaps.<br>
+        Pop balloon fighters from above for <b>+25 pts</b>.<br>
+        Chain pops within 2s for a <b style="color:var(--ink)">×COMBO</b>.<br>
+        One touch to any pipe = gone.
+      </div>
+      <div class="board" id="board"></div>
+      <button class="play-btn" id="playBtn">INSERT COIN</button>
+    </div>
+  </div>
+</div>
+<script src="arcade-scores.js?v=1"></script>
+<script>
+// ─── constants ───────────────────────────────────────────────────────────────
+const GAME_ID      = 'flap-fight';
+const GAME_TITLE   = 'FLAP FIGHT';
+const ACCENT       = '#4dd9f5';
+const GRAVITY      = 0.40;
+const FLAP_VY      = -7.8;
+const PIPE_W       = 54;
+const PIPE_CAP_OVR = 5;
+const BIRD_R       = 11;
+const ENEMY_R      = 14;
+const POP_DIST     = BIRD_R + ENEMY_R + 3;
+const COMBO_WINDOW = 2200;          // ms between pops to keep combo alive
+const BASE_SPEED   = 2.1;
+const PIPE_FRAMES  = 130;           // frames between pipe spawns
+const CELL         = 18;            // resize cell buffer (convention)
+const GROUND_H     = 26;            // scrolling ground strip height
+const MAX_ENEMIES  = 7;             // cap on simultaneous balloon fighters
+const STAR_COUNT   = 60;            // parallax background stars
+
+// ─── DOM ─────────────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('c');
+const ctx     = canvas.getContext('2d');
+const wrap    = document.getElementById('wrap');
+const ov      = document.getElementById('ov');
+const ovTitle = document.getElementById('ovTitle');
+const ovEmoji = document.getElementById('ovEmoji');
+const ovsub   = document.getElementById('ovsub');
+const board   = document.getElementById('board');
+const playBtn = document.getElementById('playBtn');
+const scoreEl = document.getElementById('score');
+const comboEl = document.getElementById('combo');
+const lvlEl   = document.getElementById('lvl');
+
+// ─── game state ──────────────────────────────────────────────────────────────
+let cw, ch;
+let bird, pipes, enemies, particles, floaters, stars;
+let score, frame, running, dead, bestScore;
+let pipeSpeed, gapSize, level, pipesUntilLevel;
+let comboCount, lastPopMs, comboTimer;
+let animId;
+let groundX = 0;
+
+// ─── stars init ──────────────────────────────────────────────────────────────
+function initStars() {
+  stars = [];
+  for (let i = 0; i < STAR_COUNT; i++) {
+    const layer = Math.random() < 0.5 ? 0 : 1;  // 0=slow, 1=fast
+    stars.push({
+      x: Math.random() * cw,
+      y: Math.random() * (ch - GROUND_H),
+      r: layer === 0 ? rnd(0.5, 1.2) : rnd(1.0, 2.0),
+      speed: layer === 0 ? rnd(0.15, 0.35) : rnd(0.5, 0.9),
+      alpha: rnd(0.2, 0.7),
+    });
+  }
+}
+
+// ─── resize (convention: subtract CELL buffer top+bottom) ─────────────────────
+function resize() {
+  cw = wrap.clientWidth  - 12;
+  ch = wrap.clientHeight - 28 - CELL * 2;
+  canvas.width  = cw;
+  canvas.height = ch;
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function rnd(a, b) { return a + Math.random() * (b - a); }
+
+function spawnPipe() {
+  const margin = 60;
+  const gapY   = rnd(margin, ch - GROUND_H - margin - gapSize);
+  pipes.push({ x: cw + PIPE_W + 2, gapY, gapSize, counted: false });
+}
+
+function spawnEnemy() {
+  if (enemies.length >= MAX_ENEMIES) return;
+  const y    = rnd(28, ch - GROUND_H - 28);
+  const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
+  const fast = level >= 10;
+  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const ang = (Math.PI * 2 * i) / count + rnd(-0.4, 0.4);
+    const spd = rnd(2.5, 5.5);
+    particles.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1.5,
+                     alpha: 1, r: rnd(2.5, 5.5), color });
+  }
+}
+
+function setLevel(n) {
+  level         = n;
+  pipeSpeed     = BASE_SPEED + (n - 1) * 0.18;
+  gapSize       = Math.max(115, 155 - (n - 1) * 4);
+  pipesUntilLevel = 10;
+  lvlEl.textContent = `LEVEL ${n}`;
+}
+
+// ─── init ─────────────────────────────────────────────────────────────────────
+function initGame() {
+  resize();
+  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0 };
+  pipes     = [];
+  enemies   = [];
+  particles = [];
+  floaters  = [];
+  groundX   = 0;
+  score     = 0;
+  frame     = 0;
+  running   = true;
+  dead      = false;
+  bestScore = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
+  comboCount  = 0;
+  lastPopMs   = 0;
+  clearTimeout(comboTimer);
+  comboEl.classList.remove('on');
+  scoreEl.textContent = '0';
+  setLevel(1);
+  initStars();
+  spawnPipe();
+}
+
+// ─── flap ─────────────────────────────────────────────────────────────────────
+function flap() {
+  if (!running) return;
+  bird.vy = FLAP_VY;
+}
+
+// ─── update ──────────────────────────────────────────────────────────────────
+function update() {
+  frame++;
+
+  // bird physics
+  bird.vy += GRAVITY;
+  bird.y  += bird.vy;
+  // clamp rotation: nose-down on fall, nose-up on rise
+  bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
+
+  // ceiling / floor (ground strip)
+  if (bird.y - BIRD_R < 0 || bird.y + BIRD_R > ch - GROUND_H) { die(); return; }
+
+  // scroll ground
+  groundX = (groundX - pipeSpeed * 0.9) % (GROUND_H * 2);
+
+  // stars parallax
+  for (const s of stars) {
+    s.x -= s.speed;
+    if (s.x < 0) s.x = cw;
+  }
+
+  // spawn pipes
+  if (frame % PIPE_FRAMES === 0) spawnPipe();
+
+  // spawn enemies: interval shrinks each level, min 45 frames
+  const eInt = Math.max(45, 88 - (level - 1) * 5);
+  if (frame > PIPE_FRAMES * 0.6 && frame % eInt === 0) {
+    spawnEnemy();
+    if (level >= 10 && frame % (eInt * 2) === 0) spawnEnemy(); // dual wave at L10+
+  }
+
+  // pipes
+  for (let i = pipes.length - 1; i >= 0; i--) {
+    const p = pipes[i];
+    p.x -= pipeSpeed;
+    if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
+
+    // score pipe
+    if (!p.counted && p.x + PIPE_W < bird.x) {
+      p.counted = true;
+      score += 10;
+      scoreEl.textContent = score;
+      pipesUntilLevel--;
+      if (pipesUntilLevel <= 0) setLevel(level + 1);
+      floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2, text: '+10', alpha: 1, vy: -1.4, color: '#4dd9f5' });
+    }
+
+    // collision: rect vs circle
+    const inX = bird.x + BIRD_R > p.x && bird.x - BIRD_R < p.x + PIPE_W;
+    if (inX) {
+      const inGap = bird.y - BIRD_R >= p.gapY && bird.y + BIRD_R <= p.gapY + p.gapSize;
+      if (!inGap) { die(); return; }
+    }
+  }
+
+  // enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (!e.alive) { enemies.splice(i, 1); continue; }
+
+    const spd = pipeSpeed * (e.fast ? 0.8 : 0.62);
+    e.x -= spd;
+    e.y += e.vy;
+    // bounce off top/bottom
+    if (e.y < ENEMY_R + 2)  { e.y = ENEMY_R + 2;  e.vy = Math.abs(e.vy); }
+    if (e.y > ch - GROUND_H - ENEMY_R - 2) { e.y = ch - GROUND_H - ENEMY_R - 2; e.vy = -Math.abs(e.vy); }
+    if (e.x + ENEMY_R < 0) { enemies.splice(i, 1); continue; }
+
+    // pop check
+    const dx   = bird.x - e.x;
+    const dy   = bird.y - e.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < POP_DIST) {
+      const now = Date.now();
+      if (now - lastPopMs < COMBO_WINDOW) {
+        comboCount = Math.min(comboCount + 1, 9);
+      } else {
+        comboCount = 1;
+      }
+      lastPopMs = now;
+      const pts = 25 * comboCount;
+      score += pts;
+      scoreEl.textContent = score;
+      e.alive = false;
+      bird.vy = Math.min(bird.vy, -2.5);
+      spawnParticles(e.x, e.y, '#ff6b4a', 10);
+      const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
+      floaters.push({ x: e.x, y: e.y - ENEMY_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
+
+      if (comboCount >= 2) {
+        comboEl.textContent = `×${comboCount} COMBO  +${pts}`;
+        comboEl.classList.add('on');
+        clearTimeout(comboTimer);
+        comboTimer = setTimeout(() => comboEl.classList.remove('on'), 1400);
+      }
+    }
+  }
+
+  // particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.18;
+    p.alpha -= 0.038;
+    if (p.alpha <= 0) particles.splice(i, 1);
+  }
+
+  // floaters (rising score labels)
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i];
+    f.y    += f.vy;
+    f.alpha -= 0.028;
+    if (f.alpha <= 0) floaters.splice(i, 1);
+  }
+}
+
+// ─── draw ────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, cw, ch);
+
+  // sky gradient background
+  const sky = ctx.createLinearGradient(0, 0, 0, ch);
+  sky.addColorStop(0, '#030f18');
+  sky.addColorStop(1, '#071a2a');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, cw, ch);
+
+  // parallax stars
+  for (const s of stars) {
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle = '#b0f0ff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // pipes (bottom pipe stops at ground)
+  for (const p of pipes) {
+    drawPipe(p.x, 0,              PIPE_W, p.gapY,                             false);
+    drawPipe(p.x, p.gapY + p.gapSize, PIPE_W, ch - GROUND_H - p.gapY - p.gapSize, true);
+  }
+
+  // enemies
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    drawEnemy(e.x, e.y);
+  }
+
+  // particles
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.alpha);
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ground strip (drawn over pipes/enemies, under bird)
+  drawGround();
+
+  // floating score labels
+  ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
+  ctx.textAlign = 'center';
+  for (const f of floaters) {
+    ctx.globalAlpha = Math.max(0, f.alpha);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+
+  // bird (drawn last — always on top)
+  drawBird(bird.x, bird.y, bird.rot);
+}
+
+function drawGround() {
+  const gy = ch - GROUND_H;
+  // base fill
+  const gg = ctx.createLinearGradient(0, gy, 0, ch);
+  gg.addColorStop(0, '#0e5c30');
+  gg.addColorStop(0.3, '#0a4a26');
+  gg.addColorStop(1, '#051e10');
+  ctx.fillStyle = gg;
+  ctx.fillRect(0, gy, cw, GROUND_H);
+  // top edge highlight
+  ctx.fillStyle = '#15a358';
+  ctx.fillRect(0, gy, cw, 3);
+  // scrolling stripe pattern
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  const stripeW = GROUND_H * 2;
+  for (let x = (groundX % stripeW) - stripeW; x < cw + stripeW; x += stripeW) {
+    ctx.beginPath();
+    ctx.moveTo(x, gy + 3);
+    ctx.lineTo(x + stripeW * 0.5, gy + 3);
+    ctx.lineTo(x + stripeW * 0.5, ch);
+    ctx.lineTo(x, ch);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawPipe(x, y, w, h, isBottom) {
+  if (h <= 2) return;
+
+  // body gradient (left-to-right shading)
+  const g = ctx.createLinearGradient(x, 0, x + w, 0);
+  g.addColorStop(0,    '#0a5e3a');
+  g.addColorStop(0.30, '#12834f');
+  g.addColorStop(0.65, '#0a6840');
+  g.addColorStop(1,    '#053a24');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+
+  // cap
+  const capH = 14;
+  const capY = isBottom ? y : y + h - capH;
+  ctx.fillStyle = '#15a358';
+  ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
+
+  // dark edge under cap
+  ctx.fillStyle = '#053a24';
+  const edgeY = isBottom ? capY : capY + capH - 2;
+  ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
+
+  // highlight strip
+  ctx.fillStyle = 'rgba(255,255,255,.07)';
+  ctx.fillRect(x + 3, y, 6, h);
+}
+
+function drawEnemy(x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // two balloons
+  const balloonCols = ['#ff6b4a', '#ffcf3d'];
+  const bOffsets    = [[-7, -18], [7, -18]];
+  for (let i = 0; i < 2; i++) {
+    const [bx, by] = bOffsets[i];
+    // string
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(bx, by + 8); ctx.lineTo(0, 0); ctx.stroke();
+    // balloon
+    ctx.fillStyle = balloonCols[i];
+    ctx.beginPath();
+    ctx.arc(bx, by, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // sheen
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.beginPath();
+    ctx.arc(bx - 2, by - 3, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // body (enemy fighter)
+  ctx.fillStyle = '#e84040';
+  ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+  // visor
+  ctx.fillStyle = 'rgba(255,255,255,.7)';
+  ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawBird(x, y, rotDeg) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotDeg * Math.PI / 180);
+
+  // two balloons above the bird
+  const bCols  = ['#4dd9f5', '#b0f0ff'];
+  const bOff   = [[-5, -17], [5, -17]];
+  for (let i = 0; i < 2; i++) {
+    const [bx, by] = bOff[i];
+    ctx.strokeStyle = 'rgba(77,217,245,.55)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(bx, by + 7); ctx.lineTo(0, -2); ctx.stroke();
+    ctx.fillStyle = bCols[i];
+    ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.arc(bx - 2, by - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // bird body
+  ctx.fillStyle = '#4dd9f5';
+  ctx.beginPath(); ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2); ctx.fill();
+  // subtle shadow at bottom of body
+  ctx.fillStyle = 'rgba(0,0,0,.2)';
+  ctx.beginPath();
+  ctx.arc(1, 3, BIRD_R - 2, 0, Math.PI * 2); ctx.fill();
+
+  // eye white
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(4, -3, 4, 0, Math.PI * 2); ctx.fill();
+  // pupil
+  ctx.fillStyle = '#021518';
+  ctx.beginPath(); ctx.arc(5, -3, 2, 0, Math.PI * 2); ctx.fill();
+  // eye sheen
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(4, -4, 1, 0, Math.PI * 2); ctx.fill();
+
+  // beak
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath();
+  ctx.moveTo(BIRD_R - 2, -1);
+  ctx.lineTo(BIRD_R + 7, -2);
+  ctx.lineTo(BIRD_R + 7, 2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ─── game over ─────────────────────────────────────────────────────────────────
+function die() {
+  if (dead) return;
+  dead    = true;
+  running = false;
+  spawnParticles(bird.x, bird.y, ACCENT, 12);
+  draw();
+
+  if (score > bestScore) {
+    bestScore = score;
+    localStorage.setItem('hs_flap-fight', bestScore);
+  }
+
+  if (score > 0) {
+    ArcadeScores.show({
+      game: GAME_ID, title: GAME_TITLE, score,
+      accent: ACCENT,
+      onClose: showOverlay,
+    });
+  } else {
+    showOverlay();
+  }
+}
+
+function showOverlay(finalScore) {
+  const s = (typeof finalScore === 'number') ? finalScore : score;
+  ovTitle.textContent = 'FLAP FIGHT';
+  ovEmoji.textContent = s > 0 ? '💥🎈' : '🎈💨';
+  ovsub.innerHTML = s > 0
+    ? `You scored <b style="color:var(--ink)">${s}</b> points!`
+    : `Tap to flap through the gaps.<br>
+       Pop balloon fighters for <b>+25 pts</b>.<br>
+       Chain pops for a <b style="color:var(--ink)">×COMBO</b>.<br>
+       One pipe touch = game over.`;
+  const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
+  const best = Math.max(bestScore || 0, stored, s);
+  board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
+  playBtn.textContent = s > 0 ? 'PLAY AGAIN' : 'INSERT COIN';
+  ov.classList.remove('hidden');
+}
+
+// ─── main loop ─────────────────────────────────────────────────────────────────
+function loop() {
+  if (running) { update(); draw(); }
+  animId = requestAnimationFrame(loop);
+}
+
+// ─── input ───────────────────────────────────────────────────────────────────
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (running) flap();
+}, { passive: false });
+
+canvas.addEventListener('click', () => {
+  if (running) flap();
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'ArrowUp') && running) {
+    e.preventDefault();
+    flap();
+  }
+});
+
+canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+playBtn.addEventListener('click', () => {
+  ov.classList.add('hidden');
+  if (animId) cancelAnimationFrame(animId);
+  initGame();
+  tryFullscreen();
+  loop();
+});
+
+// live resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (running) resize();
+  }, 120);
+});
+
+function tryFullscreen() {
+  try {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch (_) {}
+}
+
+// one-time touchend fullscreen fallback (iOS Safari)
+document.addEventListener('touchend', function ff() {
+  tryFullscreen();
+  document.removeEventListener('touchend', ff);
+}, { passive: true });
+</script>
+</body>
+</html>
