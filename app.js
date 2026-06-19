@@ -269,73 +269,51 @@ function flapAttract(ctx, w, h, t, world, s) {
   const PW     = Math.max(12, w * 0.14);
   const BR     = 7;    // bird radius
   const GAP_H  = h * 0.42;  // wide gap — AI can navigate it reliably
-  const SPEED  = w * 0.00110;
+  const SPEED  = w * 0.000880;
   const GRAV   = 0.26;
   const FLAP   = -5.2;
 
-  function resetState() {
+  if (!s.init) {
+    s.init   = true;
+    s.last   = t;
     s.birdY  = h * 0.48;
     s.birdVy = 0;
-    s.dead   = false;
-    s.flash  = 0;
     s.pipes  = [
       { x: w * 0.78, gap: h * 0.26, gapH: GAP_H },
       { x: w * 1.52, gap: h * 0.18, gapH: GAP_H },
     ];
-  }
-
-  if (!s.init) {
-    s.init  = true;
-    s.last  = t;
     s.enemy = { x: w * 0.54, y: h * 0.36, vy: 0.38 };
-    s.stars = Array.from({length: 18}, () => ({
-      x: Math.random() * w, y: Math.random() * h * 0.82,
+    s.stars = Array.from({length: 22}, () => ({
+      x: Math.random() * w, y: Math.random() * h * 0.80,
       r: Math.random() * 1.4 + 0.4, a: Math.random() * 0.45 + 0.15,
     }));
-    resetState();
+    // 3 cloud layers: [x, y, width, alpha, speed-multiplier]
+    s.clouds = [
+      // far (slow, dim)
+      ...[0,1,2,3].map(i => ({ x: w*(0.05+i*0.25), y: h*(0.08+Math.random()*0.12), wr: w*0.09, a:0.08, spd:0.18 })),
+      // mid
+      ...[0,1,2].map(i => ({ x: w*(0.10+i*0.35), y: h*(0.20+Math.random()*0.14), wr: w*0.12, a:0.13, spd:0.38 })),
+      // near (fast, bright)
+      ...[0,1].map(i  => ({ x: w*(0.15+i*0.55), y: h*(0.30+Math.random()*0.10), wr: w*0.10, a:0.18, spd:0.65 })),
+    ];
   }
 
   const dt = Math.min(t - s.last, 32);
   s.last = t;
 
-  // ── death flash then reset ──
-  if (s.dead) {
-    s.flash -= dt;
-    if (s.flash <= 0) resetState();
-    // draw white flash fading out
-    const sky2 = ctx.createLinearGradient(0,0,0,h);
-    sky2.addColorStop(0,'#030f18'); sky2.addColorStop(1,'#071a2a');
-    ctx.fillStyle = sky2; ctx.fillRect(0,0,w,h);
-    ctx.fillStyle = '#fff';
-    ctx.globalAlpha = Math.max(0, s.flash / 600);
-    ctx.fillRect(0,0,w,h);
-    ctx.globalAlpha = 1;
-    return;
-  }
-
   // ── physics ──
   s.birdVy += GRAV;
   s.birdY  += s.birdVy * (dt / 16);
 
-  // ── AI: flap toward the centre of the nearest upcoming gap ──
+  // ── AI: flap proactively toward gap centre — no death in attract ──
   const bx = w * 0.27;
   const ahead = s.pipes.filter(p => p.x + PW > bx + BR).sort((a,b) => a.x - b.x)[0];
   if (ahead) {
     const target = ahead.gap + GAP_H * 0.5;
-    if (s.birdY > target - 8 && s.birdVy > -0.5) s.birdVy = FLAP;
+    if (s.birdY > target - 18 && s.birdVy > -1.5) s.birdVy = FLAP;
   }
-
-  // ── pipe collision ──
-  let died = false;
-  for (const p of s.pipes) {
-    const inX = bx + BR > p.x && bx - BR < p.x + PW;
-    if (inX) {
-      const inGap = s.birdY - BR >= p.gap && s.birdY + BR <= p.gap + GAP_H;
-      if (!inGap) { died = true; break; }
-    }
-  }
-  if (s.birdY + BR > h - GROUND || s.birdY - BR < 0) died = true;
-  if (died) { s.dead = true; s.flash = 650; }
+  // soft clamp — never touches ceiling/floor
+  s.birdY = Math.max(BR + 4, Math.min(h - GROUND - BR - 4, s.birdY));
 
   // ── move pipes ──
   for (const p of s.pipes) {
@@ -365,13 +343,17 @@ function flapAttract(ctx, w, h, t, world, s) {
   }
   ctx.globalAlpha = 1;
 
-  // clouds
-  [[w*0.18, h*0.22, 14], [w*0.65, h*0.15, 10]].forEach(([cx, cy, cr]) => {
-    ctx.fillStyle = 'rgba(180,220,255,0.13)';
-    ctx.beginPath(); ctx.arc(cx, cy, cr*1.2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx+cr*1.3, cy+cr*0.2, cr, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx-cr, cy+cr*0.3, cr*0.8, 0, Math.PI*2); ctx.fill();
-  });
+  // parallax clouds — scroll + wrap
+  for (const c of s.clouds) {
+    c.x -= SPEED * c.spd * dt;
+    if (c.x + c.wr * 1.5 < 0) c.x = w + c.wr;
+    const cr = c.wr * 0.5;
+    ctx.fillStyle = `rgba(180,220,255,${c.a})`;
+    ctx.beginPath(); ctx.arc(c.x,          c.y,        cr*1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x+cr*1.4,   c.y+cr*0.2, cr,     0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x-cr*0.9,   c.y+cr*0.3, cr*0.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x+cr*0.5,   c.y-cr*0.3, cr*0.7, 0, Math.PI*2); ctx.fill();
+  }
 
   // pipes
   for (const p of s.pipes) {
