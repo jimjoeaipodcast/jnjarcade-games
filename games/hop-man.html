@@ -390,7 +390,7 @@ function updHud(){
 // ── Lane lookup ─────────────────────────────────────────────────────────────
 function laneAt(r){ return lanes.find(l=>l.row===r) || null; }
 // Bottom-most SAFE (non-lane) row — always respawn here so we never land on water/road.
-function safeSpawnRow(){ for(let r=ROWS-1;r>=0;r--) if(!laneAt(r)) return r; return ROWS-1; }
+function safeSpawnRow(){ for(let r=ROWS-3;r>=0;r--) if(!laneAt(r)) return r; return ROWS-3; }
 
 // ── Level clear → next ──────────────────────────────────────────────────────
 function nextLevel(){
