@@ -163,7 +163,9 @@ function seedBoard(){
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 let COLS=13, CELL=26, ROWS=22, VROWS=15, W=0, H=0, VH=0, portrait=false;
-let TOP_PAD=4, BOT_PAD=4;   // sky rows above fly + grass rows below spawn
+let TOP_PAD=4, BOT_PAD=4;   // sky rows above fly + grass rows below spawn (desktop only)
+// True desktop = mouse + hover (phones/tablets always get no-scroll full-screen layout)
+const isDesktop = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
 let camY=0, targetCamY=0;
 let grid=[], lanes=[], cars=[], ghosts=[], cherries=[], walls=new Set();
 let player={c:0,r:0};
@@ -229,10 +231,10 @@ function resize(){
   const availH = wrap.clientHeight - 10;
   CELL  = Math.max(16, Math.floor(availW / COLS));
   VROWS = Math.max(11, Math.floor(availH / CELL));   // visible rows (viewport)
-  const _PAD = portrait ? 0 : Math.max(3, Math.round(VROWS / 5));
+  const _PAD = isDesktop ? Math.max(3, Math.round(VROWS / 5)) : 0;
   TOP_PAD = _PAD; BOT_PAD = _PAD;
-  // Portrait: full level fits on screen (no scroll). Landscape: world taller than viewport.
-  ROWS  = portrait ? VROWS : Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD);
+  // Touch/mobile: full level on screen, no scroll. Desktop mouse: scrollable world.
+  ROWS  = isDesktop ? Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD) : VROWS;
   W  = CELL * COLS;
   VH = CELL * VROWS;   // canvas height = viewport
   H  = CELL * ROWS;    // world height (used in draw for full-world background fills)
@@ -377,7 +379,7 @@ function buildLevel(){
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
   const spawnPy = player.r * CELL + CELL/2;
-  camY = targetCamY = portrait ? 0 : Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
+  camY = targetCamY = isDesktop ? Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80)) : 0;
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -391,7 +393,7 @@ function updHud(){
 // ── Lane lookup ─────────────────────────────────────────────────────────────
 function laneAt(r){ return lanes.find(l=>l.row===r) || null; }
 // Bottom-most SAFE (non-lane) row — always respawn here so we never land on water/road.
-function safeSpawnRow(){ const cap=portrait?ROWS-1:ROWS-3; for(let r=cap;r>=0;r--) if(!laneAt(r)) return r; return cap; }
+function safeSpawnRow(){ const cap=isDesktop?ROWS-3:ROWS-1; for(let r=cap;r>=0;r--) if(!laneAt(r)) return r; return cap; }
 
 // ── Level clear → next ──────────────────────────────────────────────────────
 function nextLevel(){
@@ -482,7 +484,7 @@ function die(drowned){
   player.r      = safeSpawnRow();
   const rpy = player.r * CELL + CELL/2;
   const rpy2 = player.r * CELL + CELL/2;
-  camY = targetCamY = portrait ? 0 : Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
+  camY = targetCamY = isDesktop ? Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80)) : 0;
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -941,8 +943,8 @@ function draw(){
   // Camera: runs every frame so frog is always tracked
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
-    if(portrait){
-      // Mobile: no scrolling — full level on screen
+    if(!isDesktop){
+      // Touch/mobile: no scrolling — full level on screen, camY locked at 0
       targetCamY = 0;
       camY = 0;
     } else {
