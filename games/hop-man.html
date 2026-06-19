@@ -163,6 +163,7 @@ function seedBoard(){
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 let COLS=13, CELL=26, ROWS=22, VROWS=15, W=0, H=0, VH=0, portrait=false;
+let TOP_PAD=4, BOT_PAD=4;   // sky rows above fly + grass rows below spawn
 let camY=0, targetCamY=0;
 let grid=[], lanes=[], cars=[], ghosts=[], cherries=[], walls=new Set();
 let player={c:0,r:0};
@@ -228,7 +229,9 @@ function resize(){
   const availH = wrap.clientHeight - 10;
   CELL  = Math.max(16, Math.floor(availW / COLS));
   VROWS = Math.max(11, Math.floor(availH / CELL));   // visible rows (viewport)
-  ROWS  = Math.max(22, VROWS + 8);                   // total world rows (always scrollable)
+  const _PAD = Math.max(3, Math.round(VROWS / 5));   // 1/5 viewport worth of sky + grass padding
+  TOP_PAD = _PAD; BOT_PAD = _PAD;
+  ROWS  = Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD); // extra rows for camera breathing room
   W  = CELL * COLS;
   VH = CELL * VROWS;   // canvas height = viewport
   H  = CELL * ROWS;    // world height (used in draw for full-world background fills)
@@ -248,13 +251,16 @@ function buildLevel(){
 
   // Pac-Man-style coin field: a coin in EVERY cell. Collect them ALL → +500 (Osimo 2026-06-16).
   grid = Array.from({length:ROWS}, ()=> Array.from({length:COLS}, ()=> 1));
+  // No coins in sky zone (above fly) or bottom-pad zone (below spawn)
+  for(let r=0; r<TOP_PAD; r++) for(let c=0; c<COLS; c++) grid[r][c]=0;
+  for(let r=ROWS-BOT_PAD; r<ROWS; r++) for(let c=0; c<COLS; c++) grid[r][c]=0;
 
   // Random lane layout: blocks of 1-3 lanes between safe rows. Never 2 consecutive safe rows.
-  // Row 0 (fly) and row ROWS-1 (spawn) are always safe. (Osimo 2026-06-16)
+  // Fly row = TOP_PAD; spawn row = ROWS-1-BOT_PAD. Lanes only in the game zone between them.
   lanes = [];
   levelTheme = P.theme || 'city';
-  let r2=1, laneBlockIdx=0;
-  while(r2 <= ROWS-2){
+  let r2=TOP_PAD+1, laneBlockIdx=0;
+  while(r2 <= ROWS-BOT_PAD-2){
     const nL = 1 + Math.floor(Math.random()*3);
     let laneType;
     if(!P.river)     laneType='road';
@@ -282,8 +288,9 @@ function buildLevel(){
 
   // Cherries ONLY on ghost levels, and only on SAFE rows (so eating one can never kill you).
   cherries = [];
-  if(P.ghosts && safeRows.length>=2){
-    cherries = [{c:2, r:safeRows[1]}, {c:COLS-3, r:safeRows[safeRows.length-2]}];
+  const gameSafeRows = safeRows.filter(r => r > TOP_PAD && r < ROWS-BOT_PAD);
+  if(P.ghosts && gameSafeRows.length>=2){
+    cherries = [{c:2, r:gameSafeRows[1]}, {c:COLS-3, r:gameSafeRows[gameSafeRows.length-2]}];
   }
 
   // Walls on safe rows: 2-4 black obstacles per safe row (not spawn, not fly row).
@@ -292,7 +299,7 @@ function buildLevel(){
   const wKey = (c,r) => r*1000+c;
   const spawnRow = safeSpawnRow();
   for(const sr of safeRows){
-    if(sr===0 || sr===spawnRow) continue;  // never block fly row or spawn row
+    if(sr<=TOP_PAD || sr>=ROWS-BOT_PAD || sr===spawnRow) continue;  // skip sky/pad/fly/spawn
     const nw = 2 + Math.floor(Math.random()*3);  // 2-4 walls per safe row
     let placed2=0, tries=0;
     while(placed2<nw && tries++<80){
@@ -306,9 +313,9 @@ function buildLevel(){
     }
   }
 
-  // The FLY sits TOP-CENTRE — reach it to advance the level. Clear its coin so it isn't counted.
-  fly = {c: COLS>>1, r: 0};
-  grid[0][fly.c] = 0;
+  // The FLY sits at TOP_PAD — 1/5-viewport sky rows above it give camera breathing room.
+  fly = {c: COLS>>1, r: TOP_PAD};
+  grid[TOP_PAD][fly.c] = 0;
 
   dotsLeft = 0;
   for(const row of grid) for(const v of row) if(v) dotsLeft++;
@@ -368,9 +375,9 @@ function buildLevel(){
   dir = {dc:0,dr:0}; moveAcc = 0; splashes = [];
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
-  // Init camera: frog at 75% down viewport so level ahead is visible above
+  // Init camera: frog at 80% down (1/5 from bottom) — level above visible, sky below
   const spawnPy = player.r * CELL + CELL/2;
-  camY = targetCamY = Math.max(0, Math.min(H - VH, spawnPy - VH * 0.75));
+  camY = targetCamY = Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -384,7 +391,7 @@ function updHud(){
 // ── Lane lookup ─────────────────────────────────────────────────────────────
 function laneAt(r){ return lanes.find(l=>l.row===r) || null; }
 // Bottom-most SAFE (non-lane) row — always respawn here so we never land on water/road.
-function safeSpawnRow(){ for(let r=ROWS-1;r>=0;r--) if(!laneAt(r)) return r; return ROWS-1; }
+function safeSpawnRow(){ const cap=ROWS-1-BOT_PAD; for(let r=cap;r>=0;r--) if(!laneAt(r)) return r; return cap; }
 
 // ── Level clear → next ──────────────────────────────────────────────────────
 function nextLevel(){
@@ -474,7 +481,7 @@ function die(drowned){
   player.c      = COLS>>1;
   player.r      = safeSpawnRow();
   const rpy = player.r * CELL + CELL/2;
-  camY = targetCamY = Math.max(0, Math.min(H - VH, rpy - VH * 0.75));
+  camY = targetCamY = Math.max(0, Math.min(H - VH, rpy - VH * 0.80));
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -933,11 +940,14 @@ function draw(){
   // Camera: runs every frame so frog is always tracked
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
-    targetCamY = Math.max(0, Math.min(H - VH, py - VH * 0.75));
+    // Bias: 0.80 at bottom (1/5 from bottom) → 0.20 at top (1/5 from top)
+    const _t = Math.max(0, Math.min(1, player.r / Math.max(1, ROWS - 1)));
+    const _bias = 0.20 + _t * 0.60;
+    targetCamY = Math.max(0, Math.min(H - VH, py - VH * _bias));
     camY += (targetCamY - camY) * 0.38;
     if(Math.abs(camY - targetCamY) < 2) camY = targetCamY;
-    // Prevent frog going above top of canvas (upper clamp only — lower conflicts at world-bottom)
-    const maxCam = Math.max(0, player.r * CELL + CELL/2 - CELL);
+    // Frog stays within 1/5 from top (matches end-bias 0.20)
+    const maxCam = Math.max(0, py - VH * 0.20);
     if(camY > maxCam) camY = maxCam;
     camY = Math.max(0, Math.min(H - VH, camY));
   }
