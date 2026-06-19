@@ -108,7 +108,7 @@
   </div>
   <div class="canvas-wrap" id="wrap">
     <canvas id="c"></canvas>
-    <div class="overlay" id="ov">
+    <div class="overlay hidden" id="ov">
       <div class="overlay-emoji" id="ovEmoji">🎈💨</div>
       <div class="overlay-title" id="ovTitle">FLAP FIGHT</div>
       <div class="overlay-sub" id="ovsub">
@@ -164,7 +164,7 @@ const lvlEl   = document.getElementById('lvl');
 // ─── game state ──────────────────────────────────────────────────────────────
 let cw, ch;
 let bird, pipes, enemies, particles, floaters, stars, clouds;
-let score, frame, running, dead, bestScore, gameStartTime;
+let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let birdInflate, inflateInvincible, nextSpecialSpawn;
@@ -265,7 +265,7 @@ function setLevel(n) {
 // ─── init ─────────────────────────────────────────────────────────────────────
 function initGame() {
   resize();
-  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: FLAP_VY, rot: 0, r: BIRD_R };
+  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
   nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
@@ -278,7 +278,8 @@ function initGame() {
   groundX       = 0;
   score         = 0;
   frame         = 0;
-  running       = true;
+  running       = false;
+  waiting       = true;
   dead          = false;
   gameStartTime = Date.now();
   bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
@@ -297,6 +298,14 @@ function initGame() {
 function flap() {
   if (!running || popping) return;
   bird.vy = FLAP_VY;
+}
+
+function startPlaying() {
+  if (!waiting) return;
+  waiting = false;
+  running = true;
+  tryFullscreen();
+  flap();
 }
 
 // ─── update ──────────────────────────────────────────────────────────────────
@@ -566,11 +575,24 @@ function draw() {
     }
   } else {
     const _inv = Date.now() < inflateInvincible;
-    if (!_inv || Math.floor(Date.now() / 75) % 2 === 0) {
+    const _waitFlash = waiting && Math.floor(Date.now() / 300) % 3 === 0;
+    if ((!_inv || Math.floor(Date.now() / 75) % 2 === 0) && !_waitFlash) {
       if (_inv) ctx.globalAlpha = 0.35;
       drawBird(bird.x, bird.y, bird.rot);
       ctx.globalAlpha = 1;
     }
+  }
+  // waiting — tap to play hint
+  if (waiting) {
+    const a = 0.55 + 0.45 * Math.sin(Date.now() * 0.006);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+    ctx.fillText('TAP TO PLAY', cw * 0.5, ch * 0.68);
+    ctx.restore();
   }
 }
 
@@ -892,24 +914,28 @@ function showOverlay(finalScore) {
 
 // ─── main loop ─────────────────────────────────────────────────────────────────
 function loop() {
-  if (running) { update(); draw(); }
+  if (running) update();
+  if (running || waiting) draw();
   animId = requestAnimationFrame(loop);
 }
 
 // ─── input ───────────────────────────────────────────────────────────────────
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (waiting) { startPlaying(); return; }
   if (running) flap();
 }, { passive: false });
 
 canvas.addEventListener('click', () => {
+  if (waiting) { startPlaying(); return; }
   if (running) flap();
 });
 
 document.addEventListener('keydown', e => {
-  if ((e.code === 'Space' || e.code === 'ArrowUp') && running) {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
-    flap();
+    if (waiting) { startPlaying(); return; }
+    if (running) flap();
   }
 });
 
@@ -918,10 +944,13 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 playBtn.addEventListener('click', () => {
   ov.classList.add('hidden');
   if (animId) cancelAnimationFrame(animId);
-  initGame();
-  tryFullscreen();
+  initGame();   // enters waiting state — tap again to launch bird
   loop();
 });
+
+// Auto-start in waiting state on load
+initGame();
+loop();
 
 // live resize
 let resizeTimer;
