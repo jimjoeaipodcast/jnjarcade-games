@@ -470,6 +470,7 @@ const SPRITES = { g: S_GOOMBA, k: S_KOOPA, c: S_COIN, m: S_SHROOM, f: S_FLOWER, 
 
 /* ── state ── */
 let map, mapW, mapH, ents, fireballs = [];
+let flagCells = [];             // {x, y} world centres of tile-5 exit flags
 let px, py, pa;                 // player pos + angle
 let score, hi, lives, level, kills, coins;
 let tripleUntil = 0, starUntil = 0, hurtUntil = 0, hitFlash = 0, graceUntil = 0;
@@ -479,18 +480,20 @@ let msgTimer = null;
 
 function parseMap(rows) {
   mapH = rows.length; mapW = rows[0].length;
-  map = [];
-  ents = [];
+  map = []; ents = []; flagCells = [];
   let spawn = { x: 1.5, y: 1.5 };
   for (let y = 0; y < mapH; y++) {
     map.push([]);
     for (let x = 0; x < mapW; x++) {
       const ch = rows[y][x];
-      if (ch >= '1' && ch <= '9') { map[y].push(Number(ch)); continue; }
+      if (ch >= '1' && ch <= '9') {
+        map[y].push(Number(ch));
+        if (ch === '5') flagCells.push({ x: x + 0.5, y: y + 0.5 });
+        continue;
+      }
       map[y].push(0);
       const cx = x + 0.5, cy = y + 0.5;
       if ('gkcmfp'.includes(ch)) ents.push(makeEnt(ch, cx, cy));
-      if (ch === '.') { /* floor */ }
     }
   }
   // player spawns at the first open tile from top-left that has space
@@ -515,6 +518,8 @@ function tileAt(x, y) {
   return map[y|0][x|0];
 }
 function solid(x, y) { return tileAt(x, y) !== 0; }
+// player can walk into/through exit flag tiles (tile 5) to trigger level clear
+function solidForPlayer(x, y) { const t = tileAt(x, y); return t !== 0 && t !== 5; }
 
 /* ── HUD ── */
 function updateHUD() {
@@ -540,11 +545,10 @@ function showMsg(text, dur) {
 /* ── movement + combat ── */
 function tryMove(nx, ny) {
   const R = 0.28;
-  if (!solid(nx + R, py) && !solid(nx - R, py)) px = nx;
-  if (!solid(px, ny + R) && !solid(px, ny - R)) py = ny;
-  // walked into the flag?
-  const ahead = tileAt(px + Math.cos(pa)*0.45, py + Math.sin(pa)*0.45);
-  if (ahead === 5) levelClear();
+  if (!solidForPlayer(nx + R, py) && !solidForPlayer(nx - R, py)) px = nx;
+  if (!solidForPlayer(px, ny + R) && !solidForPlayer(px, ny - R)) py = ny;
+  // standing on or facing the flag?
+  if (tileAt(px, py) === 5 || tileAt(px + Math.cos(pa)*0.45, py + Math.sin(pa)*0.45) === 5) levelClear();
 }
 
 function fire() {
@@ -712,16 +716,37 @@ function render() {
   }
 
   // sprites — sort far → near
+  const planeX = Math.cos(pa + Math.PI/2) * Math.tan(FOV/2);
+  const planeY = Math.sin(pa + Math.PI/2) * Math.tan(FOV/2);
+  const dirX = Math.cos(pa), dirY = Math.sin(pa);
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+
+  // flag beacon — pulsing green glow pillar, always visible from anywhere
+  const pulse = 0.7 + 0.3 * Math.sin(now * 0.004);
+  for (const fc of flagCells) {
+    const sx = fc.x - px, sy = fc.y - py;
+    const tx = invDet * (dirY * sx - dirX * sy);
+    const ty = invDet * (-planeY * sx + planeX * sy);
+    if (ty > 0.2) {
+      const scrX = ((W / 2) * (1 + tx / ty)) | 0;
+      const size = Math.abs(H / ty * 0.8) | 0;
+      if (size > 4) {
+        const gx = scrX, gy = HALF - size * 0.3;
+        const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, size * 0.7);
+        gr.addColorStop(0, 'rgba(48,209,88,' + (0.9 * pulse) + ')');
+        gr.addColorStop(0.4, 'rgba(20,180,60,' + (0.5 * pulse) + ')');
+        gr.addColorStop(1, 'rgba(0,80,20,0)');
+        ctx.fillStyle = gr;
+        ctx.fillRect(gx - size * 0.7, gy - size * 0.5, size * 1.4, size);
+      }
+    }
+  }
+
   const drawables = [];
   for (const e of ents) if (!e.dead) drawables.push(e);
   for (const f of fireballs) drawables.push({ x: f.x, y: f.y, type: '*' });
   drawables.sort((a, b) =>
     ((b.x-px)**2 + (b.y-py)**2) - ((a.x-px)**2 + (a.y-py)**2));
-
-  const planeX = Math.cos(pa + Math.PI/2) * Math.tan(FOV/2);
-  const planeY = Math.sin(pa + Math.PI/2) * Math.tan(FOV/2);
-  const dirX = Math.cos(pa), dirY = Math.sin(pa);
-  const invDet = 1 / (planeX * dirY - dirX * planeY);
 
   for (const s of drawables) {
     const sx = s.x - px, sy = s.y - py;
@@ -806,13 +831,26 @@ function radar(now) {
       const wx = (c + 0.5 - px) * scale;
       const wy = (r + 0.5 - py) * scale;
       if (Math.abs(wx) > R + scale * 2 || Math.abs(wy) > R + scale * 2) continue;
+      if (t === 5) continue; // flag rendered separately as glowing dot below
       ctx.fillStyle =
-        t === 5 ? 'rgba(48,209,88,0.85)'  :  // exit flag
         t === 3 ? 'rgba(255,210,61,0.75)' :  // ? block
                   'rgba(255,70,100,0.5)';    // walls
       const ts = scale * 0.92;
       ctx.fillRect(wx - ts * 0.5, wy - ts * 0.5, ts, ts);
     }
+  }
+
+  // flag cells — pulsing glowing green dot on minimap
+  const flagPulse = 0.6 + 0.4 * Math.sin(now * 0.005);
+  for (const fc of flagCells) {
+    const wx = (fc.x - px) * scale, wy = (fc.y - py) * scale;
+    if (Math.abs(wx) > R + scale * 2 || Math.abs(wy) > R + scale * 2) continue;
+    ctx.save();
+    ctx.shadowColor = '#30d158'; ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(48,209,88,' + flagPulse + ')';
+    ctx.beginPath(); ctx.arc(wx, wy, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   for (const e of ents) {
