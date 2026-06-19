@@ -74,13 +74,26 @@
       "name": "Hop-Man",
       "emoji": "🐸",
       "url": "/games/hop-man.html",
-      "releaseDate": "2099-01-01",
+      "releaseDate": "2026-06-19",
       "week": 2,
       "gradient": [
         "#00C851",
         "#007E33"
       ],
       "episode": "Episode 2"
+    },
+    {
+      "id": "flap-fight",
+      "name": "Flap Fight",
+      "emoji": "🎈",
+      "url": "/games/flap-fight.html",
+      "releaseDate": "2026-06-19",
+      "week": 2,
+      "gradient": [
+        "#FF6EC7",
+        "#FF375F"
+      ],
+      "episode": "Bonus"
     },
     {
       "id": "token-rush",

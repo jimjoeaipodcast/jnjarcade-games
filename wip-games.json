@@ -1,22 +1,6 @@
 {
   "games": [
     {
-      "id": "flap-fight",
-      "name": "FLAP FIGHT",
-      "emoji": "🎈",
-      "genre": "BALLOON FIGHT × FLAPPY BIRD",
-      "url": "games/flap-fight.html",
-      "status": "testing"
-    },
-    {
-      "id": "hop-man",
-      "name": "HOP-MAN",
-      "emoji": "🐸",
-      "genre": "PAC-MAN × FROGGER",
-      "url": "games/hop-man.html",
-      "status": "testing"
-    },
-    {
       "id": "token-rush",
       "name": "TOKEN RUSH",
       "emoji": "⚡",
