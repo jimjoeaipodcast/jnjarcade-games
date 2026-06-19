@@ -167,6 +167,7 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
+let birdInflate, lastSpecialMin;
 let animId;
 let groundX = 0;
 
@@ -257,7 +258,9 @@ function setLevel(n) {
 // ─── init ─────────────────────────────────────────────────────────────────────
 function initGame() {
   resize();
-  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0 };
+  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
+  birdInflate    = 0;
+  lastSpecialMin = 0;
   pipes     = [];
   enemies   = [];
   particles = [];
@@ -297,7 +300,7 @@ function update() {
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
 
   // ceiling / floor (ground strip)
-  if (bird.y - BIRD_R < 0 || bird.y + BIRD_R > ch - GROUND_H) { die(); return; }
+  if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) { inflate(); return; }
 
   // scroll ground
   groundX = (groundX - pipeSpeed * 0.9) % (GROUND_H * 2);
@@ -340,11 +343,11 @@ function update() {
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2, text: '+10', alpha: 1, vy: -1.4, color: '#4dd9f5' });
     }
 
-    // collision: rect vs circle
-    const inX = bird.x + BIRD_R > p.x && bird.x - BIRD_R < p.x + PIPE_W;
+    // collision: rect vs circle (dynamic bird.r)
+    const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
     if (inX) {
-      const inGap = bird.y - BIRD_R >= p.gapY && bird.y + BIRD_R <= p.gapY + p.gapSize;
-      if (!inGap) { die(); return; }
+      const inGap = bird.y - bird.r >= p.gapY && bird.y + bird.r <= p.gapY + p.gapSize;
+      if (!inGap) { inflate(); return; }
     }
   }
 
@@ -366,31 +369,53 @@ function update() {
     const cx = e.x, cy = e.y - CHUTE_OFFSET;
     const dcx = bird.x - cx, dcy = bird.y - cy;
     const chuteDist = Math.sqrt(dcx * dcx + dcy * dcy);
-    if (chuteDist < BIRD_R + CHUTE_R && bird.vy > -2) {
-      const now = Date.now();
-      if (now - lastPopMs < COMBO_WINDOW) {
-        comboCount = Math.min(comboCount + 1, 9);
-      } else {
-        comboCount = 1;
-      }
-      lastPopMs = now;
-      const pts = 25 * comboCount;
-      score += pts;
-      scoreEl.textContent = score;
+    if (chuteDist < bird.r + CHUTE_R && bird.vy > -2) {
       e.alive = false;
-      bird.vy = -7;   // satisfying bounce off chute
-      spawnParticles(e.x, cy, '#ff6b4a', 12);
-      spawnParticles(e.x, cy, '#ffcf3d', 6);
-      const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
-      floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
-
-      if (comboCount >= 2) {
-        comboEl.textContent = `×${comboCount} COMBO  +${pts}`;
-        comboEl.classList.add('on');
-        clearTimeout(comboTimer);
-        comboTimer = setTimeout(() => comboEl.classList.remove('on'), 1400);
+      bird.vy = -7;
+      if (e.special) {
+        // DEFLATE PARACHUTE — shrink bird back one inflation level
+        spawnParticles(e.x, cy, '#00ffcc', 14);
+        spawnParticles(e.x, cy, '#7fff00', 7);
+        if (birdInflate > 0) {
+          birdInflate--;
+          bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: '#00ffcc' });
+        } else {
+          score += 50;
+          scoreEl.textContent = score;
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: '#00ffcc' });
+        }
+      } else {
+        // normal stomp — combo + points
+        const now = Date.now();
+        if (now - lastPopMs < COMBO_WINDOW) {
+          comboCount = Math.min(comboCount + 1, 9);
+        } else {
+          comboCount = 1;
+        }
+        lastPopMs = now;
+        const pts = 25 * comboCount;
+        score += pts;
+        scoreEl.textContent = score;
+        spawnParticles(e.x, cy, '#ff6b4a', 12);
+        spawnParticles(e.x, cy, '#ffcf3d', 6);
+        const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
+        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
+        if (comboCount >= 2) {
+          comboEl.textContent = `×${comboCount} COMBO  +${pts}`;
+          comboEl.classList.add('on');
+          clearTimeout(comboTimer);
+          comboTimer = setTimeout(() => comboEl.classList.remove('on'), 1400);
+        }
       }
     }
+  }
+
+  // special deflate parachute: one every 5 minutes
+  const specialMins = Math.floor((Date.now() - gameStartTime) / 300000);
+  if (specialMins > lastSpecialMin) {
+    lastSpecialMin = specialMins;
+    spawnSpecialEnemy();
   }
 
   // particles
@@ -444,7 +469,7 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
-    drawEnemy(e.x, e.y);
+    drawEnemy(e.x, e.y, e.special);
   }
 
   // particles
@@ -541,7 +566,7 @@ function drawPipe(x, y, w, h, isBottom) {
   ctx.fillRect(x + 3, y, 6, h);
 }
 
-function drawEnemy(x, y) {
+function drawEnemy(x, y, special = false) {
   ctx.save();
   ctx.translate(x, y);
 
@@ -550,7 +575,7 @@ function drawEnemy(x, y) {
   const BR = ENEMY_R - 4;    // 10 — body radius
 
   // STRINGS (dome rim → body top)
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.strokeStyle = special ? 'rgba(0,255,200,0.7)' : 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1;
   const rimPts = [[-CR * 0.85, -CO + CR * 0.05], [-CR * 0.35, -CO + CR * 0.6],
                   [ CR * 0.35, -CO + CR * 0.6],  [ CR * 0.85, -CO + CR * 0.05]];
@@ -565,7 +590,9 @@ function drawEnemy(x, y) {
   // PARACHUTE DOME
   ctx.save();
   ctx.translate(0, -CO);
-  const panels = ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];
+  const panels = special
+    ? ['#00ffcc', '#7fff00', '#00ffcc', '#7fff00']
+    : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];
   for (let i = 0; i < 4; i++) {
     const a1 = Math.PI + (i / 4) * Math.PI;
     const a2 = Math.PI + ((i + 1) / 4) * Math.PI;
@@ -584,18 +611,26 @@ function drawEnemy(x, y) {
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
   // dome outline
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.strokeStyle = special ? 'rgba(0,200,150,0.6)' : 'rgba(0,0,0,0.3)';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
+  // special: star label above dome
+  if (special) {
+    ctx.fillStyle = '#00ffcc';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('DEFLATE', 0, -CR - 5);
+  }
   ctx.restore();
 
   // BODY
-  ctx.fillStyle = '#e84040';
+  ctx.fillStyle = special ? '#00bb88' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = '#cc2020'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.strokeStyle = special ? '#009966' : '#cc2020';
+  ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
 
@@ -603,18 +638,21 @@ function drawEnemy(x, y) {
 }
 
 function drawBird(x, y, rotDeg) {
+  const R = bird.r;  // dynamic radius — grows with each inflation
+  const scale = R / BIRD_R;
+
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(rotDeg * Math.PI / 180);
+  ctx.scale(scale, scale);
 
   // BACKPACK (behind body — draw first)
   ctx.fillStyle = '#7B4A1E';
   ctx.fillRect(-BIRD_R - 5, -5, 8, 13);
   ctx.fillStyle = '#5C3310';
-  ctx.fillRect(-BIRD_R - 3, 1, 4, 2);   // horizontal buckle strap
+  ctx.fillRect(-BIRD_R - 3, 1, 4, 2);
   ctx.fillStyle = '#D4A017';
-  ctx.fillRect(-BIRD_R - 2, 0, 2, 3);   // buckle clasp (gold)
-  // diagonal shoulder strap across body
+  ctx.fillRect(-BIRD_R - 2, 0, 2, 3);
   ctx.strokeStyle = 'rgba(92,51,16,0.55)';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath();
@@ -622,22 +660,37 @@ function drawBird(x, y, rotDeg) {
   ctx.quadraticCurveTo(0, -6, 4, -1);
   ctx.stroke();
 
-  // BODY (classic flappy — yellow oval)
+  // BODY (colour tints warmer with each inflation)
+  const bodyColA = birdInflate === 0 ? '#FFE566' : birdInflate === 1 ? '#FFB03A' : '#FF6622';
+  const bodyColB = birdInflate === 0 ? '#F5A623' : birdInflate === 1 ? '#E05000' : '#CC1100';
   const bg = ctx.createRadialGradient(-2, -2, 1, 0, 0, BIRD_R + 2);
-  bg.addColorStop(0, '#FFE566');
-  bg.addColorStop(1, '#F5A623');
+  bg.addColorStop(0, bodyColA);
+  bg.addColorStop(1, bodyColB);
   ctx.fillStyle = bg;
   ctx.beginPath();
   ctx.ellipse(0, 1, BIRD_R + 1, BIRD_R, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // WING (flat nub on back)
-  ctx.fillStyle = '#E8980E';
+  // inflation stress lines (appear from inflate 1+)
+  if (birdInflate >= 1) {
+    ctx.strokeStyle = `rgba(255,255,255,${birdInflate * 0.18})`;
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (BIRD_R * 0.4), Math.sin(a) * (BIRD_R * 0.4));
+      ctx.lineTo(Math.cos(a) * (BIRD_R * 0.85), Math.sin(a) * (BIRD_R * 0.85));
+      ctx.stroke();
+    }
+  }
+
+  // WING
+  ctx.fillStyle = birdInflate === 0 ? '#E8980E' : '#C05000';
   ctx.beginPath();
   ctx.ellipse(-5, 3, 6, 3, -0.25, 0, Math.PI * 2);
   ctx.fill();
 
-  // BELLY (cream patch)
+  // BELLY
   ctx.fillStyle = '#FFF8E0';
   ctx.beginPath();
   ctx.ellipse(3, 4, 5, 4, 0, 0, Math.PI * 2);
@@ -647,16 +700,16 @@ function drawBird(x, y, rotDeg) {
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(5, -2, 5.5, 0, Math.PI * 2); ctx.fill();
 
-  // GOGGLE FRAME (leather — dark brown ring)
+  // GOGGLE FRAME
   ctx.strokeStyle = '#2E1800';
   ctx.lineWidth = 2.8;
   ctx.beginPath(); ctx.arc(5, -2, 5.5, 0, Math.PI * 2); ctx.stroke();
 
-  // GOGGLE LENS (amber tint)
+  // GOGGLE LENS
   ctx.fillStyle = 'rgba(155, 95, 0, 0.40)';
   ctx.beginPath(); ctx.arc(5, -2, 4.8, 0, Math.PI * 2); ctx.fill();
 
-  // GOGGLE STRAP (leather band over head to backpack side)
+  // GOGGLE STRAP
   ctx.strokeStyle = '#2E1800';
   ctx.lineWidth = 2.8; ctx.lineCap = 'round';
   ctx.beginPath();
@@ -667,7 +720,6 @@ function drawBird(x, y, rotDeg) {
   // PUPIL
   ctx.fillStyle = '#0a0500';
   ctx.beginPath(); ctx.arc(6, -2, 2.2, 0, Math.PI * 2); ctx.fill();
-  // sheen
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(5, -3.5, 1.2, 0, Math.PI * 2); ctx.fill();
 
@@ -680,7 +732,7 @@ function drawBird(x, y, rotDeg) {
   ctx.lineTo(BIRD_R - 1,  0.5);
   ctx.closePath();
   ctx.fill();
-  // BEAK — lower jaw (darker)
+  // BEAK — lower jaw
   ctx.fillStyle = '#C47800';
   ctx.beginPath();
   ctx.moveTo(BIRD_R - 1, 0.5);
@@ -689,11 +741,34 @@ function drawBird(x, y, rotDeg) {
   ctx.lineTo(BIRD_R - 1, 2);
   ctx.closePath();
   ctx.fill();
-  // beak line
   ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(BIRD_R - 1, 0.5); ctx.lineTo(BIRD_R + 9, 0.8); ctx.stroke();
 
   ctx.restore();
+}
+
+// ─── inflate (hit but not dead yet) ──────────────────────────────────────────
+function inflate() {
+  if (birdInflate >= 3) { die(); return; }
+  birdInflate++;
+  bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
+  bird.vy = -5;
+  spawnParticles(bird.x, bird.y, '#ffffff', 8);
+  spawnParticles(bird.x, bird.y, '#ffaa44', 6);
+  const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!', '💨 HUGE!!!'];
+  floaters.push({ x: bird.x, y: bird.y - bird.r - 6, text: msgs[birdInflate], alpha: 1, vy: -1.8, color: '#ff9944' });
+}
+
+// ─── special deflate enemy ───────────────────────────────────────────────────
+function spawnSpecialEnemy() {
+  enemies.push({
+    x: cw + CHUTE_R,
+    y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
+    vy: rnd(0.35, 0.70) * (Math.random() < 0.5 ? 1 : -1),
+    alive: true,
+    fast: false,
+    special: true,
+  });
 }
 
 // ─── game over ─────────────────────────────────────────────────────────────────
@@ -727,9 +802,9 @@ function showOverlay(finalScore) {
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
     : `Tap to flap — gaps shrink every minute.<br>
-       Stomp <b>down</b> on enemy parachutes for <b>+25 pts</b>.<br>
-       Chain stomps for a <b style="color:var(--ink)">×COMBO</b>.<br>
-       One pipe touch = game over.`;
+       Hit a pipe → you <b>inflate</b> (3 hits max).<br>
+       Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.<br>
+       Every 5 min: a <b style="color:#00ffcc">teal DEFLATE parachute</b> appears — stomp it to shrink back!`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
