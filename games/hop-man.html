@@ -751,17 +751,28 @@ function drawFly(cx, cy, cell){
   ctx.restore();
 }
 
-// ── Tree obstacle — same on all themes (road + water) ────────────────────────
+// ── Tree obstacle — green on road, autumn on water ───────────────────────────
 function drawHedge(wx, wy, ws, theme){
-  ctx.fillStyle='#5a3008';
+  const autumn = theme === 'water';
+  ctx.fillStyle = autumn ? '#3d1a02' : '#5a3008';
   ctx.fillRect(wx+ws*0.38, wy+ws*0.58, ws*0.24, ws*0.38);
-  for(const [ox,oy,r,clr] of [
-    [-ws*0.18,ws*0.13,ws*0.27,'#246612'],
-    [ ws*0.18,ws*0.11,ws*0.25,'#1e5a10'],
-    [      0,-ws*0.03,ws*0.30,'#2e801a'],
-  ]){
+  const canopy = autumn
+    ? [[-ws*0.18,ws*0.13,ws*0.27,'#d45a08'],
+       [ ws*0.18,ws*0.11,ws*0.25,'#c43208'],
+       [      0,-ws*0.03,ws*0.30,'#e8960a']]
+    : [[-ws*0.18,ws*0.13,ws*0.27,'#246612'],
+       [ ws*0.18,ws*0.11,ws*0.25,'#1e5a10'],
+       [      0,-ws*0.03,ws*0.30,'#2e801a']];
+  for(const [ox,oy,r,clr] of canopy){
     ctx.fillStyle=clr;
     ctx.beginPath(); ctx.arc(wx+ws*0.5+ox, wy+ws*0.44+oy, r, 0, TAU); ctx.fill();
+  }
+  // falling leaf accent on autumn trees
+  if(autumn){
+    ctx.fillStyle='#f0c030';
+    ctx.beginPath(); ctx.arc(wx+ws*0.72, wy+ws*0.68, ws*0.055, 0, TAU); ctx.fill();
+    ctx.fillStyle='#e06010';
+    ctx.beginPath(); ctx.arc(wx+ws*0.28, wy+ws*0.74, ws*0.04, 0, TAU); ctx.fill();
   }
 }
 
