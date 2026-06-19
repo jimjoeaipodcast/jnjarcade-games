@@ -721,9 +721,10 @@ function render() {
   const dirX = Math.cos(pa), dirY = Math.sin(pa);
   const invDet = 1 / (planeX * dirY - dirX * planeY);
 
-  // flag beacon — pulsing green glow pillar, always visible from anywhere
+  // flag beacon — only visible once all hostiles are dead
+  const allDead = ents.every(e => !e.hostile || e.dead);
   const pulse = 0.7 + 0.3 * Math.sin(now * 0.004);
-  for (const fc of flagCells) {
+  if (allDead) for (const fc of flagCells) {
     const sx = fc.x - px, sy = fc.y - py;
     const tx = invDet * (dirY * sx - dirX * sy);
     const ty = invDet * (-planeY * sx + planeX * sy);
@@ -840,9 +841,10 @@ function radar(now) {
     }
   }
 
-  // flag cells — pulsing glowing green dot on minimap
+  // flag cells — only show on minimap after all hostiles killed
   const flagPulse = 0.6 + 0.4 * Math.sin(now * 0.005);
-  for (const fc of flagCells) {
+  const flagUnlocked = ents.every(e => !e.hostile || e.dead);
+  if (flagUnlocked) for (const fc of flagCells) {
     const wx = (fc.x - px) * scale, wy = (fc.y - py) * scale;
     if (Math.abs(wx) > R + scale * 2 || Math.abs(wy) > R + scale * 2) continue;
     ctx.save();
