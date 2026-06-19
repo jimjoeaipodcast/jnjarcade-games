@@ -229,7 +229,13 @@ function spawnPipe() {
   const gap    = currentGapSize();
   const margin = 60;
   const gapY   = rnd(margin, ch - GROUND_H - margin - gap);
-  pipes.push({ x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false });
+  const wobble = level >= 6 && Math.random() < 0.35;
+  pipes.push({
+    x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
+    wobble, wobblePhase: 0, wobbleXOff: 0,
+    fallOffset: 0, falling: false,
+    fallTimer: wobble ? Math.round(rnd(55, 100)) : 0,
+  });
 }
 
 function spawnEnemy() {
@@ -259,7 +265,7 @@ function setLevel(n) {
 // ─── init ─────────────────────────────────────────────────────────────────────
 function initGame() {
   resize();
-  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
+  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: FLAP_VY, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
   nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
@@ -354,6 +360,18 @@ function update() {
     p.x -= pipeSpeed;
     if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
 
+    // wobble / falling top pipe update
+    if (p.wobble) {
+      p.wobblePhase += 0.10;
+      if (!p.falling) {
+        p.wobbleXOff = Math.sin(p.wobblePhase) * 5;
+        p.fallTimer--;
+        if (p.fallTimer <= 0) { p.falling = true; p.wobbleXOff = 0; }
+      } else {
+        p.fallOffset += 2.8;
+      }
+    }
+
     // score pipe
     if (!p.counted && p.x + PIPE_W < bird.x) {
       p.counted = true;
@@ -365,9 +383,10 @@ function update() {
     }
 
     // collision: rect vs circle (dynamic bird.r)
+    const effGapY = p.gapY + (p.wobble ? p.fallOffset : 0);
     const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
     if (inX) {
-      const inGap = bird.y - bird.r >= p.gapY && bird.y + bird.r <= p.gapY + p.gapSize;
+      const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= p.gapY + p.gapSize;
       if (!inGap) { if (Date.now() >= inflateInvincible) inflate(); return; }
     }
   }
@@ -485,10 +504,21 @@ function draw() {
   // parallax clouds
   for (const c of clouds) drawCloud(c.x, c.y, c.w, c.alpha);
 
-  // pipes (bottom pipe stops at ground)
+  // pipes (bottom pipe stops at ground; wobble pipes have animated top)
   for (const p of pipes) {
-    drawPipe(p.x, 0,              PIPE_W, p.gapY,                             false);
-    drawPipe(p.x, p.gapY + p.gapSize, PIPE_W, ch - GROUND_H - p.gapY - p.gapSize, true);
+    const xOff   = p.wobble ? p.wobbleXOff : 0;
+    const topH   = p.gapY + (p.wobble ? p.fallOffset : 0);
+    drawPipe(p.x + xOff, 0,              PIPE_W, topH,                                   false);
+    drawPipe(p.x,         p.gapY + p.gapSize, PIPE_W, ch - GROUND_H - p.gapY - p.gapSize, true);
+    // danger glow on wobble pipe
+    if (p.wobble && !p.falling) {
+      const pulse = 0.3 + 0.3 * Math.abs(Math.sin(p.wobblePhase * 1.4));
+      ctx.save();
+      ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 18;
+      ctx.strokeStyle = 'rgba(255,80,0,' + pulse + ')'; ctx.lineWidth = 3;
+      ctx.strokeRect(p.x + xOff - PIPE_CAP_OVR, topH - 14, PIPE_W + PIPE_CAP_OVR * 2, 14);
+      ctx.restore();
+    }
   }
 
   // enemies

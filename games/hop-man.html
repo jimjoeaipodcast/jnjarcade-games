@@ -94,6 +94,18 @@
     transition:transform .06s, box-shadow .06s;
   }
   .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+  /* ── Desktop landscape: rotate portrait canvas to fill the screen ── */
+  @media (orientation: landscape) {
+    body { overflow: hidden; }
+    .game-shell {
+      position: fixed;
+      width: 100vh;
+      height: 100vw;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-90deg);
+    }
+  }
 </style>
 </head>
 <body>
@@ -776,22 +788,94 @@ function drawHedge(wx, wy, ws, theme){
   }
 }
 
-// ── Lily pad — safe path marker for water levels (Osimo 2026-06-17) ──────────
+// ── Lily pads — 3 quality variants, deterministic by cell position ──────────
 function drawLilyPad(cx, cy, cell){
-  const r=cell*0.39;
-  const g=ctx.createRadialGradient(cx-r*0.2,cy-r*0.3,1,cx,cy,r);
-  g.addColorStop(0,'#44b820'); g.addColorStop(0.65,'#2a8012'); g.addColorStop(1,'#165808');
-  ctx.fillStyle=g;
-  ctx.beginPath(); ctx.moveTo(cx,cy);
-  ctx.arc(cx,cy,r,0.28,Math.PI*2-0.28);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle='rgba(60,180,30,.38)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.94,0.28,Math.PI*2-0.28); ctx.closePath(); ctx.stroke();
-  ctx.strokeStyle='rgba(0,60,0,.22)'; ctx.lineWidth=0.8;
-  for(let i=0;i<5;i++){
-    const ang=0.32+i*1.08;
-    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(ang)*r*0.84,cy+Math.sin(ang)*r*0.84); ctx.stroke();
+  const model = Math.abs(((cx * 3) + (cy * 7)) | 0) % 3;
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  if(model === 0){
+    // Classic — enhanced gradient, 6 veins, shimmer highlight
+    const r = cell*0.40, ang = 0.28;
+    const g = ctx.createRadialGradient(-r*0.25,-r*0.30,1,0,0,r);
+    g.addColorStop(0,'#5ed428'); g.addColorStop(0.6,'#2e9014'); g.addColorStop(1,'#145806');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,ang,TAU-ang); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(90,210,40,.32)'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.arc(0,0,r*0.86,ang,TAU-ang); ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle='rgba(0,70,0,.28)'; ctx.lineWidth=0.9;
+    for(let i=0;i<6;i++){
+      const a=ang+0.1+i*((TAU-ang*2-0.2)/5);
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*r*0.88,Math.sin(a)*r*0.88); ctx.stroke();
+    }
+    ctx.fillStyle='rgba(200,255,140,.11)';
+    ctx.beginPath(); ctx.ellipse(-r*0.30,-r*0.38,r*0.26,r*0.11,-0.4,0,TAU); ctx.fill();
+
+  } else if(model === 1){
+    // Flower pad — darker, 6-petal pink flower on top
+    const r = cell*0.36, ang = 0.32;
+    ctx.rotate(0.55);
+    const g = ctx.createRadialGradient(-r*0.20,-r*0.28,1,0,0,r);
+    g.addColorStop(0,'#3ec020'); g.addColorStop(0.55,'#1c7c0a'); g.addColorStop(1,'#0a4204');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,ang,TAU-ang); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(0,60,0,.30)'; ctx.lineWidth=0.8;
+    for(let i=0;i<4;i++){
+      const a=ang+0.18+i*((TAU-ang*2-0.36)/3);
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*r*0.84,Math.sin(a)*r*0.84); ctx.stroke();
+    }
+    ctx.rotate(-0.55); // reset for flower
+    const pr = r*0.24;
+    // 6 petals
+    ctx.fillStyle='#e860a8';
+    for(let i=0;i<6;i++){
+      const a=(i/6)*TAU;
+      ctx.beginPath(); ctx.ellipse(Math.cos(a)*pr*0.8,Math.sin(a)*pr*0.8,pr*0.46,pr*0.25,a,0,TAU); ctx.fill();
+    }
+    // petal highlight
+    ctx.fillStyle='rgba(255,180,230,.35)';
+    for(let i=0;i<6;i++){
+      const a=(i/6)*TAU;
+      ctx.beginPath(); ctx.ellipse(Math.cos(a)*pr*0.7,Math.sin(a)*pr*0.7,pr*0.22,pr*0.10,a,0,TAU); ctx.fill();
+    }
+    ctx.fillStyle='#ffe040'; ctx.beginPath(); ctx.arc(0,0,pr*0.30,0,TAU); ctx.fill();
+    ctx.fillStyle='#ffaa00'; ctx.beginPath(); ctx.arc(0,0,pr*0.14,0,TAU); ctx.fill();
+
+  } else {
+    // Lotus pad — large, deep green, white lotus with gold stamen
+    const r = cell*0.44, ang = 0.24;
+    ctx.rotate(-0.35);
+    const g = ctx.createRadialGradient(-r*0.18,-r*0.32,2,0,0,r);
+    g.addColorStop(0,'#3ab020'); g.addColorStop(0.50,'#186e0c'); g.addColorStop(0.86,'#0c4a06'); g.addColorStop(1,'#051802');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,ang,TAU-ang); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(50,160,20,.22)'; ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.arc(0,0,r*0.76,ang,TAU-ang); ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle='rgba(0,80,0,.20)'; ctx.lineWidth=1.0;
+    for(let i=0;i<7;i++){
+      const a=ang+0.07+i*((TAU-ang*2-0.14)/6);
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*r*0.91,Math.sin(a)*r*0.91); ctx.stroke();
+    }
+    ctx.fillStyle='rgba(160,255,100,.09)';
+    ctx.beginPath(); ctx.ellipse(-r*0.26,-r*0.35,r*0.22,r*0.09,-0.5,0,TAU); ctx.fill();
+    ctx.rotate(0.35); // reset for lotus
+    const lr = r*0.30;
+    // 5 white petals
+    ctx.fillStyle='rgba(255,255,255,.88)';
+    for(let i=0;i<5;i++){
+      const a=(i/5)*TAU - Math.PI/2;
+      ctx.beginPath(); ctx.ellipse(Math.cos(a)*lr*0.55,Math.sin(a)*lr*0.55,lr*0.35,lr*0.52,a,0,TAU); ctx.fill();
+    }
+    ctx.fillStyle='rgba(255,255,255,.50)';
+    for(let i=0;i<5;i++){
+      const a=(i/5)*TAU - Math.PI/2 + 0.2;
+      ctx.beginPath(); ctx.ellipse(Math.cos(a)*lr*0.38,Math.sin(a)*lr*0.38,lr*0.18,lr*0.30,a,0,TAU); ctx.fill();
+    }
+    ctx.fillStyle='#ffd828'; ctx.beginPath(); ctx.arc(0,0,lr*0.24,0,TAU); ctx.fill();
+    ctx.fillStyle='#ff9000'; ctx.beginPath(); ctx.arc(0,0,lr*0.11,0,TAU); ctx.fill();
   }
+
+  ctx.restore();
 }
 
 // ── Road vehicles that actually LOOK like vehicles (Osimo 2026-06-16) ──
