@@ -375,9 +375,8 @@ function buildLevel(){
   dir = {dc:0,dr:0}; moveAcc = 0; splashes = [];
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
-  // Init camera: frog at 80% (1/5 from bottom), BOT_PAD empty rows below visible
   const spawnPy = player.r * CELL + CELL/2;
-  camY = targetCamY = Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
+  camY = targetCamY = portrait ? H - VH : Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -391,7 +390,7 @@ function updHud(){
 // ── Lane lookup ─────────────────────────────────────────────────────────────
 function laneAt(r){ return lanes.find(l=>l.row===r) || null; }
 // Bottom-most SAFE (non-lane) row — always respawn here so we never land on water/road.
-function safeSpawnRow(){ for(let r=ROWS-3;r>=0;r--) if(!laneAt(r)) return r; return ROWS-3; }
+function safeSpawnRow(){ const cap=portrait?ROWS-1:ROWS-3; for(let r=cap;r>=0;r--) if(!laneAt(r)) return r; return cap; }
 
 // ── Level clear → next ──────────────────────────────────────────────────────
 function nextLevel(){
@@ -482,7 +481,7 @@ function die(drowned){
   player.r      = safeSpawnRow();
   const rpy = player.r * CELL + CELL/2;
   const rpy2 = player.r * CELL + CELL/2;
-  camY = targetCamY = Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
+  camY = targetCamY = portrait ? H - VH : Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -941,16 +940,20 @@ function draw(){
   // Camera: runs every frame so frog is always tracked
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
-    // Bias: 0.80 at bottom (1/5 from bottom) → 0.20 at top (1/5 from top)
-    const _t = Math.max(0, Math.min(1, player.r / Math.max(1, ROWS - 1)));
-    const _bias = 0.20 + _t * 0.60;
-    targetCamY = Math.max(0, Math.min(H - VH, py - VH * _bias));
-    camY += (targetCamY - camY) * 0.38;
-    if(Math.abs(camY - targetCamY) < 2) camY = targetCamY;
-    // Frog stays within 1/5 from top (matches end-bias 0.20)
-    const maxCam = Math.max(0, py - VH * 0.20);
-    if(camY > maxCam) camY = maxCam;
-    camY = Math.max(0, Math.min(H - VH, camY));
+    if(portrait){
+      // Mobile: frog stays near bottom (original behaviour)
+      targetCamY = H - VH;
+      camY = targetCamY;
+    } else {
+      // Desktop: bias 0.80 at bottom → 0.20 at top, with upper clamp
+      const _t = Math.max(0, Math.min(1, player.r / Math.max(1, ROWS - 1)));
+      targetCamY = Math.max(0, Math.min(H - VH, py - VH * (0.20 + _t * 0.60)));
+      camY += (targetCamY - camY) * 0.38;
+      if(Math.abs(camY - targetCamY) < 2) camY = targetCamY;
+      const maxCam = Math.max(0, py - VH * 0.20);
+      if(camY > maxCam) camY = maxCam;
+      camY = Math.max(0, Math.min(H - VH, camY));
+    }
   }
 
   ctx.clearRect(0,0,W,VH);   // clear viewport only
