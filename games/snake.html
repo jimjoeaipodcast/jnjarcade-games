@@ -207,7 +207,7 @@
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const CELL       = 18;
-const FOOD_COUNT = 4;   // dots on screen at once
+let   FOOD_COUNT = 4;   // dots on screen at once (11 on desktop)
 const MAX_LIVES  = 9;
 const GUN_MAX    = 5;
 
@@ -277,6 +277,7 @@ let growPending = 0;
 // ─── SIZING ───────────────────────────────────────────────────────────────────
 function resize() {
   const wrap = document.getElementById('canvasWrap');
+  FOOD_COUNT = window.matchMedia('(hover:hover) and (pointer:fine)').matches ? 11 : 4;
   const w = wrap.clientWidth  - 12;
   // one-cell buffer top + bottom ONLY in real fullscreen (Android clips the
   // edges there). iOS Safari never gets true fullscreen — give it the space.
