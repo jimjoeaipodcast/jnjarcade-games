@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#07080d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<title>HOP-MAN — JnJ Arcade</title>
+<!--
+  HOP-MAN — the Game Mashup: PAC-MAN × FROGGER (Jimmy & Joe). A healthy mix of both worlds, not
+  too retro. Eat the dots, but the world is LIVING: car lanes + a river of floating logs.
+  • Power pellet (blue) FREEZES the traffic for a few seconds.
+  • Cherries 🍒 SCARE the ghosts — they flee and you can EAT them (eyes float home to respawn).
+  Level tiers (Osimo 2026-06-15):
+    L1-4 cars · L5-9 faster cars (+20%, new colour) · L10-19 superbikes (+20%) ·
+    L20-24 long fast trains · L25+ GHOSTS that chase but obey the lanes (one dies by mistake ~each min).
+  PORTRAIT: full-screen, snake-sized quadrant — reach the OTHER SIDE (top) to clear the level.
+  LANDSCAPE: eat every dot to clear. JnJ seed scores are hard to beat — stick around and try.
+  Conventions: full-screen shell, swipe-only, INSERT COIN overlay, cabinet colours, cell-buffer.
+-->
+<style>
+  :root {
+    --ink:#ffcf3d; --dim:#5c4404; --pit:#0c0a04;
+    --glow:rgba(255,207,61,.22); --bg:#07080d;
+  }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    height:100%; background:var(--bg); color:#fff;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .game-shell {
+    display:flex; flex-direction:column;
+    height:100vh; height:100dvh; width:100%;
+    padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0)
+            env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+  }
+  .game-header {
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:9px 14px;
+    background:linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.2));
+    border-bottom:2px solid var(--dim);
+  }
+  .back-btn { color:var(--ink); text-decoration:none; font-weight:700; font-size:13px; letter-spacing:.05em; opacity:.85; }
+  .game-name {
+    font-family:'Bungee',cursive; letter-spacing:.14em;
+    color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px;
+  }
+  .hdr-right { text-align:right; }
+  .score-label { font-size:9px; letter-spacing:.18em; opacity:.55; }
+  .score-val { font-size:19px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .hud-bar {
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px 5px; font-size:12px;
+    border-bottom:1px solid rgba(255,207,61,.1);
+  }
+  .lives { letter-spacing:2px; font-size:14px; }
+  .lvl { opacity:.65; letter-spacing:.1em; font-size:11px; }
+  .freeze { color:#5ad7ff; font-weight:700; opacity:0; transition:opacity .2s; }
+  .freeze.on { opacity:1; }
+  /* canvas-wrap: 14px padding (convention); glow border stays fully visible */
+  .canvas-wrap {
+    flex:1; position:relative; padding:14px 6px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas {
+    display:block; border:2px solid var(--dim); border-radius:10px;
+    box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
+    background:var(--pit); touch-action:none;
+  }
+  .overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px;
+    background:rgba(7,8,13,.88); backdrop-filter:blur(4px);
+    text-align:center; padding:24px; z-index:5; border-radius:10px;
+  }
+  .overlay.hidden { display:none; }
+  .overlay-emoji { font-size:48px; }
+  .overlay-title {
+    font-family:'Bungee',cursive; font-size:28px; font-weight:900;
+    letter-spacing:.1em; color:var(--ink); text-shadow:0 0 18px var(--glow);
+  }
+  .overlay-sub { font-size:13px; line-height:1.6; opacity:.85; max-width:320px; }
+  .board { font-size:12px; opacity:.8; line-height:1.7; margin-top:2px; }
+  .board b { color:var(--ink); }
+  .play-btn {
+    margin-top:4px; background:var(--ink); color:#1a1303; border:none;
+    border-radius:28px; padding:13px 28px; font-size:15px; font-weight:800;
+    letter-spacing:.08em; cursor:pointer; box-shadow:0 0 24px var(--glow);
+    font-family:'Bungee',cursive;
+    transition:transform .06s, box-shadow .06s;
+  }
+  .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+</style>
+</head>
+<body>
+<div class="game-shell">
+  <header class="game-header">
+    <a class="back-btn" href="../index.html">‹ ARCADE</a>
+    <div class="game-name">HOP-MAN</div>
+    <div class="hdr-right"><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+  </header>
+  <div class="hud-bar">
+    <div class="lives" id="lives">🐸🐸🐸</div>
+    <div class="freeze" id="freeze">❄ FROZEN</div>
+    <div class="lvl" id="lvl">LEVEL 1</div>
+  </div>
+  <div class="canvas-wrap" id="wrap">
+    <canvas id="c"></canvas>
+    <div class="overlay" id="ov">
+      <div class="overlay-emoji" id="ovEmoji">🐸🚗</div>
+      <div class="overlay-title" id="ovTitle">HOP-MAN</div>
+      <div class="overlay-sub" id="ovsub">
+        Swipe to set a direction — the frog keeps going.<br>
+        Grab every coin to clear the level (<b style="color:var(--ink)">+500</b>).<br>
+        Ride logs across the water (steer left / right).<br>
+        Grab a <b style="color:#5ad7ff">freeze pod</b> to stop the traffic.
+      </div>
+      <div class="board" id="board"></div>
+      <button class="play-btn" id="play">INSERT COIN</button>
+    </div>
+  </div>
+</div>
+<script src="arcade-scores.js?v=8"></script>
+<script>
+(function(){
+'use strict';
+
+// ── DOM refs ────────────────────────────────────────────────────────────────
+const cv      = document.getElementById('c');
+const ctx     = cv.getContext('2d');
+const wrap    = document.getElementById('wrap');
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const lvlEl   = document.getElementById('lvl');
+const freezeEl= document.getElementById('freeze');
+const ov      = document.getElementById('ov');
+const ovEmoji = document.getElementById('ovEmoji');
+const ovTitle = document.getElementById('ovTitle');
+const ovsub   = document.getElementById('ovsub');
+const boardEl = document.getElementById('board');
+const playBtn = document.getElementById('play');
+
+// ── Leaderboard seed (Osimo 2026-06-16: NO Jimmy/Joe scores; pre-populate the board with a few
+//    believable random high scores so it's never empty / there's something to beat) ──
+function seedBoard(){
+  try{
+    const key='jnj_board_hop-man';
+    if((JSON.parse(localStorage.getItem(key)||'[]')).length) return;
+    const names=['ZARA','NICO','PIPER','REX','LUMA','BEAU','KITT','VESPA','OZ','MILO','ASH','JUNO'];
+    const used={}, list=[]; let s=9400;
+    for(let i=0;i<7;i++){
+      let nm; do{ nm=names[(Math.random()*names.length)|0]; }while(used[nm]); used[nm]=1;
+      list.push({n:nm, s:s, t:Date.now()-(i+1)*36000000});
+      s -= 550 + ((Math.random()*450)|0);
+    }
+    localStorage.setItem(key, JSON.stringify(list));
+  }catch(e){}
+}
+
+// ── Mutable state ──────────────────────────────────────────────────────────
+let COLS=13, CELL=26, ROWS=15, W=0, H=0, portrait=false;
+let grid=[], lanes=[], cars=[], ghosts=[], cherries=[], walls=new Set();
+let player={c:0,r:0};
+let score=0, lives=3, level=1, dotsLeft=0;
+let freeze=0, scare=0;
+let running=false, attract=false;
+let ghostKillTimer=0;
+let deathCooldown=0;   // frames of invincibility after a hit — prevents chain kills
+let perimPh=0;         // perimeter glow oscillation phase
+let hopAnim=0;         // 1→0 over a hop: drives the frog's squash/arc jump
+let faceDir=0;         // -1 left, +1 right, 0 forward — which way the frog looks
+let idlePh=0;          // gentle idle breathing when not mid-hop
+let leafOnly=true;     // hidden: rode ONLY leaf-bearing logs this whole level…
+let rodeAnyLog=false;  // …and rode at least one — if both (all logs had leaves), TRIPLE the level's score
+let levelStartScore=0; // score at the start of the level, for the leaf-log triple calculation
+let dir={dc:0,dr:0};   // current heading — Pac-Man-style: keep going until the player turns
+let moveAcc=0;         // tick accumulator for the auto-step cadence (off-log only)
+let freezeDur=180;     // freeze-pod duration for THIS level (shrinks within each 5-level block)
+let splashes=[];       // drown plops {x,y,t}
+let levelJustBuilt=false; // set when a level clears mid-tick → skip the rest of that tick
+let flowPh=0;          // water flow animation phase
+let levelTheme='city'; // 'water'|'city'|'mix' — drives background + safe-row visuals
+let fly=null;          // the FLY at top-centre — reach it to advance the level
+let allCleared=false;  // all coins collected this level (+500 awarded once)
+let timeLeft=300;      // seconds left this level (5 min, −30s every 10 levels)
+let timeAcc=0;         // tick accumulator for the 1-second countdown
+const STEP_TICKS=5;    // auto-glide one cell every 5 ticks (~6 cells/sec) — LEFT/RIGHT only
+
+// ── Level plan (Osimo 2026-06-16) ───────────────────────────────────────────
+// L1-4: logs only, tapering (easy→hard). L5-9: cars (varied colours, +20%, more each level).
+// L10-14: buses. L15-19: fast trains. L20+: trains + chasing ghosts. Bikes mix in from L8.
+// Freeze pods: 4,3,2,1,0 per level inside each 5-level block; freeze time shrinks each level.
+const CAR_COLOURS=['#ff5b5b','#5ad7ff','#9be85a','#ffa23b','#c66bff','#ff6fae','#f7e04a','#4ad0a0'];
+function levelPlan(L){
+  const i5=(L-1)%5;
+  const plan={pods:Math.max(0,4-i5), freezeDur:Math.max(60,180-i5*30),
+              river:false, logsPer:0, kind:null, veh:0, speed:1.0, bikeChance:0, ghosts:false, theme:'city'};
+  if(L<=4){
+    plan.river=true; plan.logsPer=[4,3,2,2][L-1]; plan.theme='water';
+  } else if(L<10){
+    plan.river=true; plan.logsPer=3; plan.kind='car'; plan.veh=1+(L-5); plan.speed=1.0; plan.bikeChance=L>=8?0.30:0; plan.theme='mix';
+  } else if(L<15){
+    plan.river=true; plan.logsPer=2; plan.kind='bus'; plan.veh=2+(L-10); plan.speed=0.95; plan.bikeChance=0.35; plan.theme='mix';
+  } else if(L<20){
+    plan.river=true; plan.logsPer=2; plan.kind='train'; plan.veh=1; plan.speed=1.4; plan.bikeChance=0.20; plan.theme='mix';
+  } else {
+    plan.river=true; plan.logsPer=2; plan.kind='train'; plan.veh=1; plan.speed=1.4; plan.bikeChance=0.20; plan.theme='mix';
+  }
+  // Ghosts on each band's PEAK-difficulty level (most cars/buses/trains) + everything L20+.
+  plan.ghosts = (L===9 || L===14 || L===19 || L>=20);
+  // Time budget: 5 min, minus 30s every 10 levels, floored at 60s (Osimo 2026-06-16).
+  plan.timeSec = Math.max(60, 300 - 30*Math.floor((L-1)/10));
+  return plan;
+}
+
+// ── Resize — FILL the canvas-wrap like the Snake game (Osimo 2026-06-16: same playable area,
+// stats above). COLS is fixed; CELL fills the width; ROWS fills the height with whole cells. ──
+function detectOrient(){ portrait = wrap.clientHeight > wrap.clientWidth * 1.05; }
+function resize(){
+  detectOrient();
+  COLS = portrait ? 11 : 13;
+  const availW = wrap.clientWidth  - 12;     // 6px left + 6px right padding
+  const availH = wrap.clientHeight - 10;
+  CELL = Math.max(16, Math.floor(availW / COLS));
+  ROWS = Math.max(11, Math.floor(availH / CELL));
+  W = CELL*COLS; H = CELL*ROWS;
+  cv.width  = W; cv.height = H;
+  cv.style.width  = W+'px';
+  cv.style.height = H+'px';
+}
+
+// ── Build level state (resize FIRST, then build arrays sized to ROWS/COLS) ──
+function buildLevel(){
+  resize();   // sets COLS, CELL, ROWS to FILL the screen (Snake-matched playable area)
+  const P = levelPlan(level);
+  freezeDur = P.freezeDur;
+  timeLeft = P.timeSec; timeAcc = 0;
+  leafOnly = true; rodeAnyLog = false; allCleared = false;
+  levelStartScore = score;
+
+  // Pac-Man-style coin field: a coin in EVERY cell. Collect them ALL → +500 (Osimo 2026-06-16).
+  grid = Array.from({length:ROWS}, ()=> Array.from({length:COLS}, ()=> 1));
+
+  // Random lane layout: blocks of 1-3 lanes between safe rows. Never 2 consecutive safe rows.
+  // Row 0 (fly) and row ROWS-1 (spawn) are always safe. (Osimo 2026-06-16)
+  lanes = [];
+  levelTheme = P.theme || 'city';
+  let r2=1, laneBlockIdx=0;
+  while(r2 <= ROWS-2){
+    const nL = 1 + Math.floor(Math.random()*3);
+    let laneType;
+    if(!P.river)     laneType='road';
+    else if(!P.kind) laneType='river';
+    else             laneType=laneBlockIdx%2===0?'river':'road';
+    laneBlockIdx++;
+    for(let k=0; k<nL && r2<=ROWS-2; k++, r2++)
+      lanes.push({row:r2, type:laneType, kind:P.kind});
+    r2++;
+  }
+  // No coins under road lanes — no dots on roads (Osimo 2026-06-17)
+  for(const ln of lanes){
+    if(ln.type==='road') for(let c=0;c<COLS;c++) grid[ln.row][c]=0;
+  }
+  const isLane = r => lanes.some(l=>l.row===r);
+  const safeRows = []; for(let r=0;r<ROWS;r++) if(!isLane(r)) safeRows.push(r);
+
+  // Freeze pods: P.pods of them, on scattered SAFE cells (4,3,2,1,0 across each 5-level block).
+  let placed=0, guard=0;
+  while(placed<P.pods && guard++<300){
+    const r = safeRows[(Math.random()*safeRows.length)|0];
+    const c = 1+((Math.random()*(COLS-2))|0);
+    if(grid[r] && grid[r][c]===1){ grid[r][c]=2; placed++; }
+  }
+
+  // Cherries ONLY on ghost levels, and only on SAFE rows (so eating one can never kill you).
+  cherries = [];
+  if(P.ghosts && safeRows.length>=2){
+    cherries = [{c:2, r:safeRows[1]}, {c:COLS-3, r:safeRows[safeRows.length-2]}];
+  }
+
+  // Walls on safe rows: 2-4 black obstacles per safe row (not spawn, not fly row).
+  // Force the frog to navigate around them — no straight-line rush. (Osimo 2026-06-16)
+  walls = new Set();
+  const wKey = (c,r) => r*1000+c;
+  const spawnRow = safeSpawnRow();
+  for(const sr of safeRows){
+    if(sr===0 || sr===spawnRow) continue;  // never block fly row or spawn row
+    const nw = 2 + Math.floor(Math.random()*3);  // 2-4 walls per safe row
+    let placed2=0, tries=0;
+    while(placed2<nw && tries++<80){
+      const wc = 1+Math.floor(Math.random()*(COLS-2));
+      const k = wKey(wc,sr);
+      if(walls.has(k)) continue;
+      // Don't block the centre column entirely (frog spawns there)
+      if(wc===Math.floor(COLS/2) && !walls.has(wKey(wc-1,sr)) && !walls.has(wKey(wc+1,sr))) continue;
+      walls.add(k); placed2++;
+      grid[sr][wc] = 0;   // no coin under a wall
+    }
+  }
+
+  // The FLY sits TOP-CENTRE — reach it to advance the level. Clear its coin so it isn't counted.
+  fly = {c: COLS>>1, r: 0};
+  grid[0][fly.c] = 0;
+
+  dotsLeft = 0;
+  for(const row of grid) for(const v of row) if(v) dotsLeft++;
+
+  // Everything gets gradually faster: +5% per level (L1→L100), Osimo 2026-06-16.
+  const lvlSpeed = 1 + 0.05*(level-1);
+
+  // Obstacles per lane
+  cars = [];
+  for(const ln of lanes){
+    const d = Math.random()<.5 ? 1 : -1;
+    const base = (0.45+Math.random()*0.20) * P.speed * lvlSpeed * d;
+    if(ln.type==='river'){
+      // Logs: P.logsPer per lane; ~30% spawn a touching PAIR; ≥1 leaf-log per river (Osimo).
+      // Leaf logs are 3 cells wide (vs 1.5 for plain logs) — Osimo 2026-06-19.
+      const LEN=1.5, LEAF_LEN=3, n=P.logsPer; let x=Math.random()*2; const laneLogs=[];
+      for(let i=0;i<n;i++){
+        const hasLeaf=Math.random()<0.05;
+        const lg={row:ln.row, type:'river', x, sp:base, len:hasLeaf?LEAF_LEN:LEN, leaf:hasLeaf};
+        cars.push(lg); laneLogs.push(lg);
+        if(i<n-1 && Math.random()<0.30){ x+=lg.len;
+          const hasLeaf2=Math.random()<0.05;
+          const lg2={row:ln.row,type:'river',x,sp:base,len:hasLeaf2?LEAF_LEN:LEN,leaf:hasLeaf2,paired:true};
+          cars.push(lg2); laneLogs.push(lg2); i++; x+=lg2.len; }
+        else { x += lg.len + 1.5 + Math.random()*2; }
+      }
+      if(laneLogs.length && !laneLogs.some(l=>l.leaf)){
+        const tgt=laneLogs[(Math.random()*laneLogs.length)|0];
+        tgt.leaf=true; tgt.len=LEAF_LEN;   // guarantee ≥1 leaf, widen it too
+      }
+    } else {
+      // Vehicles of the level's kind, bikes mixed in. Spaced so they NEVER overlap (Osimo).
+      const len0   = P.kind==='train'?3.5 : P.kind==='bus'?2.2 : 1.3;
+      const minSlot= len0 + 1.0;
+      const n      = Math.min(Math.max(1,P.veh), Math.max(1, Math.floor(COLS/minSlot)));
+      const slot   = COLS/n;
+      for(let i=0;i<n;i++){
+        const bike = Math.random()<P.bikeChance;
+        const kind = bike ? 'bike' : P.kind;
+        const len  = kind==='train'?3.5 : kind==='bus'?2.2 : kind==='bike'?0.7 : 1.3;
+        const sp   = base * (kind==='bike'?1.35 : kind==='bus'?0.85 : 1);
+        const jit  = Math.random()*Math.max(0, slot-len-0.6);   // jitter that preserves the gap
+        cars.push({row:ln.row, type:'road', kind, x: i*slot + jit, sp, len,
+                   colour: CAR_COLOURS[(Math.random()*CAR_COLOURS.length)|0]});
+      }
+    }
+  }
+
+  // Ghosts from L20+ (chase you, obey the lanes)
+  ghosts = P.ghosts
+    ? [{c:1, r:1, hx:1, hy:1, dead:0}, {c:COLS-2, r:1, hx:COLS-2, hy:1, dead:0}]
+    : [];
+  ghostKillTimer = 0;
+
+  // Player spawns at bottom-centre on a guaranteed SAFE row, stationary until the player swipes.
+  player = {c: COLS>>1, r: safeSpawnRow()};
+  dir = {dc:0,dr:0}; moveAcc = 0; splashes = [];
+  deathCooldown = 0;
+  collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
+}
+
+// ── HUD ─────────────────────────────────────────────────────────────────────
+function updHud(){
+  scoreEl.textContent = score;
+  livesEl.textContent = '🐸'.repeat(Math.max(0,lives));
+  const m=Math.floor(timeLeft/60), s=timeLeft%60;
+  lvlEl.textContent   = 'LVL '+level+'  ⏱ '+m+':'+String(s).padStart(2,'0');
+}
+
+// ── Lane lookup ─────────────────────────────────────────────────────────────
+function laneAt(r){ return lanes.find(l=>l.row===r) || null; }
+// Bottom-most SAFE (non-lane) row — always respawn here so we never land on water/road.
+function safeSpawnRow(){ for(let r=ROWS-1;r>=0;r--) if(!laneAt(r)) return r; return ROWS-1; }
+
+// ── Level clear → next ──────────────────────────────────────────────────────
+function nextLevel(){
+  level++;
+  if(level % 11 === 0){ lives++; showMsg('🐸 BONUS LIFE! Every 11 levels.'); }
+  buildLevel();
+  updHud();
+  levelJustBuilt = true;     // entities are freshly rebuilt — the current tick must bail
+}
+
+// ── Collect whatever is in cell (nc,nr): coin, freeze pod, cherry, scared ghost ──
+// Called from a deliberate step AND from log-drift (collect coins as the log carries you).
+function collectAt(nc, nr){
+  if(nr<0||nr>=ROWS||nc<0||nc>=COLS) return;
+
+  // Reach the FLY → advance the level. If coins are STILL uncollected, forfeit 100 (Osimo 2026-06-16).
+  if(fly && nc===fly.c && nr===fly.r){
+    if(dotsLeft>0) score = Math.max(0, score-100);
+    nextLevel();
+    return;
+  }
+
+  const v = grid[nr][nc];
+  if(v===1){      grid[nr][nc]=0; score+=10; dotsLeft--; }
+  else if(v===2){ grid[nr][nc]=0; score+=50; dotsLeft--; freeze=freezeDur; }   // tick toggles the indicator
+
+  const ci = cherries.findIndex(ch=>ch.c===nc && ch.r===nr);
+  if(ci>=0){ cherries.splice(ci,1); score+=100; scare=360; }   // scares ghosts; never harms the frog
+
+  for(const g of ghosts){
+    if(!g.dead && Math.round(g.c)===nc && g.r===nr && scare>0){ g.dead=120; score+=200; }
+  }
+
+  // All coins collected → +500 ONCE. If ALL logs ridden were leaf-bearing → TRIPLE the level score.
+  if(dotsLeft<=0 && !allCleared){
+    allCleared = true;
+    if(rodeAnyLog && leafOnly){
+      // triple the points earned this level (score - levelStartScore), plus the 500 coin bonus
+      const levelEarned = score - levelStartScore;
+      score += levelEarned * 2 + 500; // x2 on top of what exists = triple total
+      showMsg('🍃 ALL LEAF LOGS — TRIPLE SCORE!');
+    } else {
+      score += 500;
+    }
+  }
+  updHud();
+}
+
+// ── Move one cell (the unit of motion for both auto-walk and manual log-hops) ──
+function step(dc, dr){
+  if(!running) return false;
+  player.c = Math.round(player.c);     // snap any float from log-drift
+  const nc = player.c + dc, nr = player.r + dr;
+  if(nc<0 || nc>=COLS || nr<0 || nr>=ROWS) return false;
+  if(walls.has(nr*1000+nc)) return false;   // blocked by wall (Osimo 2026-06-16)
+  player.c = nc; player.r = nr;
+  hopAnim = 1;
+  faceDir = dc!==0 ? dc : faceDir;
+  collectAt(nc, nr);
+  return true;
+}
+
+// ── Player death ─────────────────────────────────────────────────────────────
+function gameOver(emoji, title){
+  running = false;
+  if(attract) return;
+  ovEmoji.textContent = emoji;
+  ovTitle.textContent = title;
+  ovsub.innerHTML = 'You scored <b style="color:var(--ink)">'+score+'</b>.';
+  boardEl.innerHTML = '';                 // no Jimmy/Joe board here — the leaderboard shows instead
+  playBtn.textContent = 'PLAY AGAIN';
+  if(window.ArcadeScores && score>0){
+    ArcadeScores.show({ game:'hop-man', title:'HOP-MAN', score, accent:'#ffcf3d',
+      onClose: ()=>ov.classList.remove('hidden') });
+  } else {
+    ov.classList.remove('hidden');
+  }
+}
+
+function die(drowned){
+  if(deathCooldown>0) return;   // invincibility window
+  if(drowned) splashes.push({x: player.c*CELL+CELL/2, y: player.r*CELL+CELL/2, t:18}); // plop!
+  lives--;
+  updHud();
+  if(lives<=0){ gameOver('💀','GAME OVER'); return; }
+  // Respawn on a guaranteed SAFE row, stationary, with a ~3s invincibility window
+  player.c      = COLS>>1;
+  player.r      = safeSpawnRow();
+  dir = {dc:0,dr:0}; moveAcc = 0;
+  deathCooldown = 90;
+  collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
+}
+
+// ── Road-collision helper ────────────────────────────────────────────────────
+// Returns true if the integer cell (row, col) is occupied by a road vehicle
+function carHitsCell(row, col){
+  const c = Math.round(col);
+  for(const car of cars){
+    if(car.type!=='road' || car.row!==row) continue;
+    if(c >= Math.floor(car.x) && c <= Math.ceil(car.x+car.len)) return true;
+  }
+  return false;
+}
+
+// Is cell (row,col) covered by a log? Centre-based to match the drawn span (auto-move won't
+// step into open water; same test the on-log/drown logic uses).
+function riverCellHasLog(row, col){
+  const fctr = col + 0.5;
+  for(const car of cars){
+    if(car.type!=='river' || car.row!==row) continue;
+    if(fctr >= car.x && fctr <= car.x+car.len) return true;
+  }
+  return false;
+}
+
+// ── Game tick (~30 fps) ──────────────────────────────────────────────────────
+function tick(){
+  flowPh += 0.025;
+  if(freeze>0) freeze--;
+  freezeEl.classList.toggle('on', freeze>0);        // accurate every frame (was sticking 'on')
+  if(scare>0)   scare--;
+  if(deathCooldown>0) deathCooldown--;
+  if(hopAnim>0) hopAnim = Math.max(0, hopAnim-0.14);
+  idlePh += 0.12;
+  for(const s of splashes) s.t--;
+  splashes = splashes.filter(s=>s.t>0);
+
+  // Level timer: 1/sec while playing; running out = game over (Osimo 2026-06-16).
+  if(!attract){
+    if(++timeAcc>=30){ timeAcc=0; if(timeLeft>0){ timeLeft--; updHud(); }
+      if(timeLeft<=0){ gameOver('⏰',"TIME'S UP"); return; } }
+  }
+
+  // Move every car + log
+  for(const car of cars){
+    if(freeze<=0){
+      car.x += car.sp * 0.06;
+      if(car.x >  COLS+car.len) car.x = -car.len;
+      if(car.x < -car.len)      car.x =  COLS+car.len;
+    }
+  }
+
+  const pc = Math.round(player.c);
+
+  // Are we on a log this frame? Use the frog's CELL CENTRE vs the log's REAL span [x, x+len]
+  // so "on the trunk" exactly matches what's drawn (fixes edge-of-log false drownings).
+  const fctr = player.c + 0.5;
+  let onLog=false, logSp=0, ridingLog=null;
+  for(const car of cars){
+    if(car.type==='river' && car.row===player.r && fctr >= car.x && fctr <= car.x+car.len){
+      // FROZEN logs don't move, so the frog must NOT drift on them (Osimo 2026-06-16).
+      onLog=true; logSp = freeze>0 ? 0 : car.sp*0.06; ridingLog=car;
+    }
+  }
+  if(onLog && ridingLog){ rodeAnyLog = true; if(!ridingLog.leaf) leafOnly = false; }
+
+  // River: plop-drown if standing on water with no log; else drift WITH the log + collect coins.
+  const ln = laneAt(player.r);
+  if(ln && ln.type==='river' && !onLog && freeze<=0 && deathCooldown<=0){
+    die(true);
+  } else if(onLog){
+    const before = Math.round(player.c);
+    player.c += logSp;
+    if(player.c < -0.2 || player.c > COLS-0.8){ die(true); }          // carried off the edge
+    else { const after = Math.round(player.c); if(after!==before) collectAt(after, player.r); }
+  }
+
+  // Auto-glide (Pac-Man) — LEFT/RIGHT only (dir.dr is always 0); never auto-step into open water.
+  if(!onLog && running && dir.dc){
+    if(++moveAcc >= STEP_TICKS){
+      moveAcc = 0;
+      const nc = pc+dir.dc;
+      if(nc>=0 && nc<COLS){
+        const lane = laneAt(player.r);
+        const openWater = lane && lane.type==='river' && !riverCellHasLog(player.r,nc);
+        if(!openWater) step(dir.dc, 0);     // else idle, waiting for a log
+      }
+    }
+  }
+
+  // A level cleared mid-tick (rebuilt entities) — bail before touching stale state.
+  if(levelJustBuilt){ levelJustBuilt = false; return; }
+
+  // Precise car collision — only a real overlap of the frog's cell with the car body kills.
+  if(deathCooldown<=0){
+    const fc = Math.round(player.c)+0.5;
+    for(const car of cars){
+      if(car.type!=='road' || car.row!==player.r) continue;
+      if(fc > car.x+0.15 && fc < car.x+car.len-0.15){ die(false); break; }
+    }
+  }
+
+  // Ghosts: chase or flee. Cannot enter river OR road lanes — if they land there anyway they die,
+  // eyes float home. (Osimo 2026-06-16: ghosts respect all hazard lanes.)
+  ghostKillTimer++;
+  for(const g of ghosts){
+    if(g.dead){ g.dead--; if(g.dead<=0){ g.c=g.hx; g.r=g.hy; } continue; }
+    // Safety: ghost somehow on a hazard row → die immediately, eyes home
+    const glane = laneAt(g.r);
+    if(glane && (glane.type==='river' || glane.type==='road')){ g.dead=120; ghostKillTimer=0; continue; }
+    if(Math.random()<0.04){
+      const flee = scare>0;
+      const gdc = Math.sign(player.c-g.c)*(flee?-1:1);
+      const gdr = Math.sign(player.r-g.r)*(flee?-1:1);
+      const moves=[];
+      if(gdc!==0) moves.push([gdc,0]);
+      if(gdr!==0) moves.push([0,gdr]);
+      if(gdr!==0) moves.push([0,-gdr]);
+      if(gdc!==0) moves.push([-gdc,0]);
+      moves.push([1,0],[-1,0],[0,1],[0,-1]);
+      for(const [mc,mr] of moves){
+        const nc=g.c+mc, nr=g.r+mr;
+        if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
+        const ln=laneAt(nr);
+        if(ln && (ln.type==='river' || ln.type==='road')) continue; // never enter hazard rows
+        g.c=nc; g.r=nr; break;
+      }
+    }
+    if(Math.round(g.c)===Math.round(player.c) && g.r===player.r){
+      if(scare>0){ g.dead=120; score+=200; } else die(false);
+    }
+  }
+
+  // Attract auto-pilot: play like a person — glide L/R, hop up toward the fly. Uses control()
+  // so it honours the new movement model (auto horizontal, manual vertical).
+  if(attract && running && Math.random()<0.06){
+    const opts = [[0,-1],[0,-1],[1,0],[-1,0]].filter(([dc,dr])=>{   // bias UP toward the fly
+      const nr=player.r+dr, nc=Math.round(player.c)+dc;
+      if(nr<0||nr>=ROWS||nc<0||nc>=COLS) return false;
+      const lane=laneAt(nr);
+      if(lane && lane.type==='river' && !riverCellHasLog(nr,nc)) return false;
+      if(lane && lane.type==='road'  && carHitsCell(nr,nc))      return false;
+      return true;
+    });
+    if(opts.length){ const o=opts[(Math.random()*opts.length)|0]; control(o[0], o[1]); }
+  }
+}
+
+// ── Draw helpers ─────────────────────────────────────────────────────────────
+const TAU = Math.PI*2;
+function rr(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y, x+w,y+h, r);
+  ctx.arcTo(x+w,y+h, x,y+h, r);
+  ctx.arcTo(x,y+h, x,y, r);
+  ctx.arcTo(x,y, x+w,y, r);
+  ctx.closePath();
+}
+
+// ── A real YELLOW frog (vector — not an emoji, so it renders in headless capture too) ──
+// anim 0..1 (1 = just hopped / airborne), face -1|0|+1. Squash on land, stretch + arc mid-hop.
+function drawFrog(px, py, cell, anim, face){
+  const arc   = Math.sin(anim*Math.PI);
+  const lift  = arc * cell*0.30;
+  const breath= Math.sin(idlePh)*cell*0.012*(1-anim);
+  const sx    = 1 + arc*0.14;
+  const sy    = 1 - arc*0.18 + breath/cell;
+  ctx.save();
+  ctx.translate(px, py - lift);
+  ctx.scale(sx, sy);
+  const bw = cell*0.42, bh = cell*0.28;          // wide, squat frog body
+  const splay = 1 + arc*0.9;
+  // BIG back legs — folded, splay on the hop, webbed feet
+  ctx.fillStyle = '#cda31e';
+  for(const s of [-1, 1]){
+    ctx.save(); ctx.translate(s*bw*0.72, bh*0.34); ctx.rotate(s*0.45*splay);
+    ctx.beginPath(); ctx.ellipse(0,0, cell*0.20, cell*0.10, 0, 0, TAU); ctx.fill();          // thigh
+    ctx.beginPath(); ctx.ellipse(s*cell*0.18, cell*0.06, cell*0.12, cell*0.06, s*0.3,0,TAU); ctx.fill(); // webbed foot
+    ctx.restore();
+  }
+  // front webbed hands
+  ctx.fillStyle = '#e6bc26';
+  for(const s of [-1,1]){ ctx.beginPath(); ctx.ellipse(s*bw*0.34, bh*0.8, cell*0.09, cell*0.055,0,0,TAU); ctx.fill(); }
+  // BODY — yellow gradient
+  const g = ctx.createRadialGradient(-bw*0.25,-bh*0.4,1, 0,0, bw*1.2);
+  g.addColorStop(0,'#fff0a8'); g.addColorStop(.55,'#ffcf3d'); g.addColorStop(1,'#d99a16');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0,0, bw, bh, 0, 0, TAU); ctx.fill();
+  // dappled froggy spots
+  ctx.fillStyle='rgba(154,106,16,.35)';
+  ctx.beginPath(); ctx.ellipse(-bw*0.4,-bh*0.1,cell*0.06,cell*0.045,0,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( bw*0.45,bh*0.1,cell*0.05,cell*0.04,0,0,TAU); ctx.fill();
+  // belly
+  ctx.fillStyle='rgba(255,255,255,.22)';
+  ctx.beginPath(); ctx.ellipse(0, bh*0.35, bw*0.55, bh*0.4, 0,0,TAU); ctx.fill();
+  // BIG bulging eyes high on top, set wide
+  const ex = face*bw*0.18, ey = -bh*0.85;
+  for(const s of [-1,1]){
+    ctx.fillStyle = '#ffcf3d';
+    ctx.beginPath(); ctx.arc(s*bw*0.5+ex, ey+cell*0.05, cell*0.17, 0, TAU); ctx.fill();    // eye mound
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s*bw*0.5+ex, ey, cell*0.135, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#15110a';
+    ctx.beginPath(); ctx.arc(s*bw*0.5+ex+face*cell*0.04, ey, cell*0.07, 0, TAU); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.9)';
+    ctx.beginPath(); ctx.arc(s*bw*0.5+ex-cell*0.03, ey-cell*0.03, cell*0.022, 0, TAU); ctx.fill();  // glint
+  }
+  // nostrils
+  ctx.fillStyle='#9a6a10';
+  ctx.beginPath(); ctx.arc(-cell*0.05,-bh*0.45,cell*0.018,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc( cell*0.05,-bh*0.45,cell*0.018,0,TAU); ctx.fill();
+  // wide smile
+  ctx.strokeStyle='#9a6a10'; ctx.lineWidth=Math.max(1,cell*0.05); ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(0,-bh*0.05, bw*0.5, 0.12*Math.PI, 0.88*Math.PI); ctx.stroke();
+  ctx.restore();
+}
+
+// ── A real floating LOG (wood body, bark striations, cut end-grain rings) ──
+function drawLog(x, y, w, h, leaf){
+  const g = ctx.createLinearGradient(0, y, 0, y+h);
+  g.addColorStop(0,'#8a5e36'); g.addColorStop(.5,'#6b4a2a'); g.addColorStop(1,'#46301a');
+  ctx.fillStyle = g; rr(x, y, w, h, h*0.45); ctx.fill();
+  // bark striations along the length
+  ctx.strokeStyle='rgba(38,24,10,.45)'; ctx.lineWidth=1;
+  for(let i=h*0.6; i<w-h*0.6; i+=Math.max(6,CELL*0.5)){
+    ctx.beginPath(); ctx.moveTo(x+i, y+h*0.22); ctx.lineTo(x+i, y+h*0.78); ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(255,220,170,.10)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(x+h*0.6, y+h*0.32); ctx.lineTo(x+w-h*0.6, y+h*0.32); ctx.stroke();
+  // cut end-grain rings on the LEFT end only (Osimo 2026-06-16 — all logs face the same way)
+  const ex = x+h*0.46;
+  ctx.fillStyle='#caa066';
+  ctx.beginPath(); ctx.ellipse(ex, y+h/2, h*0.30, h*0.42, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle='#7a5630'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.ellipse(ex, y+h/2, h*0.19, h*0.27, 0, 0, TAU); ctx.stroke();
+  ctx.fillStyle='#8a6a3a';
+  ctx.beginPath(); ctx.ellipse(ex, y+h/2, h*0.07, h*0.1, 0, 0, TAU); ctx.fill();
+  // 5% of logs sprout a small twig + leaf (and secretly mark a "leaf-log")
+  if(leaf){
+    const lx = x+w*0.66, ly = y+h*0.12;
+    ctx.strokeStyle='#5a3a1a'; ctx.lineWidth=Math.max(1,h*0.07); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(lx, ly+h*0.16); ctx.lineTo(lx+h*0.14, ly-h*0.22); ctx.stroke();
+    ctx.fillStyle='#5bbf3a';
+    ctx.beginPath(); ctx.ellipse(lx+h*0.24, ly-h*0.30, h*0.17, h*0.095, -0.6, 0, TAU); ctx.fill();
+    ctx.strokeStyle='#3f8a2e'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(lx+h*0.1, ly-h*0.2); ctx.lineTo(lx+h*0.34, ly-h*0.4); ctx.stroke();
+  }
+}
+
+// ── A vector cherry pair (drawn, not emoji — consistent in capture) ──
+function drawCherry(cx, cy, cell){
+  const r = cell*0.15;
+  ctx.strokeStyle='#3f8a2e'; ctx.lineWidth=Math.max(1.5,cell*0.05); ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(cx, cy-cell*0.30); ctx.quadraticCurveTo(cx-cell*0.06, cy-cell*0.1, cx-r, cy+r*0.2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy-cell*0.30); ctx.quadraticCurveTo(cx+cell*0.09, cy-cell*0.1, cx+r*1.1, cy+r*0.05); ctx.stroke();
+  ctx.fillStyle='#4caf3f';
+  ctx.beginPath(); ctx.ellipse(cx+cell*0.08, cy-cell*0.30, cell*0.1, cell*0.05, -0.6, 0, TAU); ctx.fill();
+  for(const ox of [-r, r*1.1]){
+    const g = ctx.createRadialGradient(cx+ox-r*0.3, cy+r*0.1-r*0.3, 1, cx+ox, cy+r*0.1, r*1.2);
+    g.addColorStop(0,'#ff8093'); g.addColorStop(.5,'#e0214a'); g.addColorStop(1,'#9e0b2c');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx+ox, cy+r*0.1, r, 0, TAU); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.6)';
+    ctx.beginPath(); ctx.arc(cx+ox-r*0.35, cy+r*0.1-r*0.35, r*0.24, 0, TAU); ctx.fill();
+  }
+}
+
+// ── The FLY (level exit) — a little buzzing fly, top-centre ──
+function drawFly(cx, cy, cell){
+  const buzz = Math.sin(idlePh*3)*cell*0.05;
+  ctx.save(); ctx.translate(cx, cy+buzz);
+  ctx.fillStyle='rgba(220,235,255,.5)';                                  // wings
+  ctx.beginPath(); ctx.ellipse(-cell*0.16,-cell*0.12, cell*0.17, cell*0.09, -0.6,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( cell*0.16,-cell*0.12, cell*0.17, cell*0.09,  0.6,0,TAU); ctx.fill();
+  ctx.fillStyle='#1b1b22';                                               // body
+  ctx.beginPath(); ctx.ellipse(0,cell*0.02, cell*0.16, cell*0.22, 0,0,TAU); ctx.fill();
+  ctx.fillStyle='#34343d';                                               // head
+  ctx.beginPath(); ctx.ellipse(0,-cell*0.12, cell*0.13, cell*0.12, 0,0,TAU); ctx.fill();
+  ctx.fillStyle='#ff4d4d';                                               // eyes
+  ctx.beginPath(); ctx.arc(-cell*0.06,-cell*0.13, cell*0.045,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc( cell*0.06,-cell*0.13, cell*0.045,0,TAU); ctx.fill();
+  ctx.restore();
+}
+
+// ── Hedge / bush obstacle (replaces black wall blocks — Osimo 2026-06-17) ────
+function drawHedge(wx, wy, ws, theme){
+  if(theme==='water'){
+    ctx.fillStyle='#1a5e0a';
+    rr(wx+1, wy+ws*0.35, ws-2, ws*0.62, ws*0.30); ctx.fill();
+    ctx.fillStyle='#28800e';
+    for(const ox of [0.25,0.5,0.75]){
+      ctx.beginPath(); ctx.arc(wx+ws*ox, wy+ws*0.37, ws*0.17, Math.PI, 0); ctx.fill();
+    }
+    ctx.fillStyle='#3aaa1c';
+    ctx.beginPath(); ctx.arc(wx+ws*0.36, wy+ws*0.33, ws*0.08, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(wx+ws*0.63, wy+ws*0.30, ws*0.06, 0, TAU); ctx.fill();
+  } else {
+    ctx.fillStyle='#5a3008';
+    ctx.fillRect(wx+ws*0.38, wy+ws*0.58, ws*0.24, ws*0.38);
+    for(const [ox,oy,r,clr] of [
+      [-ws*0.18,ws*0.13,ws*0.27,'#246612'],
+      [ ws*0.18,ws*0.11,ws*0.25,'#1e5a10'],
+      [      0,-ws*0.03,ws*0.30,'#2e801a'],
+    ]){
+      ctx.fillStyle=clr;
+      ctx.beginPath(); ctx.arc(wx+ws*0.5+ox, wy+ws*0.44+oy, r, 0, TAU); ctx.fill();
+    }
+  }
+}
+
+// ── Lily pad — safe path marker for water levels (Osimo 2026-06-17) ──────────
+function drawLilyPad(cx, cy, cell){
+  const r=cell*0.39;
+  const g=ctx.createRadialGradient(cx-r*0.2,cy-r*0.3,1,cx,cy,r);
+  g.addColorStop(0,'#44b820'); g.addColorStop(0.65,'#2a8012'); g.addColorStop(1,'#165808');
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.moveTo(cx,cy);
+  ctx.arc(cx,cy,r,0.28,Math.PI*2-0.28);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(60,180,30,.38)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.94,0.28,Math.PI*2-0.28); ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle='rgba(0,60,0,.22)'; ctx.lineWidth=0.8;
+  for(let i=0;i<5;i++){
+    const ang=0.32+i*1.08;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(ang)*r*0.84,cy+Math.sin(ang)*r*0.84); ctx.stroke();
+  }
+}
+
+// ── Road vehicles that actually LOOK like vehicles (Osimo 2026-06-16) ──
+function drawVehicle(x, y, w, h, kind, colour, frozen){
+  const body  = frozen ? '#4f7886' : colour;
+  const glass = frozen ? '#cbe7ef' : 'rgba(190,230,255,.92)';
+  const tyre  = '#c0c0c0';   // light grey tires (Osimo 2026-06-16)
+  if(kind==='train'){
+    const seg = w/3;
+    for(let i=0;i<3;i++){
+      const sx=x+i*seg+1;
+      ctx.fillStyle = i===0 ? (frozen?'#5a8090':'#d23b3b') : body;     // red loco up front
+      rr(sx, y+h*0.04, seg-2, h*0.78, 4); ctx.fill();
+      ctx.fillStyle=glass; rr(sx+seg*0.20, y+h*0.18, seg*0.46, h*0.30, 2); ctx.fill();
+    }
+    ctx.fillStyle=tyre;
+    for(let i=0;i<6;i++){ ctx.beginPath(); ctx.arc(x+(i+0.5)*w/6, y+h*0.86, h*0.12, 0, TAU); ctx.fill(); }
+    return;
+  }
+  if(kind==='bike'){
+    const cy=y+h*0.64, wr=h*0.30;
+    for(const wx of [x+wr, x+w-wr]){                                  // wheels + hubs
+      ctx.fillStyle=tyre;  ctx.beginPath(); ctx.arc(wx,cy,wr,0,TAU); ctx.fill();
+      ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(wx,cy,wr*0.42,0,TAU); ctx.fill();
+    }
+    ctx.strokeStyle=body; ctx.lineWidth=Math.max(2,h*0.11); ctx.lineCap='round';
+    ctx.beginPath();                                                  // frame + handlebars
+    ctx.moveTo(x+wr,cy); ctx.lineTo(x+w*0.5,y+h*0.38); ctx.lineTo(x+w-wr,cy);
+    ctx.moveTo(x+w*0.5,y+h*0.38); ctx.lineTo(x+w*0.74,y+h*0.30); ctx.stroke();
+    ctx.fillStyle = frozen?'#6a8a98':'#3a3a44';                        // rider torso
+    ctx.beginPath(); ctx.ellipse(x+w*0.45,y+h*0.20,h*0.12,h*0.2,0,0,TAU); ctx.fill();
+    ctx.fillStyle = frozen?'#9fc2cf':'#ff5b5b';                        // helmet
+    ctx.beginPath(); ctx.arc(x+w*0.45,y+h*0.08,h*0.12,Math.PI,0); ctx.fill();
+    return;
+  }
+  // car / bus
+  const inset = kind==='bus' ? 0.05 : 0.20;
+  ctx.fillStyle=body;
+  rr(x, y+h*0.32, w, h*0.60, kind==='bus'?4:7); ctx.fill();                            // lower body
+  rr(x+w*inset, y+h*0.04, w*(1-inset*2), h*0.46, kind==='bus'?4:9); ctx.fill();        // cabin
+  ctx.fillStyle=glass;
+  if(kind==='bus'){
+    const wn=4, ww=(w*(1-inset*2))/wn;
+    for(let i=0;i<wn;i++){ rr(x+w*inset+i*ww+ww*0.14, y+h*0.12, ww*0.70, h*0.28, 2); ctx.fill(); }
+  } else {
+    rr(x+w*inset+w*0.05, y+h*0.11, w*(1-inset*2)-w*0.10, h*0.30, 4); ctx.fill();
+  }
+  ctx.fillStyle = frozen?'#cfe6ee':'#fff3a8';                                          // headlights
+  ctx.beginPath(); ctx.arc(x+w-2, y+h*0.58, h*0.08, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+2,   y+h*0.58, h*0.06, 0, TAU); ctx.fill();
+  ctx.fillStyle=tyre;                                                                  // wheels
+  ctx.beginPath(); ctx.arc(x+w*0.24, y+h*0.90, h*0.15, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+w*0.76, y+h*0.90, h*0.15, 0, TAU); ctx.fill();
+}
+
+// ── Draw ─────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(levelTheme==='water'){
+    ctx.fillStyle='#061d30'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(22,72,128,0.13)'; ctx.lineWidth=1;
+    for(let wy3=0; wy3<H; wy3+=CELL*0.43){
+      ctx.beginPath();
+      for(let px=0; px<W; px+=4){
+        const wv=wy3+Math.sin((px*0.07)+flowPh*1.8)*CELL*0.055;
+        if(px===0) ctx.moveTo(px,wv); else ctx.lineTo(px,wv);
+      }
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle='#0c0a04'; ctx.fillRect(0,0,W,H);
+  }
+
+  // Lanes: river = dark-blue water; road = black tarmac + dashed centre line; train = tracks.
+  for(const ln of lanes){
+    const ly = ln.row*CELL;
+    if(ln.type==='river'){
+      ctx.fillStyle=levelTheme==='water'?'rgba(8,42,72,.90)':'rgba(14,42,68,.82)';
+      ctx.fillRect(0,ly,W,CELL);
+      // Animated water flow
+      ctx.save(); ctx.beginPath(); ctx.rect(0,ly,W,CELL); ctx.clip();
+      const fOff=(flowPh*CELL*0.22)%(CELL*0.65);
+      ctx.strokeStyle='rgba(45,125,195,0.18)'; ctx.lineWidth=1;
+      for(let fx=-CELL; fx<W+CELL; fx+=CELL*0.65){
+        const lx=((fx+fOff)%(W+CELL))-CELL*0.3;
+        ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx+CELL*0.3,ly+CELL); ctx.stroke();
+      }
+      ctx.strokeStyle='rgba(95,190,240,0.13)'; ctx.lineWidth=1.5;
+      for(let ry2=ly+CELL*0.22; ry2<ly+CELL-CELL*0.05; ry2+=CELL*0.42){
+        ctx.beginPath();
+        for(let px=0; px<W; px+=3){
+          const wv=ry2+Math.sin((px*0.16)+flowPh*2.5)*CELL*0.055;
+          if(px===0) ctx.moveTo(px,wv); else ctx.lineTo(px,wv);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Frozen river overlay
+      if(freeze>0){
+        ctx.fillStyle='rgba(180,230,255,0.40)'; ctx.fillRect(0,ly,W,CELL);
+        ctx.strokeStyle='rgba(220,245,255,0.55)'; ctx.lineWidth=1;
+        for(let fx=0; fx<W; fx+=CELL*0.6){
+          ctx.beginPath(); ctx.moveTo(fx,ly); ctx.lineTo(fx+CELL*0.3,ly+CELL); ctx.stroke();
+        }
+      }
+    } else if(ln.kind==='train'){
+      ctx.fillStyle='#15110a'; ctx.fillRect(0,ly,W,CELL);
+      ctx.strokeStyle='rgba(150,152,162,.55)'; ctx.lineWidth=Math.max(2,CELL*0.06);
+      ctx.beginPath(); ctx.moveTo(0,ly+CELL*0.32); ctx.lineTo(W,ly+CELL*0.32);
+                       ctx.moveTo(0,ly+CELL*0.68); ctx.lineTo(W,ly+CELL*0.68); ctx.stroke();
+      ctx.strokeStyle='rgba(120,86,52,.55)'; ctx.lineWidth=Math.max(2,CELL*0.11);
+      for(let tx=CELL*0.3; tx<W; tx+=CELL*0.9){ ctx.beginPath(); ctx.moveTo(tx,ly+CELL*0.2); ctx.lineTo(tx,ly+CELL*0.8); ctx.stroke(); }
+    } else {
+      ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,ly,W,CELL);
+      ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=Math.max(2,CELL*0.07);
+      ctx.setLineDash([CELL*0.5, CELL*0.4]);
+      ctx.beginPath(); ctx.moveTo(0,ly+CELL/2); ctx.lineTo(W,ly+CELL/2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Safe row backgrounds: lily pads (water) or grass strips (mix)
+  for(let r=0; r<ROWS; r++){
+    if(laneAt(r)) continue;
+    const sy2=r*CELL;
+    if(levelTheme==='water'){
+      for(let cc=0; cc<COLS; cc++){
+        if(!walls.has(r*1000+cc)&&!(fly&&r===fly.r&&cc===fly.c))
+          drawLilyPad(cc*CELL+CELL/2, sy2+CELL/2, CELL);
+      }
+    } else if(levelTheme==='mix'){
+      ctx.fillStyle='rgba(14,36,8,.48)'; ctx.fillRect(0, sy2, W, CELL);
+    }
+  }
+
+  // Pulsing perimeter glow
+  perimPh += 0.04;
+  const gAlpha = 0.25+0.55*(0.5+0.5*Math.sin(perimPh));
+  ctx.save();
+  ctx.strokeStyle='#ffcf3d'; ctx.shadowColor='rgba(255,207,61,.7)'; ctx.shadowBlur=18;
+  ctx.lineWidth=2; ctx.globalAlpha=gAlpha;
+  ctx.strokeRect(1,1,W-2,H-2);
+  ctx.restore();
+
+  // Walls — hedges or trees (Osimo 2026-06-17)
+  for(const k of walls){
+    const wr=(k/1000)|0, wc=k%1000;
+    drawHedge(wc*CELL, wr*CELL, CELL, levelTheme);
+  }
+
+  // Dots and power pellets (skip road lanes — no dots on roads, Osimo 2026-06-17)
+  for(let r=0;r<ROWS;r++){
+    const row=grid[r]; if(!row) continue;
+    const ln2=laneAt(r); if(ln2&&ln2.type==='road') continue;
+    for(let cc=0;cc<COLS;cc++){
+      const v=row[cc]; if(!v) continue;
+      const x=cc*CELL+CELL/2, y=r*CELL+CELL/2;
+      if(v===1){
+        ctx.fillStyle='rgba(255,207,61,.85)';
+        ctx.beginPath(); ctx.arc(x,y,CELL*.12,0,TAU); ctx.fill();
+      } else {
+        ctx.fillStyle='#5ad7ff';
+        ctx.shadowColor='#5ad7ff'; ctx.shadowBlur=10;
+        ctx.beginPath(); ctx.arc(x,y,CELL*.12,0,TAU); ctx.fill();  // same size as coins (Osimo 2026-06-16)
+        ctx.shadowBlur=0;
+      }
+    }
+  }
+
+  // Cherries (vector)
+  for(const ch of cherries) drawCherry(ch.c*CELL+CELL/2, ch.r*CELL+CELL/2, CELL);
+
+  // The FLY — level exit, top-centre
+  if(fly) drawFly(fly.c*CELL+CELL/2, fly.r*CELL+CELL/2, CELL);
+
+  // Logs (river) + vehicles (road)
+  for(const car of cars){
+    const x=car.x*CELL, y=car.row*CELL+CELL*.12, w=CELL*car.len, h=CELL*.76;
+    if(car.type==='river'){
+      const bob=Math.sin((perimPh*1.3)+car.x*0.6)*CELL*0.04;
+      const wkDir=car.sp>0?-1:1, wkX=car.sp>0?x:x+w;
+      const wkPh=flowPh*2.8+car.x*5;
+      const wg=ctx.createLinearGradient(wkX,0,wkX+wkDir*CELL*1.0,0);
+      wg.addColorStop(0,'rgba(175,228,255,0.28)'); wg.addColorStop(1,'rgba(175,228,255,0)');
+      ctx.fillStyle=wg; ctx.fillRect(wkX,y+bob+h*0.22,wkDir*CELL*1.0,h*0.56);
+      ctx.fillStyle='rgba(210,245,255,0.48)';
+      for(let i=0;i<4;i++){
+        const fdx=wkDir*CELL*(0.08+i*0.19), fdy=Math.sin(wkPh+i*1.9)*h*0.28;
+        const fr=Math.abs(Math.sin(wkPh+i*2.7))*CELL*0.038+CELL*0.020;
+        ctx.beginPath(); ctx.arc(wkX+fdx,y+bob+h*0.5+fdy,fr,0,TAU); ctx.fill();
+      }
+      drawLog(x, y+bob, w, h, car.leaf);
+    } else {
+      drawVehicle(x, y, w, h, car.kind, car.colour, freeze>0);
+    }
+  }
+
+  // Ghosts
+  for(const g of ghosts){
+    const gx=g.c*CELL+CELL/2, gy=g.r*CELL+CELL/2;
+    if(g.dead){
+      // Floating eyes returning home
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(gx-CELL*.12,gy,CELL*.1,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx+CELL*.12,gy,CELL*.1,0,TAU); ctx.fill();
+      continue;
+    }
+    // Body
+    ctx.fillStyle = scare>0 ? '#3b50c4' : '#ff5bd0';
+    ctx.beginPath();
+    ctx.arc(gx,gy,CELL*.34,Math.PI,0);
+    ctx.lineTo(gx+CELL*.34,gy+CELL*.34);
+    ctx.lineTo(gx,gy+CELL*.22);
+    ctx.lineTo(gx-CELL*.34,gy+CELL*.34);
+    ctx.closePath(); ctx.fill();
+    // Eyes
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(gx-CELL*.12,gy-CELL*.05,CELL*.09,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(gx+CELL*.12,gy-CELL*.05,CELL*.09,0,TAU); ctx.fill();
+    // Scared wavy mouth
+    if(scare>0){
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(gx,gy+CELL*.12,CELL*.1,Math.PI,0); ctx.stroke();
+    }
+  }
+
+  // Player — a real yellow frog; flashes during the invincibility window
+  const showFrog = deathCooldown<=0 || (Math.floor(deathCooldown/5)%2===0);
+  if(showFrog){
+    const px=player.c*CELL+CELL/2, py=player.r*CELL+CELL/2;
+    drawFrog(px, py, CELL, hopAnim, faceDir);
+  }
+
+  // Drown plops — an expanding splash ring where the frog went under
+  for(const s of splashes){
+    const k = 1 - s.t/18, rad = CELL*(0.18+0.55*k), a = 0.75*(1-k);
+    ctx.strokeStyle = `rgba(120,200,255,${a})`; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad, 0, TAU); ctx.stroke();
+    ctx.fillStyle = `rgba(160,220,255,${a})`;
+    for(let i=0;i<6;i++){ const ang=i/6*TAU; ctx.beginPath(); ctx.arc(s.x+Math.cos(ang)*rad, s.y+Math.sin(ang)*rad, CELL*0.06, 0, TAU); ctx.fill(); }
+  }
+}
+
+// ── Main loop (~30 fps cap) ──────────────────────────────────────────────────
+let lastTs=0;
+function loop(ts){
+  if(ts-lastTs>33){ lastTs=ts; if(running) tick(); draw(); }
+  requestAnimationFrame(loop);
+}
+
+// ── Fullscreen ───────────────────────────────────────────────────────────────
+function tryFullscreen(){
+  const el=document.documentElement;
+  const req=el.requestFullscreen||el.webkitRequestFullscreen
+            ||el.mozRequestFullScreen||el.msRequestFullscreen;
+  if(req) req.call(el).catch(()=>{});
+}
+
+// ── Start / restart ──────────────────────────────────────────────────────────
+function start(at){
+  attract = !!at;
+  // ?lvl=N starts at level N (QA + tier footage); defaults to 1.
+  const lv = parseInt(new URLSearchParams(location.search).get('lvl'), 10);
+  score=0; lives=3; level=(lv>=1?lv:1); freeze=0; scare=0;
+  buildLevel();   // calls resize() internally
+  updHud();
+  running = true;
+  ov.classList.add('hidden');
+}
+
+// Play button — reset overlay state for PLAY AGAIN
+playBtn.addEventListener('click',()=>{
+  tryFullscreen();
+  ovEmoji.textContent = '🐸🚗';
+  ovTitle.textContent = 'HOP-MAN';
+  ovsub.innerHTML = 'Swipe to set a direction — the frog keeps going.<br>'
+    +'Grab every coin to clear the level (<b style="color:var(--ink)">+500</b>).<br>'
+    +'Ride logs across the water (steer left / right).<br>'
+    +'Grab a <b style="color:#5ad7ff">freeze pod</b> to stop the traffic.';
+  start(false);
+});
+
+// First touch claims fullscreen on mobile (one-shot)
+document.addEventListener('touchend', function fsOnce(){ tryFullscreen(); document.removeEventListener('touchend',fsOnce); });
+
+// ── Controls — a swipe/key SETS the heading (Pac-Man auto-move); on a log it's a manual hop ──
+let lastHoriz=0, lastHorizT=0;
+function control(dc, dr){
+  if(!running){ start(false); return; }
+  // Osimo 2026-06-16: FORWARD/BACK = single manual hop. LEFT/RIGHT = single hop on the first swipe;
+  // swipe the SAME way again quickly to "RUN" (continuous Pac-Man glide).
+  if(dr!==0){ dir={dc:0,dr:0}; step(0, dr); return; }   // up/down hop also cancels any run
+  faceDir = dc;
+  const now = (window.performance ? performance.now() : Date.now());
+  dir = (dc===lastHoriz && now-lastHorizT < 500) ? {dc, dr:0} : {dc:0, dr:0};  // 2nd swipe → run
+  lastHoriz = dc; lastHorizT = now;
+  step(dc, 0);
+}
+
+// ── Swipe (18px threshold, no on-screen d-pad) ──────────────────────────────
+let sx=0,sy=0,sw=false;
+wrap.addEventListener('touchstart',e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; sw=true; },{passive:true});
+wrap.addEventListener('touchmove', e=>{ if(running) e.preventDefault(); },{passive:false});
+wrap.addEventListener('touchend',  e=>{
+  if(!sw) return; sw=false;
+  const t=e.changedTouches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+  if(Math.abs(dx)<18 && Math.abs(dy)<18) return;   // tap, not a swipe
+  if(Math.abs(dx)>Math.abs(dy)) control(dx>0?1:-1, 0);
+  else                           control(0, dy>0?1:-1);
+});
+
+// ── Keyboard ─────────────────────────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],
+           a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]}[e.key];
+  if(m){ e.preventDefault(); control(m[0], m[1]); }
+  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(!running) start(false); }
+});
+
+// ── Live resize: clamp entities, do NOT rebuild the whole level ──────────────
+window.addEventListener('resize',()=>{
+  // Not playing (boot / start overlay): REBUILD for the new size so the grid matches ROWS.
+  // (Bare resize() changed ROWS but left grid stale → draw read undefined rows → blank board.)
+  if(!running){ buildLevel(); draw(); return; }
+  const oldCols=COLS, oldRows=ROWS;
+  detectOrient();
+  COLS = portrait ? 11 : 13;
+  resize();
+  if(COLS===oldCols && ROWS===oldRows) return;
+  // Clamp player to new grid
+  player.c = Math.min(Math.round(player.c), COLS-1);
+  player.r = Math.min(player.r, ROWS-1);
+  // Clamp cherries and off-screen cars
+  cherries = cherries.filter(ch=>ch.c<COLS && ch.r<ROWS);
+  cars     = cars.filter(car=>car.row<ROWS);
+  // Extend grid arrays if ROWS/COLS grew
+  while(grid.length<ROWS) grid.push(Array.from({length:COLS},()=>0));
+  for(const row of grid) while(row.length<COLS) row.push(0);
+  updHud();
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+detectOrient();
+buildLevel();
+updHud();
+seedBoard();
+requestAnimationFrame(loop);
+
+// ?attract=1 — headless footage capture auto-plays
+if(new URLSearchParams(location.search).get('attract')==='1'){
+  ov.classList.add('hidden');
+  start(true);
+}
+})();
+</script>
+</body>
+</html>
