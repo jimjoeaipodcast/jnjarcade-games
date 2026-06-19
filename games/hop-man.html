@@ -231,7 +231,8 @@ function resize(){
   VROWS = Math.max(11, Math.floor(availH / CELL));   // visible rows (viewport)
   const _PAD = portrait ? 0 : Math.max(3, Math.round(VROWS / 5));
   TOP_PAD = _PAD; BOT_PAD = _PAD;
-  ROWS  = Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD); // extra rows for camera breathing room
+  // Portrait: full level fits on screen (no scroll). Landscape: world taller than viewport.
+  ROWS  = portrait ? VROWS : Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD);
   W  = CELL * COLS;
   VH = CELL * VROWS;   // canvas height = viewport
   H  = CELL * ROWS;    // world height (used in draw for full-world background fills)
@@ -376,7 +377,7 @@ function buildLevel(){
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
   const spawnPy = player.r * CELL + CELL/2;
-  camY = targetCamY = portrait ? H - VH : Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
+  camY = targetCamY = portrait ? 0 : Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -481,7 +482,7 @@ function die(drowned){
   player.r      = safeSpawnRow();
   const rpy = player.r * CELL + CELL/2;
   const rpy2 = player.r * CELL + CELL/2;
-  camY = targetCamY = portrait ? H - VH : Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
+  camY = targetCamY = portrait ? 0 : Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -941,9 +942,9 @@ function draw(){
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
     if(portrait){
-      // Mobile: frog stays near bottom (original behaviour)
-      targetCamY = H - VH;
-      camY = targetCamY;
+      // Mobile: no scrolling — full level on screen
+      targetCamY = 0;
+      camY = 0;
     } else {
       // Desktop: bias 0.80 at bottom → 0.20 at top, with upper clamp
       const _t = Math.max(0, Math.min(1, player.r / Math.max(1, ROWS - 1)));
