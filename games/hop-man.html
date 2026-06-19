@@ -375,8 +375,9 @@ function buildLevel(){
   dir = {dc:0,dr:0}; moveAcc = 0; splashes = [];
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
-  // Init camera: max down — spawn at bottom of screen, BOT_PAD empty rows below visible
-  camY = targetCamY = H - VH;
+  // Init camera: frog at 80% (1/5 from bottom), BOT_PAD empty rows below visible
+  const spawnPy = player.r * CELL + CELL/2;
+  camY = targetCamY = Math.max(0, Math.min(H - VH, spawnPy - VH * 0.80));
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -480,7 +481,8 @@ function die(drowned){
   player.c      = COLS>>1;
   player.r      = safeSpawnRow();
   const rpy = player.r * CELL + CELL/2;
-  camY = targetCamY = H - VH;
+  const rpy2 = player.r * CELL + CELL/2;
+  camY = targetCamY = Math.max(0, Math.min(H - VH, rpy2 - VH * 0.80));
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
