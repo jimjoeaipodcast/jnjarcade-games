@@ -751,29 +751,17 @@ function drawFly(cx, cy, cell){
   ctx.restore();
 }
 
-// ── Hedge / bush obstacle (replaces black wall blocks — Osimo 2026-06-17) ────
+// ── Tree obstacle — same on all themes (road + water) ────────────────────────
 function drawHedge(wx, wy, ws, theme){
-  if(theme==='water'){
-    ctx.fillStyle='#1a5e0a';
-    rr(wx+1, wy+ws*0.35, ws-2, ws*0.62, ws*0.30); ctx.fill();
-    ctx.fillStyle='#28800e';
-    for(const ox of [0.25,0.5,0.75]){
-      ctx.beginPath(); ctx.arc(wx+ws*ox, wy+ws*0.37, ws*0.17, Math.PI, 0); ctx.fill();
-    }
-    ctx.fillStyle='#3aaa1c';
-    ctx.beginPath(); ctx.arc(wx+ws*0.36, wy+ws*0.33, ws*0.08, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(wx+ws*0.63, wy+ws*0.30, ws*0.06, 0, TAU); ctx.fill();
-  } else {
-    ctx.fillStyle='#5a3008';
-    ctx.fillRect(wx+ws*0.38, wy+ws*0.58, ws*0.24, ws*0.38);
-    for(const [ox,oy,r,clr] of [
-      [-ws*0.18,ws*0.13,ws*0.27,'#246612'],
-      [ ws*0.18,ws*0.11,ws*0.25,'#1e5a10'],
-      [      0,-ws*0.03,ws*0.30,'#2e801a'],
-    ]){
-      ctx.fillStyle=clr;
-      ctx.beginPath(); ctx.arc(wx+ws*0.5+ox, wy+ws*0.44+oy, r, 0, TAU); ctx.fill();
-    }
+  ctx.fillStyle='#5a3008';
+  ctx.fillRect(wx+ws*0.38, wy+ws*0.58, ws*0.24, ws*0.38);
+  for(const [ox,oy,r,clr] of [
+    [-ws*0.18,ws*0.13,ws*0.27,'#246612'],
+    [ ws*0.18,ws*0.11,ws*0.25,'#1e5a10'],
+    [      0,-ws*0.03,ws*0.30,'#2e801a'],
+  ]){
+    ctx.fillStyle=clr;
+    ctx.beginPath(); ctx.arc(wx+ws*0.5+ox, wy+ws*0.44+oy, r, 0, TAU); ctx.fill();
   }
 }
 
