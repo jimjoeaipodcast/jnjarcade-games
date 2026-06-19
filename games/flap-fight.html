@@ -167,8 +167,7 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
-let birdInflate, inflateInvincible, deflateColorIdx;
-const DEFLATE_COLORS = ['#ff00cc', '#00e5ff', '#aaff00', '#ff8800', '#cc00ff'];
+let birdInflate, inflateInvincible;
 let animId;
 let groundX = 0;
 
@@ -237,11 +236,12 @@ function spawnEnemy() {
   const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
-  // 6% chance: rare deflate parachute with rotating colour
+  // 6% chance: rare deflate parachute — spawns top or bottom strip (hard to reach)
   if (birdInflate > 0 && Math.random() < 0.06) {
-    const col = DEFLATE_COLORS[deflateColorIdx % DEFLATE_COLORS.length];
-    deflateColorIdx++;
-    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, special: true, specialColor: col });
+    const hardY = Math.random() < 0.5
+      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)        // top strip
+      : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4); // bottom strip
+    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1), alive: true, phase: Math.random() * Math.PI * 2, fast, special: true });
   } else {
     enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
   }
@@ -269,7 +269,6 @@ function initGame() {
   bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
-  deflateColorIdx   = 0;
   pipes     = [];
   enemies   = [];
   particles = [];
@@ -388,7 +387,7 @@ function update() {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
         spawnParticles(e.x, cy, '#00ffcc', 14);
         spawnParticles(e.x, cy, '#7fff00', 7);
-        const sc = e.specialColor || '#00ffcc';
+        const sc = '#ffcf3d';
         if (birdInflate > 0) {
           birdInflate--;
           bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
@@ -475,7 +474,7 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
-    drawEnemy(e.x, e.y, e.special, e.specialColor);
+    drawEnemy(e.x, e.y, e.special);
   }
 
   // particles
@@ -577,7 +576,7 @@ function drawPipe(x, y, w, h, isBottom) {
   ctx.fillRect(x + 3, y, 6, h);
 }
 
-function drawEnemy(x, y, special = false, specialColor = '#00ffcc') {
+function drawEnemy(x, y, special = false) {
   ctx.save();
   ctx.translate(x, y);
 
@@ -585,8 +584,11 @@ function drawEnemy(x, y, special = false, specialColor = '#00ffcc') {
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
   const BR = ENEMY_R - 4;    // 10 — body radius
 
+  // special: flash panels red↔yellow every 280ms
+  const flash = special && Math.floor(Date.now() / 280) % 2 === 0;
+
   // STRINGS (dome rim → body top)
-  ctx.strokeStyle = special ? specialColor + 'bb' : 'rgba(255,255,255,0.55)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1;
   const rimPts = [[-CR * 0.85, -CO + CR * 0.05], [-CR * 0.35, -CO + CR * 0.6],
                   [ CR * 0.35, -CO + CR * 0.6],  [ CR * 0.85, -CO + CR * 0.05]];
@@ -598,12 +600,12 @@ function drawEnemy(x, y, special = false, specialColor = '#00ffcc') {
     ctx.stroke();
   }
 
-  // PARACHUTE DOME
+  // PARACHUTE DOME — special flips red/yellow each frame pair
   ctx.save();
   ctx.translate(0, -CO);
-  const panels = special
-    ? [specialColor, '#ffffff', specialColor, '#ffffff']
-    : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];
+  const panels = flash
+    ? ['#ffcf3d', '#ff6b4a', '#ffcf3d', '#ff6b4a']   // swapped
+    : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];   // normal
   for (let i = 0; i < 4; i++) {
     const a1 = Math.PI + (i / 4) * Math.PI;
     const a2 = Math.PI + ((i + 1) / 4) * Math.PI;
@@ -622,25 +624,18 @@ function drawEnemy(x, y, special = false, specialColor = '#00ffcc') {
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
   // dome outline
-  ctx.strokeStyle = special ? specialColor + '99' : 'rgba(0,0,0,0.3)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
-  // special: star label above dome
-  if (special) {
-    ctx.fillStyle = specialColor;
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('DEFLATE', 0, -CR - 5);
-  }
   ctx.restore();
 
-  // BODY
-  ctx.fillStyle = special ? specialColor : '#e84040';
+  // BODY — flashes yellow when dome is red, red when dome is yellow
+  ctx.fillStyle = flash ? '#ffcf3d' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = special ? specialColor : '#cc2020';
+  ctx.strokeStyle = flash ? '#cc9900' : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
