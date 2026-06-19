@@ -112,9 +112,9 @@
       <div class="overlay-emoji" id="ovEmoji">🎈💨</div>
       <div class="overlay-title" id="ovTitle">FLAP FIGHT</div>
       <div class="overlay-sub" id="ovsub">
-        Tap to flap through the gaps.<br>
-        Pop balloon fighters from above for <b>+25 pts</b>.<br>
-        Chain pops within 2s for a <b style="color:var(--ink)">×COMBO</b>.<br>
+        Tap to flap — gaps shrink every minute.<br>
+        Stomp <b>down</b> on enemy parachutes for <b>+25 pts</b>.<br>
+        Chain stomps for a <b style="color:var(--ink)">×COMBO</b>.<br>
         One touch to any pipe = gone.
       </div>
       <div class="board" id="board"></div>
@@ -142,6 +142,10 @@ const CELL         = 18;            // resize cell buffer (convention)
 const GROUND_H     = 26;            // scrolling ground strip height
 const MAX_ENEMIES  = 7;             // cap on simultaneous balloon fighters
 const STAR_COUNT   = 60;            // parallax background stars
+const CHUTE_R      = 22;            // parachute dome radius
+const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
+const GAP_START    = 220;           // initial pipe gap (wide)
+const GAP_MIN      = 105;           // narrowest pipe gap
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -159,9 +163,9 @@ const lvlEl   = document.getElementById('lvl');
 
 // ─── game state ──────────────────────────────────────────────────────────────
 let cw, ch;
-let bird, pipes, enemies, particles, floaters, stars;
-let score, frame, running, dead, bestScore;
-let pipeSpeed, gapSize, level, pipesUntilLevel;
+let bird, pipes, enemies, particles, floaters, stars, clouds;
+let score, frame, running, dead, bestScore, gameStartTime;
+let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let animId;
 let groundX = 0;
@@ -181,6 +185,33 @@ function initStars() {
   }
 }
 
+// ─── clouds init ─────────────────────────────────────────────────────────────
+function initClouds() {
+  clouds = [];
+  const layers = [
+    { count: 4, wMin: 55,  wMax: 90,  spMin: 0.10, spMax: 0.20, alpha: 0.10 },
+    { count: 4, wMin: 80,  wMax: 130, spMin: 0.25, spMax: 0.42, alpha: 0.20 },
+    { count: 3, wMin: 110, wMax: 170, spMin: 0.50, spMax: 0.75, alpha: 0.28 },
+  ];
+  for (const l of layers) {
+    for (let i = 0; i < l.count; i++) {
+      clouds.push({
+        x:     rnd(0, cw),
+        y:     rnd(18, ch * 0.60),
+        w:     rnd(l.wMin, l.wMax),
+        speed: rnd(l.spMin, l.spMax),
+        alpha: l.alpha,
+      });
+    }
+  }
+}
+
+// ─── time-based gap ──────────────────────────────────────────────────────────
+function currentGapSize() {
+  const mins = (Date.now() - gameStartTime) / 60000;
+  return Math.max(GAP_MIN, Math.round(GAP_START - mins * 25));
+}
+
 // ─── resize (convention: subtract CELL buffer top+bottom) ─────────────────────
 function resize() {
   cw = wrap.clientWidth  - 12;
@@ -193,14 +224,15 @@ function resize() {
 function rnd(a, b) { return a + Math.random() * (b - a); }
 
 function spawnPipe() {
+  const gap    = currentGapSize();
   const margin = 60;
-  const gapY   = rnd(margin, ch - GROUND_H - margin - gapSize);
-  pipes.push({ x: cw + PIPE_W + 2, gapY, gapSize, counted: false });
+  const gapY   = rnd(margin, ch - GROUND_H - margin - gap);
+  pipes.push({ x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false });
 }
 
 function spawnEnemy() {
   if (enemies.length >= MAX_ENEMIES) return;
-  const y    = rnd(28, ch - GROUND_H - 28);
+  const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
   enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
@@ -216,9 +248,8 @@ function spawnParticles(x, y, color, count) {
 }
 
 function setLevel(n) {
-  level         = n;
-  pipeSpeed     = BASE_SPEED + (n - 1) * 0.18;
-  gapSize       = Math.max(115, 155 - (n - 1) * 4);
+  level           = n;
+  pipeSpeed       = BASE_SPEED + (n - 1) * 0.18;
   pipesUntilLevel = 10;
   lvlEl.textContent = `LEVEL ${n}`;
 }
@@ -230,13 +261,14 @@ function initGame() {
   pipes     = [];
   enemies   = [];
   particles = [];
-  floaters  = [];
-  groundX   = 0;
-  score     = 0;
-  frame     = 0;
-  running   = true;
-  dead      = false;
-  bestScore = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
+  floaters      = [];
+  groundX       = 0;
+  score         = 0;
+  frame         = 0;
+  running       = true;
+  dead          = false;
+  gameStartTime = Date.now();
+  bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   comboCount  = 0;
   lastPopMs   = 0;
   clearTimeout(comboTimer);
@@ -244,6 +276,7 @@ function initGame() {
   scoreEl.textContent = '0';
   setLevel(1);
   initStars();
+  initClouds();
   spawnPipe();
 }
 
@@ -273,6 +306,12 @@ function update() {
   for (const s of stars) {
     s.x -= s.speed;
     if (s.x < 0) s.x = cw;
+  }
+
+  // clouds parallax
+  for (const c of clouds) {
+    c.x -= c.speed;
+    if (c.x + c.w < -30) { c.x = cw + 30; c.y = rnd(18, ch * 0.60); }
   }
 
   // spawn pipes
@@ -318,15 +357,16 @@ function update() {
     e.x -= spd;
     e.y += e.vy;
     // bounce off top/bottom
-    if (e.y < ENEMY_R + 2)  { e.y = ENEMY_R + 2;  e.vy = Math.abs(e.vy); }
+    const minY = CHUTE_OFFSET + CHUTE_R + 4;
+    if (e.y < minY)  { e.y = minY;  e.vy = Math.abs(e.vy); }
     if (e.y > ch - GROUND_H - ENEMY_R - 2) { e.y = ch - GROUND_H - ENEMY_R - 2; e.vy = -Math.abs(e.vy); }
-    if (e.x + ENEMY_R < 0) { enemies.splice(i, 1); continue; }
+    if (e.x + CHUTE_R < 0) { enemies.splice(i, 1); continue; }
 
-    // pop check
-    const dx   = bird.x - e.x;
-    const dy   = bird.y - e.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < POP_DIST) {
+    // stomp check: bird falls onto parachute from above
+    const cx = e.x, cy = e.y - CHUTE_OFFSET;
+    const dcx = bird.x - cx, dcy = bird.y - cy;
+    const chuteDist = Math.sqrt(dcx * dcx + dcy * dcy);
+    if (chuteDist < BIRD_R + CHUTE_R && bird.vy > -2) {
       const now = Date.now();
       if (now - lastPopMs < COMBO_WINDOW) {
         comboCount = Math.min(comboCount + 1, 9);
@@ -338,10 +378,11 @@ function update() {
       score += pts;
       scoreEl.textContent = score;
       e.alive = false;
-      bird.vy = Math.min(bird.vy, -2.5);
-      spawnParticles(e.x, e.y, '#ff6b4a', 10);
+      bird.vy = -7;   // satisfying bounce off chute
+      spawnParticles(e.x, cy, '#ff6b4a', 12);
+      spawnParticles(e.x, cy, '#ffcf3d', 6);
       const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
-      floaters.push({ x: e.x, y: e.y - ENEMY_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
+      floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
 
       if (comboCount >= 2) {
         comboEl.textContent = `×${comboCount} COMBO  +${pts}`;
@@ -390,6 +431,9 @@ function draw() {
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+
+  // parallax clouds
+  for (const c of clouds) drawCloud(c.x, c.y, c.w, c.alpha);
 
   // pipes (bottom pipe stops at ground)
   for (const p of pipes) {
@@ -457,6 +501,18 @@ function drawGround() {
   }
 }
 
+function drawCloud(x, y, w, alpha) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(190,225,255,1)';
+  const r = w * 0.18;
+  ctx.beginPath(); ctx.arc(x,           y,           r * 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + r * 1.3, y + r * 0.2, r,       0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - r * 1.1, y + r * 0.3, r * 0.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + r * 0.5, y - r * 0.5, r * 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + r * 2.3, y + r * 0.4, r * 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
 function drawPipe(x, y, w, h, isBottom) {
   if (h <= 2) return;
 
@@ -489,33 +545,59 @@ function drawEnemy(x, y) {
   ctx.save();
   ctx.translate(x, y);
 
-  // two balloons
-  const balloonCols = ['#ff6b4a', '#ffcf3d'];
-  const bOffsets    = [[-7, -18], [7, -18]];
-  for (let i = 0; i < 2; i++) {
-    const [bx, by] = bOffsets[i];
-    // string
-    ctx.strokeStyle = 'rgba(255,255,255,.45)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(bx, by + 8); ctx.lineTo(0, 0); ctx.stroke();
-    // balloon
-    ctx.fillStyle = balloonCols[i];
+  const CR = CHUTE_R;        // 22 — dome radius
+  const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
+  const BR = ENEMY_R - 4;    // 10 — body radius
+
+  // STRINGS (dome rim → body top)
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1;
+  const rimPts = [[-CR * 0.85, -CO + CR * 0.05], [-CR * 0.35, -CO + CR * 0.6],
+                  [ CR * 0.35, -CO + CR * 0.6],  [ CR * 0.85, -CO + CR * 0.05]];
+  const bodyAnchor = [[-5, -BR], [-2, -BR], [2, -BR], [5, -BR]];
+  for (let i = 0; i < 4; i++) {
     ctx.beginPath();
-    ctx.arc(bx, by, 8, 0, Math.PI * 2);
-    ctx.fill();
-    // sheen
-    ctx.fillStyle = 'rgba(255,255,255,.25)';
-    ctx.beginPath();
-    ctx.arc(bx - 2, by - 3, 3, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(rimPts[i][0], rimPts[i][1]);
+    ctx.lineTo(bodyAnchor[i][0], bodyAnchor[i][1]);
+    ctx.stroke();
   }
 
-  // body (enemy fighter)
+  // PARACHUTE DOME
+  ctx.save();
+  ctx.translate(0, -CO);
+  const panels = ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];
+  for (let i = 0; i < 4; i++) {
+    const a1 = Math.PI + (i / 4) * Math.PI;
+    const a2 = Math.PI + ((i + 1) / 4) * Math.PI;
+    ctx.fillStyle = panels[i];
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, CR, a1, a2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // rib lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const a = Math.PI + (i / 4) * Math.PI;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
+  }
+  // dome outline
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
+  ctx.restore();
+
+  // BODY
   ctx.fillStyle = '#e84040';
-  ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-  // visor
+  ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
+  // dangling legs
+  ctx.strokeStyle = '#cc2020'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
 
   ctx.restore();
 }
@@ -525,46 +607,91 @@ function drawBird(x, y, rotDeg) {
   ctx.translate(x, y);
   ctx.rotate(rotDeg * Math.PI / 180);
 
-  // two balloons above the bird
-  const bCols  = ['#4dd9f5', '#b0f0ff'];
-  const bOff   = [[-5, -17], [5, -17]];
-  for (let i = 0; i < 2; i++) {
-    const [bx, by] = bOff[i];
-    ctx.strokeStyle = 'rgba(77,217,245,.55)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(bx, by + 7); ctx.lineTo(0, -2); ctx.stroke();
-    ctx.fillStyle = bCols[i];
-    ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.3)';
-    ctx.beginPath(); ctx.arc(bx - 2, by - 2, 2.5, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // bird body
-  ctx.fillStyle = '#4dd9f5';
-  ctx.beginPath(); ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2); ctx.fill();
-  // subtle shadow at bottom of body
-  ctx.fillStyle = 'rgba(0,0,0,.2)';
+  // BACKPACK (behind body — draw first)
+  ctx.fillStyle = '#7B4A1E';
+  ctx.fillRect(-BIRD_R - 5, -5, 8, 13);
+  ctx.fillStyle = '#5C3310';
+  ctx.fillRect(-BIRD_R - 3, 1, 4, 2);   // horizontal buckle strap
+  ctx.fillStyle = '#D4A017';
+  ctx.fillRect(-BIRD_R - 2, 0, 2, 3);   // buckle clasp (gold)
+  // diagonal shoulder strap across body
+  ctx.strokeStyle = 'rgba(92,51,16,0.55)';
+  ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(1, 3, BIRD_R - 2, 0, Math.PI * 2); ctx.fill();
+  ctx.moveTo(-BIRD_R, -3);
+  ctx.quadraticCurveTo(0, -6, 4, -1);
+  ctx.stroke();
 
-  // eye white
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(4, -3, 4, 0, Math.PI * 2); ctx.fill();
-  // pupil
-  ctx.fillStyle = '#021518';
-  ctx.beginPath(); ctx.arc(5, -3, 2, 0, Math.PI * 2); ctx.fill();
-  // eye sheen
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(4, -4, 1, 0, Math.PI * 2); ctx.fill();
-
-  // beak
-  ctx.fillStyle = '#f5a623';
+  // BODY (classic flappy — yellow oval)
+  const bg = ctx.createRadialGradient(-2, -2, 1, 0, 0, BIRD_R + 2);
+  bg.addColorStop(0, '#FFE566');
+  bg.addColorStop(1, '#F5A623');
+  ctx.fillStyle = bg;
   ctx.beginPath();
-  ctx.moveTo(BIRD_R - 2, -1);
-  ctx.lineTo(BIRD_R + 7, -2);
-  ctx.lineTo(BIRD_R + 7, 2);
+  ctx.ellipse(0, 1, BIRD_R + 1, BIRD_R, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // WING (flat nub on back)
+  ctx.fillStyle = '#E8980E';
+  ctx.beginPath();
+  ctx.ellipse(-5, 3, 6, 3, -0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  // BELLY (cream patch)
+  ctx.fillStyle = '#FFF8E0';
+  ctx.beginPath();
+  ctx.ellipse(3, 4, 5, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // EYE white base
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(5, -2, 5.5, 0, Math.PI * 2); ctx.fill();
+
+  // GOGGLE FRAME (leather — dark brown ring)
+  ctx.strokeStyle = '#2E1800';
+  ctx.lineWidth = 2.8;
+  ctx.beginPath(); ctx.arc(5, -2, 5.5, 0, Math.PI * 2); ctx.stroke();
+
+  // GOGGLE LENS (amber tint)
+  ctx.fillStyle = 'rgba(155, 95, 0, 0.40)';
+  ctx.beginPath(); ctx.arc(5, -2, 4.8, 0, Math.PI * 2); ctx.fill();
+
+  // GOGGLE STRAP (leather band over head to backpack side)
+  ctx.strokeStyle = '#2E1800';
+  ctx.lineWidth = 2.8; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(2.5, -7);
+  ctx.quadraticCurveTo(-1, -10, -BIRD_R, -3);
+  ctx.stroke();
+
+  // PUPIL
+  ctx.fillStyle = '#0a0500';
+  ctx.beginPath(); ctx.arc(6, -2, 2.2, 0, Math.PI * 2); ctx.fill();
+  // sheen
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(5, -3.5, 1.2, 0, Math.PI * 2); ctx.fill();
+
+  // BEAK — upper jaw
+  ctx.fillStyle = '#F5A000';
+  ctx.beginPath();
+  ctx.moveTo(BIRD_R - 1, -2);
+  ctx.lineTo(BIRD_R + 9, -1.5);
+  ctx.lineTo(BIRD_R + 9,  1);
+  ctx.lineTo(BIRD_R - 1,  0.5);
   ctx.closePath();
   ctx.fill();
+  // BEAK — lower jaw (darker)
+  ctx.fillStyle = '#C47800';
+  ctx.beginPath();
+  ctx.moveTo(BIRD_R - 1, 0.5);
+  ctx.lineTo(BIRD_R + 9, 1);
+  ctx.lineTo(BIRD_R + 9, 3);
+  ctx.lineTo(BIRD_R - 1, 2);
+  ctx.closePath();
+  ctx.fill();
+  // beak line
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(BIRD_R - 1, 0.5); ctx.lineTo(BIRD_R + 9, 0.8); ctx.stroke();
 
   ctx.restore();
 }
@@ -599,9 +726,9 @@ function showOverlay(finalScore) {
   ovEmoji.textContent = s > 0 ? '💥🎈' : '🎈💨';
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
-    : `Tap to flap through the gaps.<br>
-       Pop balloon fighters for <b>+25 pts</b>.<br>
-       Chain pops for a <b style="color:var(--ink)">×COMBO</b>.<br>
+    : `Tap to flap — gaps shrink every minute.<br>
+       Stomp <b>down</b> on enemy parachutes for <b>+25 pts</b>.<br>
+       Chain stomps for a <b style="color:var(--ink)">×COMBO</b>.<br>
        One pipe touch = game over.`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
