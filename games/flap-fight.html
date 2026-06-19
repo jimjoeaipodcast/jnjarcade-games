@@ -168,6 +168,7 @@ let score, frame, running, dead, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let birdInflate, inflateInvincible, nextSpecialSpawn;
+let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
 
@@ -261,7 +262,9 @@ function initGame() {
   bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
-  nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000)); // first one: 40-70s in
+  nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
+  popping           = false;
+  popRingR          = 0;
   pipes     = [];
   enemies   = [];
   particles = [];
@@ -286,13 +289,27 @@ function initGame() {
 
 // ─── flap ─────────────────────────────────────────────────────────────────────
 function flap() {
-  if (!running) return;
+  if (!running || popping) return;
   bird.vy = FLAP_VY;
 }
 
 // ─── update ──────────────────────────────────────────────────────────────────
 function update() {
   frame++;
+
+  // pop animation — keep particles/floaters/ring alive, skip everything else
+  if (popping) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.alpha -= 0.022;
+      if (p.alpha <= 0) particles.splice(i, 1);
+    }
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      const f = floaters[i]; f.y += f.vy; f.vy *= 0.96; f.alpha -= 0.018;
+      if (f.alpha <= 0) floaters.splice(i, 1);
+    }
+    popRingR += 4.5;
+    return;
+  }
 
   // bird physics
   bird.vy += GRAVITY;
@@ -504,12 +521,26 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 
-  // bird (drawn last — flashes while invincible after inflate hit)
-  const _inv = Date.now() < inflateInvincible;
-  if (!_inv || Math.floor(Date.now() / 75) % 2 === 0) {
-    if (_inv) ctx.globalAlpha = 0.35;
-    drawBird(bird.x, bird.y, bird.rot);
-    ctx.globalAlpha = 1;
+  // bird (or pop ring if dying)
+  if (popping) {
+    const ringAlpha = Math.max(0, 1 - popRingR / 130);
+    if (ringAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = ringAlpha;
+      ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(popRingX, popRingY, popRingR, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = ringAlpha * 0.6;
+      ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(popRingX, popRingY, popRingR * 0.65, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  } else {
+    const _inv = Date.now() < inflateInvincible;
+    if (!_inv || Math.floor(Date.now() / 75) % 2 === 0) {
+      if (_inv) ctx.globalAlpha = 0.35;
+      drawBird(bird.x, bird.y, bird.rot);
+      ctx.globalAlpha = 1;
+    }
   }
 }
 
@@ -771,11 +802,21 @@ function inflate() {
 
 // ─── balloon pop death ───────────────────────────────────────────────────────
 function balloonPop() {
-  spawnParticles(bird.x, bird.y, '#ff4400', 22);
-  spawnParticles(bird.x, bird.y, '#ffcc00', 16);
-  spawnParticles(bird.x, bird.y, '#ffffff', 10);
-  floaters.push({ x: bird.x, y: bird.y - 30, text: '💥 POP!', alpha: 1, vy: -2.2, color: '#ff4400' });
-  die();
+  popping  = true;
+  popRingR = 0;
+  popRingX = bird.x;
+  popRingY = bird.y;
+  // big radial burst — mixed colours, faster particles so they spread wide
+  const cols = ['#ff4400', '#ffcc00', '#ffffff', '#ff8800'];
+  for (let i = 0; i < 40; i++) {
+    const ang = (Math.PI * 2 * i) / 40 + rnd(-0.25, 0.25);
+    const spd = rnd(4, 11);
+    particles.push({ x: bird.x, y: bird.y,
+                     vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 2.5,
+                     alpha: 1, r: rnd(4, 10), color: cols[i % cols.length] });
+  }
+  floaters.push({ x: bird.x, y: bird.y - 20, text: '💥 POP!', alpha: 1, vy: -2.5, color: '#ff4400' });
+  setTimeout(() => die(), 950);
 }
 
 // ─── game over ─────────────────────────────────────────────────────────────────
