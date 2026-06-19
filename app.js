@@ -282,7 +282,11 @@ function flapAttract(ctx, w, h, t, world, s) {
       { x: w * 0.78, gap: h * 0.26, gapH: GAP_H },
       { x: w * 1.52, gap: h * 0.18, gapH: GAP_H },
     ];
-    s.enemy = { x: w * 0.54, y: h * 0.36, vy: 0.38, popped: false, popTimer: 0 };
+    s.enemies = [
+      { x: w * 0.54, y: h * 0.36, vy:  0.38, popped: false, popTimer: 0 },
+      { x: w * 0.86, y: h * 0.58, vy: -0.50, popped: false, popTimer: 0 },
+      { x: w * 1.18, y: h * 0.25, vy:  0.44, popped: false, popTimer: 0 },
+    ];
     s.particles = [];
     s.stars = Array.from({length: 22}, () => ({
       x: Math.random() * w, y: Math.random() * h * 0.80,
@@ -326,32 +330,27 @@ function flapAttract(ctx, w, h, t, world, s) {
     }
   }
 
-  // ── enemy ──
-  if (s.enemy.popped) {
-    s.enemy.popTimer -= dt;
-    if (s.enemy.popTimer <= 0) {
-      s.enemy.popped = false;
-      s.enemy.x = w + 14;
-      s.enemy.y = h * (0.25 + Math.random() * 0.35);
-    }
-  } else {
-    s.enemy.x -= SPEED * 0.55 * dt;
-    s.enemy.y += s.enemy.vy * (dt / 16);
-    if (s.enemy.y < h * 0.12 + 26 || s.enemy.y > h * 0.68) s.enemy.vy *= -1;
-    if (s.enemy.x + 14 < 0) { s.enemy.x = w + 14; s.enemy.y = h * (0.25 + Math.random() * 0.35); }
-
-    // stomp check: bird falling, circle vs parachute dome
-    const DOME_R = 11, DOME_CY = s.enemy.y - DOME_R - 1;
-    const dx = bx - s.enemy.x, dy = s.birdY - DOME_CY;
-    if (s.birdVy > 0 && Math.sqrt(dx*dx + dy*dy) < BR + DOME_R) {
-      s.birdVy = -4.8;
-      s.enemy.popped = true;
-      s.enemy.popTimer = 1600;
-      const cols = ['#ff6b4a','#ffcf3d','#ffffff','#ff3355'];
-      for (let i = 0; i < 10; i++) {
-        const ang = (i / 10) * Math.PI * 2;
-        const spd = 1.5 + Math.random() * 2.5;
-        s.particles.push({ x: s.enemy.x, y: DOME_CY, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 1, col: cols[i%cols.length] });
+  // ── enemies ──
+  for (const e of s.enemies) {
+    if (e.popped) {
+      e.popTimer -= dt;
+      if (e.popTimer <= 0) { e.popped = false; e.x = w + 14; e.y = h * (0.25 + Math.random() * 0.35); }
+    } else {
+      e.x -= SPEED * 0.55 * dt;
+      e.y += e.vy * (dt / 16);
+      if (e.y < h * 0.12 + 26 || e.y > h * 0.68) e.vy *= -1;
+      if (e.x + 14 < 0) { e.x = w + 14; e.y = h * (0.25 + Math.random() * 0.35); }
+      // stomp check
+      const DOME_R = 11, DOME_CY = e.y - DOME_R - 1;
+      const dx = bx - e.x, dy = s.birdY - DOME_CY;
+      if (s.birdVy > 0 && Math.sqrt(dx*dx + dy*dy) < BR + DOME_R) {
+        s.birdVy = -4.8;
+        e.popped = true; e.popTimer = 1600;
+        const cols = ['#ff6b4a','#ffcf3d','#ffffff','#ff3355'];
+        for (let i = 0; i < 10; i++) {
+          const ang = (i / 10) * Math.PI * 2, spd = 1.5 + Math.random() * 2.5;
+          s.particles.push({ x: e.x, y: DOME_CY, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 1, col: cols[i%4] });
+        }
       }
     }
   }
@@ -410,28 +409,30 @@ function flapAttract(ctx, w, h, t, world, s) {
   }
   ctx.globalAlpha = 1;
 
-  // parachute enemy (skip when popped)
-  if (!s.enemy.popped) {
-    const ex = s.enemy.x, ey = s.enemy.y, cr = 11;
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.moveTo(ex-cr*0.7, ey-cr-1); ctx.lineTo(ex-3, ey); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ex+cr*0.7, ey-cr-1); ctx.lineTo(ex+3, ey); ctx.stroke();
-    const panels = ['#ff6b4a','#ffcf3d','#ff6b4a','#ffcf3d'];
+  // parachute enemies (3, skip when popped) — dome doubled for cassette visibility
+  const panels = ['#ff6b4a','#ffcf3d','#ff6b4a','#ffcf3d'];
+  for (const e of s.enemies) {
+    if (e.popped) continue;
+    const ex = e.x, ey = e.y, cr = 22, es = 2;  // cr doubled (11→22), es=scale for fixed coords
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(ex-cr*0.7, ey-cr-1); ctx.lineTo(ex-3*es, ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex+cr*0.7, ey-cr-1); ctx.lineTo(ex+3*es, ey); ctx.stroke();
     for (let i = 0; i < 4; i++) {
       ctx.fillStyle = panels[i];
       ctx.beginPath(); ctx.moveTo(ex, ey-cr-1);
       ctx.arc(ex, ey-cr-1, cr, Math.PI+(i/4)*Math.PI, Math.PI+((i+1)/4)*Math.PI);
       ctx.closePath(); ctx.fill();
     }
-    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.arc(ex, ey-cr-1, cr, Math.PI, 0); ctx.closePath(); ctx.stroke();
-    ctx.fillStyle='#e84040'; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#e84040'; ctx.beginPath(); ctx.arc(ex, ey, 5*es, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(ex-2, ey-2, 2.5, 0, Math.PI*2); ctx.fill();
   }
 
-  // bird (mini — yellow, goggle, beak)
+  // bird — 2.4× scale so it reads clearly on the cassette
   const bx2 = bx, by2 = s.birdY;
   const rot = Math.min(Math.max(s.birdVy * 4, -25), 80) * Math.PI / 180;
-  ctx.save(); ctx.translate(bx2, by2); ctx.rotate(rot);
+  ctx.save(); ctx.translate(bx2, by2); ctx.rotate(rot); ctx.scale(2.4, 2.4);
   ctx.fillStyle = '#FFE566';
   ctx.beginPath(); ctx.ellipse(0, 0, BR+1, BR, 0, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#FFF8E0';
