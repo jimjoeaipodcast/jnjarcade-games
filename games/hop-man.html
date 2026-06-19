@@ -94,18 +94,6 @@
     transition:transform .06s, box-shadow .06s;
   }
   .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
-  /* ── Desktop landscape: rotate portrait canvas to fill the screen ── */
-  @media (orientation: landscape) {
-    body { overflow: hidden; }
-    .game-shell {
-      position: fixed;
-      width: 100vh;
-      height: 100vw;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-90deg);
-    }
-  }
 </style>
 </head>
 <body>
@@ -174,7 +162,8 @@ function seedBoard(){
 }
 
 // ── Mutable state ──────────────────────────────────────────────────────────
-let COLS=13, CELL=26, ROWS=15, W=0, H=0, portrait=false;
+let COLS=13, CELL=26, ROWS=22, VROWS=15, W=0, H=0, VH=0, portrait=false;
+let camY=0, targetCamY=0;
 let grid=[], lanes=[], cars=[], ghosts=[], cherries=[], walls=new Set();
 let player={c:0,r:0};
 let score=0, lives=3, level=1, dotsLeft=0;
@@ -235,19 +224,23 @@ function detectOrient(){ portrait = wrap.clientHeight > wrap.clientWidth * 1.05;
 function resize(){
   detectOrient();
   COLS = portrait ? 11 : 13;
-  const availW = wrap.clientWidth  - 12;     // 6px left + 6px right padding
+  const availW = wrap.clientWidth  - 12;
   const availH = wrap.clientHeight - 10;
-  CELL = Math.max(16, Math.floor(availW / COLS));
-  ROWS = Math.max(11, Math.floor(availH / CELL));
-  W = CELL*COLS; H = CELL*ROWS;
-  cv.width  = W; cv.height = H;
+  CELL  = Math.max(16, Math.floor(availW / COLS));
+  VROWS = Math.max(11, Math.floor(availH / CELL));   // visible rows (viewport)
+  ROWS  = Math.max(22, VROWS + 8);                   // total world rows (always scrollable)
+  W  = CELL * COLS;
+  VH = CELL * VROWS;   // canvas height = viewport
+  H  = CELL * ROWS;    // world height (used in draw for full-world background fills)
+  cv.width  = W; cv.height = VH;
   cv.style.width  = W+'px';
-  cv.style.height = H+'px';
+  cv.style.height = VH+'px';
 }
 
 // ── Build level state (resize FIRST, then build arrays sized to ROWS/COLS) ──
 function buildLevel(){
-  resize();   // sets COLS, CELL, ROWS to FILL the screen (Snake-matched playable area)
+  resize();   // sets COLS, CELL, ROWS, VH, H
+  camY = targetCamY = H - VH;   // start camera at bottom of world
   const P = levelPlan(level);
   freezeDur = P.freezeDur;
   timeLeft = P.timeSec; timeAcc = 0;
@@ -478,6 +471,7 @@ function die(drowned){
   // Respawn on a guaranteed SAFE row, stationary, with a ~3s invincibility window
   player.c      = COLS>>1;
   player.r      = safeSpawnRow();
+  camY = targetCamY = H - VH;   // snap camera back to bottom on respawn
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -506,8 +500,15 @@ function riverCellHasLog(row, col){
 }
 
 // ── Game tick (~30 fps) ──────────────────────────────────────────────────────
+function updateCamera(){
+  const targetY = player.r * CELL + CELL/2 - VH * 0.5;
+  targetCamY = Math.max(0, Math.min(H - VH, targetY));
+  camY += (targetCamY - camY) * 0.18;
+}
+
 function tick(){
   flowPh += 0.025;
+  updateCamera();
   if(freeze>0) freeze--;
   freezeEl.classList.toggle('on', freeze>0);        // accurate every frame (was sticking 'on')
   if(scare>0)   scare--;
@@ -933,7 +934,10 @@ function drawVehicle(x, y, w, h, kind, colour, frozen){
 
 // ── Draw ─────────────────────────────────────────────────────────────────────
 function draw(){
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0,0,W,VH);   // clear viewport only
+  ctx.save();
+  ctx.translate(0, -camY);   // enter world space — all drawing below is world-coord
+
   if(levelTheme==='water'){
     ctx.fillStyle='#061d30'; ctx.fillRect(0,0,W,H);
     ctx.strokeStyle='rgba(22,72,128,0.13)'; ctx.lineWidth=1;
@@ -1010,15 +1014,6 @@ function draw(){
       ctx.fillStyle='rgba(14,36,8,.48)'; ctx.fillRect(0, sy2, W, CELL);
     }
   }
-
-  // Pulsing perimeter glow
-  perimPh += 0.04;
-  const gAlpha = 0.25+0.55*(0.5+0.5*Math.sin(perimPh));
-  ctx.save();
-  ctx.strokeStyle='#ffcf3d'; ctx.shadowColor='rgba(255,207,61,.7)'; ctx.shadowBlur=18;
-  ctx.lineWidth=2; ctx.globalAlpha=gAlpha;
-  ctx.strokeRect(1,1,W-2,H-2);
-  ctx.restore();
 
   // Walls — hedges or trees (Osimo 2026-06-17)
   for(const k of walls){
@@ -1117,6 +1112,17 @@ function draw(){
     ctx.fillStyle = `rgba(160,220,255,${a})`;
     for(let i=0;i<6;i++){ const ang=i/6*TAU; ctx.beginPath(); ctx.arc(s.x+Math.cos(ang)*rad, s.y+Math.sin(ang)*rad, CELL*0.06, 0, TAU); ctx.fill(); }
   }
+
+  ctx.restore();   // back to canvas space
+
+  // Pulsing perimeter glow (canvas border, not world border)
+  perimPh += 0.04;
+  const gAlpha = 0.25+0.55*(0.5+0.5*Math.sin(perimPh));
+  ctx.save();
+  ctx.strokeStyle='#ffcf3d'; ctx.shadowColor='rgba(255,207,61,.7)'; ctx.shadowBlur=18;
+  ctx.lineWidth=2; ctx.globalAlpha=gAlpha;
+  ctx.strokeRect(1,1,W-2,VH-2);
+  ctx.restore();
 }
 
 // ── Main loop (~30 fps cap) ──────────────────────────────────────────────────
