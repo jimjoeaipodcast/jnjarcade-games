@@ -262,18 +262,23 @@ function buildLevel(){
   // Fly row = TOP_PAD; spawn row = ROWS-1-BOT_PAD. Lanes only in the game zone between them.
   lanes = [];
   levelTheme = P.theme || 'city';
-  let r2=TOP_PAD+1, laneBlockIdx=0;
+  let r2=TOP_PAD+1, laneBlockIdx=0, lastLaneType='river', lastLaneKind=P.kind;
   while(r2 <= ROWS-BOT_PAD-2){
     const nL = 1 + Math.floor(Math.random()*3);
     let laneType;
     if(!P.river)     laneType='road';
     else if(!P.kind) laneType='river';
     else             laneType=laneBlockIdx%2===0?'river':'road';
+    lastLaneType = laneType; lastLaneKind = P.kind;
     laneBlockIdx++;
     for(let k=0; k<nL && r2<=ROWS-2; k++, r2++)
       lanes.push({row:r2, type:laneType, kind:P.kind});
     r2++;
   }
+  // Guarantee a lane on the row directly above spawn (consistent start position every level)
+  const preSpawn = ROWS - BOT_PAD - 2;
+  if(preSpawn >= TOP_PAD+1 && !lanes.some(l=>l.row===preSpawn))
+    lanes.push({row:preSpawn, type:lastLaneType, kind:lastLaneKind});
   // No coins under road lanes — no dots on roads (Osimo 2026-06-17)
   for(const ln of lanes){
     if(ln.type==='road') for(let c=0;c<COLS;c++) grid[ln.row][c]=0;
