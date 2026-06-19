@@ -167,7 +167,8 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
-let birdInflate, lastSpecialMin;
+let birdInflate, inflateInvincible, deflateColorIdx;
+const DEFLATE_COLORS = ['#ff00cc', '#00e5ff', '#aaff00', '#ff8800', '#cc00ff'];
 let animId;
 let groundX = 0;
 
@@ -236,7 +237,14 @@ function spawnEnemy() {
   const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
-  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
+  // 6% chance: rare deflate parachute with rotating colour
+  if (birdInflate > 0 && Math.random() < 0.06) {
+    const col = DEFLATE_COLORS[deflateColorIdx % DEFLATE_COLORS.length];
+    deflateColorIdx++;
+    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, special: true, specialColor: col });
+  } else {
+    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
+  }
 }
 
 function spawnParticles(x, y, color, count) {
@@ -259,8 +267,9 @@ function setLevel(n) {
 function initGame() {
   resize();
   bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
-  birdInflate    = 0;
-  lastSpecialMin = 0;
+  birdInflate       = 0;
+  inflateInvincible = 0;
+  deflateColorIdx   = 0;
   pipes     = [];
   enemies   = [];
   particles = [];
@@ -299,8 +308,11 @@ function update() {
   // clamp rotation: nose-down on fall, nose-up on rise
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
 
-  // ceiling / floor (ground strip)
-  if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) { inflate(); return; }
+  // ceiling / floor — skip if invincible (1s after inflate hit)
+  if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) {
+    if (Date.now() >= inflateInvincible) inflate();
+    return;
+  }
 
   // scroll ground
   groundX = (groundX - pipeSpeed * 0.9) % (GROUND_H * 2);
@@ -347,7 +359,7 @@ function update() {
     const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
     if (inX) {
       const inGap = bird.y - bird.r >= p.gapY && bird.y + bird.r <= p.gapY + p.gapSize;
-      if (!inGap) { inflate(); return; }
+      if (!inGap) { if (Date.now() >= inflateInvincible) inflate(); return; }
     }
   }
 
@@ -376,14 +388,15 @@ function update() {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
         spawnParticles(e.x, cy, '#00ffcc', 14);
         spawnParticles(e.x, cy, '#7fff00', 7);
+        const sc = e.specialColor || '#00ffcc';
         if (birdInflate > 0) {
           birdInflate--;
           bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: '#00ffcc' });
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: sc });
         } else {
           score += 50;
           scoreEl.textContent = score;
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: '#00ffcc' });
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: sc });
         }
       } else {
         // normal stomp — combo + points
@@ -409,13 +422,6 @@ function update() {
         }
       }
     }
-  }
-
-  // special deflate parachute: one every 5 minutes
-  const specialMins = Math.floor((Date.now() - gameStartTime) / 300000);
-  if (specialMins > lastSpecialMin) {
-    lastSpecialMin = specialMins;
-    spawnSpecialEnemy();
   }
 
   // particles
@@ -469,7 +475,7 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
-    drawEnemy(e.x, e.y, e.special);
+    drawEnemy(e.x, e.y, e.special, e.specialColor);
   }
 
   // particles
@@ -496,8 +502,13 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 
-  // bird (drawn last — always on top)
-  drawBird(bird.x, bird.y, bird.rot);
+  // bird (drawn last — flashes while invincible after inflate hit)
+  const _inv = Date.now() < inflateInvincible;
+  if (!_inv || Math.floor(Date.now() / 75) % 2 === 0) {
+    if (_inv) ctx.globalAlpha = 0.35;
+    drawBird(bird.x, bird.y, bird.rot);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawGround() {
@@ -566,7 +577,7 @@ function drawPipe(x, y, w, h, isBottom) {
   ctx.fillRect(x + 3, y, 6, h);
 }
 
-function drawEnemy(x, y, special = false) {
+function drawEnemy(x, y, special = false, specialColor = '#00ffcc') {
   ctx.save();
   ctx.translate(x, y);
 
@@ -575,7 +586,7 @@ function drawEnemy(x, y, special = false) {
   const BR = ENEMY_R - 4;    // 10 — body radius
 
   // STRINGS (dome rim → body top)
-  ctx.strokeStyle = special ? 'rgba(0,255,200,0.7)' : 'rgba(255,255,255,0.55)';
+  ctx.strokeStyle = special ? specialColor + 'bb' : 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1;
   const rimPts = [[-CR * 0.85, -CO + CR * 0.05], [-CR * 0.35, -CO + CR * 0.6],
                   [ CR * 0.35, -CO + CR * 0.6],  [ CR * 0.85, -CO + CR * 0.05]];
@@ -591,7 +602,7 @@ function drawEnemy(x, y, special = false) {
   ctx.save();
   ctx.translate(0, -CO);
   const panels = special
-    ? ['#00ffcc', '#7fff00', '#00ffcc', '#7fff00']
+    ? [specialColor, '#ffffff', specialColor, '#ffffff']
     : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];
   for (let i = 0; i < 4; i++) {
     const a1 = Math.PI + (i / 4) * Math.PI;
@@ -611,12 +622,12 @@ function drawEnemy(x, y, special = false) {
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
   // dome outline
-  ctx.strokeStyle = special ? 'rgba(0,200,150,0.6)' : 'rgba(0,0,0,0.3)';
+  ctx.strokeStyle = special ? specialColor + '99' : 'rgba(0,0,0,0.3)';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
   // special: star label above dome
   if (special) {
-    ctx.fillStyle = '#00ffcc';
+    ctx.fillStyle = specialColor;
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('DEFLATE', 0, -CR - 5);
@@ -624,12 +635,12 @@ function drawEnemy(x, y, special = false) {
   ctx.restore();
 
   // BODY
-  ctx.fillStyle = special ? '#00bb88' : '#e84040';
+  ctx.fillStyle = special ? specialColor : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = special ? '#009966' : '#cc2020';
+  ctx.strokeStyle = special ? specialColor : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
@@ -749,26 +760,24 @@ function drawBird(x, y, rotDeg) {
 
 // ─── inflate (hit but not dead yet) ──────────────────────────────────────────
 function inflate() {
-  if (birdInflate >= 3) { die(); return; }
+  if (birdInflate >= 2) { balloonPop(); return; }  // 3rd hit = pop death
   birdInflate++;
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
   bird.vy = -5;
+  inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
   spawnParticles(bird.x, bird.y, '#ffffff', 8);
   spawnParticles(bird.x, bird.y, '#ffaa44', 6);
-  const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!', '💨 HUGE!!!'];
+  const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!'];
   floaters.push({ x: bird.x, y: bird.y - bird.r - 6, text: msgs[birdInflate], alpha: 1, vy: -1.8, color: '#ff9944' });
 }
 
-// ─── special deflate enemy ───────────────────────────────────────────────────
-function spawnSpecialEnemy() {
-  enemies.push({
-    x: cw + CHUTE_R,
-    y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
-    vy: rnd(0.35, 0.70) * (Math.random() < 0.5 ? 1 : -1),
-    alive: true,
-    fast: false,
-    special: true,
-  });
+// ─── balloon pop death ───────────────────────────────────────────────────────
+function balloonPop() {
+  spawnParticles(bird.x, bird.y, '#ff4400', 22);
+  spawnParticles(bird.x, bird.y, '#ffcc00', 16);
+  spawnParticles(bird.x, bird.y, '#ffffff', 10);
+  floaters.push({ x: bird.x, y: bird.y - 30, text: '💥 POP!', alpha: 1, vy: -2.2, color: '#ff4400' });
+  die();
 }
 
 // ─── game over ─────────────────────────────────────────────────────────────────
@@ -801,10 +810,10 @@ function showOverlay(finalScore) {
   ovEmoji.textContent = s > 0 ? '💥🎈' : '🎈💨';
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
-    : `Tap to flap — gaps shrink every minute.<br>
-       Hit a pipe → you <b>inflate</b> (3 hits max).<br>
+    : `Tap to flap — gaps shrink every level.<br>
+       Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).<br>
        Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.<br>
-       Every 5 min: a <b style="color:#00ffcc">teal DEFLATE parachute</b> appears — stomp it to shrink back!`;
+       Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
