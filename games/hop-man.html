@@ -320,7 +320,7 @@ function buildLevel(){
     if(ln.type==='river'){
       // Logs: P.logsPer per lane; ~30% spawn a touching PAIR; ≥1 leaf-log per river (Osimo).
       // Leaf logs are 3 cells wide (vs 1.5 for plain logs) — Osimo 2026-06-19.
-      const LEN=1.5, LEAF_LEN=3, n=P.logsPer; let x=Math.random()*2; const laneLogs=[];
+      const LEN=2.2, LEAF_LEN=3, n=P.logsPer; let x=Math.random()*2; const laneLogs=[];
       for(let i=0;i<n;i++){
         const hasLeaf=Math.random()<0.05;
         const lg={row:ln.row, type:'river', x, sp:base, len:hasLeaf?LEAF_LEN:LEN, leaf:hasLeaf};
