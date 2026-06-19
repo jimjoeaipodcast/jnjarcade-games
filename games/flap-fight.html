@@ -167,7 +167,7 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
-let birdInflate, inflateInvincible;
+let birdInflate, inflateInvincible, nextSpecialSpawn;
 let animId;
 let groundX = 0;
 
@@ -236,15 +236,7 @@ function spawnEnemy() {
   const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
-  // 6% chance: rare deflate parachute — spawns top or bottom strip (hard to reach)
-  if (birdInflate > 0 && Math.random() < 0.06) {
-    const hardY = Math.random() < 0.5
-      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)        // top strip
-      : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4); // bottom strip
-    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1), alive: true, phase: Math.random() * Math.PI * 2, fast, special: true });
-  } else {
-    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
-  }
+  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
 }
 
 function spawnParticles(x, y, color, count) {
@@ -269,6 +261,7 @@ function initGame() {
   bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
+  nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000)); // first one: 40-70s in
   pipes     = [];
   enemies   = [];
   particles = [];
@@ -421,6 +414,16 @@ function update() {
         }
       }
     }
+  }
+
+  // rare deflate parachute: once per ~1 min at a random moment, only when inflated
+  if (birdInflate > 0 && Date.now() >= nextSpecialSpawn) {
+    nextSpecialSpawn = Date.now() + Math.round(rnd(45000, 75000));
+    const hardY = Math.random() < 0.5
+      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
+      : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
+    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, special: true });
   }
 
   // particles
