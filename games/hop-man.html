@@ -229,7 +229,7 @@ function resize(){
   const availH = wrap.clientHeight - 10;
   CELL  = Math.max(16, Math.floor(availW / COLS));
   VROWS = Math.max(11, Math.floor(availH / CELL));   // visible rows (viewport)
-  const _PAD = Math.max(3, Math.round(VROWS / 5));   // 1/5 viewport worth of sky + grass padding
+  const _PAD = portrait ? 0 : Math.max(3, Math.round(VROWS / 5));
   TOP_PAD = _PAD; BOT_PAD = _PAD;
   ROWS  = Math.max(22, VROWS + 8 + TOP_PAD + BOT_PAD); // extra rows for camera breathing room
   W  = CELL * COLS;
