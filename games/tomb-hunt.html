@@ -113,7 +113,7 @@ const GAME_ID    = 'tomb-hunt';
 const GAME_TITLE = 'TOMB HUNT';
 const ACCENT     = '#d4a017';
 const CELL       = 18;
-const GROUND_H   = 32;
+const GROUND_H   = 52;
 const GRAVITY    = 0.52;
 const JUMP_VY    = -13.5;
 const PLAYER_W   = 20;
@@ -146,14 +146,10 @@ let level, speed, jumpsLeft, sliding, slideTimer;
 let hitTime, lastFireTime, shootCooldown;
 let playerX, playerY, playerVY;
 let swinging, vineX, vineY0, vineLen, vineAngle, vineAV;
-let terrain;          // 0=jungle 1=temple, alternates per section
-let sectionX;         // world-x of current terrain section start
-let worldX;           // total distance scrolled
-let bgOffset;
+let worldX;
 
-let boulders, spikes, guards, darts, pitCells;
+let boulders, spikes, guards, darts;
 let vines, artifacts, gems, bullets, particles, floaters;
-let clouds, bgTrees;
 
 let touchStartY, touchStartX, touchStartTime;
 
@@ -317,7 +313,7 @@ function startGame() {
   ov.classList.add('hidden');
   score = 0; frame = 0; level = 1; speed = BASE_SPEED; lives = 3; hitTime = -9999;
   lastFireTime = 0; shootCooldown = FIRE_INTERVAL;
-  worldX = 0; bgOffset = 0; terrain = 0; sectionX = 0;
+  worldX = 0;
   scoreEl.textContent = 0;
   lvlEl.textContent = 'LEVEL 1';
   updateHearts();
@@ -328,35 +324,24 @@ function startGame() {
   swinging = false;
   boulders = []; spikes = []; guards = []; darts = []; vines = [];
   artifacts = []; gems = []; bullets = []; particles = []; floaters = [];
-  bgTrees = initBgTrees(); clouds = initClouds();
+  // pre-populate so screen is never empty at start
+  guards.push({ x: cw * 0.72, y: floorY - PLAYER_H, w: 22, h: PLAYER_H, alive: true, shootTimer: 400 });
+  guards.push({ x: cw * 1.30, y: floorY - PLAYER_H, w: 22, h: PLAYER_H, alive: true, shootTimer: 0 });
+  boulders.push({ x: cw * 0.90, y: floorY - 22, r: 22, angle: 0, alive: true });
+  artifacts.push({ x: cw * 0.55, y: floorY - 65, alive: true, bob: 0 });
   scheduleNext();
   running = true; dead = false; waiting = false;
   if (animId) cancelAnimationFrame(animId);
   animId = requestAnimationFrame(tick);
 }
 
-function initBgTrees() {
-  const trees = [];
-  for (let i = 0; i < 14; i++) {
-    trees.push({ x: rand(0, cw), layer: Math.random() < 0.5 ? 0 : 1,
-      h: rand(60, 130), w: rand(16, 32), col: rng(['#1a3d0f','#15300b','#223d10','#0e2a08']) });
-  }
-  return trees;
-}
-function initClouds() {
-  const cl = [];
-  for (let i = 0; i < 8; i++) {
-    cl.push({ x: rand(0, cw), y: rand(10, ch * 0.25), r: rand(18, 40), spd: rand(0.2, 0.5) });
-  }
-  return cl;
-}
+
 
 // ─── main tick ────────────────────────────────────────────────────────────────
 function tick() {
   if (!running) return;
   frame++;
   worldX += speed;
-  bgOffset += speed * 0.18;
 
   // level up every 400 world-units
   const newLevel = 1 + Math.floor(worldX / 400);
@@ -367,9 +352,6 @@ function tick() {
     lvlEl.textContent = 'LEVEL ' + level;
     spawnParticles(cw / 2, ch / 2, '#ffd700', 12, 'gold');
   }
-
-  // terrain section switch every ~650px
-  if (worldX - sectionX > 650) { terrain = 1 - terrain; sectionX = worldX; }
 
   // spawn obstacles
   if (frame >= nextObstacle) {
@@ -433,12 +415,6 @@ function updateEntities() {
   const now = Date.now();
   const invincible = now - hitTime < INVINCIBLE_MS;
 
-  // background clouds
-  for (const c of clouds) {
-    c.x -= c.spd;
-    if (c.x + c.r < 0) { c.x = cw + c.r; c.y = rand(10, ch * 0.25); }
-  }
-
   // boulders
   for (const b of boulders) {
     b.x -= speed * 1.1;
@@ -476,7 +452,7 @@ function updateEntities() {
     // hit guard
     for (const g of guards) {
       if (!g.alive) continue;
-      if (b.x > g.x - 8 && b.x < g.x + g.w + 8 && b.y > g.y && b.y < g.y + g.h) {
+      if (b.x > g.x - 16 && b.x < g.x + g.w + 16 && b.y > floorY - 72 && b.y < floorY) {
         g.alive = false; b.alive = false;
         spawnParticles(g.x, g.y + g.h * 0.5, '#ff6b35', 6, 'hit');
         addScore(25, g.x, g.y);
@@ -654,96 +630,86 @@ function drawAll() {
 function draw() { drawAll(); }
 
 function drawBg() {
-  // Sky gradient (jungle=deep green-blue, temple=warm amber-dark)
-  const jungle = terrain === 0;
-  const skyTop    = jungle ? '#060f14' : '#100800';
-  const skyBottom = jungle ? '#0d1f10' : '#180e02';
-  const gr = ctx.createLinearGradient(0, 0, 0, floorY);
-  gr.addColorStop(0, skyTop); gr.addColorStop(1, skyBottom);
-  ctx.fillStyle = gr; ctx.fillRect(0, 0, cw, floorY);
+  // ── Sky — single solid warm dark, no movement ──────────────────────────
+  ctx.fillStyle = '#0b0802';
+  ctx.fillRect(0, 0, cw, floorY);
 
-  // Parallax clouds/mist
-  ctx.save();
-  for (const c of clouds) {
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = jungle ? '#4a8c3f' : '#8c6a20';
-    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(c.x + c.r * 0.6, c.y - c.r * 0.2, c.r * 0.7, 0, Math.PI * 2); ctx.fill();
+  // Amber horizon glow (static)
+  const hg = ctx.createLinearGradient(0, floorY * 0.5, 0, floorY);
+  hg.addColorStop(0, 'rgba(0,0,0,0)');
+  hg.addColorStop(1, 'rgba(130,75,0,0.20)');
+  ctx.fillStyle = hg; ctx.fillRect(0, 0, cw, floorY);
+
+  // ── Jungle canopy silhouette — slow parallax (10% world) ───────────────
+  const tileW = 180;
+  const treeScroll = worldX * 0.10 % tileW;
+  ctx.fillStyle = '#0c1e08';
+  for (let tx = -treeScroll; tx < cw + tileW; tx += tileW) {
+    const base = floorY;
+    const th = ch * 0.30;
+    ctx.beginPath(); ctx.arc(tx + 18,  base - th,        32, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx + 68,  base - th - 18,   40, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx + 118, base - th + 6,    28, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx + 152, base - th - 8,    22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(tx + 14, base - th + 18, 8, th - 18);
+    ctx.fillRect(tx + 64, base - th + 18, 10, th - 18);
+    ctx.fillRect(tx + 114, base - th + 20, 7, th - 20);
+    ctx.fillRect(tx + 148, base - th + 14, 6, th - 14);
   }
-  ctx.restore();
 
-  // Background trees (slow parallax)
-  const bgX = -(bgOffset * 0.25) % (cw + 60);
-  for (let pass = 0; pass < 2; pass++) {
-    for (const t of bgTrees) {
-      if (t.layer !== pass) continue;
-      const tx = ((t.x - bgOffset * (pass === 0 ? 0.12 : 0.22)) % (cw + 80) + cw + 80) % (cw + 80);
-      ctx.globalAlpha = pass === 0 ? 0.35 : 0.55;
-      ctx.fillStyle = t.col;
-      // trunk
-      ctx.fillRect(tx - 4, floorY - t.h, 8, t.h);
-      // canopy
-      ctx.beginPath();
-      ctx.arc(tx, floorY - t.h, t.w * 0.6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath();
-      ctx.arc(tx - t.w * 0.3, floorY - t.h + 12, t.w * 0.45, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath();
-      ctx.arc(tx + t.w * 0.3, floorY - t.h + 14, t.w * 0.42, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
-
-  // Temple pillars in temple mode
-  if (terrain === 1) {
-    const pillarSpacing = 160;
-    const pillarOffset  = (bgOffset * 0.4) % pillarSpacing;
+  // ── Temple pillars — medium parallax (24% world) ───────────────────────
+  const pillarW = 200;
+  const pillarScroll = worldX * 0.24 % pillarW;
+  const pillarH = Math.min(floorY * 0.68, 200);
+  for (let px = -(pillarScroll % pillarW); px < cw + pillarW; px += pillarW) {
+    // pillar shaft
+    ctx.fillStyle = '#1c1006';
+    ctx.fillRect(px - 16, floorY - pillarH, 32, pillarH);
+    // channel (centre shadow)
+    ctx.fillStyle = '#0d0803';
+    ctx.fillRect(px - 6, floorY - pillarH + 12, 12, pillarH - 12);
+    // capital (top block)
+    ctx.fillStyle = '#281808';
+    ctx.fillRect(px - 24, floorY - pillarH - 16, 48, 18);
+    ctx.fillRect(px - 18, floorY - pillarH - 24, 36, 10);
+    // torch flame
+    const flicker = 0.7 + 0.3 * Math.sin(frame * 0.13 + px * 0.05);
+    const tY = floorY - pillarH - 34;
     ctx.save();
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = '#6b5320';
-    for (let px = -pillarOffset; px < cw + pillarSpacing; px += pillarSpacing) {
-      const pw = 22, ph = Math.min(ch * 0.55, 200);
-      ctx.fillRect(px - pw / 2, floorY - ph, pw, ph);
-      ctx.fillRect(px - pw * 0.7, floorY - ph - 12, pw * 1.4, 14); // capital
-    }
+    ctx.globalAlpha = 0.65 * flicker;
+    const tg = ctx.createRadialGradient(px, tY, 1, px, tY, 26);
+    tg.addColorStop(0, '#ffdd55');
+    tg.addColorStop(0.45, 'rgba(255,100,10,0.5)');
+    tg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = tg;
+    ctx.beginPath(); ctx.arc(px, tY, 26, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-  }
-
-  // Torch flicker in temple mode
-  if (terrain === 1) {
-    const torchSpacing = 240;
-    const torchOffset  = (bgOffset * 0.45) % torchSpacing;
-    for (let px = -torchOffset + 60; px < cw + torchSpacing; px += torchSpacing) {
-      const flicker = 0.7 + 0.3 * Math.sin(frame * 0.18 + px);
-      const tY = floorY - 80;
-      ctx.save();
-      ctx.globalAlpha = 0.55 * flicker;
-      const tg = ctx.createRadialGradient(px, tY, 2, px, tY, 30);
-      tg.addColorStop(0, '#ffcc44'); tg.addColorStop(1, 'rgba(255,100,0,0)');
-      ctx.fillStyle = tg;
-      ctx.beginPath(); ctx.arc(px, tY, 30, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
   }
 }
 
 function drawGround() {
-  const jungle = terrain === 0;
-  // Ground fill
-  ctx.fillStyle = jungle ? '#0a1a07' : '#1a1000';
+  // Underground base
+  ctx.fillStyle = '#060f04';
   ctx.fillRect(0, floorY, cw, GROUND_H);
 
-  // Ground texture line
-  ctx.strokeStyle = jungle ? '#1d4a12' : '#3d2800';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(cw, floorY); ctx.stroke();
+  // Earth layer (top 55%)
+  ctx.fillStyle = '#0e2009';
+  ctx.fillRect(0, floorY, cw, Math.round(GROUND_H * 0.55));
 
-  // Ground dots / stones
-  const dotSpacing = 28;
-  const dotOffset  = (bgOffset * 0.9) % dotSpacing;
-  ctx.fillStyle = jungle ? '#162a10' : '#2a1800';
-  for (let x = -dotOffset; x < cw; x += dotSpacing) {
-    ctx.fillRect(x, floorY + 4, 10, 4);
+  // Surface top — bright grass edge (3 layers for depth)
+  ctx.fillStyle = '#28601a'; ctx.fillRect(0, floorY,     cw, 4);
+  ctx.fillStyle = '#3a8022'; ctx.fillRect(0, floorY,     cw, 2);
+  ctx.fillStyle = '#55aa30'; ctx.fillRect(0, floorY,     cw, 1);
+
+  // Stone tile seams (scroll with world)
+  const tileW = 44;
+  const seam = worldX % tileW;
+  ctx.fillStyle = '#081404';
+  for (let tx = -seam % tileW; tx < cw + tileW; tx += tileW) {
+    ctx.fillRect(tx, floorY + 5, 2, Math.round(GROUND_H * 0.5));
   }
+  // horizontal mid-seam
+  ctx.fillRect(0, floorY + Math.round(GROUND_H * 0.50), cw, 1);
 }
 
 function drawVines() {
@@ -830,34 +796,93 @@ function drawPitSpikes() {
 
 function drawGuards() {
   for (const g of guards) {
-    const t = frame * 0.12;
+    const wa = frame * 0.13;
     ctx.save();
-    ctx.translate(g.x + g.w / 2, g.y + g.h);
+    // translate to feet (ground level)
+    ctx.translate(g.x + g.w / 2, floorY);
+
     // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // legs (walk anim)
-    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-4, -8); ctx.lineTo(-4 + Math.sin(t) * 6, -8 + 8 + Math.cos(t) * 4); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(4, -8); ctx.lineTo(4 - Math.sin(t) * 6, -8 + 8 - Math.cos(t) * 4); ctx.stroke();
-    // body
-    ctx.fillStyle = '#4a3020';
-    ctx.fillRect(-7, -g.h + 10, 14, g.h - 18);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 18, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // legs (walk anim) — chunky
+    ctx.strokeStyle = '#5a3818'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(-6 + Math.sin(wa) * 9, -14 + 14 + Math.cos(wa) * 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -14); ctx.lineTo(6 - Math.sin(wa) * 9, -14 + 14 - Math.cos(wa) * 5); ctx.stroke();
+    // boots
+    ctx.fillStyle = '#1e0e04';
+    ctx.fillRect(-12 + Math.sin(wa) * 9, -2, 14, 7);
+    ctx.fillRect(4 - Math.sin(wa) * 9, -2, 14, 7);
+
+    // body — chunky armoured torso
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(-12, -46, 24, 32);
+    // armour plate highlight
+    ctx.fillStyle = '#5a3820';
+    ctx.fillRect(-10, -44, 20, 10);
+    // belt
+    ctx.fillStyle = '#281408';
+    ctx.fillRect(-12, -24, 24, 6);
+    // buckle
+    ctx.fillStyle = '#c8a020';
+    ctx.fillRect(-4, -24, 8, 6);
+
+    // shoulder pads
+    ctx.fillStyle = '#281408';
+    ctx.fillRect(-18, -46, 10, 10);
+    ctx.fillRect(8, -46, 10, 10);
+    // pad rivets
+    ctx.fillStyle = '#5a3820';
+    ctx.fillRect(-15, -43, 4, 4); ctx.fillRect(11, -43, 4, 4);
+
+    // neck
+    ctx.fillStyle = '#7a5830';
+    ctx.fillRect(-5, -52, 10, 8);
+
     // head
     ctx.fillStyle = '#7a5830';
-    ctx.beginPath(); ctx.arc(0, -g.h + 8, 9, 0, Math.PI * 2); ctx.fill();
-    // helmet
-    ctx.fillStyle = '#3a2810';
-    ctx.beginPath(); ctx.arc(0, -g.h + 6, 9.5, Math.PI, 0); ctx.fill();
-    // eyes (red glow)
-    ctx.fillStyle = '#ff3333';
-    ctx.beginPath(); ctx.arc(-3, -g.h + 9, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(3, -g.h + 9, 2, 0, Math.PI * 2); ctx.fill();
-    // gun arm (pointing left toward player)
-    ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-7, -g.h * 0.65); ctx.lineTo(-16, -g.h * 0.65); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -58, 13, 0, Math.PI * 2); ctx.fill();
+
+    // helmet — full combat
+    ctx.fillStyle = '#1e1008';
+    ctx.beginPath(); ctx.arc(0, -60, 14, Math.PI, 0); ctx.fill();
+    ctx.fillRect(-14, -66, 28, 8);
+    // helmet brim
+    ctx.fillRect(-17, -62, 34, 5);
+
+    // visor slit (glowing red)
+    ctx.fillStyle = '#cc1111';
+    ctx.fillRect(-9, -62, 18, 5);
+    // eye glow dots
+    ctx.fillStyle = '#ff4444';
+    ctx.shadowColor = '#ff2222'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(-5, -60, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -60, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // gun arm (left, toward player)
+    ctx.strokeStyle = '#483020'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-12, -38); ctx.lineTo(-28, -36); ctx.stroke();
+    // gun body
+    ctx.fillStyle = '#181818';
+    ctx.fillRect(-40, -40, 18, 9);
+    // gun handle
+    ctx.fillRect(-30, -38, 8, 12);
+    // barrel
+    ctx.fillStyle = '#0e0e0e';
+    ctx.fillRect(-44, -38, 8, 5);
+    // muzzle flash (occasional)
+    if (g.shootTimer < 80) {
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - g.shootTimer / 80);
+      ctx.fillStyle = '#ffcc00'; ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(-50, -36, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // right arm (hanging)
+    ctx.strokeStyle = '#483020'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(12, -38); ctx.lineTo(16, -22); ctx.stroke();
+
     ctx.restore();
   }
 }
