@@ -80,5 +80,125 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js?v=17"></script>
+  <script>
+  /* ── Pac-Man eats the bulb-row dots after 1:11 idle ── */
+  (function(){
+    const IDLE_MS  = 71000;   // 1 min 11 sec
+    const DOT_R    = 4;
+    const DOT_GAP  = 20;
+    const PAC_R    = 10;
+    const PAC_SPD  = 1.8;     // px per frame
+
+    let cv = null, ctx2 = null, raf = null, timer = null;
+    let dots = [], pacX = 0, mouthAngle = 0, mouthDir = 1;
+    let targetRow = null;     // the second .bulb-row (below JnJ)
+
+    function getRow(){
+      const rows = document.querySelectorAll('.bulb-row');
+      return rows[1] || rows[0] || null;
+    }
+
+    function buildCanvas(row){
+      if(cv) cv.remove();
+      const rect = row.getBoundingClientRect();
+      cv = document.createElement('canvas');
+      cv.style.cssText = [
+        'position:fixed',
+        'pointer-events:none',
+        'z-index:9999',
+        'left:' + rect.left + 'px',
+        'top:'  + rect.top  + 'px',
+      ].join(';');
+      cv.width  = rect.width;
+      cv.height = Math.max(rect.height, PAC_R * 2 + 4);
+      ctx2 = cv.getContext('2d');
+      document.body.appendChild(cv);
+      return cv;
+    }
+
+    function buildDots(width){
+      dots = [];
+      const y = cv.height / 2;
+      for(let x = DOT_GAP; x < width - DOT_GAP; x += DOT_GAP) dots.push({x, y, alive: true});
+    }
+
+    function drawFrame(){
+      const w = cv.width, h = cv.height;
+      ctx2.clearRect(0, 0, w, h);
+
+      // dots
+      for(const d of dots){
+        if(!d.alive) continue;
+        ctx2.fillStyle = '#ffd23d';
+        ctx2.shadowColor = 'rgba(255,210,61,.85)';
+        ctx2.shadowBlur  = 6;
+        ctx2.beginPath();
+        ctx2.arc(d.x, d.y, DOT_R, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.shadowBlur = 0;
+      }
+
+      // pac-man mouth
+      mouthAngle += 0.18 * mouthDir;
+      if(mouthAngle >  0.38) mouthDir = -1;
+      if(mouthAngle <  0.04) mouthDir =  1;
+
+      const cy = cv.height / 2;
+      ctx2.fillStyle = '#ffd23d';
+      ctx2.shadowColor = 'rgba(255,210,61,.6)';
+      ctx2.shadowBlur  = 10;
+      ctx2.beginPath();
+      ctx2.moveTo(pacX, cy);
+      ctx2.arc(pacX, cy, PAC_R, mouthAngle, Math.PI * 2 - mouthAngle);
+      ctx2.closePath();
+      ctx2.fill();
+      ctx2.shadowBlur = 0;
+
+      // eat dots
+      for(const d of dots){
+        if(!d.alive) continue;
+        if(Math.abs(pacX - d.x) < PAC_R + DOT_R * 0.5) d.alive = false;
+      }
+
+      pacX += PAC_SPD;
+      const allGone = dots.every(d => !d.alive);
+      if(allGone || pacX > w + PAC_R + 4) {
+        endEgg();
+        return;
+      }
+      raf = requestAnimationFrame(drawFrame);
+    }
+
+    function runEgg(){
+      targetRow = getRow();
+      if(!targetRow) { scheduleNext(); return; }
+      buildCanvas(targetRow);
+      targetRow.style.opacity = '0';
+      buildDots(cv.width);
+      pacX = -PAC_R - 4;
+      mouthAngle = 0.28; mouthDir = -1;
+      raf = requestAnimationFrame(drawFrame);
+    }
+
+    function endEgg(){
+      if(raf) cancelAnimationFrame(raf);
+      if(cv) { cv.remove(); cv = null; ctx2 = null; }
+      if(targetRow) { targetRow.style.opacity = ''; targetRow = null; }
+      scheduleNext();
+    }
+
+    function scheduleNext(){
+      clearTimeout(timer);
+      timer = setTimeout(runEgg, IDLE_MS);
+    }
+
+    // Reset on any interaction
+    ['mousemove','keydown','touchstart','click','scroll'].forEach(ev =>
+      document.addEventListener(ev, scheduleNext, {passive: true})
+    );
+
+    scheduleNext();
+  })();
+  </script>
 </body>
 </html>
