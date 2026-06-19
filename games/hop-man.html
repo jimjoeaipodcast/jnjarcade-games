@@ -240,7 +240,6 @@ function resize(){
 // ── Build level state (resize FIRST, then build arrays sized to ROWS/COLS) ──
 function buildLevel(){
   resize();   // sets COLS, CELL, ROWS, VH, H
-  camY = targetCamY = H - VH;   // start camera at bottom of world
   const P = levelPlan(level);
   freezeDur = P.freezeDur;
   timeLeft = P.timeSec; timeAcc = 0;
@@ -369,6 +368,9 @@ function buildLevel(){
   dir = {dc:0,dr:0}; moveAcc = 0; splashes = [];
   deathCooldown = 0;
   collectAt(player.c, player.r);   // auto-collect the pellet under the spawn point (Osimo 2026-06-16)
+  // Init camera: frog at 75% down viewport so level ahead is visible above
+  const spawnPy = player.r * CELL + CELL/2;
+  camY = targetCamY = Math.max(0, Math.min(H - VH, spawnPy - VH * 0.75));
 }
 
 // ── HUD ─────────────────────────────────────────────────────────────────────
@@ -471,7 +473,8 @@ function die(drowned){
   // Respawn on a guaranteed SAFE row, stationary, with a ~3s invincibility window
   player.c      = COLS>>1;
   player.r      = safeSpawnRow();
-  camY = targetCamY = H - VH;   // snap camera back to bottom on respawn
+  const rpy = player.r * CELL + CELL/2;
+  camY = targetCamY = Math.max(0, Math.min(H - VH, rpy - VH * 0.75));
   dir = {dc:0,dr:0}; moveAcc = 0;
   deathCooldown = 90;
   collectAt(player.c, player.r);   // auto-collect spawn pellet on respawn (Osimo 2026-06-16)
@@ -930,7 +933,7 @@ function draw(){
   // Camera: runs every frame (not gated by running) so frog is always tracked
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
-    targetCamY = Math.max(0, Math.min(H - VH, py - VH * 0.5));
+    targetCamY = Math.max(0, Math.min(H - VH, py - VH * 0.75));
     camY += (targetCamY - camY) * 0.30;
     // Hard clamp — frog can never exit the visible canvas (1 CELL margin)
     camY = Math.min(camY, py - CELL);
