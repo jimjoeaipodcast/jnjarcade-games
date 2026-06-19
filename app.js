@@ -269,7 +269,7 @@ function flapAttract(ctx, w, h, t, world, s) {
   const PW     = Math.max(12, w * 0.14);
   const BR     = 7;    // bird radius
   const GAP_H  = h * 0.42;  // wide gap — AI can navigate it reliably
-  const SPEED  = w * 0.000880;
+  const SPEED  = w * 0.000704;
   const GRAV   = 0.26;
   const FLAP   = -5.2;
 
@@ -282,7 +282,8 @@ function flapAttract(ctx, w, h, t, world, s) {
       { x: w * 0.78, gap: h * 0.26, gapH: GAP_H },
       { x: w * 1.52, gap: h * 0.18, gapH: GAP_H },
     ];
-    s.enemy = { x: w * 0.54, y: h * 0.36, vy: 0.38 };
+    s.enemy = { x: w * 0.54, y: h * 0.36, vy: 0.38, popped: false, popTimer: 0 };
+    s.particles = [];
     s.stars = Array.from({length: 22}, () => ({
       x: Math.random() * w, y: Math.random() * h * 0.80,
       r: Math.random() * 1.4 + 0.4, a: Math.random() * 0.45 + 0.15,
@@ -326,10 +327,40 @@ function flapAttract(ctx, w, h, t, world, s) {
   }
 
   // ── enemy ──
-  s.enemy.x -= SPEED * 0.55 * dt;
-  s.enemy.y += s.enemy.vy * (dt / 16);
-  if (s.enemy.y < h * 0.12 + 26 || s.enemy.y > h * 0.68) s.enemy.vy *= -1;
-  if (s.enemy.x + 14 < 0) { s.enemy.x = w + 14; s.enemy.y = h * 0.38; }
+  if (s.enemy.popped) {
+    s.enemy.popTimer -= dt;
+    if (s.enemy.popTimer <= 0) {
+      s.enemy.popped = false;
+      s.enemy.x = w + 14;
+      s.enemy.y = h * (0.25 + Math.random() * 0.35);
+    }
+  } else {
+    s.enemy.x -= SPEED * 0.55 * dt;
+    s.enemy.y += s.enemy.vy * (dt / 16);
+    if (s.enemy.y < h * 0.12 + 26 || s.enemy.y > h * 0.68) s.enemy.vy *= -1;
+    if (s.enemy.x + 14 < 0) { s.enemy.x = w + 14; s.enemy.y = h * (0.25 + Math.random() * 0.35); }
+
+    // stomp check: bird falling, circle vs parachute dome
+    const DOME_R = 11, DOME_CY = s.enemy.y - DOME_R - 1;
+    const dx = bx - s.enemy.x, dy = s.birdY - DOME_CY;
+    if (s.birdVy > 0 && Math.sqrt(dx*dx + dy*dy) < BR + DOME_R) {
+      s.birdVy = -4.8;
+      s.enemy.popped = true;
+      s.enemy.popTimer = 1600;
+      const cols = ['#ff6b4a','#ffcf3d','#ffffff','#ff3355'];
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2;
+        const spd = 1.5 + Math.random() * 2.5;
+        s.particles.push({ x: s.enemy.x, y: DOME_CY, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 1, col: cols[i%cols.length] });
+      }
+    }
+  }
+
+  // ── particles ──
+  s.particles = s.particles.filter(p => p.life > 0);
+  for (const p of s.particles) {
+    p.x += p.vx * (dt / 16); p.y += p.vy * (dt / 16); p.vy += 0.12; p.life -= dt / 600;
+  }
 
   // ── DRAW ──
   const sky = ctx.createLinearGradient(0, 0, 0, h);
@@ -371,21 +402,31 @@ function flapAttract(ctx, w, h, t, world, s) {
   ctx.fillStyle = '#0a4a26'; ctx.fillRect(0, h-GROUND, w, GROUND);
   ctx.fillStyle = '#15a358'; ctx.fillRect(0, h-GROUND, w, 3);
 
-  // parachute enemy
-  const ex = s.enemy.x, ey = s.enemy.y, cr = 11;
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(ex-cr*0.7, ey-cr-1); ctx.lineTo(ex-3, ey); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(ex+cr*0.7, ey-cr-1); ctx.lineTo(ex+3, ey); ctx.stroke();
-  const panels = ['#ff6b4a','#ffcf3d','#ff6b4a','#ffcf3d'];
-  for (let i = 0; i < 4; i++) {
-    ctx.fillStyle = panels[i];
-    ctx.beginPath(); ctx.moveTo(ex, ey-cr-1);
-    ctx.arc(ex, ey-cr-1, cr, Math.PI+(i/4)*Math.PI, Math.PI+((i+1)/4)*Math.PI);
-    ctx.closePath(); ctx.fill();
+  // pop particles
+  for (const p of s.particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2); ctx.fill();
   }
-  ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.arc(ex, ey-cr-1, cr, Math.PI, 0); ctx.closePath(); ctx.stroke();
-  ctx.fillStyle='#e84040'; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // parachute enemy (skip when popped)
+  if (!s.enemy.popped) {
+    const ex = s.enemy.x, ey = s.enemy.y, cr = 11;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(ex-cr*0.7, ey-cr-1); ctx.lineTo(ex-3, ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex+cr*0.7, ey-cr-1); ctx.lineTo(ex+3, ey); ctx.stroke();
+    const panels = ['#ff6b4a','#ffcf3d','#ff6b4a','#ffcf3d'];
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = panels[i];
+      ctx.beginPath(); ctx.moveTo(ex, ey-cr-1);
+      ctx.arc(ex, ey-cr-1, cr, Math.PI+(i/4)*Math.PI, Math.PI+((i+1)/4)*Math.PI);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(ex, ey-cr-1, cr, Math.PI, 0); ctx.closePath(); ctx.stroke();
+    ctx.fillStyle='#e84040'; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI*2); ctx.fill();
+  }
 
   // bird (mini — yellow, goggle, beak)
   const bx2 = bx, by2 = s.birdY;
