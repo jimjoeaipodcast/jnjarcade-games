@@ -1,0 +1,36 @@
+{
+  "games": [
+    {
+      "id": "flap-fight",
+      "name": "FLAP FIGHT",
+      "emoji": "🎈",
+      "genre": "BALLOON FIGHT × FLAPPY BIRD",
+      "url": "games/flap-fight.html",
+      "status": "testing"
+    },
+    {
+      "id": "hop-man",
+      "name": "HOP-MAN",
+      "emoji": "🐸",
+      "genre": "PAC-MAN × FROGGER",
+      "url": "games/hop-man.html",
+      "status": "testing"
+    },
+    {
+      "id": "token-rush",
+      "name": "TOKEN RUSH",
+      "emoji": "⚡",
+      "genre": "EPISODE 3",
+      "url": "games/token-rush.html",
+      "status": "testing"
+    },
+    {
+      "id": "cipher-hunt",
+      "name": "CIPHER HUNT",
+      "emoji": "🔐",
+      "genre": "EPISODE 6",
+      "url": "games/cipher-hunt.html",
+      "status": "testing"
+    }
+  ]
+}
