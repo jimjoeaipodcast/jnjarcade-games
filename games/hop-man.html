@@ -500,15 +500,8 @@ function riverCellHasLog(row, col){
 }
 
 // ── Game tick (~30 fps) ──────────────────────────────────────────────────────
-function updateCamera(){
-  const targetY = player.r * CELL + CELL/2 - VH * 0.5;
-  targetCamY = Math.max(0, Math.min(H - VH, targetY));
-  camY += (targetCamY - camY) * 0.18;
-}
-
 function tick(){
   flowPh += 0.025;
-  updateCamera();
   if(freeze>0) freeze--;
   freezeEl.classList.toggle('on', freeze>0);        // accurate every frame (was sticking 'on')
   if(scare>0)   scare--;
@@ -934,6 +927,17 @@ function drawVehicle(x, y, w, h, kind, colour, frozen){
 
 // ── Draw ─────────────────────────────────────────────────────────────────────
 function draw(){
+  // Camera: runs every frame (not gated by running) so frog is always tracked
+  if(VH > 0 && H > VH){
+    const py = player.r * CELL + CELL/2;
+    targetCamY = Math.max(0, Math.min(H - VH, py - VH * 0.5));
+    camY += (targetCamY - camY) * 0.30;
+    // Hard clamp — frog can never exit the visible canvas (1 CELL margin)
+    camY = Math.min(camY, py - CELL);
+    camY = Math.max(camY, py - VH + CELL);
+    camY = Math.max(0, Math.min(H - VH, camY));
+  }
+
   ctx.clearRect(0,0,W,VH);   // clear viewport only
   ctx.save();
   ctx.translate(0, -camY);   // enter world space — all drawing below is world-coord
