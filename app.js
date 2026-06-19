@@ -53,7 +53,7 @@ const WORLDS = {
   'flap-fight': {
     ink: '#4dd9f5', dim: '#0d4a5c', pit: '#030f18', glowsoft: 'rgba(77,217,245,0.22)',
     genre: 'BALLOON FIGHT × FLAPPY BIRD',
-    quote: '"there\'s a guy with a parachute. I jumped on him. TWICE. the gaps keep shrinking. I cannot stop."',
+    quote: '"stomped a parachute guy mid-gap. bounced straight into a pipe. still my best run."',
     by: 'JIMMY',
     attract: flapAttract,
   },
@@ -263,47 +263,92 @@ function startAttract(canvas, world) {
    A snake hunts food on a grid; on every meal it fires a shot
    that blasts the arkanoid brick wall at the top. */
 
-/* FLAP-FIGHT attract — bird dodges pipes, stomps parachute enemies */
+/* FLAP-FIGHT attract — real physics, AI targets gap, dies on pipe hit */
 function flapAttract(ctx, w, h, t, world, s) {
+  const GROUND = Math.max(10, h * 0.10);
+  const PW     = Math.max(12, w * 0.14);
+  const BR     = 7;    // bird radius
+  const GAP_H  = h * 0.42;  // wide gap — AI can navigate it reliably
+  const SPEED  = w * 0.00110;
+  const GRAV   = 0.26;
+  const FLAP   = -5.2;
+
+  function resetState() {
+    s.birdY  = h * 0.48;
+    s.birdVy = 0;
+    s.dead   = false;
+    s.flash  = 0;
+    s.pipes  = [
+      { x: w * 0.78, gap: h * 0.26, gapH: GAP_H },
+      { x: w * 1.52, gap: h * 0.18, gapH: GAP_H },
+    ];
+  }
+
   if (!s.init) {
     s.init  = true;
-    s.birdY = h * 0.5;
-    s.birdVy = 0;
-    s.pipes  = [
-      { x: w * 0.72, gap: h * 0.28, gapH: h * 0.38 },
-      { x: w * 1.30, gap: h * 0.20, gapH: h * 0.38 },
-    ];
-    s.enemy  = { x: w * 0.52, y: h * 0.35, vy: 0.45 };
-    s.stars  = Array.from({length: 18}, () => ({
+    s.last  = t;
+    s.enemy = { x: w * 0.54, y: h * 0.36, vy: 0.38 };
+    s.stars = Array.from({length: 18}, () => ({
       x: Math.random() * w, y: Math.random() * h * 0.82,
       r: Math.random() * 1.4 + 0.4, a: Math.random() * 0.45 + 0.15,
     }));
-    s.last = t;
+    resetState();
   }
 
-  const dt    = Math.min(t - s.last, 32);
-  s.last      = t;
-  const speed = w * 0.0022;
-  const GROUND = Math.max(10, h * 0.1);
-  const PW     = Math.max(12, w * 0.13);
+  const dt = Math.min(t - s.last, 32);
+  s.last = t;
 
-  // physics
-  s.birdVy += 0.30;
+  // ── death flash then reset ──
+  if (s.dead) {
+    s.flash -= dt;
+    if (s.flash <= 0) resetState();
+    // draw white flash fading out
+    const sky2 = ctx.createLinearGradient(0,0,0,h);
+    sky2.addColorStop(0,'#030f18'); sky2.addColorStop(1,'#071a2a');
+    ctx.fillStyle = sky2; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = Math.max(0, s.flash / 600);
+    ctx.fillRect(0,0,w,h);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // ── physics ──
+  s.birdVy += GRAV;
   s.birdY  += s.birdVy * (dt / 16);
-  if (s.birdY > h - GROUND - 10) s.birdVy = -5.8;
-  s.birdY   = Math.max(12, Math.min(h - GROUND - 10, s.birdY));
 
-  // pipes
+  // ── AI: flap toward the centre of the nearest upcoming gap ──
+  const bx = w * 0.27;
+  const ahead = s.pipes.filter(p => p.x + PW > bx + BR).sort((a,b) => a.x - b.x)[0];
+  if (ahead) {
+    const target = ahead.gap + GAP_H * 0.5;
+    if (s.birdY > target - 8 && s.birdVy > -0.5) s.birdVy = FLAP;
+  }
+
+  // ── pipe collision ──
+  let died = false;
   for (const p of s.pipes) {
-    p.x -= speed * dt;
+    const inX = bx + BR > p.x && bx - BR < p.x + PW;
+    if (inX) {
+      const inGap = s.birdY - BR >= p.gap && s.birdY + BR <= p.gap + GAP_H;
+      if (!inGap) { died = true; break; }
+    }
+  }
+  if (s.birdY + BR > h - GROUND || s.birdY - BR < 0) died = true;
+  if (died) { s.dead = true; s.flash = 650; }
+
+  // ── move pipes ──
+  for (const p of s.pipes) {
+    p.x -= SPEED * dt;
     if (p.x + PW < 0) {
       p.x   = w + PW;
-      p.gap = h * (0.12 + Math.random() * 0.38);
+      p.gap = h * (0.10 + Math.random() * 0.42);
+      p.gapH = GAP_H;
     }
   }
 
-  // enemy
-  s.enemy.x -= speed * 0.6 * dt;
+  // ── enemy ──
+  s.enemy.x -= SPEED * 0.55 * dt;
   s.enemy.y += s.enemy.vy * (dt / 16);
   if (s.enemy.y < h * 0.12 + 26 || s.enemy.y > h * 0.68) s.enemy.vy *= -1;
   if (s.enemy.x + 14 < 0) { s.enemy.x = w + 14; s.enemy.y = h * 0.38; }
@@ -335,7 +380,7 @@ function flapAttract(ctx, w, h, t, world, s) {
     ctx.fillStyle = g;
     ctx.fillRect(p.x, 0, PW, p.gap);
     ctx.fillStyle = '#15a358'; ctx.fillRect(p.x-3, p.gap-8, PW+6, 8);
-    const bTop = p.gap + p.gapH;
+    const bTop = p.gap + GAP_H;
     ctx.fillStyle = g; ctx.fillRect(p.x, bTop, PW, h-bTop-GROUND);
     ctx.fillStyle = '#15a358'; ctx.fillRect(p.x-3, bTop, PW+6, 8);
   }
@@ -360,19 +405,22 @@ function flapAttract(ctx, w, h, t, world, s) {
   ctx.beginPath(); ctx.arc(ex, ey-cr-1, cr, Math.PI, 0); ctx.closePath(); ctx.stroke();
   ctx.fillStyle='#e84040'; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI*2); ctx.fill();
 
-  // bird (mini)
-  const bx = w * 0.27, by = s.birdY;
+  // bird (mini — yellow, goggle, beak)
+  const bx2 = bx, by2 = s.birdY;
+  const rot = Math.min(Math.max(s.birdVy * 4, -25), 80) * Math.PI / 180;
+  ctx.save(); ctx.translate(bx2, by2); ctx.rotate(rot);
   ctx.fillStyle = '#FFE566';
-  ctx.beginPath(); ctx.ellipse(bx, by, 8, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 0, BR+1, BR, 0, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#FFF8E0';
-  ctx.beginPath(); ctx.ellipse(bx+2, by+2, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 2, 4, 3, 0, 0, Math.PI*2); ctx.fill();
   ctx.strokeStyle = '#3A2000'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(bx+3, by-1, 3.5, 0, Math.PI*2); ctx.stroke();
-  ctx.fillStyle = 'rgba(155,95,0,0.4)';
-  ctx.beginPath(); ctx.arc(bx+3, by-1, 3, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(bx+4, by-1, 1.2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -1, 3.5, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle = 'rgba(155,95,0,0.42)';
+  ctx.beginPath(); ctx.arc(3, -1, 3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(4, -1, 1.2, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#F5A000';
-  ctx.beginPath(); ctx.moveTo(bx+7,by-0.5); ctx.lineTo(bx+12,by-1); ctx.lineTo(bx+12,by+1.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(BR,-.5); ctx.lineTo(BR+6,-1); ctx.lineTo(BR+6,1.5); ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 
 /* HOP-MAN attract — frog rows of pellets, rides logs, dodges cars.
