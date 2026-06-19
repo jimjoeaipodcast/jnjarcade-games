@@ -930,14 +930,15 @@ function drawVehicle(x, y, w, h, kind, colour, frozen){
 
 // ── Draw ─────────────────────────────────────────────────────────────────────
 function draw(){
-  // Camera: runs every frame (not gated by running) so frog is always tracked
+  // Camera: runs every frame so frog is always tracked
   if(VH > 0 && H > VH){
     const py = player.r * CELL + CELL/2;
     targetCamY = Math.max(0, Math.min(H - VH, py - VH * 0.75));
-    camY += (targetCamY - camY) * 0.30;
-    // Hard clamp — frog can never exit the visible canvas (1 CELL margin)
-    camY = Math.min(camY, py - CELL);
-    camY = Math.max(camY, py - VH + CELL);
+    camY += (targetCamY - camY) * 0.38;
+    if(Math.abs(camY - targetCamY) < 2) camY = targetCamY;
+    // Prevent frog going above top of canvas (upper clamp only — lower conflicts at world-bottom)
+    const maxCam = Math.max(0, player.r * CELL + CELL/2 - CELL);
+    if(camY > maxCam) camY = maxCam;
     camY = Math.max(0, Math.min(H - VH, camY));
   }
 
