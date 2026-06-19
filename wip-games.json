@@ -15,6 +15,14 @@
       "genre": "EPISODE 6",
       "url": "games/cipher-hunt.html",
       "status": "testing"
+    },
+    {
+      "id": "tomb-hunt",
+      "name": "TOMB HUNT",
+      "emoji": "🏺",
+      "genre": "JUNGLE HUNT × TOMB RAIDER",
+      "url": "games/tomb-hunt.html",
+      "status": "testing"
     }
   ]
 }

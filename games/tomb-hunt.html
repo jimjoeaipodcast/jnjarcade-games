@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0a02">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<title>TOMB HUNT — JnJ Arcade</title>
+<!--
+  TOMB HUNT — JUNGLE HUNT × TOMB RAIDER
+  Auto-running Lara-style explorer: swipe UP to jump (double-jump), DOWN to slide.
+  Grab vines (Jungle Hunt), shoot guards (auto twin-pistols), dodge boulders and spike traps.
+  Collect golden artifacts (+50) and gems (+10). Three hearts. Speed climbs each level.
+  Conventions: full-screen shell, swipe controls, INSERT COIN, cell-buffer in resize().
+-->
+<style>
+:root { --ink:#d4a017; --dim:#4a3200; --pit:#0d0a02; --glow:rgba(212,160,23,.22); --bg:#0d0a02; }
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body {
+  height:100%; background:var(--bg); color:#fff;
+  font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+  overflow:hidden; user-select:none; -webkit-user-select:none;
+}
+.game-shell {
+  display:flex; flex-direction:column;
+  height:100vh; height:100dvh; width:100%;
+  padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0)
+          env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+}
+.game-header {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+  padding:9px 14px;
+  background:linear-gradient(rgba(0,0,0,.6),rgba(0,0,0,.2));
+  border-bottom:2px solid var(--dim);
+}
+.back-btn { color:var(--ink); text-decoration:none; font-weight:700; font-size:13px; letter-spacing:.05em; opacity:.85; }
+.game-name { font-family:'Bungee',cursive; letter-spacing:.14em; color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px; }
+.hdr-right { text-align:right; }
+.score-label { font-size:9px; letter-spacing:.18em; opacity:.55; }
+.score-val { font-size:19px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.hud-bar {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px 5px; font-size:12px; border-bottom:1px solid rgba(212,160,23,.1);
+}
+.hearts-display { color:#ff5555; font-size:16px; letter-spacing:2px; }
+.lvl { opacity:.65; letter-spacing:.1em; font-size:11px; }
+.canvas-wrap {
+  flex:1; position:relative; padding:14px 6px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+}
+canvas { display:block; border:2px solid var(--dim); border-radius:10px;
+  box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
+  background:var(--pit); touch-action:none; }
+.overlay {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:12px;
+  background:rgba(13,10,2,.9); backdrop-filter:blur(4px);
+  text-align:center; padding:24px; z-index:5; border-radius:10px;
+}
+.overlay.hidden { display:none; }
+.overlay-emoji { font-size:48px; }
+.overlay-title {
+  font-family:'Bungee',cursive; font-size:28px; font-weight:900;
+  letter-spacing:.1em; color:var(--ink); text-shadow:0 0 18px var(--glow);
+}
+.overlay-sub { font-size:13px; line-height:1.7; opacity:.85; max-width:320px; }
+.board { font-size:12px; opacity:.8; line-height:1.7; margin-top:2px; }
+.board b { color:var(--ink); }
+.play-btn {
+  margin-top:4px; background:var(--ink); color:#0d0a02; border:none;
+  border-radius:28px; padding:13px 28px; font-size:15px; font-weight:800;
+  letter-spacing:.08em; cursor:pointer; box-shadow:0 0 24px var(--glow);
+  font-family:'Bungee',cursive; transition:transform .06s, box-shadow .06s;
+}
+.play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+</style>
+</head>
+<body>
+<div class="game-shell">
+  <header class="game-header">
+    <a class="back-btn" href="../index.html">‹ ARCADE</a>
+    <div class="game-name">TOMB HUNT</div>
+    <div class="hdr-right"><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+  </header>
+  <div class="hud-bar">
+    <div class="hearts-display" id="hearts">♥ ♥ ♥</div>
+    <div class="lvl" id="lvl">LEVEL 1</div>
+  </div>
+  <div class="canvas-wrap" id="wrap">
+    <canvas id="c"></canvas>
+    <div class="overlay hidden" id="ov">
+      <div class="overlay-emoji" id="ovEmoji">🏺🌿</div>
+      <div class="overlay-title" id="ovTitle">TOMB HUNT</div>
+      <div class="overlay-sub" id="ovsub">
+        Swipe <b>UP</b> to jump — tap again mid-air for a <b>double jump</b>.<br>
+        Swipe <b>DOWN</b> to slide under darts and low obstacles.<br>
+        Grab <b>vines</b> to swing — release at the peak.<br>
+        Shoot guards <b>automatically</b> — just keep running.<br>
+        Collect <b style="color:var(--ink)">artifacts (+50)</b> and gems (+10).
+      </div>
+      <div class="board" id="board"></div>
+      <button class="play-btn" id="playBtn">INSERT COIN</button>
+    </div>
+  </div>
+</div>
+<script src="arcade-scores.js?v=10"></script>
+<script>
+// ─── constants ───────────────────────────────────────────────────────────────
+const GAME_ID    = 'tomb-hunt';
+const GAME_TITLE = 'TOMB HUNT';
+const ACCENT     = '#d4a017';
+const CELL       = 18;
+const GROUND_H   = 32;
+const GRAVITY    = 0.52;
+const JUMP_VY    = -13.5;
+const PLAYER_W   = 20;
+const PLAYER_H   = 36;
+const SLIDE_H    = 18;
+const BASE_SPEED = 3.2;
+const INVINCIBLE_MS = 1800;  // after taking a hit
+const BULLET_SPEED  = 11;
+const FIRE_INTERVAL = 900;   // ms between auto-shots
+const VINE_GRAB_DIST = 28;
+
+// ─── DOM ─────────────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('c');
+const ctx     = canvas.getContext('2d');
+const wrap    = document.getElementById('wrap');
+const ov      = document.getElementById('ov');
+const ovTitle = document.getElementById('ovTitle');
+const ovEmoji = document.getElementById('ovEmoji');
+const ovsub   = document.getElementById('ovsub');
+const board   = document.getElementById('board');
+const playBtn = document.getElementById('playBtn');
+const scoreEl = document.getElementById('score');
+const heartsEl= document.getElementById('hearts');
+const lvlEl   = document.getElementById('lvl');
+
+// ─── game state ──────────────────────────────────────────────────────────────
+let cw, ch, floorY;
+let score, frame, running, dead, waiting, best, animId;
+let level, speed, jumpsLeft, sliding, slideTimer;
+let hitTime, lastFireTime, shootCooldown;
+let playerX, playerY, playerVY;
+let swinging, vineX, vineY0, vineLen, vineAngle, vineAV;
+let terrain;          // 0=jungle 1=temple, alternates per section
+let sectionX;         // world-x of current terrain section start
+let worldX;           // total distance scrolled
+let bgOffset;
+
+let boulders, spikes, guards, darts, pitCells;
+let vines, artifacts, gems, bullets, particles, floaters;
+let clouds, bgTrees;
+
+let touchStartY, touchStartX, touchStartTime;
+
+// ─── resize (conventions) ────────────────────────────────────────────────────
+function resize() {
+  cw = wrap.clientWidth - 12;
+  ch = wrap.clientHeight - 28 - CELL * 2;
+  canvas.width  = cw;
+  canvas.height = ch;
+  floorY = ch - GROUND_H;
+  if (running && !dead) resetPlayerX();
+}
+function resetPlayerX() { playerX = Math.round(cw * 0.22); }
+window.addEventListener('resize', () => { resize(); if (!running) drawIdle(); });
+
+// ─── input ───────────────────────────────────────────────────────────────────
+const SWIPE_THRESH = 18;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchStartX = t.clientX; touchStartY = t.clientY; touchStartTime = Date.now();
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const dy = t.clientY - touchStartY;
+  const dx = t.clientX - touchStartX;
+  const dt = Date.now() - touchStartTime;
+  if (!running && waiting) { startGame(); return; }
+  if (!running || dead) return;
+  if (Math.abs(dy) < SWIPE_THRESH && Math.abs(dx) < SWIPE_THRESH && dt < 250) {
+    doJump(); return;
+  }
+  if (Math.abs(dy) > Math.abs(dx)) {
+    if (dy < -SWIPE_THRESH) doJump();
+    else if (dy > SWIPE_THRESH) doSlide();
+  }
+}, { passive: false });
+document.addEventListener('keydown', e => {
+  if (!running && waiting && (e.code === 'Space' || e.code === 'Enter')) { startGame(); return; }
+  if (!running || dead) return;
+  if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') doJump();
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') doSlide();
+});
+playBtn.addEventListener('click', () => { if (waiting || !running) startGame(); });
+
+function doJump() {
+  if (swinging) { releaseVine(); return; }
+  if (jumpsLeft > 0) {
+    playerVY = JUMP_VY;
+    jumpsLeft--;
+    spawnParticles(playerX, floorY, '#d4a017', 4, 'dust');
+  }
+}
+function doSlide() {
+  if (onGround() && !swinging) { sliding = true; slideTimer = 0; }
+}
+function onGround() { return playerY >= floorY - PLAYER_H + 2; }
+
+// ─── vine mechanics ───────────────────────────────────────────────────────────
+function tryGrabVine() {
+  if (swinging) return;
+  for (const v of vines) {
+    const vTipX = v.x + Math.sin(v.angle) * v.len;
+    const vTipY = v.y0  + Math.cos(v.angle) * v.len;
+    const dist = Math.hypot(playerX - vTipX, playerY - vTipY);
+    if (dist < VINE_GRAB_DIST && playerVY >= -2) {
+      swinging = true;
+      vineX = v.x; vineY0 = v.y0; vineLen = v.len;
+      vineAngle = v.angle; vineAV = v.av || 0;
+      jumpsLeft = 2;
+      return;
+    }
+  }
+}
+function releaseVine() {
+  if (!swinging) return;
+  swinging = false;
+  playerVY = vineAV * vineLen * -0.7;
+  playerX  = vineX + Math.sin(vineAngle) * vineLen;
+  playerY  = vineY0 + Math.cos(vineAngle) * vineLen;
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+function rng(arr)     { return arr[Math.floor(Math.random() * arr.length)]; }
+function spawnParticles(x, y, col, n, kind) {
+  for (let i = 0; i < n; i++) {
+    particles.push({
+      x, y,
+      vx: rand(-3, 3),
+      vy: rand(-5, kind === 'dust' ? -1 : -3),
+      alpha: 1,
+      col,
+      kind,
+      r: rand(2, kind === 'gold' ? 5 : 3),
+    });
+  }
+}
+function addFloater(txt, x, y, col) {
+  floaters.push({ txt, x, y, vy: -1.2, alpha: 1, col });
+}
+function addScore(n, x, y) {
+  score += n;
+  scoreEl.textContent = score;
+  addFloater('+' + n, x, y, n >= 50 ? '#ffd700' : '#a8ff78');
+}
+function takeDamage() {
+  if (Date.now() - hitTime < INVINCIBLE_MS) return;
+  hitTime = Date.now();
+  if (swinging) { swinging = false; }
+  lives--;
+  updateHearts();
+  if (lives <= 0) { triggerDeath(); return; }
+  spawnParticles(playerX, playerY, '#ff5555', 8, 'hit');
+  // knockback
+  playerVY = -8;
+}
+
+let lives;
+function updateHearts() {
+  heartsEl.textContent = '♥ '.repeat(Math.max(0, lives)).trim() || '💀';
+}
+
+// ─── spawn helpers ────────────────────────────────────────────────────────────
+function spawnBoulder() {
+  boulders.push({ x: cw + 40, y: floorY - 20, r: rand(18, 26), angle: 0, alive: true });
+}
+function spawnSpikePit() {
+  const w = rand(60, 110);
+  spikes.push({ x: cw + 10, w, alive: true });
+}
+function spawnGuard() {
+  guards.push({ x: cw + 20, y: floorY - PLAYER_H, w: 18, h: PLAYER_H, alive: true, shootTimer: 0 });
+}
+function spawnDart(x) {
+  darts.push({ x, y: floorY - PLAYER_H * 0.65, vy: 0, alive: true });
+}
+function spawnVine() {
+  vines.push({ x: cw + rand(30, 60), y0: 0, len: rand(ch * 0.38, ch * 0.52), angle: -0.4, av: 0 });
+}
+function spawnArtifact() {
+  artifacts.push({ x: cw + rand(20, 80), y: floorY - rand(50, 120), alive: true, bob: Math.random() * Math.PI * 2 });
+}
+function spawnGem(x, y) {
+  gems.push({ x, y, vy: -4, alive: true });
+}
+
+// ─── spawn schedule ───────────────────────────────────────────────────────────
+let nextObstacle, nextCollect, nextVine, nextGuard;
+function scheduleNext() {
+  const gap = Math.max(80, 220 - level * 8);
+  nextObstacle = frame + gap + Math.floor(rand(0, 60));
+  nextCollect  = frame + Math.floor(rand(40, 120));
+  nextGuard    = frame + Math.floor(rand(150, 280));
+  nextVine     = frame + Math.floor(rand(200, 350));
+}
+
+// ─── init ─────────────────────────────────────────────────────────────────────
+function startGame() {
+  ov.classList.add('hidden');
+  score = 0; frame = 0; level = 1; speed = BASE_SPEED; lives = 3; hitTime = -9999;
+  lastFireTime = 0; shootCooldown = FIRE_INTERVAL;
+  worldX = 0; bgOffset = 0; terrain = 0; sectionX = 0;
+  scoreEl.textContent = 0;
+  lvlEl.textContent = 'LEVEL 1';
+  updateHearts();
+  resize();
+  playerX = Math.round(cw * 0.22);
+  playerY = floorY - PLAYER_H;
+  playerVY = 0; jumpsLeft = 2; sliding = false; slideTimer = 0;
+  swinging = false;
+  boulders = []; spikes = []; guards = []; darts = []; vines = [];
+  artifacts = []; gems = []; bullets = []; particles = []; floaters = [];
+  bgTrees = initBgTrees(); clouds = initClouds();
+  scheduleNext();
+  running = true; dead = false; waiting = false;
+  if (animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(tick);
+}
+
+function initBgTrees() {
+  const trees = [];
+  for (let i = 0; i < 14; i++) {
+    trees.push({ x: rand(0, cw), layer: Math.random() < 0.5 ? 0 : 1,
+      h: rand(60, 130), w: rand(16, 32), col: rng(['#1a3d0f','#15300b','#223d10','#0e2a08']) });
+  }
+  return trees;
+}
+function initClouds() {
+  const cl = [];
+  for (let i = 0; i < 8; i++) {
+    cl.push({ x: rand(0, cw), y: rand(10, ch * 0.25), r: rand(18, 40), spd: rand(0.2, 0.5) });
+  }
+  return cl;
+}
+
+// ─── main tick ────────────────────────────────────────────────────────────────
+function tick() {
+  if (!running) return;
+  frame++;
+  worldX += speed;
+  bgOffset += speed * 0.18;
+
+  // level up every 400 world-units
+  const newLevel = 1 + Math.floor(worldX / 400);
+  if (newLevel > level) {
+    level = newLevel;
+    speed = BASE_SPEED + (level - 1) * 0.28;
+    shootCooldown = Math.max(450, FIRE_INTERVAL - level * 40);
+    lvlEl.textContent = 'LEVEL ' + level;
+    spawnParticles(cw / 2, ch / 2, '#ffd700', 12, 'gold');
+  }
+
+  // terrain section switch every ~650px
+  if (worldX - sectionX > 650) { terrain = 1 - terrain; sectionX = worldX; }
+
+  // spawn obstacles
+  if (frame >= nextObstacle) {
+    const roll = Math.random();
+    if (roll < 0.35) spawnBoulder();
+    else if (roll < 0.60) spawnSpikePit();
+    else spawnDart(cw + 10);
+    scheduleNext();
+    nextObstacle = frame + Math.max(70, 200 - level * 7) + Math.floor(rand(0, 50));
+  }
+  if (frame >= nextGuard) { spawnGuard(); nextGuard = frame + Math.floor(rand(180, 320)); }
+  if (frame >= nextVine)  { spawnVine();  nextVine  = frame + Math.floor(rand(220, 400)); }
+  if (frame >= nextCollect) {
+    if (Math.random() < 0.4) spawnArtifact();
+    else spawnGem(cw + rand(20, 80), floorY - rand(40, 110));
+    nextCollect = frame + Math.floor(rand(60, 130));
+  }
+
+  updatePhysics();
+  updateEntities();
+  autoShoot();
+  checkCollisions();
+  draw();
+  if (!dead) animId = requestAnimationFrame(tick);
+}
+
+// ─── physics ─────────────────────────────────────────────────────────────────
+function updatePhysics() {
+  if (swinging) {
+    // pendulum
+    const g = 0.008;
+    vineAV += -g * Math.sin(vineAngle);
+    vineAV *= 0.995;
+    vineAngle += vineAV;
+    playerX = vineX + Math.sin(vineAngle) * vineLen;
+    playerY = vineY0 + Math.cos(vineAngle) * vineLen;
+    // auto-release if swung past 90 degrees OR touched ground
+    if (Math.abs(vineAngle) > 1.2 || playerY >= floorY - PLAYER_H) releaseVine();
+    return;
+  }
+
+  if (sliding) {
+    slideTimer++;
+    if (slideTimer > 24) { sliding = false; }
+  }
+
+  playerVY += GRAVITY;
+  playerY += playerVY;
+  if (playerY >= floorY - (sliding ? SLIDE_H : PLAYER_H)) {
+    playerY = floorY - (sliding ? SLIDE_H : PLAYER_H);
+    playerVY = 0;
+    jumpsLeft = 2;
+    tryGrabVine();
+  }
+  // clamp to canvas
+  if (playerY < 0) { playerY = 0; playerVY = 0; }
+}
+
+// ─── entities ─────────────────────────────────────────────────────────────────
+function updateEntities() {
+  const now = Date.now();
+  const invincible = now - hitTime < INVINCIBLE_MS;
+
+  // background clouds
+  for (const c of clouds) {
+    c.x -= c.spd;
+    if (c.x + c.r < 0) { c.x = cw + c.r; c.y = rand(10, ch * 0.25); }
+  }
+
+  // boulders
+  for (const b of boulders) {
+    b.x -= speed * 1.1;
+    b.angle += 0.06;
+    if (b.x + b.r < 0) b.alive = false;
+  }
+
+  // spike pits (they're floor gaps — represented as visible spikes)
+  for (const s of spikes) {
+    s.x -= speed;
+    if (s.x + s.w < 0) s.alive = false;
+  }
+
+  // guards (walk left + auto-shoot)
+  for (const g of guards) {
+    g.x -= speed * 0.55;
+    g.shootTimer += 16;
+    if (g.shootTimer > shootCooldown) {
+      g.shootTimer = 0;
+      darts.push({ x: g.x - 4, y: g.y + g.h * 0.35, vy: 0, alive: true, fromGuard: true });
+    }
+    if (g.x + g.w < 0) g.alive = false;
+  }
+
+  // darts (fly left)
+  for (const d of darts) {
+    d.x -= BULLET_SPEED * 0.9;
+    if (d.x < -10) d.alive = false;
+  }
+
+  // player bullets (fly right)
+  for (const b of bullets) {
+    b.x += BULLET_SPEED;
+    if (b.x > cw + 10) b.alive = false;
+    // hit guard
+    for (const g of guards) {
+      if (!g.alive) continue;
+      if (b.x > g.x - 8 && b.x < g.x + g.w + 8 && b.y > g.y && b.y < g.y + g.h) {
+        g.alive = false; b.alive = false;
+        spawnParticles(g.x, g.y + g.h * 0.5, '#ff6b35', 6, 'hit');
+        addScore(25, g.x, g.y);
+        addScore(0, 0, 0); // dummy
+        break;
+      }
+    }
+  }
+
+  // vines (scroll)
+  for (const v of vines) {
+    v.x -= speed;
+    if (!swinging) v.angle = Math.sin(frame * 0.025 + v.x) * 0.25;
+    if (v.x < -20) v.alive = false;
+  }
+
+  // artifacts
+  for (const a of artifacts) {
+    a.x -= speed;
+    a.bob += 0.06;
+    if (a.x < -20) a.alive = false;
+  }
+
+  // gems
+  for (const g of gems) {
+    g.x -= speed;
+    g.vy += 0.3;
+    g.y += g.vy;
+    if (g.y > floorY - 8) { g.y = floorY - 8; g.vy = 0; }
+    if (g.x < -10) g.alive = false;
+  }
+
+  // particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.2;
+    p.alpha -= 0.032;
+    if (p.alpha <= 0) particles.splice(i, 1);
+  }
+  // floaters
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i];
+    f.y += f.vy; f.alpha -= 0.025;
+    if (f.alpha <= 0) floaters.splice(i, 1);
+  }
+
+  // cleanup dead
+  boulders  = boulders .filter(b => b.alive);
+  spikes    = spikes   .filter(s => s.alive);
+  guards    = guards   .filter(g => g.alive);
+  darts     = darts    .filter(d => d.alive);
+  bullets   = bullets  .filter(b => b.alive);
+  vines     = vines    .filter(v => v.alive !== false);
+  artifacts = artifacts.filter(a => a.alive);
+  gems      = gems     .filter(g => g.alive);
+}
+
+// ─── auto-shoot ───────────────────────────────────────────────────────────────
+function autoShoot() {
+  const now = Date.now();
+  const hasTarget = guards.some(g => g.alive && g.x > playerX && g.x < playerX + cw * 0.65)
+    || darts.some(d => d.alive && d.fromGuard && d.x < playerX + 60 && d.x > 0);
+  if (hasTarget && now - lastFireTime > shootCooldown) {
+    lastFireTime = now;
+    const pH = sliding ? SLIDE_H : PLAYER_H;
+    bullets.push({ x: playerX + PLAYER_W, y: playerY + pH * 0.35, alive: true });
+    bullets.push({ x: playerX + PLAYER_W, y: playerY + pH * 0.5, alive: true });
+  }
+}
+
+// ─── collisions ───────────────────────────────────────────────────────────────
+function checkCollisions() {
+  if (dead) return;
+  const now = Date.now();
+  const invincible = now - hitTime < INVINCIBLE_MS;
+  const pH = sliding ? SLIDE_H : PLAYER_H;
+  const px1 = playerX - PLAYER_W / 2, px2 = playerX + PLAYER_W / 2;
+  const py1 = playerY, py2 = playerY + pH;
+
+  // boulders
+  if (!invincible) {
+    for (const b of boulders) {
+      if (Math.hypot(playerX - b.x, playerY + pH * 0.5 - b.y) < b.r + PLAYER_W * 0.5) takeDamage();
+    }
+    // darts
+    for (const d of darts) {
+      if (d.x > px1 - 4 && d.x < px2 + 4 && d.y > py1 && d.y < py2) {
+        d.alive = false; takeDamage();
+      }
+    }
+    // guards (touch)
+    for (const g of guards) {
+      if (!g.alive) continue;
+      if (px2 > g.x - 4 && px1 < g.x + g.w + 4 && py2 > g.y && py1 < g.y + g.h) takeDamage();
+    }
+    // spike pits
+    for (const s of spikes) {
+      if (playerX > s.x - 4 && playerX < s.x + s.w + 4) {
+        // pit: if player is on ground level they fall in
+        if (playerY + pH >= floorY - 4) takeDamage();
+      }
+    }
+  }
+
+  // artifacts
+  for (let i = artifacts.length - 1; i >= 0; i--) {
+    const a = artifacts[i];
+    if (Math.hypot(playerX - a.x, playerY + pH * 0.5 - a.y) < 28) {
+      artifacts.splice(i, 1);
+      addScore(50, a.x, a.y);
+      spawnParticles(a.x, a.y, '#ffd700', 8, 'gold');
+    }
+  }
+  // gems
+  for (let i = gems.length - 1; i >= 0; i--) {
+    const g = gems[i];
+    if (Math.hypot(playerX - g.x, playerY + pH * 0.5 - g.y) < 20) {
+      gems.splice(i, 1);
+      addScore(10, g.x, g.y);
+      spawnParticles(g.x, g.y, '#a8ff78', 4, 'gem');
+    }
+  }
+}
+
+// ─── death ────────────────────────────────────────────────────────────────────
+function triggerDeath() {
+  dead = true; running = false;
+  spawnParticles(playerX, playerY, '#ff5555', 14, 'hit');
+  spawnParticles(playerX, playerY, '#ffd700', 8, 'gold');
+  // one last draw
+  drawAll();
+  // save best
+  if (score > (best || 0)) best = score;
+  const prev = ArcadeScores ? null : null;
+  setTimeout(() => {
+    if (score > 0 && typeof ArcadeScores !== 'undefined') {
+      ArcadeScores.show({
+        game: GAME_ID, title: GAME_TITLE, score, accent: ACCENT,
+        onClose: showTitle,
+      });
+    } else showTitle();
+  }, 600);
+}
+
+function showTitle() {
+  waiting = true; running = false; dead = false;
+  ovEmoji.textContent = score > 0 ? '💀🏺' : '🏺🌿';
+  ovTitle.textContent = score > 0 ? 'GAME OVER' : 'TOMB HUNT';
+  ovsub.innerHTML = score > 0
+    ? `You scored <b style="color:var(--ink)">${score}</b>. The temple keeps its secrets.<br>Best: <b style="color:var(--ink)">${best||score}</b>`
+    : `Swipe <b>UP</b> to jump · <b>DOWN</b> to slide<br>Grab <b>vines</b> · shoot guards <b>automatically</b><br>Collect <b style="color:var(--ink)">artifacts (+50)</b> and gems (+10)`;
+  board.innerHTML = best ? `Best: <b>${best}</b>` : '';
+  playBtn.textContent = score > 0 ? 'TRY AGAIN' : 'INSERT COIN';
+  ov.classList.remove('hidden');
+  drawIdle();
+}
+
+// ─── draw ─────────────────────────────────────────────────────────────────────
+function drawAll() {
+  ctx.clearRect(0, 0, cw, ch);
+  drawBg();
+  drawVines();
+  drawPitSpikes();
+  drawBoulders();
+  drawGuards();
+  drawDarts();
+  drawBullets();
+  drawArtifacts();
+  drawGems();
+  drawGround();
+  drawPlayer();
+  drawParticles();
+  drawFloaters();
+}
+function draw() { drawAll(); }
+
+function drawBg() {
+  // Sky gradient (jungle=deep green-blue, temple=warm amber-dark)
+  const jungle = terrain === 0;
+  const skyTop    = jungle ? '#060f14' : '#100800';
+  const skyBottom = jungle ? '#0d1f10' : '#180e02';
+  const gr = ctx.createLinearGradient(0, 0, 0, floorY);
+  gr.addColorStop(0, skyTop); gr.addColorStop(1, skyBottom);
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, cw, floorY);
+
+  // Parallax clouds/mist
+  ctx.save();
+  for (const c of clouds) {
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = jungle ? '#4a8c3f' : '#8c6a20';
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x + c.r * 0.6, c.y - c.r * 0.2, c.r * 0.7, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Background trees (slow parallax)
+  const bgX = -(bgOffset * 0.25) % (cw + 60);
+  for (let pass = 0; pass < 2; pass++) {
+    for (const t of bgTrees) {
+      if (t.layer !== pass) continue;
+      const tx = ((t.x - bgOffset * (pass === 0 ? 0.12 : 0.22)) % (cw + 80) + cw + 80) % (cw + 80);
+      ctx.globalAlpha = pass === 0 ? 0.35 : 0.55;
+      ctx.fillStyle = t.col;
+      // trunk
+      ctx.fillRect(tx - 4, floorY - t.h, 8, t.h);
+      // canopy
+      ctx.beginPath();
+      ctx.arc(tx, floorY - t.h, t.w * 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(tx - t.w * 0.3, floorY - t.h + 12, t.w * 0.45, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(tx + t.w * 0.3, floorY - t.h + 14, t.w * 0.42, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Temple pillars in temple mode
+  if (terrain === 1) {
+    const pillarSpacing = 160;
+    const pillarOffset  = (bgOffset * 0.4) % pillarSpacing;
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#6b5320';
+    for (let px = -pillarOffset; px < cw + pillarSpacing; px += pillarSpacing) {
+      const pw = 22, ph = Math.min(ch * 0.55, 200);
+      ctx.fillRect(px - pw / 2, floorY - ph, pw, ph);
+      ctx.fillRect(px - pw * 0.7, floorY - ph - 12, pw * 1.4, 14); // capital
+    }
+    ctx.restore();
+  }
+
+  // Torch flicker in temple mode
+  if (terrain === 1) {
+    const torchSpacing = 240;
+    const torchOffset  = (bgOffset * 0.45) % torchSpacing;
+    for (let px = -torchOffset + 60; px < cw + torchSpacing; px += torchSpacing) {
+      const flicker = 0.7 + 0.3 * Math.sin(frame * 0.18 + px);
+      const tY = floorY - 80;
+      ctx.save();
+      ctx.globalAlpha = 0.55 * flicker;
+      const tg = ctx.createRadialGradient(px, tY, 2, px, tY, 30);
+      tg.addColorStop(0, '#ffcc44'); tg.addColorStop(1, 'rgba(255,100,0,0)');
+      ctx.fillStyle = tg;
+      ctx.beginPath(); ctx.arc(px, tY, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+function drawGround() {
+  const jungle = terrain === 0;
+  // Ground fill
+  ctx.fillStyle = jungle ? '#0a1a07' : '#1a1000';
+  ctx.fillRect(0, floorY, cw, GROUND_H);
+
+  // Ground texture line
+  ctx.strokeStyle = jungle ? '#1d4a12' : '#3d2800';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(cw, floorY); ctx.stroke();
+
+  // Ground dots / stones
+  const dotSpacing = 28;
+  const dotOffset  = (bgOffset * 0.9) % dotSpacing;
+  ctx.fillStyle = jungle ? '#162a10' : '#2a1800';
+  for (let x = -dotOffset; x < cw; x += dotSpacing) {
+    ctx.fillRect(x, floorY + 4, 10, 4);
+  }
+}
+
+function drawVines() {
+  for (const v of vines) {
+    const angle = swinging && v.x === vineX ? vineAngle : v.angle;
+    const tipX = v.x + Math.sin(angle) * v.len;
+    const tipY = v.y0 + Math.cos(angle) * v.len;
+
+    // vine rope
+    ctx.save();
+    ctx.strokeStyle = '#2d5a1e';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+
+    // draw as a chain of points (simple straight for now)
+    const segs = 8;
+    ctx.moveTo(v.x, v.y0);
+    for (let i = 1; i <= segs; i++) {
+      const t = i / segs;
+      const vx = v.x + Math.sin(angle * t) * v.len * t;
+      const vy = v.y0 + Math.cos(angle * t) * v.len * t;
+      ctx.lineTo(vx, vy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // leaf clusters on vine
+    ctx.fillStyle = '#3a7a2a';
+    for (let i = 0; i < 3; i++) {
+      const t = 0.25 + i * 0.25;
+      const lx = v.x + Math.sin(angle * t) * v.len * t;
+      const ly = v.y0 + Math.cos(angle * t) * v.len * t;
+      ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx - 7, ly, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawBoulders() {
+  for (const b of boulders) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.angle);
+    // stone sphere
+    const gr = ctx.createRadialGradient(-b.r * 0.3, -b.r * 0.3, b.r * 0.1, 0, 0, b.r);
+    gr.addColorStop(0, '#8a7a6a'); gr.addColorStop(1, '#3a2a1a');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI * 2); ctx.fill();
+    // crack lines
+    ctx.strokeStyle = '#2a1a0a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-b.r * 0.2, -b.r * 0.5); ctx.lineTo(b.r * 0.1, b.r * 0.3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(b.r * 0.3, -b.r * 0.3); ctx.lineTo(-b.r * 0.1, b.r * 0.2); ctx.stroke();
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(2, b.r + 6, b.r * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawPitSpikes() {
+  for (const s of spikes) {
+    // dark pit
+    ctx.fillStyle = '#050503';
+    ctx.fillRect(s.x, floorY, s.w, GROUND_H);
+    ctx.fillRect(s.x, floorY - 6, s.w, 8); // slight depression
+    // spike teeth
+    ctx.fillStyle = '#8a7060';
+    const numSpikes = Math.floor(s.w / 14);
+    for (let i = 0; i < numSpikes; i++) {
+      const sx = s.x + 7 + i * 14;
+      ctx.beginPath();
+      ctx.moveTo(sx - 5, floorY + 4);
+      ctx.lineTo(sx, floorY - 10);
+      ctx.lineTo(sx + 5, floorY + 4);
+      ctx.closePath(); ctx.fill();
+    }
+    // pit border
+    ctx.strokeStyle = '#3a2a10'; ctx.lineWidth = 2;
+    ctx.strokeRect(s.x, floorY - 6, s.w, GROUND_H + 6);
+  }
+}
+
+function drawGuards() {
+  for (const g of guards) {
+    const t = frame * 0.12;
+    ctx.save();
+    ctx.translate(g.x + g.w / 2, g.y + g.h);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // legs (walk anim)
+    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-4, -8); ctx.lineTo(-4 + Math.sin(t) * 6, -8 + 8 + Math.cos(t) * 4); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(4, -8); ctx.lineTo(4 - Math.sin(t) * 6, -8 + 8 - Math.cos(t) * 4); ctx.stroke();
+    // body
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(-7, -g.h + 10, 14, g.h - 18);
+    // head
+    ctx.fillStyle = '#7a5830';
+    ctx.beginPath(); ctx.arc(0, -g.h + 8, 9, 0, Math.PI * 2); ctx.fill();
+    // helmet
+    ctx.fillStyle = '#3a2810';
+    ctx.beginPath(); ctx.arc(0, -g.h + 6, 9.5, Math.PI, 0); ctx.fill();
+    // eyes (red glow)
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath(); ctx.arc(-3, -g.h + 9, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -g.h + 9, 2, 0, Math.PI * 2); ctx.fill();
+    // gun arm (pointing left toward player)
+    ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-7, -g.h * 0.65); ctx.lineTo(-16, -g.h * 0.65); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawDarts() {
+  for (const d of darts) {
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.fillStyle = '#c8a060';
+    ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-4, -3); ctx.lineTo(-4, 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e8c070';
+    ctx.fillRect(-10, -1, 8, 2);
+    ctx.restore();
+  }
+}
+
+function drawBullets() {
+  for (const b of bullets) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.fillStyle = '#ffd700';
+    ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+function drawArtifacts() {
+  for (const a of artifacts) {
+    const bobY = Math.sin(a.bob) * 4;
+    ctx.save();
+    ctx.translate(a.x, a.y + bobY);
+    // glow
+    ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 16;
+    // artifact: small golden idol shape
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(-6, -12, 12, 16);  // body
+    ctx.beginPath(); ctx.arc(0, -12, 8, Math.PI, 0); ctx.fill();  // head
+    ctx.fillStyle = '#b8860b';
+    ctx.fillRect(-8, 4, 16, 4);     // base
+    // shine
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(-2, -14, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+function drawGems() {
+  for (const g of gems) {
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    ctx.shadowColor = '#a8ff78'; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#a8ff78';
+    ctx.beginPath();
+    ctx.moveTo(0, -8); ctx.lineTo(6, 0); ctx.lineTo(0, 8); ctx.lineTo(-6, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(3, -2); ctx.lineTo(0, -4); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+function drawPlayer() {
+  if (dead) return;
+  const now = Date.now();
+  const invincible = now - hitTime < INVINCIBLE_MS;
+  if (invincible && Math.floor(Date.now() / 80) % 2 === 0) return; // flash
+
+  const pH = sliding ? SLIDE_H : PLAYER_H;
+  const t  = frame * 0.18;
+  const shooting = bullets.length > 0;
+
+  ctx.save();
+  ctx.translate(playerX, playerY + pH);
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (!sliding) {
+    // legs (running animation)
+    ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-3, -10); ctx.lineTo(-3 + Math.sin(t) * 7, -10 + 10 + Math.cos(t) * 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, -10); ctx.lineTo(3 - Math.sin(t) * 7, -10 + 10 - Math.cos(t) * 3); ctx.stroke();
+    // boots
+    ctx.fillStyle = '#3a1a0a';
+    ctx.fillRect(-7 + Math.sin(t) * 7, -1, 8, 5);
+    ctx.fillRect(3 - Math.sin(t) * 7, -1, 8, 5);
+
+    // body
+    ctx.fillStyle = '#6b8a3a'; // olive/khaki shirt
+    ctx.fillRect(-7, -pH + 12, 14, pH - 22);
+
+    // arms (swing when running, extend when shooting)
+    ctx.strokeStyle = '#5a7830'; ctx.lineWidth = 5;
+    if (shooting) {
+      // arms forward holding guns
+      ctx.beginPath(); ctx.moveTo(6, -pH + 18); ctx.lineTo(18, -pH + 22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(6, -pH + 24); ctx.lineTo(18, -pH + 28); ctx.stroke();
+      // guns
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(16, -pH + 19, 10, 5);
+      ctx.fillRect(16, -pH + 25, 10, 5);
+      // muzzle flash
+      if (Math.floor(Date.now() / 60) % 2 === 0) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(28, -pH + 21, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(28, -pH + 27, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    } else {
+      ctx.beginPath(); ctx.moveTo(6, -pH + 18); ctx.lineTo(6 + Math.cos(t) * 8, -pH + 18 + Math.sin(t) * 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-6, -pH + 18); ctx.lineTo(-6 - Math.cos(t) * 8, -pH + 18 - Math.sin(t) * 6); ctx.stroke();
+    }
+
+    // head
+    ctx.fillStyle = '#c49a6c'; // skin
+    ctx.beginPath(); ctx.arc(0, -pH + 10, 9, 0, Math.PI * 2); ctx.fill();
+
+    // hat (Lara braid as flowing trail)
+    ctx.fillStyle = '#4a2800';
+    ctx.beginPath();
+    ctx.moveTo(-9, -pH + 8);
+    ctx.lineTo(9, -pH + 8);
+    ctx.lineTo(9, -pH + 4);
+    ctx.arc(0, -pH + 4, 9, 0, Math.PI, true);
+    ctx.closePath(); ctx.fill();
+
+    // braid/ponytail (swings when jumping)
+    const braidSwing = (playerVY < 0 ? -0.3 : playerVY > 2 ? 0.3 : 0) + Math.sin(t * 0.5) * 0.1;
+    ctx.strokeStyle = '#8b5e3c'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-2, -pH + 6);
+    ctx.quadraticCurveTo(-14 + braidSwing * 20, -pH + 14, -16 + braidSwing * 30, -pH + 22);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-16 + braidSwing * 30, -pH + 22);
+    ctx.lineTo(-14 + braidSwing * 25, -pH + 30);
+    ctx.stroke();
+
+  } else {
+    // slide: crouched horizontal
+    ctx.fillStyle = '#6b8a3a';
+    ctx.fillRect(-14, -SLIDE_H + 2, 28, SLIDE_H - 4);
+    ctx.fillStyle = '#c49a6c';
+    ctx.beginPath(); ctx.arc(12, -SLIDE_H + 7, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a2800';
+    ctx.beginPath();
+    ctx.moveTo(6, -SLIDE_H + 5); ctx.lineTo(18, -SLIDE_H + 5);
+    ctx.lineTo(18, -SLIDE_H + 2); ctx.arc(12, -SLIDE_H + 2, 6, 0, Math.PI, true); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save(); ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.col;
+    if (p.kind === 'gold') { ctx.shadowColor = p.col; ctx.shadowBlur = 6; }
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawFloaters() {
+  for (const f of floaters) {
+    ctx.save(); ctx.globalAlpha = f.alpha;
+    ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = f.col; ctx.textAlign = 'center';
+    ctx.shadowColor = f.col; ctx.shadowBlur = 8;
+    ctx.fillText(f.txt, f.x, f.y); ctx.restore();
+  }
+}
+
+function drawIdle() {
+  resize();
+  ctx.clearRect(0, 0, cw, ch);
+  // simple idle scene
+  const gr = ctx.createLinearGradient(0, 0, 0, ch);
+  gr.addColorStop(0, '#060f14'); gr.addColorStop(1, '#0d1f10');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = '#0a1a07'; ctx.fillRect(0, ch - GROUND_H - CELL, cw, GROUND_H + CELL);
+  ctx.strokeStyle = '#1d4a12'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, ch - GROUND_H - CELL); ctx.lineTo(cw, ch - GROUND_H - CELL); ctx.stroke();
+  // golden artifact center
+  const ax = cw / 2, ay = ch * 0.45;
+  ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 20;
+  ctx.fillRect(ax - 10, ay - 20, 20, 28);
+  ctx.beginPath(); ctx.arc(ax, ay - 20, 13, Math.PI, 0); ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+// ─── boot ─────────────────────────────────────────────────────────────────────
+resize();
+best = parseInt(localStorage.getItem('th_best') || '0', 10) || 0;
+showTitle();
+
+// store best on page hide
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && best) localStorage.setItem('th_best', best);
+});
+window.addEventListener('beforeunload', () => {
+  if (best) localStorage.setItem('th_best', best);
+});
+</script>
+</body>
+</html>

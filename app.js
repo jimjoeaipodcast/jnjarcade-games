@@ -57,6 +57,13 @@ const WORLDS = {
     by: 'JIMMY',
     attract: flapAttract,
   },
+  'tomb-hunt': {
+    ink: '#d4a017', dim: '#4a3200', pit: '#0d0a02', glowsoft: 'rgba(212,160,23,0.22)',
+    genre: 'JUNGLE HUNT × TOMB RAIDER',
+    quote: '"In my day archaeology meant a shovel and a permit. She turned up with twin pistols and just started running. I have questions."',
+    by: 'JOE',
+    attract: tombHuntAttract,
+  },
 };
 
 const DEFAULT_WORLD = {
@@ -932,6 +939,169 @@ function doomAttract(ctx, w, h, t, world, s) {
 }
 
 /* ── Next release strip ───────────────────────────────────── */
+
+/* TOMB-HUNT attract — auto-running Lara jumps boulders, collects artifacts, swings vines */
+function tombHuntAttract(ctx, w, h, t, world, s) {
+  const SPEED  = w * 0.00078;
+  const GR     = 0.44;
+  const JY     = -10;
+  const FLOOR  = h * 0.78;
+  const PX     = w * 0.25;
+
+  if (!s.init) {
+    s.init = true; s.last = t; s.frame = 0;
+    s.py = FLOOR - 28; s.pvy = 0;
+    s.boulders  = [{ x: w * 0.78, r: 18, angle: 0 }, { x: w * 1.45, r: 20, angle: 0 }];
+    s.artifacts = [
+      { x: w * 0.60, y: FLOOR - 52, bob: 0 },
+      { x: w * 1.20, y: FLOOR - 44, bob: 1.8 },
+    ];
+    s.vines = [{ x: w * 1.05 }, { x: w * 1.70 }];
+    s.particles = [];
+    s.bgTrees = Array.from({length: 9}, () => ({
+      x: Math.random() * w * 1.6,
+      h: 55 + Math.random() * 90,
+      w: 14 + Math.random() * 22,
+      col: ['#1a3d0f','#15300b','#223d10'][Math.floor(Math.random()*3)],
+    }));
+  }
+
+  const dt = Math.min(t - s.last, 32); s.last = t; s.frame++;
+  const bgStep = SPEED * dt * 0.22;
+
+  // boulders
+  for (const b of s.boulders) {
+    b.x -= SPEED * dt * 1.12; b.angle += 0.058;
+    if (b.x < -35) b.x = w + 35 + Math.random() * 120;
+  }
+  // artifacts
+  for (const a of s.artifacts) {
+    a.x -= SPEED * dt; a.bob += 0.05;
+    if (a.x < -20) { a.x = w + 50 + Math.random() * 80; a.y = FLOOR - 40 - Math.random() * 55; a.bob = 0; }
+    // collect
+    if (Math.hypot(PX - a.x, (s.py + 18) - a.y) < 28) {
+      for (let j = 0; j < 7; j++) {
+        const ang = j / 7 * Math.PI * 2;
+        s.particles.push({ x: a.x, y: a.y, vx: Math.cos(ang)*2.6, vy: Math.sin(ang)*2.6-1, alpha: 1 });
+      }
+      a.x = w + 60 + Math.random() * 100; a.y = FLOOR - 40 - Math.random() * 55; a.bob = 0;
+    }
+  }
+  // vines
+  for (const v of s.vines) { v.x -= SPEED * dt; if (v.x < -15) v.x = w + 20 + Math.random() * 80; }
+  // particles
+  for (let i = s.particles.length - 1; i >= 0; i--) {
+    const p = s.particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.16; p.alpha -= 0.033;
+    if (p.alpha <= 0) s.particles.splice(i, 1);
+  }
+  // physics + AI jump
+  s.pvy += GR;
+  s.py  += s.pvy * dt / 16;
+  if (s.py >= FLOOR - 28) { s.py = FLOOR - 28; s.pvy = 0; }
+  const nearest = s.boulders.filter(b => b.x > PX + 12).sort((a,b) => a.x-b.x)[0];
+  if (nearest && nearest.x - PX < 96 && s.py >= FLOOR - 30) s.pvy = JY;
+
+  // ── DRAW ──
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#060802'); sky.addColorStop(1, '#180e02');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+
+  // bg trees
+  for (const tr of s.bgTrees) {
+    tr.x -= bgStep; if (tr.x < -tr.w - 4) tr.x = w + tr.w;
+    ctx.globalAlpha = 0.38; ctx.fillStyle = tr.col;
+    ctx.fillRect(tr.x - 4, FLOOR - tr.h, 8, tr.h);
+    ctx.beginPath(); ctx.arc(tr.x, FLOOR - tr.h, tr.w * 0.52, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tr.x - tr.w*0.3, FLOOR - tr.h + 10, tr.w*0.38, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tr.x + tr.w*0.3, FLOOR - tr.h + 12, tr.w*0.36, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // temple pillar silhouettes
+  ctx.globalAlpha = 0.14; ctx.fillStyle = '#6b5320';
+  for (let px = 50; px < w; px += 190) {
+    const ph = Math.min(FLOOR * 0.58, 140);
+    ctx.fillRect(px - 10, FLOOR - ph, 20, ph);
+    ctx.fillRect(px - 16, FLOOR - ph - 11, 32, 13);
+  }
+  ctx.globalAlpha = 1;
+
+  // vines
+  for (const v of s.vines) {
+    ctx.strokeStyle = '#2d5a1e'; ctx.lineWidth = 3; ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(v.x, 0); ctx.lineTo(v.x, FLOOR - 18); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.75; ctx.fillStyle = '#3a7a2a';
+    [0.32, 0.56, 0.72].forEach(f => {
+      ctx.beginPath(); ctx.arc(v.x, h * f, 6, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(v.x - 7, h * f + 3, 4, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // ground
+  ctx.fillStyle = '#0a1a07'; ctx.fillRect(0, FLOOR, w, h - FLOOR);
+  ctx.strokeStyle = '#1d4a12'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, FLOOR); ctx.lineTo(w, FLOOR); ctx.stroke();
+  // ground texture
+  ctx.fillStyle = '#162a10';
+  for (let gx = (-(s.frame * SPEED * 12) % 28); gx < w; gx += 28) ctx.fillRect(gx, FLOOR + 4, 10, 4);
+
+  // artifacts (golden idols)
+  for (const a of s.artifacts) {
+    const ay = a.y + Math.sin(a.bob) * 5;
+    ctx.save(); ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(a.x - 6, ay - 12, 12, 16);
+    ctx.beginPath(); ctx.arc(a.x, ay - 12, 8, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#b8860b'; ctx.fillRect(a.x - 8, ay + 4, 16, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(a.x - 2, ay - 14, 3, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // boulders
+  for (const b of s.boulders) {
+    ctx.save(); ctx.translate(b.x, FLOOR - b.r); ctx.rotate(b.angle);
+    const gr2 = ctx.createRadialGradient(-b.r*0.3,-b.r*0.3,b.r*0.1,0,0,b.r);
+    gr2.addColorStop(0,'#8a7a6a'); gr2.addColorStop(1,'#3a2a1a');
+    ctx.fillStyle = gr2; ctx.beginPath(); ctx.arc(0,0,b.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#2a1a0a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-b.r*0.2,-b.r*0.5); ctx.lineTo(b.r*0.1,b.r*0.3); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Lara character
+  const pfl = s.frame * 0.2; const pH = 28;
+  ctx.save(); ctx.translate(PX, s.py + pH);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-3,-8); ctx.lineTo(-3+Math.sin(pfl)*6,0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3,-8); ctx.lineTo(3-Math.sin(pfl)*6,0); ctx.stroke();
+  ctx.fillStyle = '#6b8a3a'; ctx.fillRect(-6,-pH+10,12,pH-18);
+  ctx.strokeStyle = '#5a7830';
+  ctx.beginPath(); ctx.moveTo(6,-pH+16); ctx.lineTo(6+Math.cos(pfl)*7,-pH+16+Math.sin(pfl)*5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6,-pH+16); ctx.lineTo(-6-Math.cos(pfl)*7,-pH+16-Math.sin(pfl)*5); ctx.stroke();
+  ctx.fillStyle = '#c49a6c'; ctx.beginPath(); ctx.arc(0,-pH+8,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#4a2800'; ctx.fillRect(-8,-pH+6,16,5);
+  ctx.beginPath(); ctx.arc(0,-pH+6,8,Math.PI,0); ctx.fill();
+  const bsw = s.pvy < -2 ? -0.28 : s.pvy > 2 ? 0.18 : 0;
+  ctx.strokeStyle = '#8b5e3c'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-2,-pH+5);
+  ctx.quadraticCurveTo(-12+bsw*14,-pH+13,-14+bsw*19,-pH+21);
+  ctx.stroke();
+  ctx.restore();
+
+  // gold particles
+  for (const p of s.particles) {
+    ctx.save(); ctx.globalAlpha = Math.max(0, p.alpha);
+    ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
 
 function buildNextStrip(games) {
   const upcoming = games
