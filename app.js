@@ -175,12 +175,20 @@ function buildCabinet(game) {
   tag.textContent = 'ATTRACT MODE';
   glass.appendChild(tag);
 
-  // your real best score lives on the cabinet; 999999 until you earn one
-  const HS_KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-3d': 'jnj_doom3d_hs' };
-  const hs = parseInt(localStorage.getItem(HS_KEYS[game.id] || '') || '0', 10);
   const hsTag = document.createElement('span');
   hsTag.className = 'hiscore-tag';
-  hsTag.textContent = 'HI-SCORE ' + (hs > 0 ? hs.toLocaleString('en-GB') : '999999');
+  hsTag.textContent = 'HI-SCORE ' + (function(id) {
+    // ArcadeScores board (hop-man, bomb-garden, candy-tris, …)
+    try {
+      const board = JSON.parse(localStorage.getItem('jnj_board_' + id) || '[]');
+      if (board.length) return Math.max(...board.map(e => e.score || 0)).toLocaleString('en-GB');
+    } catch (e) {}
+    // Per-game simple keys
+    const KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-3d': 'jnj_doom3d_hs',
+                   'flap-fight': 'hs_flap-fight', 'tomb-hunt': 'th_best' };
+    const v = parseInt(localStorage.getItem(KEYS[id] || '') || '0', 10);
+    return v > 0 ? v.toLocaleString('en-GB') : '999999';
+  }(game.id));
   glass.appendChild(hsTag);
 
   attract.appendChild(glass);
@@ -1435,7 +1443,7 @@ function candyTrisAttract(ctx, w, h, t, world, s) {
   ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(255,105,180,0.5)';
-  ctx.fillText('CANDY-TRIS', w/2, h * 0.92);
+  ctx.fillText('CRUSHTRIS', w/2, h * 0.92);
 }
 
 document.addEventListener('DOMContentLoaded', init);

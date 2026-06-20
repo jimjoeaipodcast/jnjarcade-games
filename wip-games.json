@@ -15,6 +15,14 @@
       "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
       "url": "games/bomb-garden.html",
       "status": "testing"
+    },
+    {
+      "id": "candy-tris",
+      "name": "CRUSHTRIS",
+      "emoji": "🍭",
+      "genre": "CANDY CRUSH × TETRIS",
+      "url": "games/candy-tris.html",
+      "status": "testing"
     }
   ]
 }
