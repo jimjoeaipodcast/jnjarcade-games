@@ -1,27 +1,19 @@
 {
   "games": [
     {
-      "id": "token-rush",
-      "name": "TOKEN RUSH",
-      "emoji": "⚡",
-      "genre": "EPISODE 3",
-      "url": "games/token-rush.html",
-      "status": "testing"
-    },
-    {
-      "id": "cipher-hunt",
-      "name": "CIPHER HUNT",
-      "emoji": "🔐",
-      "genre": "EPISODE 6",
-      "url": "games/cipher-hunt.html",
-      "status": "testing"
-    },
-    {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
       "emoji": "🏺",
       "genre": "JUNGLE HUNT × TOMB RAIDER",
       "url": "games/tomb-hunt.html",
+      "status": "testing"
+    },
+    {
+      "id": "bomb-garden",
+      "name": "BOMB GARDEN",
+      "emoji": "💣",
+      "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
+      "url": "games/bomb-garden.html",
       "status": "testing"
     }
   ]
