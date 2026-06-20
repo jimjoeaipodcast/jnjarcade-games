@@ -64,6 +64,13 @@ const WORLDS = {
     by: 'JOE',
     attract: tombHuntAttract,
   },
+  'bomb-garden': {
+    ink: '#3d7a28', dim: '#1a4010', pit: '#070d04', glowsoft: 'rgba(61,122,40,0.22)',
+    genre: 'BOMBERMAN × PLANTS VS ZOMBIES',
+    quote: '"In my day you either planted things OR blew things up. Not both. Nobody asked for both."',
+    by: 'JOE',
+    attract: bombGardenAttract,
+  },
 };
 
 const DEFAULT_WORLD = {
@@ -1207,6 +1214,119 @@ async function init() {
     const games = data.games || [];
 
     // main arcade: only unlocked, most-played first. WIP: show every tester game.
+/* ── Attract: Bomb Garden ─────────────────────────────────────────────────── */
+function bombGardenAttract(ctx, w, h, t, world, s) {
+  if (!s.init) {
+    s.init = true; s.last = t;
+    const CELL = Math.max(10, Math.floor(w / 13));
+    const cols = Math.floor(w / CELL), rows = Math.floor(h / CELL) | 1;
+    s.CELL = CELL; s.cols = cols; s.rows = rows;
+    // Static maze grid
+    s.grid = [];
+    for (let r = 0; r < rows; r++) {
+      s.grid[r] = [];
+      for (let c = 0; c < cols; c++) {
+        s.grid[r][c] = (r % 2 === 0 && c % 2 === 0) ? 1 : (r % 2 === 0 && Math.random() < 0.55 ? 2 : 0);
+      }
+    }
+    s.bomb = { r: Math.floor(rows / 2), c: 2, fuseEnd: t + 2200 };
+    s.exps = [];
+    s.zombies = [
+      { r: 1, cx: cols - 0.8 }, { r: 3, cx: cols - 0.4 },
+      { r: rows - 2, cx: cols - 1.1 },
+    ].filter(z => z.r < rows);
+    s.plant = { r: Math.floor(rows / 2) % 2 === 1 ? Math.floor(rows / 2) : Math.floor(rows / 2) - 1, c: 4 };
+    s.sun = { cx: 5, ry: -0.4 };
+    s.frame = 0;
+  }
+
+  const dt = Math.min(t - s.last, 32); s.last = t; s.frame++;
+  const CL = s.CELL;
+
+  // BG
+  ctx.fillStyle = '#070d04'; ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  for (let r = 0; r < s.rows; r++) for (let c = 0; c < s.cols; c++) {
+    const x = c * CL, y = r * CL;
+    ctx.fillStyle = r % 2 === 1 ? '#0f1f08' : '#0c1600';
+    ctx.fillRect(x + 1, y + 1, CL - 2, CL - 2);
+    if (s.grid[r][c] === 1) { ctx.fillStyle = '#383838'; ctx.fillRect(x + 2, y + 2, CL - 4, CL - 4); }
+    else if (s.grid[r][c] === 2) { ctx.fillStyle = '#7a5818'; ctx.fillRect(x + 2, y + 2, CL - 4, CL - 4); }
+  }
+
+  // Plant (peashooter icon substitute — green circle)
+  const pr = s.plant.r, pc = s.plant.c;
+  if (pr < s.rows && pc < s.cols) {
+    ctx.beginPath(); ctx.arc(pc * CL + CL / 2, pr * CL + CL / 2, CL * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = '#3d7a28'; ctx.fill();
+    ctx.strokeStyle = '#7bba3f'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  // Bomb
+  const bx = s.bomb.c * CL + CL / 2, by = s.bomb.r * CL + CL / 2, br = CL * 0.38;
+  const frac = Math.max(0, (s.bomb.fuseEnd - t) / 2200);
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.fillStyle = '#1a1a1a'; ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, br + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - frac));
+  ctx.strokeStyle = frac < 0.33 ? '#ff2200' : '#ff8800'; ctx.lineWidth = 2; ctx.stroke();
+  if (Math.sin(t / 70) > 0) {
+    ctx.beginPath(); ctx.arc(bx + br * 0.55, by - br * 0.65, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8800'; ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 6;
+    ctx.fill(); ctx.shadowBlur = 0;
+  }
+
+  // Trigger explosion when fuse done
+  if (t >= s.bomb.fuseEnd && !s.exploded) {
+    s.exploded = true;
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+    dirs.forEach(([dr, dc]) => {
+      for (let d = 0; d <= 2; d++) s.exps.push({ r: s.bomb.r + dr*d, c: s.bomb.c + dc*d, born: t, dur: 450 });
+    });
+    s.exps.push({ r: s.bomb.r, c: s.bomb.c, born: t, dur: 450 });
+    // Reset for loop
+    setTimeout(() => {
+      s.exploded = false; s.exps = [];
+      s.bomb = { r: s.bomb.r, c: s.bomb.c, fuseEnd: performance.now() + 2200 };
+    }, 1200);
+  }
+
+  // Explosions
+  for (const e of s.exps) {
+    const age = t - e.born, frac2 = age / e.dur; if (frac2 >= 1) continue;
+    ctx.globalAlpha = 1 - frac2;
+    ctx.beginPath(); ctx.arc(e.c * CL + CL / 2, e.r * CL + CL / 2, CL * (0.3 + frac2 * 0.3), 0, Math.PI * 2);
+    ctx.fillStyle = e.r === s.bomb.r && e.c === s.bomb.c ? '#ffee00' : '#ff8800'; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Zombies walking left
+  for (const z of s.zombies) {
+    z.cx -= 0.012 * (dt / 50);
+    if (z.cx < -1) z.cx = s.cols + 0.5;
+    const zx = z.cx * CL, zy = z.r * CL;
+    ctx.fillStyle = '#7aad54'; ctx.fillRect(zx + CL * 0.25, zy + CL * 0.3, CL * 0.5, CL * 0.5);
+    ctx.beginPath(); ctx.arc(zx + CL / 2, zy + CL * 0.25, CL * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = '#90c060'; ctx.fill();
+    ctx.fillStyle = '#cc1100';
+    ctx.fillRect(zx + CL * 0.35, zy + CL * 0.18, CL * 0.1, CL * 0.08);
+    ctx.fillRect(zx + CL * 0.55, zy + CL * 0.18, CL * 0.1, CL * 0.08);
+  }
+
+  // Falling sun coin
+  s.sun.ry += 0.025 * (dt / 50);
+  if (s.sun.ry > s.rows + 0.5) s.sun.ry = -0.5;
+  const sx = s.sun.cx * CL + CL / 2, sy = s.sun.ry * CL + CL / 2;
+  ctx.beginPath(); ctx.arc(sx, sy, CL * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = '#f5c800'; ctx.shadowColor = '#f5c800'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+
+  // Genre label
+  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(61,122,40,0.55)';
+  ctx.fillText('BOMB GARDEN', w / 2, h * 0.92);
+}
+
     const live = WIP
       ? games
       : games.filter(g => isUnlocked(g.releaseDate))

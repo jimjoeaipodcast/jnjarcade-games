@@ -96,6 +96,16 @@
       "episode": "Bonus"
     },
     {
+      "id": "bomb-garden",
+      "name": "Bomb Garden",
+      "emoji": "💣",
+      "url": "/games/bomb-garden.html",
+      "releaseDate": "2099-01-01",
+      "week": 3,
+      "gradient": ["#3d7a28","#1a4010"],
+      "episode": "Episode 3"
+    },
+    {
       "id": "token-rush",
       "name": "Token Rush",
       "emoji": "⚡",
