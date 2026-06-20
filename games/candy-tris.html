@@ -21,7 +21,7 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-acti
 #coin h1{font-family:'Bungee',monospace;font-size:30px;letter-spacing:4px;color:#ff69b4;text-shadow:0 0 24px #ff69b4;margin-bottom:8px}
 #coin .sub{font-family:'Bungee',monospace;font-size:13px;color:#cc44ff;opacity:0.8;margin-bottom:24px}
 #coin .ins{font-family:'Bungee',monospace;font-size:14px;color:#ff69b4;animation:blink 1s step-end infinite}
-#combo{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-family:'Bungee',monospace;font-size:22px;color:#ffdd00;text-shadow:0 0 20px #ffdd00;pointer-events:none;opacity:0;transition:opacity 0.3s;white-space:nowrap;z-index:5}
+#banner{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);font-family:'Bungee',monospace;text-align:center;pointer-events:none;opacity:0;transition:opacity 0.25s;z-index:5;white-space:nowrap;text-shadow:0 0 30px currentColor}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 </style>
 </head>
@@ -33,7 +33,7 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-acti
     <span id="level-el">LVL<br>1</span>
   </div>
   <canvas id="c"></canvas>
-  <span id="combo"></span>
+  <div id="banner"></div>
 </div>
 <div id="coin">
   <h1>CRUSHTRIS</h1>
@@ -47,22 +47,24 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-acti
 const COLS=10, ROWS=20;
 const COLORS=['#e01228','#e06800','#f0cc00','#20a828','#1a5ae0','#9020c8'];
 const CANDY=[
-  {body:'#e01228',light:'#ff5566',dark:'#7a000e', pat:'heart'},
-  {body:'#e06800',light:'#ff9933',dark:'#7a3500', pat:'segments'},
-  {body:'#f0cc00',light:'#ffee55',dark:'#806800', pat:'star'},
-  {body:'#20a828',light:'#55dd66',dark:'#0f4a14', pat:'leaf'},
-  {body:'#1a5ae0',light:'#5599ff',dark:'#081a80', pat:'gem'},
-  {body:'#9020c8',light:'#cc66ff',dark:'#44007a', pat:'swirl'},
+  {body:'#e01228',light:'#ff5566',dark:'#7a000e'},
+  {body:'#e06800',light:'#ff9933',dark:'#7a3500'},
+  {body:'#f0cc00',light:'#ffee55',dark:'#806800'},
+  {body:'#20a828',light:'#55dd66',dark:'#0f4a14'},
+  {body:'#1a5ae0',light:'#5599ff',dark:'#081a80'},
+  {body:'#9020c8',light:'#cc66ff',dark:'#44007a'},
 ];
 const N='NORMAL',SH='STRIPED_H',SV='STRIPED_V',WR='WRAPPED',CB='COLOUR_BOMB';
+
+// 7 standard tetrominoes: I O T S Z J L
 const PIECES=[
-  [[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]]],
-  [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
-  [[[0,1,0],[1,1,1]],[[1,0],[1,1],[1,0]],[[1,1,1],[0,1,0]],[[0,1],[1,1],[0,1]]],
-  [[[0,1,1],[1,1,0]],[[1,0],[1,1],[0,1]],[[0,1,1],[1,1,0]],[[1,0],[1,1],[0,1]]],
-  [[[1,1,0],[0,1,1]],[[0,1],[1,1],[1,0]],[[1,1,0],[0,1,1]],[[0,1],[1,1],[1,0]]],
-  [[[1,0,0],[1,1,1]],[[1,1],[1,0],[1,0]],[[1,1,1],[0,0,1]],[[0,1],[0,1],[1,1]]],
-  [[[0,0,1],[1,1,1]],[[1,0],[1,0],[1,1]],[[1,1,1],[1,0,0]],[[1,1],[0,1],[0,1]]],
+  [[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]]],          // I
+  [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],              // O
+  [[[0,1,0],[1,1,1]],[[1,0],[1,1],[1,0]],[[1,1,1],[0,1,0]],[[0,1],[1,1],[0,1]]],  // T (idx 2)
+  [[[0,1,1],[1,1,0]],[[1,0],[1,1],[0,1]],[[0,1,1],[1,1,0]],[[1,0],[1,1],[0,1]]],  // S
+  [[[1,1,0],[0,1,1]],[[0,1],[1,1],[1,0]],[[1,1,0],[0,1,1]],[[0,1],[1,1],[1,0]]],  // Z
+  [[[1,0,0],[1,1,1]],[[1,1],[1,0],[1,0]],[[1,1,1],[0,0,1]],[[0,1],[0,1],[1,1]]],  // J
+  [[[0,0,1],[1,1,1]],[[1,0],[1,0],[1,1]],[[1,1,1],[1,0,0]],[[1,1],[0,1],[0,1]]],  // L
 ];
 
 // ── DOM ────────────────────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ const ncanvas=document.getElementById('next-canvas');
 const nctx=ncanvas.getContext('2d');
 const scoreEl=document.getElementById('score-el');
 const levelEl=document.getElementById('level-el');
-const comboEl=document.getElementById('combo');
+const bannerEl=document.getElementById('banner');
 let CELL=32;
 
 function resize(){
@@ -84,8 +86,11 @@ function resize(){
 
 // ── State ──────────────────────────────────────────────────────────────────
 let board,piece,nextPiece,score,level,linesCleared,gameOver,cascading;
-let dropInterval,lastDrop,lockR,lockC,comboCount,comboTO,animId;
+let dropInterval,lastDrop,lockR,lockC,comboCount,bannerTO,animId;
 let particles=[],rings=[],sweeps=[];
+let wasRotated=false;           // for T-spin detection
+let lastClearType='';           // 'tetris' | 'tspin' | '' for back-to-back
+let backToBack=false;
 
 // ── Board helpers ──────────────────────────────────────────────────────────
 const ck=(r,c)=>r*COLS+c;
@@ -124,6 +129,18 @@ function recolor(p,newRot){
   return nc;
 }
 
+// ── T-spin detection ───────────────────────────────────────────────────────
+function checkTSpin(){
+  if(!piece||piece.type!==2||!wasRotated)return false;
+  // Centre of T-piece after rotation
+  const cr=piece.r+1,cc=piece.c+1;
+  let corners=0;
+  [[cr-1,cc-1],[cr-1,cc+1],[cr+1,cc-1],[cr+1,cc+1]].forEach(([r,c])=>{
+    if(r<0||r>=ROWS||c<0||c>=COLS||board[r][c])corners++;
+  });
+  return corners>=3;
+}
+
 // ── Gravity ────────────────────────────────────────────────────────────────
 function gravity(b){
   for(let c=0;c<COLS;c++){
@@ -131,6 +148,11 @@ function gravity(b){
     for(let r=ROWS-1;r>=0;r--){if(b[r][c]){b[w][c]=b[r][c];if(w!==r)b[r][c]=null;w--;}}
     while(w>=0)b[w--][c]=null;
   }
+}
+
+// ── Perfect clear check ────────────────────────────────────────────────────
+function isPerfectClear(){
+  return board.every(row=>row.every(c=>c===null));
 }
 
 // ── Tetris line clear ──────────────────────────────────────────────────────
@@ -191,25 +213,123 @@ function findMatches(){
     else if(run.len>=5)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:-1,type:CB}});
   }
 
+  const exp=expandSpecialCombos(toRemove);
+  return{toRemove:exp,toCreate,count:toRemove.size};
+}
+
+// ── Special + special combo expansion ─────────────────────────────────────
+function expandSpecialCombos(toRemove){
   const exp=new Set(toRemove);
+
+  // Collect specials being cleared
+  const specials=[];
   for(const key of toRemove){
-    const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];if(!cell)continue;
-    if(cell.type===SH){for(let cc=0;cc<COLS;cc++)exp.add(ck(r,cc));}
-    else if(cell.type===SV){for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,c));}
-    else if(cell.type===WR){
-      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
-        const nr=r+dr,nc=c+dc;if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
+    const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];
+    if(cell&&cell.type!==N)specials.push({r,c,key,type:cell.type,color:cell.color});
+  }
+
+  const bombs=specials.filter(s=>s.type===CB);
+  const stripes=specials.filter(s=>s.type===SH||s.type===SV);
+  const wraps=specials.filter(s=>s.type===WR);
+
+  // ── CB + CB → clear entire board ──
+  if(bombs.length>=2){
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)exp.add(ck(r,c));
+    showBanner('💥 MEGA BLAST!','#ff44ff',28);
+    return exp;
+  }
+
+  // ── CB + Striped → convert all of most-common colour to that stripe, fire all ──
+  if(bombs.length===1&&stripes.length>=1){
+    const stripe=stripes[0];
+    const cnt=Array(COLORS.length).fill(0);
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+      if(board[r][c]&&board[r][c].color>=0)cnt[board[r][c].color]++;
+    const tc=cnt.indexOf(Math.max(...cnt));
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(board[r][c]&&board[r][c].color===tc){
+        board[r][c]={color:tc,type:stripe.type};
+        exp.add(ck(r,c));
+        if(stripe.type===SH)for(let cc=0;cc<COLS;cc++)exp.add(ck(r,cc));
+        else for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,c));
       }
-    }else if(cell.type===CB){
+    }
+    showBanner('⚡ COLOR LASER!','#ffdd00',26);
+    return exp;
+  }
+
+  // ── CB + Wrapped → convert all of most-common colour to wrapped, fire 3×3 on each ──
+  if(bombs.length===1&&wraps.length>=1){
+    const cnt=Array(COLORS.length).fill(0);
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+      if(board[r][c]&&board[r][c].color>=0)cnt[board[r][c].color]++;
+    const tc=cnt.indexOf(Math.max(...cnt));
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(board[r][c]&&board[r][c].color===tc){
+        for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+          const nr=r+dr,nc=c+dc;
+          if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
+        }
+      }
+    }
+    showBanner('🌀 CANDY STORM!','#cc44ff',26);
+    return exp;
+  }
+
+  // ── Striped + Wrapped → 3-row + 3-column wide cross ──
+  if(stripes.length>=1&&wraps.length>=1){
+    const s=stripes[0];
+    for(let dr=-1;dr<=1;dr++){
+      const r2=s.r+dr;if(r2<0||r2>=ROWS)continue;
+      for(let cc=0;cc<COLS;cc++)exp.add(ck(r2,cc));
+    }
+    for(let dc=-1;dc<=1;dc++){
+      const c2=s.c+dc;if(c2<0||c2>=COLS)continue;
+      for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,c2));
+    }
+    showBanner('✚ SUGAR CROSS!','#ff8800',24);
+    return exp;
+  }
+
+  // ── Striped + Striped → row AND column from each ──
+  if(stripes.length>=2){
+    for(const s of stripes){
+      for(let cc=0;cc<COLS;cc++)exp.add(ck(s.r,cc));
+      for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,s.c));
+    }
+    showBanner('✦ DOUBLE STRIPE!','#ff69b4',24);
+    return exp;
+  }
+
+  // ── Single special expansion ──
+  for(const s of specials){
+    if(s.type===SH){for(let cc=0;cc<COLS;cc++)exp.add(ck(s.r,cc));}
+    else if(s.type===SV){for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,s.c));}
+    else if(s.type===WR){
+      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+        const nr=s.r+dr,nc=s.c+dc;
+        if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
+      }
+    }else if(s.type===CB){
       const cnt=Array(COLORS.length).fill(0);
-      for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
-        if(board[rr][cc]&&board[rr][cc].color>=0)cnt[board[rr][cc].color]++;
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+        if(board[r][c]&&board[r][c].color>=0)cnt[board[r][c].color]++;
       const tc=cnt.indexOf(Math.max(...cnt));
-      for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
-        if(board[rr][cc]&&board[rr][cc].color===tc)exp.add(ck(rr,cc));
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+        if(board[r][c]&&board[r][c].color===tc)exp.add(ck(r,c));
     }
   }
-  return{toRemove:exp,toCreate,count:toRemove.size};
+  return exp;
+}
+
+// ── Banner ─────────────────────────────────────────────────────────────────
+function showBanner(txt,col,sz){
+  clearTimeout(bannerTO);
+  bannerEl.textContent=txt;
+  bannerEl.style.color=col;
+  bannerEl.style.fontSize=(sz||22)+'px';
+  bannerEl.style.opacity='1';
+  bannerTO=setTimeout(()=>{bannerEl.style.opacity='0';},1100);
 }
 
 // ── Effects ────────────────────────────────────────────────────────────────
@@ -255,27 +375,70 @@ function addBombFX(gc,gr){
 
 // ── Lock + cascade ─────────────────────────────────────────────────────────
 function lockPiece(){
+  const isSpin=checkTSpin();
   const cells=pCells(piece);
   lockR=0;lockC=piece.c+Math.floor(pshape(piece)[0].length/2);
   for(const{r,c,col}of cells){board[r][c]={color:col,type:N};if(r>lockR)lockR=r;}
-  piece=null;comboCount=0;cascading=true;
+  piece=null;comboCount=0;wasRotated=false;cascading=true;
+
+  if(isSpin){
+    showBanner('🌀 T-SPIN!','#cc44ff',28);
+    score+=400*level;
+    if(lastClearType==='tspin'){showBanner('🔥 BACK TO BACK T-SPIN!','#ff44ff',26);score+=800*level;}
+    lastClearType='tspin';backToBack=true;
+  }else{
+    backToBack=false;
+  }
+
   setTimeout(runCascade,80);
 }
+
 function runCascade(){
   const lc=clearLines();
   if(lc>0){
-    score+=[0,100,300,500,800][Math.min(lc,4)]*level;
+    const base=[0,100,300,500,800][Math.min(lc,4)];
+    let bonus=base*level;
+
+    if(lc===4){
+      // Tetris!
+      if(backToBack&&lastClearType==='tetris'){
+        bonus=Math.round(bonus*1.5);
+        showBanner('🔥 BACK-TO-BACK TETRIS!','#ff2200',30);
+      }else{
+        showBanner('💎 TETRIS!','#ffdd00',32);
+      }
+      lastClearType='tetris';backToBack=true;
+    }else if(lc===3){
+      showBanner('TRIPLE!','#ff69b4',24);
+      lastClearType='';backToBack=false;
+    }else if(lc===2){
+      lastClearType='';backToBack=false;
+    }else{
+      lastClearType='';backToBack=false;
+    }
+
+    score+=bonus;
     linesCleared+=lc;level=Math.floor(linesCleared/10)+1;
     dropInterval=Math.max(80,1000-(level-1)*90);
   }
+
   candyCascade(0);
 }
+
 function candyCascade(depth){
   const res=findMatches();
-  if(!res){cascading=false;spawnNext();return;}
+  if(!res){
+    // Check perfect clear AFTER all cascades settle
+    if(isPerfectClear()){
+      score+=3000*level;
+      showBanner('✨ PERFECT CLEAR!','#ffffff',30);
+    }
+    cascading=false;spawnNext();return;
+  }
   score+=res.count*30*level+(comboCount>0?comboCount*60*level:0);
   comboCount++;
-  if(comboCount>=2)showCombo(comboCount);
+  if(comboCount>=3)showBanner(comboCount+'× COMBO!','#ffdd00',24);
+  else if(comboCount===2)showBanner('2× COMBO!','#ff9900',22);
 
   for(const key of res.toRemove){
     const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];if(!cell)continue;
@@ -324,16 +487,21 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowUp'||e.key===' '){rotate();e.preventDefault();}
   if(e.key.toLowerCase()==='z')hardDrop();
 });
+
 function rotate(){
   if(!piece)return;
   const nr=(piece.rot+1)%4;
   for(const[dr,dc]of[[0,0],[0,-1],[0,1],[0,-2],[0,2],[-1,0]]){
-    if(valid(piece,board,dr,dc,nr)){piece.colors=recolor(piece,nr);piece.rot=nr;piece.r+=dr;piece.c+=dc;return;}
+    if(valid(piece,board,dr,dc,nr)){
+      piece.colors=recolor(piece,nr);piece.rot=nr;piece.r+=dr;piece.c+=dc;
+      wasRotated=true;
+      return;
+    }
   }
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
-// ── Candy drawing — SQUARE TETRIS BLOCK STYLE ──────────────────────────────
+// ── Candy drawing — square Tetris block style ──────────────────────────────
 function drawPattern(c2d,cx,cy,r,idx){
   switch(idx){
     case 0:{ // Red - heart
@@ -343,7 +511,7 @@ function drawPattern(c2d,cx,cy,r,idx){
       c2d.bezierCurveTo(cx+h*1.4,cy-h*.95,cx+h*1.35,cy-h*.2,cx,cy+h*.65);
       c2d.fill();c2d.globalAlpha=1;break;
     }
-    case 1:{ // Orange - 3 segments
+    case 1:{ // Orange - segments
       c2d.strokeStyle='rgba(80,30,0,.42)';c2d.lineWidth=r*.07;
       c2d.beginPath();c2d.arc(cx,cy+r*.1,r*.09,0,Math.PI*2);
       c2d.fillStyle='rgba(90,35,0,.48)';c2d.fill();
@@ -353,7 +521,7 @@ function drawPattern(c2d,cx,cy,r,idx){
         c2d.lineTo(cx+Math.cos(a)*r*.82,cy+r*.1+Math.sin(a)*r*.82);c2d.stroke();
       }break;
     }
-    case 2:{ // Yellow - 6-point star
+    case 2:{ // Yellow - star
       c2d.strokeStyle='rgba(110,85,0,.42)';c2d.lineWidth=r*.065;
       for(let i=0;i<6;i++){
         const a=(i/6)*Math.PI*2;
@@ -362,7 +530,7 @@ function drawPattern(c2d,cx,cy,r,idx){
       c2d.beginPath();c2d.arc(cx,cy,r*.13,0,Math.PI*2);
       c2d.fillStyle='rgba(255,240,60,.9)';c2d.fill();break;
     }
-    case 3:{ // Green - leaf spine + veins
+    case 3:{ // Green - leaf
       c2d.strokeStyle='rgba(8,50,8,.5)';c2d.lineWidth=r*.065;
       c2d.beginPath();c2d.moveTo(cx,cy-r*.68);
       c2d.bezierCurveTo(cx+r*.25,cy-r*.2,cx-r*.25,cy+r*.2,cx,cy+r*.68);c2d.stroke();
@@ -372,7 +540,7 @@ function drawPattern(c2d,cx,cy,r,idx){
         c2d.beginPath();c2d.moveTo(x1,y1);c2d.lineTo(x2,y2);c2d.stroke();
       });break;
     }
-    case 4:{ // Blue - gem facets
+    case 4:{ // Blue - gem
       c2d.strokeStyle='rgba(180,220,255,.5)';c2d.lineWidth=r*.055;
       const T=[0,-.73],L=[-.55,.08],R=[.55,.08],B=[0,.73];
       [[T,L],[T,R],[L,B],[R,B],[L,R]].forEach(([a,b])=>{
@@ -382,7 +550,7 @@ function drawPattern(c2d,cx,cy,r,idx){
       c2d.beginPath();c2d.moveTo(cx,cy-.73*r);c2d.lineTo(cx+.55*r,cy+.08*r);
       c2d.lineTo(cx,cy);c2d.lineTo(cx-.55*r,cy+.08*r);c2d.closePath();c2d.fill();break;
     }
-    case 5:{ // Purple - S-swirl
+    case 5:{ // Purple - swirl
       c2d.strokeStyle='rgba(210,155,255,.6)';c2d.lineWidth=r*.08;
       c2d.beginPath();c2d.moveTo(cx-r*.38,cy-r*.52);
       c2d.bezierCurveTo(cx+r*.58,cy-r*.14,cx-r*.58,cy+r*.14,cx+r*.38,cy+r*.52);c2d.stroke();
@@ -395,7 +563,6 @@ function drawPattern(c2d,cx,cy,r,idx){
 
 function drawTypeOverlay(c2d,cx,cy,r,sz,type){
   if(type===SH||type===SV){
-    // Stripes across the square
     c2d.strokeStyle='rgba(255,255,255,0.55)';c2d.lineWidth=Math.max(1.5,sz*.04);
     const step=r*.45;
     if(type===SH){
@@ -414,7 +581,6 @@ function drawTypeOverlay(c2d,cx,cy,r,sz,type){
       c2d.textAlign='center';c2d.textBaseline='middle';c2d.fillText('↕',cx,cy+1);
     }
   }else if(type===WR){
-    // Wrapped candy bow
     c2d.strokeStyle='rgba(255,255,255,.55)';c2d.lineWidth=Math.max(1.5,sz*.04);
     c2d.beginPath();c2d.arc(cx,cy,r*.68,0,Math.PI*2);c2d.stroke();
     c2d.beginPath();c2d.arc(cx,cy,r*.38,0,Math.PI*2);c2d.stroke();
@@ -425,16 +591,14 @@ function drawTypeOverlay(c2d,cx,cy,r,sz,type){
 }
 
 function drawCandy(c2d,x,y,sz,colorIdx,type){
-  const cx=x+sz*.5, cy=y+sz*.5;
-  const b=Math.max(2,Math.round(sz*.11)); // border thickness
+  const cx=x+sz*.5,cy=y+sz*.5;
+  const b=Math.max(2,Math.round(sz*.11));
 
   if(colorIdx<0||type===CB){
-    // ── Colour bomb: dark square with rainbow wedges + star ──
     c2d.fillStyle='#080300';
     c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
     c2d.fillStyle='#190d05';
     c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
-
     c2d.save();
     c2d.beginPath();c2d.rect(x+b,y+b,sz-b*2,sz-b*2);c2d.clip();
     const spin=performance.now()/800;
@@ -443,56 +607,51 @@ function drawCandy(c2d,x,y,sz,colorIdx,type){
       c2d.arc(cx,cy,sz*.65,(i/6)*Math.PI*2+spin,((i+1)/6)*Math.PI*2+spin);
       c2d.closePath();c2d.fillStyle=col+'5a';c2d.fill();
     });
-    // Subtle shine bevel
     c2d.fillStyle='rgba(255,255,255,0.07)';
     c2d.fillRect(x+b,y+b,sz-b*2,b*.6);
     c2d.fillRect(x+b,y+b,b*.6,sz-b*2);
     c2d.restore();
-
     c2d.shadowColor='#ff44ff';c2d.shadowBlur=sz*.4;
     c2d.fillStyle='rgba(255,255,255,.95)';
     c2d.font=`bold ${Math.max(8,~~(sz*.55))}px sans-serif`;
     c2d.textAlign='center';c2d.textBaseline='middle';
     c2d.fillText('★',cx,cy+1);
     c2d.shadowBlur=0;
-
     c2d.beginPath();c2d.ellipse(cx-sz*.13,cy-sz*.19,sz*.12,sz*.065,-.5,0,Math.PI*2);
     c2d.fillStyle='rgba(255,255,255,.38)';c2d.fill();
     return;
   }
 
   const C=CANDY[colorIdx];
+  const bv=Math.max(1,b*.65);
 
-  // ── Outer border square (dark candy colour) ──
+  // Outer border
   c2d.fillStyle=C.dark;
   c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
 
-  // ── Inner fill: diagonal gradient light→body→dark ──
+  // Inner gradient fill
   const g=c2d.createLinearGradient(x+b,y+b,x+sz-b,y+sz-b);
-  g.addColorStop(0,C.light);
-  g.addColorStop(.45,C.body);
-  g.addColorStop(1,C.dark);
+  g.addColorStop(0,C.light);g.addColorStop(.45,C.body);g.addColorStop(1,C.dark);
   c2d.fillStyle=g;
   c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
 
-  // ── Tetris-style bevel: highlight top-left ──
-  const bv=Math.max(1,b*.65);
+  // Bevel: highlight top-left
   c2d.fillStyle='rgba(255,255,255,0.32)';
-  c2d.fillRect(x+b,y+b,sz-b*2,bv);         // top strip
-  c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);  // left strip
+  c2d.fillRect(x+b,y+b,sz-b*2,bv);
+  c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);
 
-  // ── Bevel: shadow bottom-right ──
+  // Bevel: shadow bottom-right
   c2d.fillStyle='rgba(0,0,0,0.28)';
-  c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);        // bottom strip
-  c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);    // right strip
+  c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);
+  c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);
 
-  // ── Candy pattern (clipped to inner square) ──
+  // Pattern clipped to inner
   c2d.save();
   c2d.beginPath();c2d.rect(x+b,y+b,sz-b*2,sz-b*2);c2d.clip();
   drawPattern(c2d,cx,cy,sz*.36,colorIdx);
   c2d.restore();
 
-  // ── Special type overlay (clipped) ──
+  // Type overlay clipped
   if(type!==N){
     c2d.save();
     c2d.beginPath();c2d.rect(x+b,y+b,sz-b*2,sz-b*2);c2d.clip();
@@ -500,13 +659,10 @@ function drawCandy(c2d,x,y,sz,colorIdx,type){
     c2d.restore();
   }
 
-  // ── Shine highlight ──
-  c2d.beginPath();
-  c2d.ellipse(cx-sz*.14,cy-sz*.18,sz*.13,sz*.07,-.45,0,Math.PI*2);
+  // Shine
+  c2d.beginPath();c2d.ellipse(cx-sz*.14,cy-sz*.18,sz*.13,sz*.07,-.45,0,Math.PI*2);
   c2d.fillStyle='rgba(255,255,255,.62)';c2d.fill();
-
-  c2d.beginPath();
-  c2d.arc(cx+sz*.2,cy-sz*.2,sz*.05,0,Math.PI*2);
+  c2d.beginPath();c2d.arc(cx+sz*.2,cy-sz*.2,sz*.05,0,Math.PI*2);
   c2d.fillStyle='rgba(255,255,255,.3)';c2d.fill();
 }
 
@@ -567,7 +723,6 @@ function drawEffects(){
 // ── Draw board ─────────────────────────────────────────────────────────────
 function drawBoard(){
   ctx.fillStyle='#0a0012';ctx.fillRect(0,0,canvas.width,canvas.height);
-  // Subtle grid lines (column separators only — horizontal would fight the block look)
   ctx.strokeStyle='rgba(255,105,180,.05)';ctx.lineWidth=.5;
   for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(canvas.width,r*CELL);ctx.stroke();}
   for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,canvas.height);ctx.stroke();}
@@ -576,7 +731,6 @@ function drawBoard(){
     if(board[r][c])drawCandy(ctx,c*CELL,r*CELL,CELL,board[r][c].color,board[r][c].type);
 
   if(piece&&!cascading){
-    // Ghost at 40% alpha
     let gr=piece.r;while(valid({...piece,r:gr+1},board))gr++;
     if(gr>piece.r){
       const sh=pshape(piece);
@@ -605,10 +759,6 @@ function updateHUD(){
   scoreEl.innerHTML='SCORE<br>'+score.toLocaleString('en-GB');
   levelEl.innerHTML='LVL<br>'+level;
 }
-function showCombo(n){
-  clearTimeout(comboTO);comboEl.textContent=n+'× COMBO!';comboEl.style.opacity='1';
-  comboTO=setTimeout(()=>{comboEl.style.opacity='0';},900);
-}
 
 // ── Loop ───────────────────────────────────────────────────────────────────
 function loop(ts){
@@ -617,7 +767,8 @@ function loop(ts){
   if(piece&&!cascading){
     if(ts-lastDrop>=dropInterval){
       lastDrop=ts;
-      if(valid(piece,board,1))piece.r++;else{lockPiece();return;}
+      if(valid(piece,board,1)){piece.r++;wasRotated=false;}
+      else{lockPiece();return;}
     }
   }
   drawBoard();updateHUD();
@@ -628,7 +779,8 @@ function resetGame(){
   board=emptyBoard();piece=null;score=0;level=1;linesCleared=0;
   gameOver=false;cascading=false;dropInterval=1000;lastDrop=performance.now();
   lockR=ROWS-1;lockC=4;comboCount=0;particles=[];rings=[];sweeps=[];
-  comboEl.style.opacity='0';cancelAnimationFrame(animId);
+  wasRotated=false;lastClearType='';backToBack=false;
+  bannerEl.style.opacity='0';cancelAnimationFrame(animId);
   nextPiece=mkPiece(Math.floor(Math.random()*PIECES.length));
   spawnNext();animId=requestAnimationFrame(loop);
 }
