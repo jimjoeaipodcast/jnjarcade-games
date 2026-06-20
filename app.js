@@ -71,6 +71,13 @@ const WORLDS = {
     by: 'JOE',
     attract: bombGardenAttract,
   },
+  'candy-tris': {
+    ink: '#ff69b4', dim: '#8b1a5a', pit: '#0a0012', glowsoft: 'rgba(255,105,180,0.22)',
+    genre: 'CANDY CRUSH × TETRIS',
+    quote: '"Tetris blocks made of sweets. I\'ve been trying to resist. My doctor says I\'m doing brilliantly. My doctor doesn\'t know about this."',
+    by: 'JOE',
+    attract: candyTrisAttract,
+  },
 };
 
 const DEFAULT_WORLD = {
@@ -1198,23 +1205,6 @@ function reportPlay(id) {
 
 /* ── Init ─────────────────────────────────────────────────── */
 
-async function init() {
-  setupFullscreenUI();
-  setupTurbo();
-
-  // /wip lab shows the SAME cabinet cassettes as the real site (Osimo 2026-06-16), from wip-games.json
-  const WIP = document.body.dataset.wip === '1';
-  try {
-    const src = WIP ? 'wip-games.json' : 'games.json';
-    const [resp] = await Promise.all([
-      fetch(src + '?v=' + Date.now()),
-      fetchGlobalPlays(),
-    ]);
-    const data = await resp.json();
-    const games = data.games || [];
-
-    // main arcade: only unlocked, most-played first. WIP: show every tester game.
-/* ── Attract: Bomb Garden ─────────────────────────────────────────────────── */
 function bombGardenAttract(ctx, w, h, t, world, s) {
   if (!s.init) {
     s.init = true; s.last = t;
@@ -1327,6 +1317,22 @@ function bombGardenAttract(ctx, w, h, t, world, s) {
   ctx.fillText('BOMB GARDEN', w / 2, h * 0.92);
 }
 
+async function init() {
+  setupFullscreenUI();
+  setupTurbo();
+
+  // /wip lab shows the SAME cabinet cassettes as the real site (Osimo 2026-06-16), from wip-games.json
+  const WIP = document.body.dataset.wip === '1';
+  try {
+    const src = WIP ? 'wip-games.json' : 'games.json';
+    const [resp] = await Promise.all([
+      fetch(src + '?v=' + Date.now()),
+      fetchGlobalPlays(),
+    ]);
+    const data = await resp.json();
+    const games = data.games || [];
+
+    // main arcade: only unlocked, most-played first. WIP: show every tester game.
     const live = WIP
       ? games
       : games.filter(g => isUnlocked(g.releaseDate))
@@ -1350,6 +1356,86 @@ function bombGardenAttract(ctx, w, h, t, world, s) {
     document.getElementById('cabinets').innerHTML =
       '<p class="hall-empty">GAME OVER.<br>ARCADE DATA FAILED TO LOAD.<br>PRESS REFRESH TO CONTINUE.</p>';
   }
+}
+
+function candyTrisAttract(ctx, w, h, t, world, s) {
+  if (!s.init) {
+    s.init = true; s.last = t;
+    const CELL = Math.max(12, Math.floor(w / 10));
+    s.CELL = CELL;
+    const COLORS = ['#ff2255','#ff8822','#ffdd00','#33dd44','#3399ff','#cc44ff'];
+    s.COLORS = COLORS;
+    // A few falling candy blobs
+    s.blobs = [];
+    for (let i = 0; i < 14; i++) {
+      s.blobs.push({
+        x: Math.random() * w,
+        y: Math.random() * h - h,
+        vy: 0.4 + Math.random() * 0.9,
+        r: CELL * (0.35 + Math.random() * 0.25),
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        spin: (Math.random() - 0.5) * 0.03,
+        a: 0,
+      });
+    }
+    // Static tetromino silhouettes
+    s.tets = [
+      // I piece
+      {cells:[[0,0],[1,0],[2,0],[3,0]], cx:w*0.15, cy:h*0.35, color:'#ff2255'},
+      // T piece
+      {cells:[[0,0],[1,0],[2,0],[1,-1]], cx:w*0.75, cy:h*0.6, color:'#3399ff'},
+      // S piece
+      {cells:[[0,0],[1,0],[1,-1],[2,-1]], cx:w*0.4, cy:h*0.78, color:'#ffdd00'},
+      // L piece
+      {cells:[[0,0],[0,1],[0,2],[1,0]], cx:w*0.82, cy:h*0.25, color:'#cc44ff'},
+    ];
+  }
+
+  const dt = Math.min(t - s.last, 32); s.last = t;
+  const CL = s.CELL;
+
+  ctx.fillStyle = '#0a0012'; ctx.fillRect(0, 0, w, h);
+
+  // Faint grid
+  ctx.strokeStyle = 'rgba(255,105,180,0.07)'; ctx.lineWidth = 0.5;
+  for (let c = 0; c <= 10; c++) { ctx.beginPath(); ctx.moveTo(c*CL,0); ctx.lineTo(c*CL,h); ctx.stroke(); }
+  for (let r = 0; r <= Math.ceil(h/CL); r++) { ctx.beginPath(); ctx.moveTo(0,r*CL); ctx.lineTo(w,r*CL); ctx.stroke(); }
+
+  // Tetromino silhouettes
+  for (const tet of s.tets) {
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = tet.color;
+    for (const [dx,dy] of tet.cells) {
+      ctx.fillRect(tet.cx + dx*CL, tet.cy + dy*CL, CL-2, CL-2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Falling candy blobs
+  for (const b of s.blobs) {
+    b.y += b.vy * (dt / 16);
+    b.a += b.spin;
+    if (b.y > h + b.r * 2) { b.y = -b.r * 2; b.x = Math.random() * w; }
+
+    const colorHex = b.color;
+    const g = ctx.createRadialGradient(b.x - b.r*0.3, b.y - b.r*0.3, 0, b.x, b.y, b.r);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.3, colorHex);
+    g.addColorStop(1, colorHex + '55');
+    ctx.shadowColor = colorHex; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.shadowBlur = 0;
+    // shine
+    ctx.beginPath(); ctx.ellipse(b.x - b.r*0.2, b.y - b.r*0.3, b.r*0.28, b.r*0.15, -0.4, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+  }
+
+  // Genre label
+  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,105,180,0.5)';
+  ctx.fillText('CANDY-TRIS', w/2, h * 0.92);
 }
 
 document.addEventListener('DOMContentLoaded', init);
