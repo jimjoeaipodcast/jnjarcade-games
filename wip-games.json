@@ -1,6 +1,15 @@
 {
   "games": [
     {
+      "id": "lupo-alberto",
+      "name": "LUPO ALBERTO",
+      "emoji": "🐺",
+      "genre": "PLATFORM TRAINING CABINET",
+      "url": "games/lupo-alberto.html",
+      "status": "training",
+      "note": "Platform mechanics training game — wolf+dog+hearts; template for all future platform reskins. Based on C64 1990."
+    },
+    {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
       "emoji": "🏺",

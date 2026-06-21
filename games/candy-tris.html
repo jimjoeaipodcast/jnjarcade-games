@@ -60,8 +60,9 @@ const CANDY=[
   {body:'#9020c8',light:'#cc66ff',dark:'#44007a'},  // purple
   {body:'#e01228',light:'#ff5566',dark:'#7a000e'},  // red
 ];
-// Change 2: Added FISH constant
 const N='NORMAL',SH='STRIPED_H',SV='STRIPED_V',WR='WRAPPED',CB='COLOUR_BOMB',FISH='FISH';
+// CC swap state
+let ccSel=null;  // {r,c} of currently selected candy for CC swap mode
 const PIECES=[
   [[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]]],
   [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
@@ -223,7 +224,8 @@ function findMatches(){
   for(const run of hR){
     for(let c=run.c;c<=run.end;c++){hSet.add(ck(run.r,c));toRemove.add(ck(run.r,c));}
     if(run.len===4)toCreate.push({r:run.r,c:Math.max(run.c,Math.min(run.end,lockC)),cell:{color:run.color,type:SH}});
-    else if(run.len>=5)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:-1,type:CB}});
+    else if(run.len===5)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:run.color,type:WR}});
+    else if(run.len>=6)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:-1,type:CB}});
   }
   for(const run of vR){
     for(let r=run.r;r<=run.end;r++){
@@ -233,10 +235,11 @@ function findMatches(){
       toRemove.add(key);
     }
     if(run.len===4)toCreate.push({r:Math.max(run.r,Math.min(run.end,lockR)),c:run.c,cell:{color:run.color,type:SV}});
-    else if(run.len>=5)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:-1,type:CB}});
+    else if(run.len===5)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:run.color,type:WR}});
+    else if(run.len>=6)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:-1,type:CB}});
   }
 
-  // Change 6: Add fish2x2 hits — all 4 cells to toRemove, create FISH at top-left
+  // 2×2 square = bomb sweet (WR type) — proper Candy Crush behavior
   for(const f of fish2x2){
     const already=toRemove.has(ck(f.r,f.c))||toRemove.has(ck(f.r,f.c+1))||
                    toRemove.has(ck(f.r+1,f.c))||toRemove.has(ck(f.r+1,f.c+1));
@@ -245,7 +248,8 @@ function findMatches(){
       toRemove.add(ck(f.r,f.c+1));
       toRemove.add(ck(f.r+1,f.c));
       toRemove.add(ck(f.r+1,f.c+1));
-      toCreate.push({r:f.r,c:f.c,cell:{color:f.color,type:FISH}});
+      // Creates a Wrapped Candy (bomb) at the centre of the 2×2
+      toCreate.push({r:f.r,c:f.c+1,cell:{color:f.color,type:WR}});
     }
   }
 
@@ -457,7 +461,7 @@ function cascade(depth,afterLineClear){
       // Flash the rows for 240ms, THEN remove them and continue cascade
       setTimeout(()=>{
         removeMarkedLines(rows);
-        cascade(depth,true);   // re-check for more lines before CC
+        cascade(depth,false);   // re-check for more lines before CC
       },240);
       return;
     }
@@ -510,11 +514,67 @@ function spawnNext(){
 
 // ── Controls ───────────────────────────────────────────────────────────────
 const SWIPE=18;let tStart=null;
-document.addEventListener('touchstart',e=>{if(gameOver||cascading||!piece)return;tStart={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
+
+// CC swap: tap a settled candy to select it (gold glow), tap adjacent to swap.
+// Swapping a special into another fires a combo even without a 3+ match.
+function ccSwapAttempt(r1,c1,r2,c2){
+  if(r2<0||r2>=ROWS||c2<0||c2>=COLS)return;
+  const a=board[r1][c1],b=board[r2][c2];
+  if(!a||!b)return;
+  board[r1][c1]=b;board[r2][c2]=a;
+  const isSpecialCombo=a.type!==N||b.type!==N;
+  if(isSpecialCombo||findMatches()){
+    // Valid swap — cascade fires
+    ccSel=null;cascading=true;
+    lockR=r1;lockC=c1;
+    setTimeout(()=>cascade(0,false),80);
+  } else {
+    // Not valid — swap back
+    board[r1][c1]=a;board[r2][c2]=b;
+  }
+}
+
+document.addEventListener('touchstart',e=>{
+  if(gameOver)return;
+  tStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+},{passive:true});
+
 document.addEventListener('touchend',e=>{
-  if(!tStart||gameOver||cascading||!piece)return;
-  const dx=e.changedTouches[0].clientX-tStart.x,dy=e.changedTouches[0].clientY-tStart.y;tStart=null;
-  if(Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE){rotate();return;}
+  if(!tStart||gameOver)return;
+  const dx=e.changedTouches[0].clientX-tStart.x,dy=e.changedTouches[0].clientY-tStart.y;
+  const isTap=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
+  tStart=null;
+
+  // CC swap mode: tap on a settled board cell (not during active piece movement)
+  if(isTap&&!cascading){
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
+    const cx=Math.floor((e.changedTouches[0].clientX-rect.left)*scaleX/CELL);
+    const cy=Math.floor((e.changedTouches[0].clientY-rect.top)*scaleY/CELL);
+    // Is the tapped cell a settled (non-falling) candy?
+    const isSettled=board[cy]&&board[cy][cx]&&
+                    (!piece||!pCells(piece).some(p=>p.r===cy&&p.c===cx));
+    if(isSettled&&cx>=0&&cx<COLS&&cy>=0&&cy<ROWS){
+      if(!ccSel){
+        ccSel={r:cy,c:cx};
+      } else if(ccSel.r===cy&&ccSel.c===cx){
+        ccSel=null;  // deselect
+      } else if(Math.abs(ccSel.r-cy)+Math.abs(ccSel.c-cx)===1){
+        // Adjacent — attempt swap
+        ccSwapAttempt(ccSel.r,ccSel.c,cy,cx);
+      } else {
+        ccSel={r:cy,c:cx};  // move selection
+      }
+      return;
+    }
+    ccSel=null;
+  } else {
+    ccSel=null;
+  }
+
+  // Tetromino controls (only when piece is active and not cascading)
+  if(cascading||!piece)return;
+  if(isTap){rotate();return;}
   if(Math.abs(dx)>Math.abs(dy)){const d=dx>0?1:-1;if(valid(piece,board,0,d))piece.c+=d;}
   else{if(dy>0)hardDrop();else rotate();}
 },{passive:true});
@@ -538,8 +598,6 @@ function rotate(){
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
-// ── Drawing — square Tetris block candy style ──────────────────────────────
-// Change 3: Single centered 4-point star sparkle on every candy type
 function drawPattern(c2d,cx,cy,r,idx){
   const s=r*0.52;
   c2d.save();
@@ -555,7 +613,6 @@ function drawPattern(c2d,cx,cy,r,idx){
   c2d.shadowBlur=0;c2d.restore();
 }
 
-// Change 4: Added FISH case to drawTypeOverlay
 function drawTypeOverlay(c2d,cx,cy,r,sz,type){
   if(type===SH||type===SV){
     c2d.strokeStyle='rgba(255,255,255,0.55)';c2d.lineWidth=Math.max(1.5,sz*.04);
@@ -582,7 +639,6 @@ function drawTypeOverlay(c2d,cx,cy,r,sz,type){
   }
 }
 
-// Change 5: drawCandy with rounded-rect clip path
 function drawCandy(c2d,x,y,sz,colorIdx,type){
   const cx=x+sz*.5,cy=y+sz*.5,b=Math.max(2,Math.round(sz*.11));
   if(colorIdx<0||type===CB){
@@ -603,15 +659,12 @@ function drawCandy(c2d,x,y,sz,colorIdx,type){
   }
   const C=CANDY[colorIdx],bv=Math.max(1,b*.65);
   const rad=Math.max(2,sz*0.15);
-  // Outer border (square)
   c2d.fillStyle=C.dark;c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
-  // Rounded clip for inner content
   c2d.save();
   c2d.beginPath();
   if(c2d.roundRect){
     c2d.roundRect(x+b,y+b,sz-b*2,sz-b*2,rad);
   } else {
-    // Fallback arc-based rounded rect
     const rx=x+b,ry=y+b,rw=sz-b*2,rh=sz-b*2;
     c2d.moveTo(rx+rad,ry);
     c2d.lineTo(rx+rw-rad,ry);
@@ -625,19 +678,14 @@ function drawCandy(c2d,x,y,sz,colorIdx,type){
     c2d.closePath();
   }
   c2d.clip();
-  // Gradient fill
   const g=c2d.createLinearGradient(x+b,y+b,x+sz-b,y+sz-b);
   g.addColorStop(0,C.light);g.addColorStop(.45,C.body);g.addColorStop(1,C.dark);
   c2d.fillStyle=g;c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
-  // Highlights
   c2d.fillStyle='rgba(255,255,255,0.32)';c2d.fillRect(x+b,y+b,sz-b*2,bv);c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);
   c2d.fillStyle='rgba(0,0,0,0.28)';c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);
-  // Pattern sparkle
   drawPattern(c2d,cx,cy,sz*.36,colorIdx);
-  // Type overlay
   if(type!==N){drawTypeOverlay(c2d,cx,cy,sz*.36,sz,type);}
   c2d.restore();
-  // Gloss highlight (drawn after restore, outside clip)
   c2d.beginPath();c2d.ellipse(cx-sz*.14,cy-sz*.18,sz*.13,sz*.07,-.45,0,Math.PI*2);c2d.fillStyle='rgba(255,255,255,.62)';c2d.fill();
   c2d.beginPath();c2d.arc(cx+sz*.2,cy-sz*.2,sz*.05,0,Math.PI*2);c2d.fillStyle='rgba(255,255,255,.3)';c2d.fill();
 }
@@ -709,6 +757,14 @@ function drawBoard(){
 
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
     if(board[r][c])drawCandy(ctx,c*CELL,r*CELL,CELL,board[r][c].color,board[r][c].type);
+
+  // CC swap: gold glow on selected cell
+  if(ccSel&&board[ccSel.r]&&board[ccSel.r][ccSel.c]){
+    ctx.strokeStyle='#ffdd00';ctx.lineWidth=3;
+    ctx.shadowColor='#ffdd00';ctx.shadowBlur=10;
+    ctx.strokeRect(ccSel.c*CELL+2,ccSel.r*CELL+2,CELL-4,CELL-4);
+    ctx.shadowBlur=0;
+  }
 
   if(piece&&!cascading){
     let gr=piece.r;while(valid({...piece,r:gr+1},board))gr++;

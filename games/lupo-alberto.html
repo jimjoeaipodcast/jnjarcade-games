@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>LUPO ALBERTO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@400;700&display=swap" rel="stylesheet">
+<script src="../arcade-scores.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#1a0d00;touch-action:none;user-select:none}
+#shell{
+  display:flex;flex-direction:column;
+  width:100%;height:100dvh;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);
+}
+#hud{
+  flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  height:44px;padding:0 12px;
+  background:#2a1800;border-bottom:2px solid #e8b84b44;
+  font-family:'Bungee',sans-serif;font-size:12px;color:#e8b84b;
+}
+#hud a{color:#e8b84b;text-decoration:none;font-size:11px;opacity:0.8}
+#wrap{flex:1;display:flex;justify-content:center;align-items:center;padding:6px 4px;overflow:hidden}
+#c{
+  display:block;image-rendering:pixelated;
+  border:2px solid #e8b84b;
+  box-shadow:0 0 0 1px #6b4a1b, 0 0 18px #e8b84b88, 0 0 6px #e8b84b44 inset;
+}
+</style>
+</head>
+<body>
+<!-- ══════════════════════════════════════════════════════════════
+     LUPO ALBERTO — JnJ Arcade Training Cabinet v1.0
+     Based on: Lupo Alberto (Idea Software, 1990, C64)
+     Theme: Italian farm — wolf chasing the heart of Marta the hen
+     Training purpose: Platform game mechanic template
+
+     PLATFORM MECHANICS DOCUMENTED (copy these to future games):
+     ──────────────────────────────────────────────────────────────
+     GRAVITY:      p.vy += GRAVITY each frame (0.38–0.55 feels natural)
+     TERMINAL VEL: clamp p.vy to TERM_VEL (14) — prevents tunnelling on fast devices
+     JUMP:         p.vy = -JUMP_FORCE when grounded; unset grounded immediately
+     GROUNDED:     true when player bottom snaps to platform top this frame
+
+     AABB PLATFORM COLLISION (top-face only, standard for platformers):
+       prevY = player Y of LAST frame
+       for each platform P:
+         horizontal overlap: p.x+PW > P.x && p.x < P.x+P.w
+         was above last frame: prevY+PH <= P.y+2          ← 2px forgiveness
+         is at or below now:   p.y+PH  >= P.y
+         → land: p.y=P.y-PH; p.vy=0; grounded=true
+
+     ENEMY PATROL (basic):
+       e.x += e.vx each frame
+       reverse vx at platform left/right edges
+       death = player AABB overlaps enemy AABB (with 4px shrink per side)
+
+     LEVEL CLEAR:
+       all hearts collected → player overlaps goal → nextLevel()
+
+     TO RESKIN AS A NEW PLATFORM GAME (change only these):
+       1. PALETTE object  — new colour scheme
+       2. drawPlayer()    — new character sprite
+       3. drawEnemy()     — new enemy sprite
+       4. drawGoal()      — new goal sprite
+       5. drawBg()        — new background
+       6. Platform layouts in buildLevel()
+       Physics, collision, flow: untouched
+     ══════════════════════════════════════════════════════════════ -->
+<div id="shell">
+  <div id="hud">
+    <a href="../">◀ ARCADE</a>
+    <span>LUPO ALBERTO</span>
+    <span id="score-el">0</span>
+  </div>
+  <div id="wrap"><canvas id="c"></canvas></div>
+</div>
+<script>
+'use strict';
+
+// ── Canvas ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const scoreEl = document.getElementById('score-el');
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const GRAVITY   = 0.40;   // pixels per frame²
+const JUMP      = 12.0;   // upward impulse (negative Y = up)
+const SPEED     = 3.2;    // horizontal run speed
+const TERM_VEL  = 14;     // max fall speed (prevents tunnelling)
+const PW = 22, PH = 32;   // player sprite bounding box
+const EW = 28, EH = 26;   // enemy (Moses) bounding box
+
+// ── State ────────────────────────────────────────────────────────────────────
+let W, H;
+let platforms = [], hearts = [], enemies = [];
+let score = 0, lives = 3, level = 1;
+let state = 'ATTRACT';     // ATTRACT | PLAYING | DEAD | CLEAR | GAMEOVER
+let deathTimer = 0, clearTimer = 0, attractTick = 0;
+
+// Player
+const p = { x:0, y:0, vx:0, vy:0, grounded:false, prevY:0,
+            facing:1, walk:0, invincible:0 };
+
+// Input
+const keys = {};
+const touch = { left:false, right:false, jumpReq:false };
+let txStart = 0, tyStart = 0;
+
+// Particles / effects
+let popList = [];
+
+// ── Resize ───────────────────────────────────────────────────────────────────
+function resize(){
+  const wrap = document.getElementById('wrap');
+  let w = wrap.clientWidth - 8;
+  let h = wrap.clientHeight - 8;
+  // Portrait 9:16 aspect — constrain to fit
+  if(w * 16 > h * 9) w = h * 9 / 16;
+  else                h = w * 16 / 9;
+  canvas.width  = Math.floor(w);
+  canvas.height = Math.floor(h);
+  W = canvas.width;
+  H = canvas.height;
+}
+
+// ── Level setup ──────────────────────────────────────────────────────────────
+function buildLevel(lv){
+  const T = Math.max(16, Math.floor(H / 28));  // tile size scales with screen
+
+  // Platform layout (all positions relative to W, H)
+  // Ground = always full bottom strip
+  platforms = [
+    { x:0,       y:H - T*2,  w:W,      h:T*2+4, type:'ground' },
+    { x:T,       y:H*0.64,   w:W*0.42, h:T,     type:'hay'   },
+    { x:W*0.34,  y:H*0.475,  w:W*0.44, h:T,     type:'wood'  },
+    { x:T*0.5,   y:H*0.31,   w:W*0.38, h:T,     type:'fence' },
+    { x:W*0.55,  y:H*0.175,  w:W*0.42, h:T,     type:'fence' },
+  ];
+
+  // Hearts scattered on each platform
+  hearts = [
+    { x: platforms[1].x + 30,                    y: platforms[1].y - 16, got:false },
+    { x: platforms[1].x + platforms[1].w - 40,   y: platforms[1].y - 16, got:false },
+    { x: platforms[2].x + 40,                    y: platforms[2].y - 16, got:false },
+    { x: platforms[2].x + platforms[2].w*0.5,    y: platforms[2].y - 16, got:false },
+    { x: platforms[3].x + 20,                    y: platforms[3].y - 16, got:false },
+    { x: platforms[3].x + platforms[3].w*0.6,    y: platforms[3].y - 16, got:false },
+    { x: platforms[4].x + 15,                    y: platforms[4].y - 16, got:false },
+  ];
+
+  // Enemies — Moses patrols platforms
+  enemies = [];
+  const speed1 = 1.1 + (lv - 1) * 0.35;
+  enemies.push({
+    x: platforms[2].x + 20,
+    y: platforms[2].y - EH,
+    vx: speed1,
+    platform: platforms[2],
+    walk: 0, facing: 1,
+  });
+  if(lv >= 2){
+    enemies.push({
+      x: platforms[0].x + W * 0.5,
+      y: platforms[0].y - EH,
+      vx: -(0.9 + (lv - 2) * 0.3),
+      platform: platforms[0],
+      walk: 0, facing: -1,
+    });
+  }
+  if(lv >= 3){
+    enemies.push({
+      x: platforms[3].x + 10,
+      y: platforms[3].y - EH,
+      vx: 1.4,
+      platform: platforms[3],
+      walk: 0, facing: 1,
+    });
+  }
+
+  resetPlayer();
+  popList = [];
+}
+
+function resetPlayer(){
+  p.x = 16;
+  p.y = platforms[0].y - PH;
+  p.vx = 0; p.vy = 0;
+  p.grounded = true;
+  p.facing   = 1;
+  p.walk     = 0;
+  p.invincible = 120;  // ~2s grace period on respawn
+}
+
+function goalPos(){
+  const pl = platforms[4];
+  return { x: pl.x + pl.w - 36, y: pl.y - 32 };
+}
+function heartsLeft(){ return hearts.filter(h => !h.got).length; }
+
+// ── Physics update ───────────────────────────────────────────────────────────
+function update(){
+  if(state !== 'PLAYING') return;
+
+  // Movement input
+  const goL = keys['ArrowLeft']  || keys['a'] || touch.left;
+  const goR = keys['ArrowRight'] || keys['d'] || touch.right;
+  if(goL && !goR){ p.vx = -SPEED; p.facing = -1; }
+  else if(goR && !goL){ p.vx = SPEED; p.facing = 1; }
+  else p.vx *= 0.65;
+
+  // Jump
+  const jumpInput = keys[' '] || keys['ArrowUp'] || keys['w'] || touch.jumpReq;
+  if(jumpInput && p.grounded){
+    p.vy = -JUMP;
+    p.grounded = false;
+    touch.jumpReq = false;
+    keys[' '] = keys['ArrowUp'] = keys['w'] = false;
+  }
+  touch.jumpReq = false;
+
+  // Gravity + terminal velocity
+  p.vy = Math.min(p.vy + GRAVITY, TERM_VEL);
+
+  // Store prevY BEFORE applying vy (needed for top-face collision)
+  p.prevY = p.y;
+
+  // Apply velocity
+  p.x += p.vx;
+  p.y += p.vy;
+
+  // World horizontal bounds
+  p.x = Math.max(0, Math.min(W - PW, p.x));
+
+  // Reset grounded — will be reasserted by platform collision below
+  p.grounded = false;
+
+  // AABB platform collision (top-face only — standard for platformers)
+  for(const pl of platforms){
+    // Horizontal overlap (shrink by 2px each side for forgiveness)
+    const hOverlap = p.x + PW > pl.x + 2 && p.x + 2 < pl.x + pl.w;
+    if(!hOverlap) continue;
+    // Landing check: was above last frame, at-or-below now
+    if(p.prevY + PH <= pl.y + 2 && p.y + PH >= pl.y){
+      p.y        = pl.y - PH;
+      p.vy       = 0;
+      p.grounded = true;
+    }
+  }
+
+  // Walk animation counter
+  if(Math.abs(p.vx) > 0.5) p.walk++;
+
+  // Invincibility countdown
+  if(p.invincible > 0) p.invincible--;
+
+  // Heart collection
+  for(const h of hearts){
+    if(h.got) continue;
+    if(Math.abs(p.x + PW/2 - (h.x + 8)) < 22 && Math.abs(p.y + PH/2 - (h.y + 8)) < 22){
+      h.got = true;
+      score += 100;
+      scoreEl.textContent = score;
+      spawnPop(h.x + 8, h.y + 8, '#ff4444');
+    }
+  }
+
+  // Enemy update
+  for(const e of enemies){
+    e.walk++;
+    e.x += e.vx;
+    e.facing = e.vx > 0 ? 1 : -1;
+    // Reverse at platform edges
+    if(e.x < e.platform.x)                   { e.x = e.platform.x;                   e.vx = Math.abs(e.vx);  }
+    if(e.x + EW > e.platform.x + e.platform.w){ e.x = e.platform.x + e.platform.w - EW; e.vx = -Math.abs(e.vx); }
+    // Death collision
+    if(p.invincible <= 0){
+      const dx = Math.abs(p.x + PW/2 - (e.x + EW/2));
+      const dy = Math.abs(p.y + PH/2 - (e.y + EH/2));
+      if(dx < (PW + EW)/2 - 5 && dy < (PH + EH)/2 - 5) diePlayer();
+    }
+  }
+
+  // Update particles
+  updatePops();
+
+  // Goal check — must collect all hearts first
+  if(heartsLeft() === 0){
+    const gp = goalPos();
+    if(p.x + PW > gp.x && p.x < gp.x + 28 && p.y + PH > gp.y && p.y < gp.y + 32){
+      state     = 'CLEAR';
+      clearTimer = 160;
+      score += 500 + lives * 100;
+      scoreEl.textContent = score;
+    }
+  }
+}
+
+function diePlayer(){
+  lives--;
+  spawnPop(p.x + PW/2, p.y + PH/2, '#ff8800');
+  if(lives <= 0){ state = 'GAMEOVER'; }
+  else { state = 'DEAD'; deathTimer = 90; }
+}
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+function spawnPop(x, y, color){
+  for(let i = 0; i < 10; i++){
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1 + Math.random() * 4;
+    popList.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 1, life:1, color });
+  }
+}
+function updatePops(){
+  for(let i = popList.length - 1; i >= 0; i--){
+    const p = popList[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.12;
+    p.life -= 0.04;
+    if(p.life <= 0) popList.splice(i, 1);
+  }
+}
+function drawPops(){
+  for(const p of popList){
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  drawBg();
+  drawPlatforms();
+  drawHearts();
+  drawGoal();
+  drawEnemies();
+  drawPlayer();
+  drawHUDOverlay();
+  drawPops();
+
+  if(state === 'ATTRACT') drawAttract();
+  if(state === 'DEAD')    drawDead();
+  if(state === 'CLEAR')   drawClear();
+  if(state === 'GAMEOVER') drawGameOver();
+}
+
+function drawBg(){
+  // Sky gradient
+  const g = ctx.createLinearGradient(0, 0, 0, H * 0.78);
+  g.addColorStop(0, '#4a9ddd');
+  g.addColorStop(1, '#c8e8ff');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H * 0.78);
+
+  // Clouds
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  cloud(W * 0.12, H * 0.06, 0.85);
+  cloud(W * 0.55, H * 0.03, 1.1);
+  cloud(W * 0.82, H * 0.09, 0.7);
+
+  // Sun
+  ctx.fillStyle = '#fff97a';
+  ctx.beginPath(); ctx.arc(W * 0.87, H * 0.07, H * 0.03, 0, Math.PI * 2); ctx.fill();
+
+  // Rolling hills silhouette
+  ctx.fillStyle = '#4a9e3a';
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.76);
+  ctx.bezierCurveTo(W * 0.2, H * 0.60, W * 0.45, H * 0.72, W * 0.65, H * 0.64);
+  ctx.bezierCurveTo(W * 0.80, H * 0.58, W, H * 0.70, W, H * 0.76);
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+
+  // Ground surface
+  ctx.fillStyle = '#4a9e3a';
+  ctx.fillRect(0, platforms[0].y - 4, W, 8);
+
+  // Dirt
+  ctx.fillStyle = '#7a4a1e';
+  ctx.fillRect(0, platforms[0].y + 4, W, H - platforms[0].y);
+}
+
+function cloud(x, y, scale){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.beginPath();
+  ctx.arc(0, 0, 18, 0, Math.PI * 2);
+  ctx.arc(22, -4, 14, 0, Math.PI * 2);
+  ctx.arc(-18, 4, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPlatforms(){
+  for(const pl of platforms){
+    if(pl.type === 'ground') continue;  // drawn in drawBg
+    const { x, y, w, h } = pl;
+
+    if(pl.type === 'hay'){
+      ctx.fillStyle = '#e8b84b';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#c89a20'; ctx.lineWidth = 1;
+      for(let bx = x + 8; bx < x + w - 4; bx += 8){
+        ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx, y + h); ctx.stroke();
+      }
+    } else if(pl.type === 'wood'){
+      ctx.fillStyle = '#7a4e22';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#5a3810';
+      ctx.fillRect(x, y, w, 3);
+      ctx.strokeStyle = '#5a3810'; ctx.lineWidth = 1;
+      for(let bx = x + 18; bx < x + w; bx += 18){
+        ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx, y + h); ctx.stroke();
+      }
+    } else {
+      // fence / stone
+      ctx.fillStyle = '#8b7355';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#6a5235';
+      for(let bx = x + 2; bx < x + w - 2; bx += 10)
+        ctx.fillRect(bx, y + 3, 8, h - 6);
+    }
+    // Grass trim on top of every platform
+    ctx.fillStyle = '#4a9e3a';
+    ctx.fillRect(x, y, w, 4);
+  }
+}
+
+function drawHearts(){
+  for(const h of hearts){
+    if(h.got) continue;
+    const hx = h.x, hy = h.y, s = 8;
+    ctx.fillStyle = '#ff3355';
+    // Simple heart shape
+    ctx.beginPath();
+    ctx.moveTo(hx + s, hy + s * 0.4);
+    ctx.bezierCurveTo(hx + s, hy,         hx + s*1.8, hy,         hx + s*1.8, hy + s*0.5);
+    ctx.bezierCurveTo(hx + s*1.8, hy + s, hx + s,     hy + s*1.3, hx + s,     hy + s*1.6);
+    ctx.bezierCurveTo(hx + s,     hy + s*1.3, hx + s*0.2, hy + s, hx + s*0.2, hy + s*0.5);
+    ctx.bezierCurveTo(hx + s*0.2, hy,     hx + s,     hy,         hx + s,     hy + s*0.4);
+    ctx.fill();
+    ctx.fillStyle = '#ff8899';
+    ctx.fillRect(hx + s * 0.4, hy + s * 0.2, 3, 3);
+  }
+}
+
+function drawGoal(){
+  const gp = goalPos();
+  const gl = heartsLeft();
+  ctx.save();
+  ctx.translate(gp.x, gp.y);
+  // Marta the hen — locked out until all hearts collected
+  ctx.globalAlpha = gl === 0 ? 1 : 0.45;
+  // Body (white)
+  ctx.fillStyle = '#f5f5f0';
+  ctx.beginPath(); ctx.ellipse(12, 20, 10, 13, 0, 0, Math.PI*2); ctx.fill();
+  // Head
+  ctx.fillStyle = '#f5f5f0';
+  ctx.beginPath(); ctx.arc(16, 9, 8, 0, Math.PI*2); ctx.fill();
+  // Red comb
+  ctx.fillStyle = '#cc2222';
+  ctx.beginPath(); ctx.arc(15, 4, 4, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.arc(20, 3, 3, Math.PI, 0); ctx.fill();
+  // Beak
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath(); ctx.moveTo(23, 8); ctx.lineTo(30, 10); ctx.lineTo(23, 12); ctx.closePath(); ctx.fill();
+  // Eye
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(20, 8, 2, 0, Math.PI*2); ctx.fill();
+  // Wing
+  ctx.fillStyle = '#ddddd5';
+  ctx.beginPath(); ctx.ellipse(6, 20, 7, 11, -0.4, 0, Math.PI*2); ctx.fill();
+  // Glow + label when all hearts collected
+  if(gl === 0){
+    const pulse = Math.abs(Math.sin(attractTick * 0.09)) * 6;
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = 'bold ' + (13 + pulse) + 'px Bungee,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('MARTA!', 14, -6 - pulse);
+    ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+
+// Player drawing — Lupo Alberto: wolf in red hat + blue overalls
+function drawPlayer(){
+  if(state === 'DEAD' && deathTimer % 8 < 4) return;
+  if(p.invincible > 0 && p.invincible % 6 < 3) return;
+
+  const flip  = p.facing < 0;
+  const frame = Math.floor(p.walk / 6) % 2;
+
+  ctx.save();
+  ctx.translate(p.x + (flip ? PW : 0), p.y);
+  if(flip) ctx.scale(-1, 1);
+
+  // Shoes
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(2, PH - (frame ? 3 : 6), 9, 5);
+  ctx.fillRect(PW - 11, PH - (frame ? 6 : 3), 9, 5);
+
+  // Legs
+  ctx.fillStyle = '#2255cc';
+  ctx.fillRect(4, PH - 14, 6, 14 - (frame ? 3 : 0));
+  ctx.fillRect(PW - 10, PH - 14, 6, 14 - (frame ? 0 : 3));
+
+  // Overalls bib
+  ctx.fillStyle = '#2255cc';
+  rRect(ctx, 4, 14, PW - 8, PH - 14, 3); ctx.fill();
+
+  // Suspenders
+  ctx.fillStyle = '#1a3a99';
+  ctx.fillRect(5, 13, 3, 8);
+  ctx.fillRect(PW - 8, 13, 3, 8);
+
+  // Wolf head (gray)
+  ctx.fillStyle = '#c5c5c5';
+  rRect(ctx, 2, 4, PW - 4, 14, 5); ctx.fill();
+
+  // Snout (lighter, pushed right for facing-right)
+  ctx.fillStyle = '#ddd';
+  rRect(ctx, PW - 12, 8, 12, 9, 3); ctx.fill();
+
+  // Nose
+  ctx.fillStyle = '#444';
+  rRect(ctx, PW - 7, 9, 5, 3, 1); ctx.fill();
+
+  // Eye
+  ctx.fillStyle = '#fff';
+  rRect(ctx, 5, 6, 7, 6, 2); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(7, 7, 3, 4);
+
+  // Wolf ears (triangular points)
+  ctx.fillStyle = '#aaa';
+  ctx.beginPath(); ctx.moveTo(4,4); ctx.lineTo(1,-3); ctx.lineTo(9,4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(PW-7,4); ctx.lineTo(PW-2,-3); ctx.lineTo(PW+2,4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffaaaa';
+  ctx.beginPath(); ctx.moveTo(5,3); ctx.lineTo(2,-1); ctx.lineTo(8,3); ctx.closePath(); ctx.fill();
+
+  // Red hat brim
+  ctx.fillStyle = '#cc2222';
+  ctx.fillRect(0, 4, PW, 4);
+  // Hat crown
+  rRect(ctx, 3, -7, PW - 6, 12, 2); ctx.fill();
+  // Hat band
+  ctx.fillStyle = '#881111'; ctx.fillRect(3, -1, PW - 6, 3);
+
+  ctx.restore();
+}
+
+// Moses drawing — stocky bulldog, tan, spike collar
+function drawEnemies(){
+  for(const e of enemies) drawMoses(e);
+}
+function drawMoses(e){
+  const flip  = e.facing < 0;
+  const frame = Math.floor(e.walk / 6) % 2;
+  ctx.save();
+  ctx.translate(e.x + (flip ? EW : 0), e.y);
+  if(flip) ctx.scale(-1, 1);
+
+  // Legs
+  ctx.fillStyle = '#b87050';
+  ctx.fillRect(3,  EH - 10, 7, frame ? 10 : 7);
+  ctx.fillRect(EW-10, EH - 10, 7, frame ? 7 : 10);
+  ctx.fillStyle = '#d8a585';
+  ctx.fillRect(1,  EH - (frame ? 2 : 5), 10, 5);
+  ctx.fillRect(EW-11, EH - (frame ? 5 : 2), 10, 5);
+
+  // Body (stocky)
+  ctx.fillStyle = '#c8956c';
+  rRect(ctx, 2, 10, EW - 4, EH - 10, 4); ctx.fill();
+
+  // Head (round bulldog — pushed forward/right)
+  ctx.fillStyle = '#c8956c';
+  ctx.beginPath(); ctx.ellipse(EW - 5, 8, 12, 10, 0.2, 0, Math.PI*2); ctx.fill();
+
+  // Jowls
+  ctx.fillStyle = '#d8a585';
+  ctx.beginPath(); ctx.ellipse(EW, 12, 8, 5, 0, 0, Math.PI*2); ctx.fill();
+
+  // Nose
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.ellipse(EW + 4, 10, 4, 2.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#555';
+  ctx.fillRect(EW+1, 10, 2, 2); ctx.fillRect(EW+5, 10, 2, 2);
+
+  // Eyes (angry)
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.ellipse(EW-11, 5, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#a00000';
+  ctx.beginPath(); ctx.ellipse(EW-10, 5, 2, 2, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(EW-15, 1); ctx.lineTo(EW-7, 4); ctx.stroke();
+
+  // Spike collar
+  ctx.fillStyle = '#2a1800';
+  ctx.fillRect(3, 16, EW - 6, 5);
+  ctx.fillStyle = '#aaa';
+  for(let sx = 7; sx < EW - 6; sx += 6){
+    ctx.beginPath(); ctx.moveTo(sx,16); ctx.lineTo(sx+3,11); ctx.lineTo(sx+6,16); ctx.closePath(); ctx.fill();
+  }
+
+  // Tail stub
+  ctx.fillStyle = '#c8956c';
+  ctx.beginPath(); ctx.ellipse(2, EH*0.4, 4, 3, -0.5, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+// ── HUD overlay ───────────────────────────────────────────────────────────────
+function drawHUDOverlay(){
+  // Lives (hearts)
+  for(let i = 0; i < 3; i++){
+    ctx.fillStyle = i < lives ? '#ff3355' : '#441122';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('♥', 8 + i * 18, 22);
+  }
+  // Level
+  ctx.fillStyle = '#e8b84b';
+  ctx.font = '12px "Barlow Condensed","Bungee",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LV ' + level, W / 2, 20);
+  ctx.textAlign = 'left';
+  // Hearts remaining
+  const hl = heartsLeft();
+  ctx.fillStyle = hl > 0 ? '#ff8888' : '#ffffaa';
+  ctx.font = '11px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(hl > 0 ? '♥×' + hl : 'REACH MARTA!', W - 8, 20);
+  ctx.textAlign = 'left';
+}
+
+// ── State overlays ────────────────────────────────────────────────────────────
+function drawAttract(){
+  attractTick++;
+  ctx.fillStyle = 'rgba(10,5,0,0.62)';
+  ctx.fillRect(0, H * 0.25, W, H * 0.52);
+
+  ctx.fillStyle = '#e8b84b';
+  ctx.font = 'bold ' + Math.floor(W * 0.09) + 'px Bungee,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LUPO ALBERTO', W/2, H * 0.36);
+
+  ctx.fillStyle = '#ffdd88';
+  ctx.font = Math.floor(W * 0.036) + 'px "Barlow Condensed",sans-serif';
+  ctx.fillText('Rescue Marta — collect ♥ hearts', W/2, H * 0.44);
+  ctx.fillText('Avoid Moses the guard dog!', W/2, H * 0.49);
+
+  if(Math.floor(attractTick / 30) % 2){
+    ctx.fillStyle = '#e8b84b';
+    ctx.font = 'bold ' + Math.floor(W * 0.055) + 'px Bungee,sans-serif';
+    ctx.fillText('TAP TO START', W/2, H * 0.60);
+  }
+  ctx.textAlign = 'left';
+}
+
+function drawDead(){
+  deathTimer--;
+  if(deathTimer <= 0){ resetPlayer(); state = 'PLAYING'; return; }
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ff4444';
+  ctx.font = 'bold ' + Math.floor(W * 0.07) + 'px Bungee,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('WOOF!', W/2, H * 0.48);
+  ctx.fillStyle = '#fff';
+  ctx.font = Math.floor(W * 0.038) + 'px "Barlow Condensed",sans-serif';
+  ctx.fillText('Moses got you! ' + lives + ' left', W/2, H * 0.55);
+  ctx.textAlign = 'left';
+}
+
+function drawClear(){
+  clearTimer--;
+  if(clearTimer <= 0){ level++; buildLevel(level); state = 'PLAYING'; return; }
+  ctx.fillStyle = 'rgba(0,30,0,0.6)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#aaff88';
+  ctx.font = 'bold ' + Math.floor(W * 0.065) + 'px Bungee,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('♥ CIAO MARTA! ♥', W/2, H * 0.44);
+  ctx.fillStyle = '#ffffaa';
+  ctx.font = Math.floor(W * 0.038) + 'px "Barlow Condensed",sans-serif';
+  ctx.fillText('Level ' + level + ' — +500pts', W/2, H * 0.52);
+  ctx.textAlign = 'left';
+}
+
+function drawGameOver(){
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ff4444';
+  ctx.font = 'bold ' + Math.floor(W * 0.075) + 'px Bungee,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', W/2, H * 0.42);
+  ctx.fillStyle = '#fff';
+  ctx.font = Math.floor(W * 0.042) + 'px "Barlow Condensed",sans-serif';
+  ctx.fillText('Score: ' + score, W/2, H * 0.50);
+  ctx.textAlign = 'left';
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function rRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+}
+
+// ── Attract AI ────────────────────────────────────────────────────────────────
+function attractUpdate(){
+  attractTick++;
+  p.vx = 1.4; p.facing = 1; p.walk++;
+  p.vy = Math.min(p.vy + GRAVITY, TERM_VEL);
+  p.prevY = p.y; p.y += p.vy; p.x += p.vx;
+  p.grounded = false;
+  for(const pl of platforms){
+    const hor = p.x + PW > pl.x && p.x < pl.x + pl.w;
+    if(!hor) continue;
+    if(p.prevY + PH <= pl.y + 2 && p.y + PH >= pl.y){
+      p.y = pl.y - PH; p.vy = 0; p.grounded = true;
+    }
+  }
+  if(p.grounded && (p.x > W - 80 || Math.random() < 0.018)){
+    p.vy = -JUMP * 0.85; p.grounded = false;
+  }
+  if(p.x > W) p.x = 0;
+  for(const e of enemies){ e.walk++; e.x += e.vx; }
+}
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if(state === 'ATTRACT') startGame();
+  if(state === 'GAMEOVER') endGame();
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  txStart = t.clientX; tyStart = t.clientY;
+  const rect = canvas.getBoundingClientRect();
+  const relX = (t.clientX - rect.left) / rect.width;
+  touch.left  = relX < 0.38;
+  touch.right = relX > 0.62;
+  if(state === 'ATTRACT') startGame();
+  if(state === 'GAMEOVER') endGame();
+}, { passive:false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const relX = (t.clientX - rect.left) / rect.width;
+  touch.left  = relX < 0.38;
+  touch.right = relX > 0.62;
+}, { passive:false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const dx = t.clientX - txStart;
+  const dy = t.clientY - tyStart;
+  touch.left = touch.right = false;
+  // Swipe up = jump
+  if(dy < -18 && Math.abs(dx) < Math.abs(dy) * 1.5) touch.jumpReq = true;
+}, { passive:false });
+
+// ── Game flow ─────────────────────────────────────────────────────────────────
+function startGame(){
+  if(state === 'PLAYING') return;
+  score = 0; lives = 3; level = 1;
+  state = 'PLAYING';
+  resize(); buildLevel(1);
+  scoreEl.textContent = 0;
+  canvas.requestFullscreen?.().catch(() => {});
+}
+
+function endGame(){
+  if(score > 0){
+    ArcadeScores.show('lupo-alberto', score, () => {
+      state = 'ATTRACT'; resize(); buildLevel(1);
+    });
+  } else {
+    state = 'ATTRACT'; resize(); buildLevel(1);
+  }
+}
+
+// ── Game loop ─────────────────────────────────────────────────────────────────
+let lastTs = 0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(ts - lastTs < 14) return;  // ~60fps cap
+  lastTs = ts;
+  if(state === 'ATTRACT')  attractUpdate();
+  else if(state === 'PLAYING') update();
+  draw();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  resize();
+  if(state !== 'ATTRACT') buildLevel(level);
+});
+resize();
+buildLevel(1);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
