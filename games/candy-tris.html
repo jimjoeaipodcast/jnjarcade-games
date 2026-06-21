@@ -513,7 +513,7 @@ function spawnNext(){
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────
-const SWIPE=18;let tStart=null;
+const SWIPE=18;let tStart=null,holding=false;
 
 // CC swap: tap a settled candy to select it (gold glow), tap adjacent to swap.
 // Swapping a special into another fires a combo even without a 3+ match.
@@ -537,9 +537,11 @@ function ccSwapAttempt(r1,c1,r2,c2){
 document.addEventListener('touchstart',e=>{
   if(gameOver)return;
   tStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+  holding=true;
 },{passive:true});
 
 document.addEventListener('touchend',e=>{
+  holding=false;
   if(!tStart||gameOver)return;
   const dx=e.changedTouches[0].clientX-tStart.x,dy=e.changedTouches[0].clientY-tStart.y;
   const isTap=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
@@ -800,7 +802,7 @@ function loop(ts){
   if(gameOver)return;
   animId=requestAnimationFrame(loop);
   if(piece&&!cascading){
-    if(ts-lastDrop>=dropInterval){
+    if(ts-lastDrop>=(holding?Math.max(40,dropInterval/3):dropInterval)){
       lastDrop=ts;
       if(valid(piece,board,1)){piece.r++;wasRotated=false;}
       else{lockPiece();return;}
