@@ -29,47 +29,5 @@
       "label": "KoFi"
     }
   ],
-  "games": [
-    {
-      "id": "snake",
-      "name": "Snake Blaster",
-      "emoji": "🐍",
-      "url": "/games/snake.html",
-      "releaseDate": "2026-05-19",
-      "week": 1,
-      "gradient": ["#00ff88", "#ff3355"],
-      "episode": "Game Lab #1",
-      "icon": "assets/icons/snake-blaster.jpg"
-    },
-    {
-      "id": "doom-3d",
-      "name": "Doom Mari-OH 3D",
-      "emoji": "👹",
-      "url": "/games/doom-3d.html",
-      "releaseDate": "2026-05-19",
-      "week": 1,
-      "gradient": ["#FF3355", "#8B0000"],
-      "episode": "Game Lab #1"
-    },
-    {
-      "id": "hop-man",
-      "name": "Hop-Man",
-      "emoji": "🐸",
-      "url": "/games/hop-man.html",
-      "releaseDate": "2026-06-19",
-      "week": 2,
-      "gradient": ["#ffcf3d", "#c98a00"],
-      "episode": "Game Lab #2"
-    },
-    {
-      "id": "flap-fight",
-      "name": "Flap Fight",
-      "emoji": "🎈",
-      "url": "/games/flap-fight.html",
-      "releaseDate": "2026-06-19",
-      "week": 2,
-      "gradient": ["#4dd9f5", "#0d4a5c"],
-      "episode": "Game Lab #2"
-    }
-  ]
+  "games": []
 }
