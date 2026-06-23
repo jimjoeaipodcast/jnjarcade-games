@@ -1,21 +1,14 @@
 {
   "games": [
     {
-      "id": "lupo-alberto",
-      "name": "LUPO ALBERTO",
-      "emoji": "🐺",
-      "genre": "PLATFORM TRAINING CABINET",
-      "url": "games/lupo-alberto.html",
-      "status": "training",
-      "note": "Platform mechanics training game — wolf+dog+hearts; template for all future platform reskins. Based on C64 1990."
-    },
-    {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
       "emoji": "🏺",
       "genre": "JUNGLE HUNT × TOMB RAIDER",
       "url": "games/tomb-hunt.html",
-      "status": "testing"
+      "status": "wip",
+      "special": "Game Lab #3",
+      "note": "Multi-platform levels (GnG staircase), stomp-to-kill guards, arc-gravity arrows, enemy darts. Approved 2026-06-20."
     },
     {
       "id": "bomb-garden",
@@ -23,15 +16,89 @@
       "emoji": "💣",
       "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
       "url": "games/bomb-garden.html",
-      "status": "testing"
+      "status": "wip",
+      "special": "Game Lab #4",
+      "note": "Plant bombs to stop zombie waves. Cross between Bomberman blast radius and PvZ lane defence."
     },
     {
       "id": "candy-tris",
       "name": "CRUSHTRIS",
-      "emoji": "🍭",
+      "emoji": "🍬",
       "genre": "CANDY CRUSH × TETRIS",
       "url": "games/candy-tris.html",
-      "status": "testing"
+      "status": "wip",
+      "special": "Game Lab #5",
+      "note": "2×2 square = bomb (3×3 blast), 5-in-line = wrapped candy, 6+ = colour bomb. Tap-select CC swap mode."
+    },
+    {
+      "id": "pac-lemming",
+      "name": "PAC-LEMMING",
+      "emoji": "🟡",
+      "genre": "LEMMINGS × PAC-MAN",
+      "url": "games/pac-lemming.html",
+      "status": "wip",
+      "special": "Game Lab #6",
+      "note": "Pac-Man eats pellets while lemmings cross the maze. Power pellets frighten ghosts + boost lem speed. 10/15 lems to win."
+    },
+    {
+      "id": "bomb-lemmings",
+      "name": "BOMB-LEMMINGS",
+      "emoji": "💣",
+      "genre": "LEMMINGS × BOMBERMAN",
+      "url": "games/bomb-lemmings.html",
+      "status": "wip",
+      "special": "Game Lab #7",
+      "note": "Save lemmings by bombing dirt walls open. Bomberman (gravity+jump+bombs). 3 ghost enemies. 10/15 lems to win."
+    },
+    {
+      "id": "lemming-invaders",
+      "name": "LEMMING-INVADERS",
+      "emoji": "👾",
+      "genre": "LEMMINGS × SPACE INVADERS",
+      "url": "games/lemming-invaders.html",
+      "status": "wip",
+      "special": "Game Lab #8",
+      "note": "Shoot down Space Invaders before bombs kill lemmings below. 3 shield bunkers. 12/20 lems to win."
+    },
+    {
+      "id": "astro-hop",
+      "name": "ASTRO-HOP",
+      "emoji": "🚀",
+      "genre": "PLATFORM MECHANICS SHOWCASE",
+      "url": "games/astro-hop.html",
+      "status": "wip",
+      "special": "Game Lab #9",
+      "note": "Double jump + coyote time + moving platforms + semi-platforms (hold down to drop through)."
+    },
+    {
+      "id": "cave-plunge",
+      "name": "CAVE-PLUNGE",
+      "emoji": "🪨",
+      "genre": "CAVE EXPLORER",
+      "url": "games/cave-plunge.html",
+      "status": "wip",
+      "special": "Game Lab #10",
+      "note": "Wall slide + wall jump. Cave explorer + bats + crystal platforms + gem collectibles."
+    },
+    {
+      "id": "jungle-hop",
+      "name": "JUNGLE-HOP",
+      "emoji": "🌴",
+      "genre": "JUNGLE PLATFORM",
+      "url": "games/jungle-hop.html",
+      "status": "wip",
+      "special": "Game Lab #11",
+      "note": "Monkey + snake + mossy logs + treasure chest goal. TWT-inspired clean design."
+    },
+    {
+      "id": "lupo-alberto",
+      "name": "LUPO ALBERTO",
+      "emoji": "🐺",
+      "genre": "PLATFORM TRAINING CABINET",
+      "url": "games/lupo-alberto.html",
+      "status": "wip",
+      "special": "Game Lab #12",
+      "note": "Platform mechanics template — wolf+dog+hearts. Based on C64 1990. Reskin = change sprites/palette only."
     }
   ]
 }
