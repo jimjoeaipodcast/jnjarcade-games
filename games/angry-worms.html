@@ -38,14 +38,15 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #overlay .hint { margin-top: 26px; font-size: 11px; color: #555; letter-spacing: 2px; }
 
 #rotate {
-  position: fixed; inset: 0; z-index: 100; background: #0a0008;
+  position: fixed; inset: 0; z-index: 100;
+  background: #100304;
   display: none; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 20px;
+  gap: 10px; text-align: center;
 }
-#rotate .phone { font-size: 80px; margin-bottom: 20px; }
-#rotate h3 { font-size: 28px; color: #e8302a; letter-spacing: 2px; }
-#rotate p { font-size: 13px; color: #666; margin-top: 12px; letter-spacing: 1px; }
-@media (orientation:portrait) { #rotate { display: flex !important; } }
+#rotate .ri { font-size: 56px; }
+#rotate h2 { font-family: 'Bungee', cursive; font-size: 20px; color: #f2e9d8; }
+#rotate p { font-weight: 600; color: #b8ad97; }
+@media (pointer: coarse) and (orientation: portrait) { #rotate { display: flex; } }
 
 #endScreen {
   position: fixed; inset: 0; z-index: 60;
@@ -74,9 +75,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 </div>
 
 <div id="rotate">
-  <div class="phone">📱</div>
-  <h3>ROTATE YOUR PHONE</h3>
-  <p>ANGRY WORMS PLAYS IN LANDSCAPE</p>
+  <div class="ri">📱</div>
+  <h2>Rotate to Landscape</h2>
+  <p>Angry Worms needs landscape mode</p>
 </div>
 
 <div id="endScreen">
