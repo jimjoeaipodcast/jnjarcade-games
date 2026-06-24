@@ -78,6 +78,13 @@ const WORLDS = {
     by: 'JOE',
     attract: candyTrisAttract,
   },
+  'angry-worms': {
+    ink: '#e8302a', dim: '#5a1a10', pit: '#100604', glowsoft: 'rgba(232,48,42,0.22)',
+    genre: 'ANGRY BIRDS × WORMS',
+    quote: '"A worm. In a catapult. As a weapon. I have so many questions and I don\'t want the answers to any of them."',
+    by: 'JOE',
+    attract: angryWormsAttract,
+  },
 };
 
 const DEFAULT_WORLD = {
@@ -1452,6 +1459,169 @@ function candyTrisAttract(ctx, w, h, t, world, s) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(255,105,180,0.5)';
   ctx.fillText('CRUSHTRIS', w/2, h * 0.92);
+}
+
+/* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
+function angryWormsAttract(ctx, w, h, t, world, s) {
+  if (!s.init) {
+    s.init = true; s.last = t; s.phase = 0; s.phaseT = 0;
+    // terrain heights — hilly profile
+    s.terrain = Array.from({length: 40}, (_, i) => {
+      const x = i / 39;
+      return h * (0.62 + 0.14 * Math.sin(x * Math.PI * 3.2) + 0.06 * Math.sin(x * Math.PI * 7));
+    });
+    s.craters = []; s.particles = [];
+    s.wormPx = w * 0.08; s.wormPy = 0; // launch pos
+    s.arcX = 0; s.arcY = 0; s.arcVx = 0; s.arcVy = 0;
+    s.exploded = false;
+    s.stars = Array.from({length: 18}, () => ({
+      x: Math.random() * w, y: Math.random() * h * 0.55,
+      r: Math.random() * 1.2 + 0.3, a: Math.random() * 0.5 + 0.15,
+    }));
+  }
+
+  const dt = Math.min(t - s.last, 32); s.last = t;
+  s.phaseT += dt;
+
+  // helpers
+  function terrainY(px) {
+    const frac = Math.max(0, Math.min(1, px / w));
+    const idx = frac * 39;
+    const i = Math.floor(idx), f = idx - i;
+    const a = s.terrain[Math.min(i, 39)], b = s.terrain[Math.min(i+1, 39)];
+    return a + (b - a) * f;
+  }
+
+  // sky
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#0a1a2e'); sky.addColorStop(1, '#1a3a5c');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+
+  // stars
+  for (const st of s.stars) {
+    ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,220,${st.a})`; ctx.fill();
+  }
+
+  // terrain gradient fill
+  const tg = ctx.createLinearGradient(0, h*0.5, 0, h);
+  tg.addColorStop(0, '#5a9e2f'); tg.addColorStop(0.12, '#4a7a22'); tg.addColorStop(1, '#2a3a18');
+  ctx.beginPath(); ctx.moveTo(0, h);
+  for (let i = 0; i < s.terrain.length; i++) ctx.lineTo(i / 39 * w, s.terrain[i]);
+  ctx.lineTo(w, h); ctx.closePath(); ctx.fillStyle = tg; ctx.fill();
+  // grass line
+  ctx.beginPath(); ctx.moveTo(0, terrainY(0));
+  for (let i = 0; i < 40; i++) ctx.lineTo(i/39*w, s.terrain[i]);
+  ctx.strokeStyle = '#8fd44a'; ctx.lineWidth = 2.5; ctx.stroke();
+
+  // craters
+  for (const c of s.craters) {
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
+    g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  // catapult (left side)
+  const catX = w * 0.10, catTY = terrainY(catX) - 2;
+  ctx.strokeStyle = '#8b5e2a'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(catX - w*0.04, catTY); ctx.lineTo(catX, catTY - h*0.11);
+  ctx.lineTo(catX + w*0.04, catTY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(catX - w*0.02, catTY - h*0.03); ctx.lineTo(catX + w*0.02, catTY - h*0.06); ctx.stroke();
+
+  // enemy worm on far hill
+  const ewX = w * 0.76, ewY = terrainY(ewX) - 8;
+  ctx.fillStyle = '#2ec44e';
+  for (let seg = 0; seg < 3; seg++) {
+    ctx.beginPath(); ctx.arc(ewX + seg*5, ewY - seg*2, 7-seg, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ewX+3, ewY-2, 2.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ewX+4, ewY-2, 1.2, 0, Math.PI*2); ctx.fill();
+
+  // PHASE 0: worm sitting on catapult (0–800ms)
+  if (s.phaseT < 800) {
+    s.wormPy = catTY - h*0.14;
+    // worm body on cup
+    ctx.fillStyle = '#e8302a';
+    for (let seg = 0; seg < 3; seg++) {
+      ctx.beginPath(); ctx.arc(catX + (seg-1)*5, s.wormPy - seg*1.5, 7-seg*0.5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(catX+3, s.wormPy-2, 3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(catX+4, s.wormPy-2, 1.5, 0, Math.PI*2); ctx.fill();
+    // stretch indicator
+    const stretch = Math.sin(s.phaseT * 0.008) * 0.5 + 0.5;
+    ctx.strokeStyle = `rgba(255,180,60,${0.3+stretch*0.4})`; ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    // preview arc
+    const vx0 = w*0.0032, vy0 = -h*0.018;
+    ctx.beginPath(); ctx.moveTo(catX, s.wormPy);
+    for (let i = 0; i < 28; i++) {
+      const ti = i * 8;
+      ctx.lineTo(catX + vx0*ti, s.wormPy + vy0*ti + 0.00035*ti*ti*h);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // PHASE 0→1 launch
+  if (s.phaseT >= 800 && s.phase === 0) {
+    s.phase = 1;
+    s.arcX = catX; s.arcY = catTY - h*0.14;
+    s.arcVx = w * 0.0032; s.arcVy = -h * 0.018;
+    s.exploded = false;
+  }
+
+  // PHASE 1: worm in flight
+  if (s.phase === 1) {
+    s.arcVy += 0.00032 * h; // gravity
+    s.arcX += s.arcVx; s.arcY += s.arcVy;
+
+    if (!s.exploded) {
+      const ty = terrainY(s.arcX);
+      if (s.arcY >= ty - 4 && s.arcX > w * 0.3) {
+        // impact
+        s.exploded = true;
+        s.craters.push({x: s.arcX, y: ty - 4, r: w*0.045});
+        for (let p = 0; p < 16; p++) {
+          const ang = Math.random() * Math.PI * 2, spd = 1.5 + Math.random() * 3;
+          s.particles.push({x: s.arcX, y: ty, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 2.5,
+            life: 1, r: 3+Math.random()*4, col: Math.random()>0.5 ? '#ff5a1f' : '#ffd23d'});
+        }
+        s.phase = 2; s.phaseT = 0;
+      }
+    }
+
+    // draw flying worm (spinning)
+    const spin = s.phaseT * 0.008;
+    ctx.save(); ctx.translate(s.arcX, s.arcY); ctx.rotate(spin);
+    ctx.fillStyle = '#e8302a';
+    ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(3, -2, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(4, -2, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // particles
+  for (let i = s.particles.length - 1; i >= 0; i--) {
+    const p = s.particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.life -= 0.025;
+    if (p.life <= 0) { s.particles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2);
+    ctx.fillStyle = p.col; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // PHASE 2: hold 1.2s then reset
+  if (s.phase === 2 && s.phaseT > 1200) {
+    s.phase = 0; s.phaseT = 0; s.particles = [];
+    if (s.craters.length > 3) s.craters.shift();
+  }
+
+  // label
+  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(232,48,42,0.5)';
+  ctx.fillText('ANGRY WORMS', w/2, h * 0.92);
 }
 
 document.addEventListener('DOMContentLoaded', init);
