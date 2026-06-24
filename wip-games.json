@@ -1,6 +1,19 @@
 {
   "games": [
     {
+      "id": "angry-worms",
+      "name": "ANGRY WORMS",
+      "emoji": "🐛",
+      "genre": "ANGRY BIRDS × WORMS",
+      "url": "games/angry-worms.html",
+      "status": "wip",
+      "special": "Game Lab #13",
+      "note": "Launch worms from catapult. Mid-flight abilities. Destructible terrain. Wind. Turn-based.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-06-24",
+      "ai_file": "games/angry-worms.html"
+    },
+    {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
       "emoji": "\ud83c\udffa",

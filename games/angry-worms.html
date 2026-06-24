@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, orientation=landscape, user-scalable=no">
+<title>ANGRY WORMS</title>
+<script src="arcade-scores.js?v=10"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Trebuchet MS','Helvetica',sans-serif; touch-action:none; }
+  #game { display:block; position:absolute; top:0; left:0; }
+
+  /* Rotate overlay */
+  #rotateOverlay {
+    position:fixed; inset:0; background:linear-gradient(135deg,#2a1a0a,#1a3a1a);
+    display:none; align-items:center; justify-content:center; flex-direction:column;
+    z-index:1000; color:#ffd23f; text-align:center; padding:20px;
+  }
+  #rotateOverlay .rot-icon {
+    font-size:80px; animation:rot 2s ease-in-out infinite; margin-bottom:20px;
+    filter:drop-shadow(0 0 20px rgba(255,210,63,0.6));
+  }
+  @keyframes rot {
+    0%,100% { transform:rotate(-90deg) scale(1); }
+    50% { transform:rotate(90deg) scale(1.15); }
+  }
+  #rotateOverlay h2 { font-size:28px; margin-bottom:10px; text-shadow:3px 3px 0 #000; }
+  #rotateOverlay p { font-size:16px; opacity:0.8; max-width:300px; line-height:1.4; }
+  @media (orientation:portrait) {
+    #rotateOverlay { display:flex; }
+  }
+
+  /* Start screen */
+  #startScreen {
+    position:fixed; inset:0; z-index:50;
+    background:radial-gradient(ellipse at center,#3a5a2a 0%,#1a2a1a 100%);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    color:#fff; cursor:pointer;
+  }
+  #startScreen.hidden { display:none; }
+  .title-block {
+    text-align:center; margin-bottom:40px;
+    animation:titleBob 3s ease-in-out infinite;
+  }
+  @keyframes titleBob {
+    0%,100% { transform:translateY(0) rotate(-1deg); }
+    50% { transform:translateY(-10px) rotate(1deg); }
+  }
+  .title-main {
+    font-size:clamp(48px,9vw,120px); font-weight:900; letter-spacing:2px;
+    color:#ffd23f;
+    text-shadow:
+      4px 4px 0 #8b0000,
+      8px 8px 0 #4a0000,
+      0 0 40px rgba(255,210,63,0.5);
+    line-height:1;
+    -webkit-text-stroke:3px #4a0000;
+  }
+  .title-sub {
+    font-size:clamp(14px,2vw,22px); margin-top:15px;
+    color:#a8d96b; letter-spacing:8px; font-weight:bold;
+    text-shadow:2px 2px 0 #000;
+  }
+  .tap-to-start {
+    background:linear-gradient(180deg,#ff7a3a,#c43e0a);
+    color:#fff; padding:18px 50px; border-radius:50px;
+    font-size:clamp(16px,2vw,22px); font-weight:900; letter-spacing:2px;
+    box-shadow:0 6px 0 #6b1f00, 0 8px 20px rgba(0,0,0,0.5);
+    border:3px solid #ffd23f;
+    animation:pulse 1.5s ease-in-out infinite;
+    text-shadow:2px 2px 0 rgba(0,0,0,0.5);
+  }
+  @keyframes pulse {
+    0%,100% { transform:scale(1); box-shadow:0 6px 0 #6b1f00, 0 8px 20px rgba(0,0,0,0.5); }
+    50% { transform:scale(1.05); box-shadow:0 8px 0 #6b1f00, 0 12px 30px rgba(0,0,0,0.7); }
+  }
+  .demo-hint {
+    position:absolute; bottom:30px; color:rgba(255,255,255,0.6);
+    font-size:14px; letter-spacing:1px;
+  }
+  .controls-hint {
+    position:absolute; top:30px; right:30px; color:rgba(255,255,255,0.5);
+    font-size:13px; text-align:right; line-height:1.6;
+  }
+
+  /* HUD */
+  #hud {
+    position:fixed; top:0; left:0; right:0; z-index:10;
+    pointer-events:none; padding:12px 20px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+  }
+  .hud-panel {
+    background:linear-gradient(180deg,rgba(40,25,10,0.9),rgba(20,12,5,0.9));
+    border:2px solid #8b6f3a; border-radius:10px;
+    padding:8px 14px; color:#ffd23f;
+    box-shadow:0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    pointer-events:auto;
+  }
+  .turn-info { font-weight:bold; font-size:14px; }
+  .turn-info .team-color {
+    display:inline-block; width:14px; height:14px; border-radius:50%;
+    vertical-align:middle; margin-right:6px; border:2px solid #000;
+  }
+  .wind-gauge {
+    display:flex; align-items:center; gap:8px;
+  }
+  .wind-label { font-size:11px; opacity:0.7; }
+  .wind-arrow {
+    width:60px; height:24px; position:relative;
+    background:rgba(0,0,0,0.3); border-radius:12px; overflow:hidden;
+  }
+  .wind-arrow-fill {
+    position:absolute; top:50%; left:50%; height:4px;
+    background:linear-gradient(90deg,#7ec8ff,#c8e8ff);
+    border-radius:2px; transform:translateY(-50%);
+    transition:width 0.4s, transform 0.4s;
+  }
+  .worms-left {
+    font-size:13px; color:#a8d96b;
+  }
+
+  #muteBtn {
+    position:fixed; top:14px; right:14px; z-index:20;
+    width:44px; height:44px; border-radius:50%;
+    background:linear-gradient(180deg,rgba(40,25,10,0.95),rgba(20,12,5,0.95));
+    border:2px solid #8b6f3a; color:#ffd23f;
+    font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 10px rgba(0,0,0,0.5);
+    pointer-events:auto;
+  }
+  #muteBtn:active { transform:scale(0.9); }
+
+  /* Win/Lose overlay */
+  #endScreen {
+    position:fixed; inset:0; z-index:60;
+    background:rgba(0,0,0,0.85);
+    display:none; align-items:center; justify-content:center; flex-direction:column;
+    color:#fff; text-align:center;
+  }
+  #endScreen.show { display:flex; }
+  .end-title {
+    font-size:clamp(40px,7vw,80px); font-weight:900; margin-bottom:10px;
+    text-shadow:4px 4px 0 #000;
+  }
+  .end-stars { font-size:50px; margin:20px 0; letter-spacing:8px; }
+  .star-on { color:#ffd23f; text-shadow:0 0 20px #ffd23f; }
+  .star-off { color:#444; }
+  .end-stats { font-size:16px; opacity:0.85; margin-bottom:25px; line-height:1.6; }
+  .end-btn {
+    background:linear-gradient(180deg,#7ec04a,#3a7a1a);
+    color:#fff; padding:14px 40px; border-radius:30px;
+    font-size:18px; font-weight:900; letter-spacing:2px;
+    border:3px solid #a8d96b;
+    box-shadow:0 5px 0 #1a3a0a, 0 8px 20px rgba(0,0,0,0.5);
+    cursor:pointer; text-shadow:2px 2px 0 rgba(0,0,0,0.4);
+    margin:5px;
+  }
+  .end-btn:active { transform:translateY(3px); box-shadow:0 2px 0 #1a3a0a; }
+  .end-btn.secondary {
+    background:linear-gradient(180deg,#8a7a5a,#4a3a1a);
+    border-color:#c8b07a; box-shadow:0 5px 0 #2a1a0a, 0 8px 20px rgba(0,0,0,0.5);
+  }
+
+  /* Toast */
+  #toast {
+    position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.85); color:#ffd23f; padding:10px 24px;
+    border-radius:30px; border:2px solid #8b6f3a; font-size:14px; font-weight:bold;
+    z-index:30; opacity:0; transition:opacity 0.3s; pointer-events:none;
+  }
+  #toast.show { opacity:1; }
+
+  /* Worm selector */
+  #wormSelect {
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+    z-index:15; display:flex; gap:8px; pointer-events:auto;
+  }
+  .worm-btn {
+    width:54px; height:54px; border-radius:12px;
+    background:linear-gradient(180deg,rgba(40,25,10,0.95),rgba(20,12,5,0.95));
+    border:2px solid #8b6f3a; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.5);
+    transition:transform 0.1s;
+  }
+  .worm-btn:active { transform:scale(0.92); }
+  .worm-btn.active { border-color:#ffd23f; box-shadow:0 0 15px rgba(255,210,63,0.6); }
+  .worm-btn.used { opacity:0.35; }
+  .worm-btn canvas { width:42px; height:42px; }
+  .worm-btn .count {
+    position:absolute; top:-6px; right:-6px;
+    background:#c43e0a; color:#fff; font-size:11px; font-weight:bold;
+    width:20px; height:20px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid #000;
+  }
+  .worm-btn .key {
+    position:absolute; bottom:-2px; left:-2px;
+    background:#222; color:#ffd23f; font-size:9px; font-weight:bold;
+    padding:1px 4px; border-radius:4px; border:1px solid #555;
+  }
+</style>
+</head>
+<body>
+
+<div id="rotateOverlay">
+  <div class="rot-icon">🔄</div>
+  <h2>Rotate Your Phone</h2>
+  <p>ANGRY WORMS is best played in landscape mode. Turn your device sideways!</p>
+</div>
+
+<div id="startScreen">
+  <div class="controls-hint">
+    DRAG to aim catapult<br>
+    TAP mid-flight for ability<br>
+    1-5 keys to switch worms
+  </div>
+  <div class="title-block">
+    <div class="title-main">ANGRY WORMS</div>
+    <div class="title-sub">CATAPULT • CRATER • CONQUER</div>
+  </div>
+  <div class="tap-to-start">TAP TO START</div>
+  <div class="demo-hint">Watching demo... worms are warming up!</div>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="hud-panel turn-info">
+    <div><span class="team-color" id="teamColor"></span><span id="turnText">Your Turn</span></div>
+    <div class="worms-left" id="wormsLeft"></div>
+  </div>
+  <div class="hud-panel wind-gauge">
+    <span class="wind-label">WIND</span>
+    <div class="wind-arrow"><div class="wind-arrow-fill" id="windFill"></div></div>
+    <span id="windStrength">0</span>
+  </div>
+</div>
+
+<button id="muteBtn">🔊</button>
+
+<div id="wormSelect"></div>
+
+<div id="toast"></div>
+
+<div id="endScreen">
+  <div class="end-title" id="endTitle">VICTORY!</div>
+  <div class="end-stars" id="endStars"></div>
+  <div class="end-stats" id="endStats"></div>
+  <div>
+    <button class="end-btn" id="nextBtn">NEXT LEVEL</button>
+    <button class="end-btn secondary" id="retryBtn">RETRY</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   ANGRY WORMS — Full game
+   ========================================================= */
+
+// ---------- Canvas setup ----------
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+let W=0, H=0, DPR=1;
+function resize(){
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cvs.style.width = W+'px';
+  cvs.style.height = H+'px';
+  cvs.width = Math.floor(W*DPR);
+  cvs.height = Math.floor(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- World ----------
+const WORLD_W = 3600;
+const WORLD_H = 720;
+const WATER_Y = 640;
+
+// terrain heightmap (per x pixel). Built per level.
+let terrain = null;
+let terrainCanvas = document.createElement('canvas');
+let terrainCtx = terrainCanvas.getContext('2d');
+const TERRAIN_RES = 2; // sample every N px for heightmap
+
+// ---------- Game state ----------
+const STATE = {
+  ATTRACT: 'attract',
+  AIMING: 'aiming',
+  FLYING: 'flying',
+  RESOLVING: 'resolving',
+  ENEMY_TURN: 'enemy',
+  WIN: 'win',
+  LOSE: 'lose'
+};
+let state = STATE.ATTRACT;
+let level = 1;
+let maxLevel = 3;
+let score = 0;
+let wormsUsed = 0;
+let wormsAvailable = 0;
+let currentWormType = 'red';
+
+// Camera
+let camX = 0, camTargetX = 0;
+let camShake = 0, camShakeX=0, camShakeY=0;
+let slowmo = 1;
+let timeScale = 1;
+
+// Wind
+let wind = 0; // -1 to 1
+let windParticles = [];
+
+// Worms & projectiles
+let playerWorms = []; // worms at base / on catapult ready
+let enemyWorms = [];
+let activeWorm = null;
+let projectiles = []; // can be multiple after split
+let particles = [];
+let debris = [];
+let bubbles = []; // speech bubbles
+let crates = []; // destructible structures
+let stars = []; // stunned stars
+
+// Catapult
+const catapult = {
+  x: 200, y: 0, // y set per level
+  angle: -Math.PI/4,
+  power: 0,
+  maxPull: 140,
+  pulling: false,
+  pullStart: {x:0,y:0},
+  pullCurrent: {x:0,y:0},
+  loadedWorm: null,
+  creak: 0
+};
+
+// ---------- Worm types ----------
+const WORM_TYPES = {
+  red:     { name:'Red',      color:'#e63946', accent:'#9a1f2a', ability:'none',     desc:'Solid hit, max knockback', radius:14, mass:1.2, dmg:35, knock:18 },
+  splitter:{ name:'Splitter', color:'#3aa7e6', accent:'#1f5a9a', ability:'split',    desc:'Tap to split into 3',      radius:13, mass:0.9, dmg:22, knock:12 },
+  rocket:  { name:'Rocket',   color:'#ffd23f', accent:'#a87f00', ability:'boost',    desc:'Tap to boost forward',     radius:13, mass:1.0, dmg:30, knock:14 },
+  bomber:  { name:'Bomber',   color:'#2a2a2a', accent:'#000',    ability:'detonate', desc:'Tap to detonate',          radius:14, mass:1.3, dmg:25, knock:10, explosive:true },
+  drill:   { name:'Drill',    color:'#7ec04a', accent:'#3a7a1a', ability:'drill',    desc:'Bores through terrain',    radius:13, mass:1.1, dmg:28, knock:8, drilling:true }
+};
+const WORM_ORDER = ['red','splitter','rocket','bomber','drill'];
+
+// ---------- Audio (synth) ----------
+let audioCtx = null;
+let muted = false;
+try { muted = localStorage.getItem('aw_muted')==='1'; } catch(e){}
+document.getElementById('muteBtn').textContent = muted?'🔇':'🔊';
+
+function initAudio(){
+  if(audioCtx) return;
+  try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+}
+function beep(freq, dur, type='sine', vol=0.15, slide=0){
+  if(muted||!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type=type; o.frequency.setValueAtTime(freq,t);
+  if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(20,freq+slide), t+dur);
+  g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function noiseBurst(dur=0.3, vol=0.3, lowpass=800){
+  if(muted||!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const bs = audioCtx.sampleRate*dur;
+  const buf = audioCtx.createBuffer(1,bs,audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<bs;i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/bs,1.5);
+  const src = audioCtx.createBufferSource(); src.buffer=buf;
+  const g = audioCtx.createGain(); g.gain.value=vol;
+  const f = audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lowpass;
+  src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  src.start(t);
+}
+function playSound(name){
+  if(!audioCtx) return;
+  switch(name){
+    case 'creak': beep(180+Math.random()*60,0.08,'sawtooth',0.06); break;
+    case 'woosh': noiseBurst(0.25,0.18,1200); break;
+    case 'thud':  beep(90,0.18,'sine',0.3,-40); noiseBurst(0.15,0.2,300); break;
+    case 'boom':
+      beep(60,0.5,'sine',0.4,-30);
+      noiseBurst(0.5,0.45,500);
+      setTimeout(()=>noiseBurst(0.3,0.25,1500),20);
+      break;
+    case 'squeal': beep(900,0.12,'square',0.18,-300); break;
+    case 'splash': noiseBurst(0.4,0.25,2500); beep(400,0.3,'sine',0.1,-200); break;
+    case 'split': beep(800,0.08,'triangle',0.15); setTimeout(()=>beep(1200,0.08,'triangle',0.15),60); setTimeout(()=>beep(1600,0.08,'triangle',0.15),120); break;
+    case 'boost': beep(200,0.3,'sawtooth',0.2,800); break;
+    case 'drill': beep(150,0.4,'square',0.15,100); noiseBurst(0.4,0.1,800); break;
+    case 'click': beep(600,0.05,'square',0.1); break;
+    case 'win': [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'triangle',0.2),i*120)); break;
+    case 'lose':[400,300,200].forEach((f,i)=>setTimeout(()=>beep(f,0.3,'sawtooth',0.2),i*200)); break;
+  }
+}
+
+// ambient wind
+let lastWindHowl = 0;
+function ambientWind(t){
+  if(muted||!audioCtx) return;
+  if(t-lastWindHowl>2500+Math.random()*2000){
+    lastWindHowl=t;
+    noiseBurst(1.5,0.04,400);
+  }
+}
+
+// ---------- Terrain generation ----------
+function buildTerrain(level){
+  terrain = { heights: new Float32Array(Math.ceil(WORLD_W/TERRAIN_RES)+1), surface: new Uint8Array(Math.ceil(WORLD_W/TERRAIN_RES)+1) };
+  // base profile
+  const baseY = 480;
+  for(let i=0;i<terrain.heights.length;i++){
+    const x = i*TERRAIN_RES;
+    let h = baseY;
+    // multiple sine layers for hills
+    h += Math.sin(x*0.005+level)*60;
+    h += Math.sin(x*0.013+level*2)*30;
+    h += Math.sin(x*0.027)*15;
+    h += Math.cos(x*0.003+1)*40;
+    // plateau on right side for structures (enemy area)
+    if(x>2200 && x<3400){
+      const t = (x-2200)/1200;
+      h = lerp(h, 460, smoothstep(0,1,Math.min(t*3,1)) * (1-smoothstep(0.7,1,t)) );
+    }
+    // catapult platform left
+    if(x<400){
+      h = lerp(520, h, smoothstep(0,400,x));
+    }
+    terrain.heights[i] = h;
+    terrain.surface[i] = 1;
+  }
+  // carve a cave
+  if(level>=2){
+    carveCircle(2600, 380, 80);
+    carveCircle(2780, 360, 70);
+    carveCircle(2950, 400, 60);
+  }
+  renderTerrainToCanvas();
+}
+function smoothstep(a,b,x){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function terrainAt(x){
+  const i = Math.floor(x/TERRAIN_RES);
+  if(i<0||i>=terrain.heights.length) return WATER_Y+50;
+  return terrain.heights[i];
+}
+function isSolidAt(x,y){
+  if(y>=WATER_Y) return false;
+  const i = Math.floor(x/TERRAIN_RES);
+  if(i<0||i>=terrain.surface.length) return false;
+  return terrain.surface[i]===1 && y >= terrain.heights[i];
+}
+function carveCircle(cx,cy,r){
+  const r2 = r*r;
+  for(let i=0;i<terrain.heights.length;i++){
+    const x = i*TERRAIN_RES;
+    const dx = x-cx;
+    if(Math.abs(dx)>r) continue;
+    // remove a chunk; for simplicity, if center is above terrain, dig down
+    const dy = Math.sqrt(r2-dx*dx);
+    const top = cy - dy;
+    const bot = cy + dy;
+    if(top < terrain.heights[i]){
+      // raise the terrain surface if the cave opening is above current surface? Actually we want to dig DOWN into ground.
+      // If cave is below current surface, just mark surface solid above the cave top.
+      // For our 1D heightmap, we set the surface height to be ABOVE the cave if cave is below ground (no change),
+      // but we want to allow worms to fall INTO the cave — so we modify the heightmap if cy is near surface.
+    }
+  }
+  // For caves, we use a separate "holes" mask. For simplicity, we mark terrain as having a cavity by storing cave circles.
+  if(!terrain.caves) terrain.caves=[];
+  terrain.caves.push({x:cx,y:cy,r:r});
+}
+function isCaveAt(x,y){
+  if(!terrain.caves) return false;
+  for(const c of terrain.caves){
+    const dx=x-c.x, dy=y-c.y;
+    if(dx*dx+dy*dy < c.r*c.r) return true;
+  }
+  return false;
+}
+function isPassableAt(x,y){
+  if(y>=WATER_Y) return true;
+  return !isSolidAt(x,y) && !isCaveAt(x,y);
+}
+
+// Render terrain to offscreen canvas
+function renderTerrainToCanvas(){
+  terrainCanvas.width = WORLD_W;
+  terrainCanvas.height = WORLD_H;
+  const c = terrainCtx;
+  c.clearRect(0,0,WORLD_W,WORLD_H);
+
+  // Build path of surface
+  c.beginPath();
+  c.moveTo(0, WORLD_H);
+  for(let i=0;i<terrain.heights.length;i++){
+    c.lineTo(i*TERRAIN_RES, terrain.heights[i]);
+  }
+  c.lineTo(WORLD_W, WORLD_H);
+  c.closePath();
+
+  // Grass top strip — clip and draw
+  c.save();
+  c.clip();
+
+  // dirt gradient
+  const grad = c.createLinearGradient(0,300,0,WORLD_H);
+  grad.addColorStop(0,'#7a4a22');
+  grad.addColorStop(0.15,'#5a3015');
+  grad.addColorStop(0.5,'#3a1d08');
+  grad.addColorStop(1,'#1a0a02');
+  c.fillStyle = grad;
+  c.fillRect(0,0,WORLD_W,WORLD_H);
+
+  // rock texture (random darker patches)
+  for(let i=0;i<400;i++){
+    const x = Math.random()*WORLD_W;
+    const y = 400 + Math.random()*250;
+    const r = 8+Math.random()*22;
+    if(isSolidAt(x,y)){
+      c.fillStyle = `rgba(0,0,0,${0.1+Math.random()*0.2})`;
+      c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.fill();
+    }
+  }
+  // small rocks
+  for(let i=0;i<200;i++){
+    const x = Math.random()*WORLD_W;
+    const y = 400 + Math.random()*250;
+    if(isSolidAt(x,y)){
+      c.fillStyle = `rgba(80,50,20,0.6)`;
+      c.beginPath(); c.arc(x,y,2+Math.random()*3,0,Math.PI*2); c.fill();
+    }
+  }
+
+  // Grass layer
+  c.lineWidth = 16;
+  c.strokeStyle = '#4a8a2a';
+  c.beginPath();
+  for(let i=0;i<terrain.heights.length;i++){
+    const x = i*TERRAIN_RES;
+    const y = terrain.heights[i];
+    if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
+  }
+  c.stroke();
+
+  // brighter grass top
+  c.lineWidth = 8;
+  c.strokeStyle = '#7ec04a';
+  c.beginPath();
+  for(let i=0;i<terrain.heights.length;i++){
+    const x = i*TERRAIN_RES;
+    const y = terrain.heights[i]-4;
+    if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
+  }
+  c.stroke();
+
+  // grass blades
+  c.strokeStyle = '#a8d96b';
+  c.lineWidth = 1.5;
+  for(let x=0;x<WORLD_W;x+=8){
+    const y = terrainAt(x);
+    if(y<WATER_Y){
+      c.beginPath();
+      c.moveTo(x,y-2);
+      c.lineTo(x+ (Math.sin(x*0.5)*2), y-8 - Math.random()*4);
+      c.stroke();
+    }
+  }
+
+  c.restore();
+
+  // Carve caves: cut holes
+  if(terrain.caves){
+    c.globalCompositeOperation='destination-out';
+    for(const cv of terrain.caves){
+      c.beginPath(); c.arc(cv.x,cv.y,cv.r,0,Math.PI*2); c.fill();
+      // rugged edge
+      for(let a=0;a<Math.PI*2;a+=0.3){
+        const r = cv.r + (Math.random()-0.5)*6;
+        c.beginPath();
+        c.arc(cv.x+Math.cos(a)*r, cv.y+Math.sin(a)*r, 6, 0, Math.PI*2);
+        c.fill();
+      }
+    }
+    c.globalCompositeOperation='source-over';
+  }
+
+  // Damage craters are carved dynamically into this canvas
+}
+
+// Deform terrain on impact
+function deformTerrain(cx,cy,r){
+  // 1) Update heightmap: if crater center is above terrain, lower surface
+  const x0 = Math.max(0, Math.floor((cx-r)/TERRAIN_RES));
+  const x1 = Math.min(terrain.heights.length-1, Math.ceil((cx+r)/TERRAIN_RES));
+  for(let i=x0;i<=x1;i++){
+    const x = i*TERRAIN_RES;
+    const dx = x-cx;
+    const inside = Math.sqrt(Math.max(0, r*r - dx*dx));
+    const topY = cy - inside;
+    const botY = cy + inside;
+    if(topY < terrain.heights[i]){
+      // crater digs into ground
+      terrain.heights[i] = Math.min(terrain.heights[i] + inside*0.9, WATER_Y);
+    }
+  }
+  // 2) Carve hole in terrain canvas
+  terrainCtx.save();
+  terrainCtx.globalCompositeOperation='destination-out';
+  // rugged crater
+  terrainCtx.beginPath();
+  for(let a=0;a<Math.PI*2;a+=0.15){
+    const rr = r*(0.85+Math.random()*0.3);
+    const px = cx+Math.cos(a)*rr;
+    const py = cy+Math.sin(a)*rr;
+    if(a===0) terrainCtx.moveTo(px,py); else terrainCtx.lineTo(px,py);
+  }
+  terrainCtx.closePath();
+  terrainCtx.fill();
+  terrainCtx.restore();
+
+  // 3) Spawn debris particles that fly out
+  for(let i=0;i<14;i++){
+    const a = Math.random()*Math.PI*2;
+    const sp = 2+Math.random()*5;
+    debris.push({
+      x: cx+Math.cos(a)*r*0.5,
+      y: cy+Math.sin(a)*r*0.5,
+      vx: Math.cos(a)*sp,
+      vy: Math.sin(a)*sp - 3,
+      r: 3+Math.random()*5,
+      life: 1,
+      color: Math.random()<0.5?'#5a3015':'#3a1d08',
+      rot: Math.random()*Math.PI*2,
+      vrot: (Math.random()-0.5)*0.3
+    });
+  }
+}
+
+// ---------- Levels ----------
+function buildLevel(n){
+  buildTerrain(n);
+  // reset entities
+  playerWorms = [];
+  enemyWorms = [];
+  projectiles = [];
+  particles = [];
+  debris = [];
+  bubbles = [];
+  stars = [];
+  crates = [];
+
+  // Catapult position
+  catapult.x = 200;
+  catapult.y = terrainAt(200) - 20;
+  catapult.angle = -Math.PI/4;
+  catapult.power = 0;
+  catapult.pulling = false;
+  catapult.loadedWorm = null;
+
+  // Player worms (inventory by type) — set count per level
+  const loadout = {
+    1: { red:3, splitter:2, rocket:2, bomber:1, drill:1 },
+    2: { red:3, splitter:3, rocket:2, bomber:2, drill:1 },
+    3: { red:4, splitter:3, rocket:3, bomber:2, drill:2 }
+  }[n] || { red:3, splitter:2, rocket:2, bomber:1, drill:1 };
+  playerWorms = [];
+  for(const k of WORM_ORDER){
+    for(let i=0;i<(loadout[k]||0);i++){
+      playerWorms.push({ type:k, used:false });
+    }
+  }
+  wormsAvailable = playerWorms.length;
+  wormsUsed = 0;
+  // pick first available worm type as current
+  currentWormType = WORM_ORDER.find(k=>playerWorms.some(w=>w.type===k && !w.used)) || 'red';
+  loadCatapult();
+
+  // Enemy worms positions per level
+  const enemyLayouts = {
+    1: [
+      {x:2400, hp:60, helmet:false},
+      {x:2650, hp:60, helmet:false},
+      {x:2900, hp:80, helmet:true},
+      {x:3150, hp:60, helmet:false},
+      {x:3350, hp:60, helmet:false}
+    ],
+    2: [
+      {x:2350, hp:60, helmet:false},
+      {x:2500, hp:80, helmet:true},
+      {x:2700, hp:60, helmet:false}, // in cave area
+      {x:2950, hp:80, helmet:true},
+      {x:3200, hp:60, helmet:false},
+      {x:3400, hp:100, helmet:true}
+    ],
+    3: [
+      {x:2300, hp:80, helmet:true},
+      {x:2500, hp:60, helmet:false},
+      {x:2680, hp:80, helmet:true},
+      {x:2850, hp:60, helmet:false},
+      {x:3050, hp:100, helmet:true},
+      {x:3250, hp:80, helmet:true},
+      {x:3450, hp:120, helmet:true}
+    ]
+  };
+  const layout = enemyLayouts[n] || enemyLayouts[1];
+  for(const e of layout){
+    const y = terrainAt(e.x) - 16;
+    enemyWorms.push({
+      x: e.x, y: y, vx:0, vy:0,
+      hp: e.hp, maxHp: e.hp,
+      helmet: e.helmet,
+      radius: 13,
+      grounded: true,
+      facing: -1,
+      stunTime: 0,
+      flash: 0,
+      dead: false,
+      isEnemy: true,
+      type: 'enemy'
+    });
+  }
+
+  // Build simple structures (crates) near some enemies for level 2/3
+  if(n>=2){
+    addCrates(2580, 2);
+    addCrates(3050, 3);
+  }
+  if(n>=3){
+    addCrates(2820, 2);
+    addCrates(3300, 3);
+  }
+
+  // wind
+  wind = (Math.random()*2-1) * (0.4 + n*0.15);
+  updateWindUI();
+  updateWormSelectUI();
+  updateTurnUI();
+
+  // camera initial
+  camX = 0; camTargetX = 0;
+}
+
+function addCrates(x, count){
+  for(let i=0;i<count;i++){
+    const cx = x + (i%2===0?i*22:-i*22);
+    const cy = terrainAt(cx) - 20 - Math.floor(i/2)*30;
+    crates.push({ x:cx, y:cy, w:30, h:30, hp:30, vx:0, vy:0, grounded:true, rot:0, vrot:0 });
+  }
+}
+
+// ---------- Catapult ----------
+function loadCatapult(){
+  // find an unused worm of currentWormType
+  let w = playerWorms.find(w=>w.type===currentWormType && !w.used);
+  if(!w){
+    // pick any unused
+    w = playerWorms.find(w=>!w.used);
+    if(w) currentWormType = w.type;
+  }
+  if(!w){
+    catapult.loadedWorm = null;
+    return;
+  }
+  catapult.loadedWorm = w;
+}
+
+// ---------- Projectile ----------
+function launchWorm(angle, power){
+  if(!catapult.loadedWorm) return;
+  const w = catapult.loadedWorm;
+  w.used = true;
+  wormsUsed++;
+  const def = WORM_TYPES[w.type];
+  const sx = catapult.x + Math.cos(angle)*40;
+  const sy = catapult.y + Math.sin(angle)*40 - 10;
+  const speed = power * 0.18;
+  const p = {
+    x: sx, y: sy,
+    vx: Math.cos(angle)*speed,
+    vy: Math.sin(angle)*speed,
+    type: w.type,
+    def: def,
+    radius: def.radius,
+    mass: def.mass,
+    abilityUsed: false,
+    alive: true,
+    age: 0,
+    trail: [],
+    rot: 0,
+    vrot: 0.1,
+    isPlayer: true,
+    explosive: def.explosive,
+    drilling: def.drilling,
+    drillTime: 0,
+    bouncing: false
+  };
+  projectiles = [p];
+  activeWorm = p;
+  state = STATE.FLYING;
+  playSound('woosh');
+  // creak release
+  catapult.creak = 0;
+  catapult.power = 0;
+  catapult.loadedWorm = null;
+  // camera follow
+  camTargetX = p.x - W*0.4;
+  // toast for ability hint
+  if(def.ability!=='none'){
+    showToast(`${def.name} Worm — TAP to ${def.ability==='split'?'split':def.ability==='boost'?'boost':def.ability==='detonate'?'detonate':'drill'}`);
+  }
+}
+
+// ---------- Abilities ----------
+function activateAbility(){
+  if(state!==STATE.FLYING) return;
+  for(const p of projectiles){
+    if(!p.alive) continue;
+    if(p.abilityUsed) continue;
+    const ab = p.def.ability;
+    if(ab==='none') continue;
+    p.abilityUsed = true;
+    if(ab==='split'){
+      // create 2 more projectiles
+      const baseVx = p.vx, baseVy = p.vy;
+      const offsets = [-0.35, 0.35];
+      for(const off of offsets){
+        const cs = Math.cos(off), sn = Math.sin(off);
+        const vx = baseVx*cs - baseVy*sn;
+        const vy = baseVx*sn + baseVy*cs;
+        projectiles.push({
+          x: p.x, y: p.y, vx, vy,
+          type: p.type, def: p.def, radius: p.def.radius*0.75, mass: p.def.mass*0.7,
+          abilityUsed: true, alive: true, age:0, trail:[], rot:0, vrot:0.1, isPlayer:true
+        });
+      }
+      playSound('split');
+      spawnParticles(p.x,p.y,12,'#3aa7e6');
+    } else if(ab==='boost'){
+      const sp = Math.hypot(p.vx,p.vy);
+      const nsp = Math.max(sp*2, 14);
+      const a = Math.atan2(p.vy,p.vx);
+      p.vx = Math.cos(a)*nsp;
+      p.vy = Math.sin(a)*nsp;
+      p.boosting = 30;
+      playSound('boost');
+      spawnParticles(p.x,p.y,15,'#ffd23f');
+      camShake = 6;
+    } else if(ab==='detonate'){
+      explode(p.x,p.y,90, p.def.dmg, p.def.knock);
+      p.alive = false;
+      playSound('boom');
+      camShake = 20;
+      slowmo = 0.35;
+    } else if(ab==='drill'){
+      p.drilling = true;
+      p.drillTime = 60;
+      playSound('drill');
+    }
+  }
+}
+
+// ---------- Explosion ----------
+function explode(cx,cy,r,dmg,knock){
+  // deform terrain
+  deformTerrain(cx,cy,r);
+  // shockwave particle
+  particles.push({ x:cx, y:cy, r:10, maxR:r*1.6, life:1, type:'shock', color:'rgba(255,210,63,0.8)' });
+  // fireball
+  for(let i=0;i<24;i++){
+    const a = Math.random()*Math.PI*2;
+    const sp = 2+Math.random()*7;
+    particles.push({
+      x:cx, y:cy,
+      vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+      r: 6+Math.random()*10, life:1,
+      type:'fire',
+      color: ['#ffd23f','#ff7a3a','#c43e0a'][Math.floor(Math.random()*3)]
+    });
+    }
+  // smoke
+  for(let i=0;i<10;i++){
+    particles.push({
+      x:cx+(Math.random()-0.5)*30, y:cy+(Math.random()-0.5)*30,
+      vx:(Math.random()-0.5)*1, vy:-1-Math.random()*1.5,
+      r: 14+Math.random()*12, life:1,
+      type:'smoke', color:'rgba(60,40,30,0.5)'
+    });
+  }
+  // damage enemies in radius
+  for(const e of enemyWorms){
+    if(e.dead) continue;
+    const dx = e.x-cx, dy=e.y-cy;
+    const d = Math.hypot(dx,dy);
+    if(d<r+30){
+      const dmgF = 1 - d/(r+30);
+      damageEnemy(e, dmg*dmgF, dx, dy, knock*dmgF);
+    }
+  }
+  // damage crates
+  for(const c of crates){
+    const dx = c.x+c.w/2-cx, dy=c.y+c.h/2-cy;
+    const d = Math.hypot(dx,dy);
+    if(d<r){
+      c.hp -= dmg;
+      c.vx += (dx/d)*knock*0.3;
+      c.vy = -Math.abs(knock*0.4);
+      c.grounded = false;
+    }
+  }
+  // damage enemy projectiles? none here
+  // knock player projectile away? we already handle p.alive=false for detonate
+  // camera shake
+  camShake = Math.max(camShake, r*0.18);
+  slowmo = Math.min(slowmo, 0.5);
+}
+
+function damageEnemy(e, dmg, dx, dy, knock){
+  if(e.dead) return;
+  // helmet reduces damage
+  if(e.helmet) dmg *= 0.65;
+  e.hp -= dmg;
+  e.flash = 1;
+  e.stunTime = 90;
+  const d = Math.hypot(dx,dy)||1;
+  e.vx += (dx/d)*knock*0.5;
+  e.vy = -Math.abs(knock*0.5) - 3;
+  e.grounded = false;
+  playSound('squeal');
+  // speech bubble
+  bubbles.push({ x:e.x, y:e.y-30, text:['Ow!','Ouch!','Argh!','Bleargh!'][Math.floor(Math.random()*4)], life:60, vy:-0.5 });
+  stars.push({ target:e, life:90 });
+  if(e.hp<=0){
+    e.dead = true;
+    e.vy = -8;
+    e.vx = (dx/d)*knock*0.8;
+    spawnParticles(e.x,e.y,18,e.helmet?'#888':'#e63946');
+    // small explosion
+    for(let i=0;i<12;i++){
+      const a=Math.random()*Math.PI*2, sp=2+Math.random()*5;
+      particles.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:4+Math.random()*4,life:1,type:'fire',color:'#ffd23f'});
+    }
+  }
+}
+
+// ---------- Particles ----------
+function spawnParticles(x,y,n,color){
+  for(let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2;
+    const sp = 1+Math.random()*4;
+    particles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, r:2+Math.random()*4, life:1, type:'spark', color });
+  }
+}
+
+// ---------- Physics update ----------
+const GRAVITY = 0.35;
+const FRICTION = 0.97;
+const AIR_DRAG = 0.998;
+
+function updatePhysics(){
+  // projectiles
+  for(const p of projectiles){
+    if(!p.alive) continue;
+    p.age++;
+    // trail
+    p.trail.push({x:p.x,y:p.y,life:1});
+    if(p.trail.length>20) p.trail.shift();
+    for(const t of p.trail) t.life -= 0.05;
+
+    // wind affects player projectiles
+    p.vx += wind * 0.012;
+    // gravity
+    p.vy += GRAVITY * p.mass * (p.drilling?0.6:1);
+    // air drag
+    p.vx *= AIR_DRAG; p.vy *= AIR_DRAG;
+    if(p.boosting && p.boosting>0){ p.boosting--; }
+
+    // rotation
+    p.vrot = Math.atan2(p.vy,p.vx)*0.5;
+    p.rot += p.vrot;
+
+    // drill behavior: if drilling, pass through terrain for drillTime, then exit normal
+    if(p.drilling && p.drillTime>0){
+      p.drillTime--;
+      // move
+      p.x += p.vx; p.y += p.vy;
+      // carve small tunnel
+      deformTerrain(p.x, p.y, p.radius*0.9);
+      // spawn dirt particles
+      if(Math.random()<0.6){
+        particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,r:3+Math.random()*3,life:0.6,type:'spark',color:'#5a3015'});
+      }
+      if(p.drillTime<=0){ p.drilling=false; }
+    } else {
+      p.x += p.vx; p.y += p.vy;
+    }
+
+    // collision with terrain
+    if(!p.drilling && isSolidAt(p.x, p.y)){
+      handleProjectileImpact(p);
+      continue;
+    }
+    // collision with crate
+    let hitCrate = false;
+    for(const c of crates){
+      if(p.x>c.x && p.x<c.x+c.w && p.y>c.y && p.y<c.y+c.h){
+        c.hp -= p.def.dmg*0.5;
+        c.vx += p.vx*0.3;
+        c.vy = -Math.abs(p.vy*0.5)-2;
+        c.grounded = false;
+        handleProjectileImpact(p, c.x+c.w/2, c.y+c.h/2);
+        hitCrate = true;
+        break;
+      }
+    }
+    if(hitCrate) continue;
+
+    // collision with enemy worm
+    for(const e of enemyWorms){
+      if(e.dead) continue;
+      const dx = p.x-e.x, dy=p.y-e.y;
+      if(dx*dx+dy*dy < (p.radius+e.radius)*(p.radius+e.radius)){
+        if(p.explosive){
+          explode(p.x,p.y,80, p.def.dmg, p.def.knock);
+          p.alive=false;
+        } else {
+          damageEnemy(e, p.def.dmg, dx, dy, p.def.knock);
+          spawnParticles(p.x,p.y,10,p.def.color);
+          playSound('thud');
+          camShake = Math.max(camShake,10);
+          slowmo = Math.min(slowmo, 0.4);
+          p.alive = false;
+        }
+        break;
+      }
+    }
+
+    // water
+    if(p.y > WATER_Y){
+      playSound('splash');
+      spawnParticles(p.x,WATER_Y,20,'#7ec8ff');
+      p.alive = false;
+      for(let i=0;i<8;i++){
+        particles.push({x:p.x,y:WATER_Y,vx:(Math.random()-0.5)*4,vy:-2-Math.random()*4,r:3+Math.random()*3,life:0.8,type:'spark',color:'#a8d8ff'});
+      }
+    }
+
+    // out of world
+    if(p.x<0 || p.x>WORLD_W || p.y<-200){
+      p.alive=false;
+    }
+  }
+  // remove dead projectiles; check if all dead -> end turn
+  projectiles = projectiles.filter(p=>p.alive || p.trail.some(t=>t.life>0));
+  if(state===STATE.FLYING && projectiles.every(p=>!p.alive)){
+    // brief delay then resolve
+    state = STATE.RESOLVING;
+    setTimeout(()=>resolveTurn(), 800);
+  }
+
+  // enemy worm physics (knockback / fall)
+  for(const e of enemyWorms){
+    if(e.flash>0) e.flash -= 0.05;
+    if(e.stunTime>0) e.stunTime--;
+    if(e.dead){
+      // ragdoll fall
+      e.vy += GRAVITY;
+      e.vx *= 0.99;
+      e.x += e.vx; e.y += e.vy;
+      e.rot = (e.rot||0) + 0.15;
+      if(e.y>WATER_Y+40){ e.sunk=true; }
+      // terrain collide (roughly) — let them sink in water
+      continue;
+    }
+    if(!e.grounded){
+      e.vy += GRAVITY;
+      e.vx *= 0.995;
+      e.x += e.vx; e.y += e.vy;
+      // terrain collide
+      const ty = terrainAt(e.x);
+      if(e.y + e.radius >= ty && !isCaveAt(e.x, e.y)){
+        e.y = ty - e.radius;
+        e.vy *= -0.3;
+        e.vx *= 0.6;
+        if(Math.abs(e.vy)<1){ e.vy=0; e.grounded=true; }
+      }
+      if(e.y>WATER_Y){
+        e.dead = true;
+        e.hp = 0;
+        playSound('splash');
+        spawnParticles(e.x,WATER_Y,20,'#7ec8ff');
+      }
+    } else {
+      // settle to ground
+      const ty = terrainAt(e.x);
+      e.y = ty - e.radius;
+    }
+  }
+
+  // crates physics
+  for(const c of crates){
+    if(!c.grounded){
+      c.vy += GRAVITY*0.8;
+      c.vx *= 0.99;
+      c.x += c.vx; c.y += c.vy;
+      c.vrot += c.vx*0.005;
+      c.rot += c.vrot;
+      const ty = terrainAt(c.x+c.w/2);
+      if(c.y + c.h >= ty){
+        c.y = ty - c.h;
+        c.vy *= -0.2;
+        c.vx *= 0.7;
+        c.vrot *= 0.6;
+        if(Math.abs(c.vy)<1){ c.grounded=true; c.vy=0; }
+      }
+    }
+  }
+  // remove dead crates
+  crates = crates.filter(c=>c.hp>0);
+
+  // particles
+  for(const p of particles){
+    if(p.type==='shock'){
+      p.r += (p.maxR-p.r)*0.3;
+      p.life -= 0.05;
+    } else if(p.type==='fire' || p.type==='smoke'){
+      p.x += p.vx; p.y += p.vy;
+      p.vy -= 0.08; p.vx *= 0.96;
+      p.life -= p.type==='fire'?0.04:0.02;
+      if(p.type==='smoke') p.r += 0.4;
+    } else { // spark
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.15; p.vx *= 0.98;
+      p.life -= 0.03;
+    }
+  }
+  particles = particles.filter(p=>p.life>0);
+
+  // debris
+  for(const d of debris){
+    d.x += d.vx; d.y += d.vy;
+    d.vy += 0.3; d.vx *= 0.99;
+    d.rot += d.vrot;
+    const ty = terrainAt(d.x);
+    if(d.y>ty){
+      d.y = ty;
+      d.vy *= -0.3; d.vx *= 0.6;
+      d.life -= 0.04;
+    } else {
+      d.life -= 0.005;
+    }
+  }
+  debris = debris.filter(d=>d.life>0);
+
+  // bubbles
+  for(const b of bubbles){
+    b.y += b.vy;
+    b.life--;
+  }
+  bubbles = bubbles.filter(b=>b.life>0);
+
+  // stars (stunned)
+  for(const s of stars){
+    s.life--;
+  }
+  stars = stars.filter(s=>s.life>0 && s.target && !s.target.sunk);
+
+  // wind particles (ambient)
+  if(Math.random()<0.3){
+    windParticles.push({
+      x: camX + (wind>0?-50:W+50),
+      y: 100+Math.random()*400,
+      vx: wind*8 + (Math.random()-0.5),
+      life: 1
+    });
+  }
+  for(const wp of windParticles){
+    wp.x += wp.vx;
+    wp.life -= 0.008;
+  }
+  windParticles = windParticles.filter(wp=>wp.life>0 && wp.x>-100 && wp.x<WORLD_W+100);
+
+  // catapult creak
+  if(catapult.pulling){
+    catapult.creak += 1;
+    if(catapult.creak>20){ playSound('creak'); catapult.creak=0; }
+  }
+}
+
+// projectile impact
+function handleProjectileImpact(p, hitX, hitY){
+  const ix = hitX||p.x, iy = hitY||p.y;
+  if(p.explosive){
+    explode(ix,iy,80, p.def.dmg, p.def.knock);
+    playSound('boom');
+    camShake = 18;
+    slowmo = 0.4;
+  } else if(p.drilling && p.def.ability==='drill' && !p.abilityUsed){
+    // not activated yet, but on impact drill activates? Actually ability is on tap.
+    // If drilling was activated (abilityUsed), drilling=true; pass through.
+    // If not activated, normal impact:
+    deformTerrain(ix,iy, p.radius*1.2);
+    spawnParticles(ix,iy,12,'#5a3015');
+    playSound('thud');
+    camShake = 8;
+  } else {
+    deformTerrain(ix,iy, p.radius*1.5);
+    spawnParticles(ix,iy,14,'#5a3015');
+    playSound('thud');
+    camShake = 10;
+    slowmo = 0.5;
+  }
+  p.alive = false;
+}
+
+// ---------- Turn resolution ----------
+function resolveTurn(){
+  // check win/lose
+  const aliveEnemies = enemyWorms.filter(e=>!e.dead && !e.sunk);
+  if(aliveEnemies.length===0){
+    state = STATE.WIN;
+    onWin();
+    return;
+  }
+  // enemy turn: AI fires one shot
+  if(playerWorms.every(w=>w.used)){
+    // no worms left — if enemies still alive, lose
+    if(aliveEnemies.length>0){
+      state = STATE.LOSE;
+      onLose();
+      return;
+    }
+  }
+  startEnemyTurn();
+}
+
+function startEnemyTurn(){
+  state = STATE.ENEMY_TURN;
+  showToast('Enemy turn!');
+  // pick an alive enemy
+  const aliveEnemies = enemyWorms.filter(e=>!e.dead && !e.sunk);
+  if(aliveEnemies.length===0){ state=STATE.WIN; onWin(); return; }
+  const shooter = aliveEnemies[Math.floor(Math.random()*aliveEnemies.length)];
+  // target: closest player worm position (we use catapult position since player worms are at base)
+  const targetX = catapult.x + (Math.random()-0.5)*100;
+  const targetY = catapult.y - 50;
+  // calculate trajectory with some inaccuracy
+  const dx = targetX - shooter.x;
+  const dy = targetY - shooter.y;
+  // basic ballistic solve
+  const g = GRAVITY;
+  const v = 14 + Math.random()*3;
+  // angle: aim up
+  let angle = Math.atan2(dy - 0.5*Math.abs(dx)*0.3, dx);
+  // add inaccuracy
+  angle += (Math.random()-0.5)*0.2;
+  // wind compensation (rough)
+  const t = dx / (Math.cos(angle)*v);
+  const windComp = wind * 0.012 * t * 0.5;
+  // spawn projectile from shooter
+  setTimeout(()=>{
+    const p = {
+      x: shooter.x, y: shooter.y - 15,
+      vx: Math.cos(angle)*v - windComp,
+      vy: Math.sin(angle)*v,
+      type: 'enemy',
+      def: { color:'#888', dmg:25, knock:10, ability:'none' },
+      radius: 11, mass: 1, abilityUsed:true, alive:true, age:0, trail:[], rot:0, vrot:0, isPlayer:false
+    };
+    projectiles = [p];
+    state = STATE.FLYING;
+    playSound('woosh');
+    camTargetX = p.x - W*0.4;
+  }, 1000);
+}
+
+// handle enemy projectile impact on catapult/player base
+function checkEnemyProjectileHits(){
+  for(const p of projectiles){
+    if(p.isPlayer) continue;
+    if(!p.alive) continue;
+    // hit catapult base
+    if(Math.abs(p.x-catapult.x)<30 && Math.abs(p.y-catapult.y)<30){
+      // damage player — but we don't have player worm entities with HP. Instead, count as penalty.
+      explode(p.x,p.y,40,0,5);
+      playSound('boom');
+      camShake = 12;
+      p.alive=false;
+      showToast('Catapult hit!');
+    }
+  }
+}
+
+// ---------- Win/Lose ----------
+function onWin(){
+  playSound('win');
+  const used = wormsUsed;
+  const total = wormsAvailableAtLevelStart();
+  const ratio = used/total;
+  let stars = 1;
+  if(ratio < 0.7) stars = 2;
+  if(ratio < 0.45) stars = 3;
+  const levelScore = Math.max(0, Math.floor(1000 * (1-ratio) + 500*stars + (level*200)));
+  score += levelScore;
+  showEndScreen(true, stars, levelScore);
+}
+function onLose(){
+  playSound('lose');
+  showEndScreen(false, 0, 0);
+}
+function wormsAvailableAtLevelStart(){
+  const l = {
+    1: 9, 2: 11, 3: 14
+  };
+  return l[level] || 9;
+}
+function showEndScreen(win, stars, levelScore){
+  const es = document.getElementById('endScreen');
+  document.getElementById('endTitle').textContent = win ? 'VICTORY!' : 'DEFEATED';
+  document.getElementById('endTitle').style.color = win ? '#ffd23f' : '#e63946';
+  const starsHtml = win ? [0,1,2].map(i=>`<span class="${i<stars?'star-on':'star-off'}">★</span>`).join('') : '';
+  document.getElementById('endStars').innerHTML = starsHtml;
+  document.getElementById('endStats').innerHTML = win
+    ? `Worms used: ${wormsUsed} / ${wormsAvailableAtLevelStart()}<br>Level score: +${levelScore}<br>Total score: ${score}`
+    : `Better luck next time, worm.<br>Total score: ${score}`;
+  document.getElementById('nextBtn').style.display = (win && level<maxLevel) ? 'inline-block' : 'none';
+  es.classList.add('show');
+  // submit score
+  try {
+    if(window.ArcadeScores) ArcadeScores.show('angry-worms', score, ()=>{ es.classList.remove('show'); buildLevel(1); level=1; score=0; state=STATE.AIMING; });
+  } catch(e){}
+}
+
+// ---------- Camera ----------
+function updateCamera(){
+  // smooth follow target
+  if(state===STATE.FLYING && activeWorm && activeWorm.alive){
+    camTargetX = activeWorm.x - W*0.4;
+  } else if(state===STATE.AIMING){
+    camTargetX = catapult.x - W*0.3;
+  }
+  camTargetX = Math.max(0, Math.min(WORLD_W - W, camTargetX));
+  camX += (camTargetX - camX) * 0.08;
+  // shake
+  if(camShake>0){
+    camShakeX = (Math.random()-0.5)*camShake;
+    camShakeY = (Math.random()-0.5)*camShake;
+    camShake *= 0.88;
+    if(camShake<0.5) camShake=0;
+  } else { camShakeX=0; camShakeY=0; }
+  // slowmo recovery
+  if(slowmo<1){
+    slowmo += (1-slowmo)*0.05;
+    if(slowmo>0.98) slowmo=1;
+  }
+  timeScale = slowmo;
+}
+
+// ---------- Input ----------
+let pointerDown = false;
+let pointer = {x:0,y:0};
+
+function getPointer(e){
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
+}
+
+cvs.addEventListener('mousedown', onPointerDown);
+cvs.addEventListener('touchstart', onPointerDown, {passive:false});
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('touchmove', onPointerMove, {passive:false});
+window.addEventListener('mouseup', onPointerUp);
+window.addEventListener('touchend', onPointerUp);
+window.addEventListener('click', onCanvasClick);
+
+function onPointerDown(e){
+  if(state===STATE.ATTRACT) return;
+  e.preventDefault();
+  initAudio();
+  const p = getPointer(e);
+  pointer = p;
+  pointerDown = true;
+  if(state===STATE.AIMING){
+    catapult.pulling = true;
+    catapult.pullStart = { x: catapult.x - camX, y: catapult.y };
+    catapult.pullCurrent = p;
+  }
+}
+function onPointerMove(e){
+  if(!pointerDown) return;
+  e.preventDefault();
+  pointer = getPointer(e);
+  if(catapult.pulling){
+    catapult.pullCurrent = pointer;
+    // compute angle and power from drag
+    const dx = catapult.pullStart.x - pointer.x;
+    const dy = catapult.pullStart.y - pointer.y;
+    const dist = Math.min(Math.hypot(dx,dy), catapult.maxPull);
+    catapult.power = dist;
+    catapult.angle = Math.atan2(dy, dx);
+    // ensure aim is generally forward/up
+    if(catapult.angle > 0.3) catapult.angle = 0.3;
+    if(catapult.angle < -Math.PI*0.85) catapult.angle = -Math.PI*0.85;
+  }
+}
+function onPointerUp(e){
+  if(!pointerDown) return;
+  pointerDown = false;
+  if(catapult.pulling){
+    catapult.pulling = false;
+    if(catapult.power > 20){
+      launchWorm(catapult.angle, catapult.power);
+    } else {
+      catapult.power = 0;
+    }
+  }
+}
+function onCanvasClick(e){
+  // mid-flight ability activation
+  if(state===STATE.FLYING){
+    activateAbility();
+  }
+}
+
+// Keyboard
+window.addEventListener('keydown', e=>{
+  if(e.key>='1' && e.key<='5'){
+    const idx = parseInt(e.key)-1;
+    const type = WORM_ORDER[idx];
+    if(playerWorms.some(w=>w.type===type && !w.used)){
+      currentWormType = type;
+      if(!catapult.loadedWorm || catapult.loadedWorm.type!==type){
+        // unload current
+        if(catapult.loadedWorm) catapult.loadedWorm.used = false;
+        loadCatapult();
+      }
+      updateWormSelectUI();
+      playSound('click');
+    }
+  }
+  if(e.key===' ' && state===STATE.FLYING){
+    activateAbility();
+  }
+  if(e.key==='m' || e.key==='M'){ toggleMute(); }
+});
+
+// Mute
+document.getElementById('muteBtn').addEventListener('click', toggleMute);
+function toggleMute(){
+  muted = !muted;
+  try{ localStorage.setItem('aw_muted', muted?'1':'0'); }catch(e){}
+  document.getElementById('muteBtn').textContent = muted?'🔇':'🔊';
+}
+
+// Start screen
+document.getElementById('startScreen').addEventListener('click', ()=>{
+  initAudio();
+  document.getElementById('startScreen').classList.add('hidden');
+  level = 1;
+  score = 0;
+  buildLevel(1);
+  state = STATE.AIMING;
+  showToast('Drag the catapult to aim!');
+});
+
+// End screen buttons
+document.getElementById('nextBtn').addEventListener('click', ()=>{
+  document.getElementById('endScreen').classList.remove('show');
+  level++;
+  buildLevel(level);
+  state = STATE.AIMING;
+});
+document.getElementById('retryBtn').addEventListener('click', ()=>{
+  document.getElementById('endScreen').classList.remove('show');
+  buildLevel(level);
+  state = STATE.AIMING;
+});
+
+// ---------- UI ----------
+function showToast(text){
+  const t = document.getElementById('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function updateWindUI(){
+  const fill = document.getElementById('windFill');
+  const strength = Math.abs(wind);
+  const w = strength * 30;
+  fill.style.width = w+'px';
+  if(wind>=0){
+    fill.style.left = '50%';
+    fill.style.transform = 'translateY(-50%)';
+    fill.style.background = 'linear-gradient(90deg,#ffd23f,#ff7a3a)';
+  } else {
+    fill.style.left = (50-w)+'%';
+    fill.style.transform = 'translateY(-50%)';
+    fill.style.background = 'linear-gradient(270deg,#7ec8ff,#3a7ac8)';
+  }
+  document.getElementById('windStrength').textContent = (wind>0?'+':'') + wind.toFixed(2);
+}
+function updateTurnUI(){
+  const isPlayerTurn = state===STATE.AIMING || state===STATE.FLYING;
+  document.getElementById('turnText').textContent = isPlayerTurn ? 'Your Turn' : (state===STATE.ENEMY_TURN?'Enemy Turn':'');
+  document.getElementById('teamColor').style.background = isPlayerTurn ? '#7ec04a' : '#e63946';
+  const enemiesLeft = enemyWorms.filter(e=>!e.dead && !e.sunk).length;
+  const wormsLeft = playerWorms.filter(w=>!w.used).length;
+  document.getElementById('wormsLeft').textContent = `Worms: ${wormsLeft}  •  Enemies: ${enemiesLeft}`;
+}
+function updateWormSelectUI(){
+  const sel = document.getElementById('wormSelect');
+  sel.innerHTML = '';
+  WORM_ORDER.forEach((type, idx)=>{
+    const count = playerWorms.filter(w=>w.type===type && !w.used).length;
+    const total = playerWorms.filter(w=>w.type===type).length;
+    const btn = document.createElement('div');
+    btn.className = 'worm-btn';
+    if(type===currentWormType) btn.classList.add('active');
+    if(count===0) btn.classList.add('used');
+    btn.innerHTML = `<canvas width="84" height="84"></canvas><div class="count">${count}</div><div class="key">${idx+1}</div>`;
+    btn.addEventListener('click', ()=>{
+      if(count===0) return;
+      currentWormType = type;
+      if(catapult.loadedWorm && catapult.loadedWorm.type!==type){
+        catapult.loadedWorm.used = false;
+        wormsUsed--; // we hadn't really used it
+        catapult.loadedWorm = null;
+      }
+      loadCatapult();
+      updateWormSelectUI();
+      playSound('click');
+    });
+    sel.appendChild(btn);
+    // draw worm icon
+    const ic = btn.querySelector('canvas').getContext('2d');
+    ic.scale(2,2);
+    drawWormIcon(ic, type, 21, 21, 14);
+  });
+}
+
+function drawWormIcon(c, type, x, y, r){
+  const def = WORM_TYPES[type];
+  // body
+  c.fillStyle = def.color;
+  c.strokeStyle = '#000';
+  c.lineWidth = 2;
+  c.beginPath();
+  c.ellipse(x, y, r, r*0.95, 0, 0, Math.PI*2);
+  c.fill(); c.stroke();
+  // belly
+  c.fillStyle = '#fff5d8';
+  c.beginPath();
+  c.ellipse(x, y+r*0.3, r*0.6, r*0.35, 0, 0, Math.PI*2);
+  c.fill();
+  // eyes
+  c.fillStyle = '#fff';
+  c.beginPath(); c.arc(x-r*0.3, y-r*0.2, r*0.25, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(x+r*0.3, y-r*0.2, r*0.25, 0, Math.PI*2); c.fill();
+  c.strokeStyle='#000'; c.lineWidth=1.5;
+  c.beginPath(); c.arc(x-r*0.3, y-r*0.2, r*0.25, 0, Math.PI*2); c.stroke();
+  c.beginPath(); c.arc(x+r*0.3, y-r*0.2,
+r*0.25, 0, Math.PI*2); c.stroke();
+  // pupils
+  c.fillStyle = '#000';
+  c.beginPath(); c.arc(x-r*0.25, y-r*0.18, r*0.1, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(x+r*0.35, y-r*0.18, r*0.1, 0, Math.PI*2); c.fill();
+  // accessory
+  c.save();
+  if(type==='standard'){
+    // plain - tiny smile
+    c.strokeStyle='#000'; c.lineWidth=1.5;
+    c.beginPath(); c.arc(x, y+r*0.1, r*0.3, 0.2, Math.PI-0.2); c.stroke();
+  } else if(type==='heavy'){
+    // helmet
+    c.fillStyle='#5a4a3a';
+    c.beginPath();
+    c.ellipse(x, y-r*0.6, r*1.0, r*0.5, 0, Math.PI, 0);
+    c.fill(); c.stroke();
+    c.fillStyle='#8a7a6a';
+    c.fillRect(x-r*1.1, y-r*0.65, r*2.2, r*0.2);
+  } else if(type==='fast'){
+    // speed stripes
+    c.strokeStyle='#ff6b6b'; c.lineWidth=2;
+    c.beginPath(); c.moveTo(x-r*0.8, y+r*0.1); c.lineTo(x-r*1.1, y+r*0.1); c.stroke();
+    c.beginPath(); c.moveTo(x-r*0.8, y+r*0.4); c.lineTo(x-r*1.1, y+r*0.4); c.stroke();
+  } else if(type==='bomber'){
+    // bomb on head
+    c.fillStyle='#2a2a2a';
+    c.beginPath(); c.arc(x, y-r*0.9, r*0.35, 0, Math.PI*2); c.fill(); c.stroke();
+    c.strokeStyle='#ff6b00'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(x, y-r*1.2); c.quadraticCurveTo(x+r*0.2, y-r*1.5, x+r*0.1, y-r*1.7); c.stroke();
+  }
+  c.restore();
+}
+
+function updateTrajectoryUI(){
+  const el = document.getElementById('trajectoryMode');
+  if(trajectoryMode===0){
+    el.textContent = 'Low';
+    el.style.color = '#ff7a3a';
+  } else if(trajectoryMode===1){
+    el.textContent = 'Med';
+    el.style.color = '#ffd23f';
+  } else {
+    el.textContent = 'High';
+    el.style.color = '#7ec8ff';
+  }
+}
+
+// ============================================================
+// SOUND
+// ============================================================
+let audioCtx = null;
+function initAudio(){
+  if(!audioCtx){
+    try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){}
+  }
+}
+function playSound(type, vol=1){
+  if(!audioCtx || !soundEnabled) return;
+  const t = audioCtx.currentTime;
+  const g = audioCtx.createGain();
+  g.connect(audioCtx.destination);
+  if(type==='launch'){
+    const o = audioCtx.createOscillator();
+    o.type='sawtooth';
+    o.frequency.setValueAtTime(80, t);
+    o.frequency.exponentialRampToValueAtTime(400, t+0.3);
+    g.gain.setValueAtTime(0.2*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.4);
+    o.connect(g); o.start(t); o.stop(t+0.4);
+  } else if(type==='release'){
+    const o = audioCtx.createOscillator();
+    o.type='square';
+    o.frequency.setValueAtTime(200, t);
+    o.frequency.exponentialRampToValueAtTime(600, t+0.08);
+    g.gain.setValueAtTime(0.15*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.12);
+    o.connect(g); o.start(t); o.stop(t+0.12);
+  } else if(type==='hit'){
+    const o = audioCtx.createOscillator();
+    o.type='sine';
+    o.frequency.setValueAtTime(300, t);
+    o.frequency.exponentialRampToValueAtTime(50, t+0.15);
+    g.gain.setValueAtTime(0.25*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.2);
+    o.connect(g); o.start(t); o.stop(t+0.2);
+  } else if(type==='explosion'){
+    // noise burst
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.5, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++){
+      d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 2);
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filt = audioCtx.createBiquadFilter();
+    filt.type='lowpass';
+    filt.frequency.setValueAtTime(800, t);
+    filt.frequency.exponentialRampToValueAtTime(100, t+0.4);
+    g.gain.setValueAtTime(0.35*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.5);
+    src.connect(filt); filt.connect(g); src.start(t);
+  } else if(type==='splash'){
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.3, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++){
+      d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 1.5) * 0.5;
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filt = audioCtx.createBiquadFilter();
+    filt.type='bandpass';
+    filt.frequency.value = 2000;
+    g.gain.setValueAtTime(0.2*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.3);
+    src.connect(filt); filt.connect(g); src.start(t);
+  } else if(type==='click'){
+    const o = audioCtx.createOscillator();
+    o.type='square';
+    o.frequency.value = 600;
+    g.gain.setValueAtTime(0.08*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.05);
+    o.connect(g); o.start(t); o.stop(t+0.05);
+  } else if(type==='charge'){
+    const o = audioCtx.createOscillator();
+    o.type='triangle';
+    o.frequency.setValueAtTime(100, t);
+    o.frequency.linearRampToValueAtTime(300, t+1.2);
+    g.gain.setValueAtTime(0.1*vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+1.2);
+    o.connect(g); o.start(t); o.stop(t+1.2);
+  } else if(type==='win'){
+    [523, 659, 784, 1047].forEach((f,i)=>{
+      const o = audioCtx.createOscillator();
+      o.type='triangle';
+      o.frequency.value = f;
+      const g2 = audioCtx.createGain();
+      g2.gain.setValueAtTime(0.0, t+i*0.12);
+      g2.gain.linearRampToValueAtTime(0.15, t+i*0.12+0.02);
+      g2.gain.exponentialRampToValueAtTime(0.001, t+i*0.12+0.3);
+      o.connect(g2); g2.connect(audioCtx.destination);
+      o.start(t+i*0.12); o.stop(t+i*0.12+0.3);
+    });
+  } else if(type==='lose'){
+    [400, 300, 200].forEach((f,i)=>{
+      const o = audioCtx.createOscillator();
+      o.type='sawtooth';
+      o.frequency.value = f;
+      const g2 = audioCtx.createGain();
+      g2.gain.setValueAtTime(0.0, t+i*0.2);
+      g2.gain.linearRampToValueAtTime(0.12, t+i*0.2+0.03);
+      g2.gain.exponentialRampToValueAtTime(0.001, t+i*0.2+0.4);
+      o.connect(g2); g2.connect(audioCtx.destination);
+      o.start(t+i*0.2); o.stop(t+i*0.2+0.4);
+    });
+  }
+}
+
+// ============================================================
+// SAVE / LOAD
+// ============================================================
+function saveGame(){
+  try {
+    localStorage.setItem('wormsSiege_bestHits', bestHitDistance.toFixed(1));
+    localStorage.setItem('wormsSiege_wins', String(totalWins));
+    localStorage.setItem('wormsSiege_sound', soundEnabled?'1':'0');
+  } catch(e){}
+}
+function loadGame(){
+  try {
+    const bh = localStorage.getItem('wormsSiege_bestHits');
+    if(bh) bestHitDistance = parseFloat(bh);
+    const w = localStorage.getItem('wormsSiege_wins');
+    if(w) totalWins = parseInt(w);
+    const s = localStorage.getItem('wormsSiege_sound');
+    if(s!==null) soundEnabled = s==='1';
+  } catch(e){}
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init(){
+  loadGame();
+  setupCanvas();
+  generateTerrain();
+  createWorms();
+  createEnemies();
+  loadCatapult();
+  initParticles();
+  
+  // event listeners
+  window.addEventListener('resize', ()=>{
+    setupCanvas();
+    generateTerrain();
+  });
+  
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('mouseleave', onMouseUp);
+  canvas.addEventListener('wheel', onWheel, {passive:false});
+  
+  canvas.addEventListener('touchstart', onTouchStart, {passive:false});
+  canvas.addEventListener('touchmove', onTouchMove, {passive:false});
+  canvas.addEventListener('touchend', onTouchEnd);
+  
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  
+  document.getElementById('muteBtn').addEventListener('click', ()=>{
+    soundEnabled = !soundEnabled;
+    document.getElementById('muteBtn').textContent = soundEnabled?'♪':'✕';
+    saveGame();
+  });
+  
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    resetGame();
+  });
+  
+  document.getElementById('windBtn').addEventListener('click', ()=>{
+    wind = (Math.random()*2-1) * 5;
+    updateWindUI();
+    playSound('click');
+  });
+  
+  // start loop
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+
+function resetGame(){
+  playerWorms = [];
+  enemyWorms = [];
+  projectiles = [];
+  particles = [];
+  waterRipples = [];
+  catapult.angle = -Math.PI*0.3;
+  catapult.power = 50;
+  catapult.charging = false;
+  catapult.chargeStart = 0;
+  catapult.loadedWorm = null;
+  catapult.armAngle = 0;
+  catapult.shake = 0;
+  state = STATE.AIMING;
+  currentWormType = 'standard';
+  trajectoryMode = 1;
+  wormsUsed = 0;
+  randomizeWind();
+  generateTerrain();
+  createWorms();
+  createEnemies();
+  loadCatapult();
+  updateWindUI();
+  updateTurnUI();
+  updateWormSelectUI();
+  updateTrajectoryUI();
+}
+
+// Start when page loads
+window.addEventListener('load', ()=>{
+  document.getElementById('muteBtn').textContent = soundEnabled?'♪':'✕';
+  init();
+});
+
+// expose for HTML buttons
+window.selectWorm = function(idx){
+  if(idx>=0 && idx<WORM_ORDER.length){
+    const type = WORM_ORDER[idx];
+    const count = playerWorms.filter(w=>w.type===type && !w.used).length;
+    if(count===0) return;
+    currentWormType = type;
+    if(catapult.loadedWorm && catapult.loadedWorm.type!==type){
+      catapult.loadedWorm.used = false;
+      wormsUsed--;
+      catapult.loadedWorm = null;
+    }
+    loadCatapult();
+    updateWormSelectUI();
+    playSound('click');
+  }
+};
+
+window.cycleTrajectory = function(){
+  trajectoryMode = (trajectoryMode+1)%3;
+  updateTrajectoryUI();
+  playSound('click');
+};
+</script>
+</body>
+</html>
