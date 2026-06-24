@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PATREON EARLY ACCESS — JnJ Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=14">
+<style>
+  .pat-head{ text-align:center; padding:30px 18px 6px; }
+  .pat-kicker{ font-size:11px; letter-spacing:.4em; color:#22c55e; opacity:.9; }
+  .pat-head h1{ font-size:30px; font-weight:900; letter-spacing:.05em; margin:6px 0 4px; }
+  .pat-sub{ font-size:13px; opacity:.6; max-width:520px; margin:0 auto; line-height:1.5; }
+  .pat-nav{ display:flex; gap:16px; justify-content:center; margin-top:10px; flex-wrap:wrap; }
+  .pat-nav a{ color:var(--ink,#ffcf3d); text-decoration:none; font-size:12px;
+              letter-spacing:.1em; opacity:.85; }
+  .pat-nav a:hover{ opacity:1; }
+</style>
+</head>
+<body data-patreon="1">
+  <header class="pat-head">
+    <div class="pat-kicker">JNJ ARCADE — PATREON EARLY ACCESS</div>
+    <h1>🟢 PLAY FIRST</h1>
+    <p class="pat-sub">Games before they hit the main arcade. You saw it here first.</p>
+    <nav class="pat-nav">
+      <a href="index.html">‹ main arcade</a>
+    </nav>
+  </header>
+
+  <main id="cabinets" aria-label="Patreon games"></main>
+
+  <button id="fsBtn" hidden></button>
+  <button id="a2hsBtn" hidden></button>
+  <div id="a2hsSheet" hidden></div>
+  <div id="toast"></div>
+
+  <script src="arcade-scores.js?v=10"></script>
+  <script src="app.js?v=patreon1"></script>
+</body>
+</html>

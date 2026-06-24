@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>BOMB-LEMMINGS</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<script src="../arcade-scores.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#000;touch-action:none;user-select:none}
+canvas{position:fixed;top:0;left:0;display:block}
+#rot{display:none;position:fixed;inset:0;background:#0d0020;z-index:99;
+  flex-direction:column;align-items:center;justify-content:center;
+  color:#cc88ff;font-family:Bungee,sans-serif;gap:18px;text-align:center}
+#rot span{font-size:58px;animation:sp 2s ease-in-out infinite alternate}
+@keyframes sp{to{transform:rotate(90deg)}}
+@media(orientation:portrait){#rot{display:flex}canvas{display:none}}
+</style>
+</head>
+<body>
+<div id="rot"><span>📱</span><p style="font-family:Bungee;font-size:18px">ROTATE PHONE</p></div>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ── CONSTANTS ────────────────────────────────────────────────────────────────
+const IW=320,IH=200;
+const TILE=8,COLS=40,ROWS=25;
+const BGRAVITY=0.35,BJUMP=5.8,BSPEED=1.6,BTERMV=10;
+const PW=10,PH=14;
+const BOMB_FUSE=180,BLAST_R=3;
+const LW=8,LH=10,LSPEED=0.7,MAX_FALL=64;
+const MAX_LEMS=15,WIN_TARGET=10;
+const GHOST_SPEED=0.5;
+const DEADZONE=16;
+
+// ── COLORS ───────────────────────────────────────────────────────────────────
+const C={
+  bg1:'#0d0020',bg2:'#1a0033',
+  steel:'#334455',steelEdge:'#4466aa',steelHi:'#556677',
+  dirt:'#8b5e1a',dirtEdge:'#c48832',grass:'#3d7a1a',
+  lem:'#44cc44',lemHat:'#1144cc',lemDark:'#228822',
+  bomb:'#1a1a1a',bombFuse:'#ff4400',bombGlow:'#ff8800',
+  blast1:'#ffffff',blast2:'#ffaa00',blast3:'#ff4400',
+  ghost1:'#cc44ff',ghost2:'#aa22dd',ghostEye:'#ffffff',ghostPup:'#330044',
+  player:'#f0f0f8',playerShade:'#ccccdd',playerBelt:'#ff2200',playerEye:'#222233',
+  exit:'#ffdd00',exitGlow:'rgba(255,221,0,0.3)',exitArrow:'#ffaa00',
+  hud:'rgba(8,0,20,0.88)',ink:'#cc88ff',scoreC:'#ffdd44',heart:'#ff4466',
+  pop:'#ffcc00',popFade:'#ff8800',
+  star:'rgba(255,255,255,0.7)',
+};
+
+// ── GRID ─────────────────────────────────────────────────────────────────────
+const grid=new Uint8Array(COLS*ROWS);
+function tileAt(tx,ty){if(tx<0||ty<0||tx>=COLS||ty>=ROWS)return 2;return grid[ty*COLS+tx];}
+function isSolid(wx,wy){const t=tileAt(Math.floor(wx/TILE),Math.floor(wy/TILE));return t>0;}
+function setTile(tx,ty,v){if(tx<0||ty<0||tx>=COLS||ty>=ROWS||grid[ty*COLS+tx]===2)return;grid[ty*COLS+tx]=v;}
+
+// ── LEVEL INIT ────────────────────────────────────────────────────────────────
+function initLevel(){
+  grid.fill(0);
+  // Steel ceiling + left/right walls
+  for(let c=0;c<COLS;c++)grid[0*COLS+c]=2;
+  for(let r=0;r<ROWS;r++){grid[r*COLS+0]=2;grid[r*COLS+COLS-1]=2;}
+  // Steel floor rows 22-24
+  for(let c=1;c<COLS-1;c++){for(let r=22;r<ROWS;r++)grid[r*COLS+c]=2;}
+  // EXIT GAP in floor (right side): col 34-37, row 22 = air
+  for(let c=34;c<=37;c++)grid[22*COLS+c]=0;
+
+  // DIRT PILLARS (player must bomb to open lemming path)
+  // Each is 2 tiles wide, spanning rows 15-21
+  [[8,9],[16,17],[24,25],[30,31]].forEach(([c0,c1])=>{
+    for(let r=15;r<=21;r++){setTile(c0,r,1);setTile(c1,r,1);}
+  });
+
+  // DIRT PLATFORMS for Bomberman to navigate (2 tiles thick: rows 13-14)
+  [[2,7],[10,15],[18,23],[26,31],[34,37]].forEach(([c0,c1])=>{
+    for(let c=c0;c<=c1;c++){setTile(c,13,1);setTile(c,14,1);}
+  });
+
+  // UPPER PLATFORMS (rows 7-8)
+  [[4,10],[13,19],[22,28],[31,37]].forEach(([c0,c1])=>{
+    for(let c=c0;c<=c1;c++){setTile(c,7,1);setTile(c,8,1);}
+  });
+}
+
+// ── STARS (fixed bg) ──────────────────────────────────────────────────────────
+const BGSTARS=[];
+for(let i=0;i<60;i++){
+  BGSTARS.push({x:Math.random()*IW,y:Math.random()*IH,r:Math.random()<0.7?0.5:1,ph:Math.random()*Math.PI*2});
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let p,lemmings,bombs,ghosts,blasts,pops;
+let saved,spawned,spawnTimer,score;
+let lives,gameState,deathTimer,winTimer,goTimer;
+let tick=0,lastTs=0;
+let W=1,H=1,scaleX=1,scaleY=1;
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+// ── TOUCH INPUT ───────────────────────────────────────────────────────────────
+let js={active:false,dx:0,dy:0,_bx:0,_by:0,_id:-1};
+let jb={pressed:false};
+
+function lxf(sx){return(sx-canvas.getBoundingClientRect().left)*IW/W;}
+function lyf(sy){return(sy-canvas.getBoundingClientRect().top)*IH/H;}
+
+canvas.addEventListener('touchstart',e=>{
+  [...e.changedTouches].forEach(t=>{
+    if(gameState==='ATTRACT'||gameState==='GAMEOVER'||gameState==='WIN'){
+      handleTapState();return;
+    }
+    const lxv=lxf(t.clientX);
+    if(lxv<IW/2){
+      js.active=true;js._bx=lxv;js._by=lyf(t.clientY);js.dx=0;js.dy=0;js._id=t.identifier;
+    } else {
+      jb.pressed=true;
+    }
+  });
+},{passive:true});
+canvas.addEventListener('touchmove',e=>{
+  [...e.changedTouches].forEach(t=>{
+    if(js.active&&t.identifier===js._id){js.dx=lxf(t.clientX)-js._bx;js.dy=lyf(t.clientY)-js._by;}
+  });
+},{passive:true});
+canvas.addEventListener('touchend',e=>{
+  [...e.changedTouches].forEach(t=>{
+    if(t.identifier===js._id){js.active=false;js.dx=0;js.dy=0;}
+  });
+},{passive:true});
+canvas.addEventListener('touchcancel',()=>{js.active=false;js.dx=0;js.dy=0;},{passive:true});
+
+// ── KEYBOARD ──────────────────────────────────────────────────────────────────
+const keys={};
+window.addEventListener('keydown',e=>{
+  if(gameState==='ATTRACT'||gameState==='GAMEOVER'||gameState==='WIN'){handleTapState();return;}
+  keys[e.key]=true;
+  if(e.key===' '||e.key==='b'){jb.pressed=true;}
+  e.preventDefault();
+},{passive:false});
+window.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+function kbAxis(){
+  let dx=0,dy=0;
+  if(keys['ArrowLeft']||keys['a'])dx=-60;
+  if(keys['ArrowRight']||keys['d'])dx=60;
+  if(keys['ArrowUp']||keys['w'])dy=-60;
+  return{dx,dy};
+}
+
+function handleTapState(){
+  if(gameState==='ATTRACT'){startGame();}
+  else if(gameState==='GAMEOVER'){showFinalScore();}
+  else if(gameState==='WIN'){showFinalScore();}
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+function spawnPops(x,y,col){
+  for(let i=0;i<8;i++){
+    const a=Math.random()*Math.PI*2,s=0.8+Math.random()*2;
+    pops.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,life:28,maxLife:28,c:col||C.pop});
+  }
+}
+function updatePops(){
+  for(let i=pops.length-1;i>=0;i--){
+    const pt=pops[i];pt.x+=pt.vx;pt.y+=pt.vy;pt.vy+=0.1;pt.life--;
+    if(pt.life<=0)pops.splice(i,1);
+  }
+}
+function drawPops(){
+  pops.forEach(pt=>{
+    ctx.globalAlpha=pt.life/pt.maxLife;
+    ctx.fillStyle=pt.c;
+    ctx.fillRect(pt.x-1,pt.y-1,3,3);
+  });
+  ctx.globalAlpha=1;
+}
+
+// ── INIT GAME ──────────────────────────────────────────────────────────────────
+function initGame(){
+  initLevel();
+  p={x:16,y:96,vx:0,vy:0,grounded:false,inv:0};
+  lives=3;
+  lemmings=[];bombs=[];ghosts=[];blasts=[];pops=[];
+  saved=0;spawned=0;spawnTimer=0;score=0;
+  // Init 3 ghosts
+  ghosts=[
+    {x:80,y:40,vx:GHOST_SPEED,vy:0,stunned:0,timer:90,wanderDir:{x:GHOST_SPEED,y:0}},
+    {x:160,y:36,vx:-GHOST_SPEED,vy:GHOST_SPEED*0.3,stunned:0,timer:60,wanderDir:{x:-GHOST_SPEED,y:GHOST_SPEED*0.3}},
+    {x:240,y:44,vx:GHOST_SPEED,vy:-GHOST_SPEED*0.3,stunned:0,timer:120,wanderDir:{x:GHOST_SPEED,y:-GHOST_SPEED*0.3}},
+  ];
+}
+
+function startGame(){
+  initGame();
+  gameState='PLAYING';
+}
+
+// ── PLAYER PHYSICS ────────────────────────────────────────────────────────────
+function updatePlayer(){
+  const kb=kbAxis();
+  const eff_dx=js.active?js.dx:kb.dx;
+  const eff_dy=js.active?js.dy:kb.dy;
+
+  // Horizontal movement
+  if(eff_dx>DEADZONE){p.vx=Math.min(p.vx+0.6,BSPEED);}
+  else if(eff_dx<-DEADZONE){p.vx=Math.max(p.vx-0.6,-BSPEED);}
+  else{p.vx*=0.72;if(Math.abs(p.vx)<0.08)p.vx=0;}
+
+  // Jump
+  if(eff_dy<-DEADZONE&&p.grounded){
+    p.vy=-BJUMP;p.grounded=false;
+    spawnPops(p.x+PW/2,p.y+PH,'#9966cc');
+  }
+
+  // Gravity
+  p.vy=Math.min(p.vy+BGRAVITY,BTERMV);
+
+  // Move X
+  const nx=p.x+p.vx;
+  if(!playerHitsWall(nx,p.y)){p.x=nx;}
+  else{p.vx=0;}
+
+  // Move Y
+  const ny=p.y+p.vy;
+  p.grounded=false;
+  if(p.vy>=0){
+    // Falling: check feet
+    if(isSolid(p.x+1,ny+PH)||isSolid(p.x+PW-2,ny+PH)){
+      // Resolve
+      let ry=p.y;
+      while(!isSolid(p.x+1,ry+PH)&&!isSolid(p.x+PW-2,ry+PH)&&ry<ny)ry++;
+      p.y=ry-1;p.vy=0;p.grounded=true;
+    } else {p.y=ny;}
+  } else {
+    // Rising: check head
+    if(isSolid(p.x+1,ny)||isSolid(p.x+PW-2,ny)){
+      p.vy=0;
+    } else {p.y=ny;}
+  }
+
+  // Respawn if fell
+  if(p.y>IH+10){hitPlayer();}
+
+  if(p.inv>0)p.inv--;
+
+  // Bomb placement
+  if(jb.pressed){
+    placeBomb();
+    jb.pressed=false;
+  }
+}
+
+function playerHitsWall(nx,ny){
+  return isSolid(nx,ny+4)||isSolid(nx+PW,ny+4)||isSolid(nx,ny+PH-2)||isSolid(nx+PW,ny+PH-2);
+}
+
+function hitPlayer(){
+  if(p.inv>0)return;
+  lives--;
+  spawnPops(p.x+PW/2,p.y+PH/2,'#ff2200');
+  if(lives<=0){
+    gameState='GAMEOVER';goTimer=180;
+    return;
+  }
+  // Respawn
+  p.x=16;p.y=96;p.vx=0;p.vy=0;p.grounded=false;p.inv=120;
+}
+
+// ── BOMBS ─────────────────────────────────────────────────────────────────────
+function placeBomb(){
+  if(bombs.length>=3)return;
+  const tx=Math.floor((p.x+PW/2)/TILE);
+  const ty=Math.floor((p.y+PH)/TILE);
+  // Don't place if bomb already there
+  if(bombs.some(b=>b.tx===tx&&b.ty===ty))return;
+  bombs.push({tx,ty,fuse:BOMB_FUSE});
+}
+
+function updateBombs(){
+  for(let i=bombs.length-1;i>=0;i--){
+    const b=bombs[i];
+    b.fuse--;
+    if(b.fuse<=0){
+      explodeBomb(b);
+      bombs.splice(i,1);
+    }
+  }
+}
+
+function explodeBomb(b){
+  const cx=b.tx*TILE+TILE/2;
+  const cy=b.ty*TILE+TILE/2;
+  blasts.push({x:cx,y:cy,life:25,maxLife:25});
+
+  // Spawn particles
+  spawnPops(cx,cy,C.blast2);
+  spawnPops(cx,cy,'#ffffff');
+
+  // Destroy dirt in cross, stop at steel
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  dirs.forEach(([dx,dy])=>{
+    for(let r=0;r<=BLAST_R;r++){
+      const ttx=b.tx+dx*r,tty=b.ty+dy*r;
+      if(ttx<0||tty<0||ttx>=COLS||tty>=ROWS)break;
+      const t=tileAt(ttx,tty);
+      if(t===2)break; // steel stops blast
+      if(t===1){setTile(ttx,tty,0);spawnPops(ttx*TILE+4,tty*TILE+4,C.dirtEdge);}
+    }
+  });
+  // Also blast center tile
+  setTile(b.tx,b.ty,0);
+
+  // Damage lemmings
+  lemmings.forEach(l=>{
+    if(l.state==='dead'||l.state==='saved')return;
+    const lx=l.x+LW/2,ly2=l.y+LH/2;
+    if(Math.abs(lx-cx)<BLAST_R*TILE&&Math.abs(ly2-cy)<BLAST_R*TILE){
+      l.state='dead';
+      spawnPops(lx,ly2,'#ffcc00');
+    }
+  });
+
+  // Stun ghosts
+  ghosts.forEach(g=>{
+    if(Math.abs(g.x+7-cx)<BLAST_R*TILE&&Math.abs(g.y+6-cy)<BLAST_R*TILE){
+      g.stunned=90;
+      score+=50;
+      spawnPops(g.x+7,g.y,'#cc44ff');
+    }
+  });
+
+  // Hit player if not invincible
+  if(p.inv===0){
+    if(Math.abs(p.x+PW/2-cx)<BLAST_R*TILE&&Math.abs(p.y+PH/2-cy)<BLAST_R*TILE){
+      hitPlayer();
+    }
+  }
+}
+
+function updateBlasts(){
+  for(let i=blasts.length-1;i>=0;i--){
+    blasts[i].life--;
+    if(blasts[i].life<=0)blasts.splice(i,1);
+  }
+}
+
+// ── LEMMINGS ──────────────────────────────────────────────────────────────────
+function makeLem(){return{x:8,y:8,dir:1,vy:0,fallDist:0,state:'fall',inv:0};}
+
+function updateLem(l){
+  if(l.state==='dead'||l.state==='saved')return;
+  if(l.state==='walk'){
+    l.x+=l.dir*LSPEED;
+    const fx=l.x+(l.dir>0?LW:0);
+    if(isSolid(fx,l.y+LH*0.5)){l.dir*=-1;l.x+=l.dir*2;}
+    if(!isSolid(l.x+LW*0.5,l.y+LH+1)){l.state='fall';l.vy=0;l.fallDist=0;}
+    // Exit check: if lemming reaches exit gap (cols 34-37) at floor level
+    if(l.x+LW/2>34*TILE&&l.x<38*TILE&&Math.abs((l.y+LH)-(22*TILE))<6){
+      l.state='saved';saved++;
+      spawnPops(l.x+LW/2,l.y+LH/2,'#44cc44');
+      score+=100;
+    }
+  } else if(l.state==='fall'){
+    l.vy=Math.min(l.vy+0.4,5);
+    const py=l.y;l.y+=l.vy;l.fallDist+=l.y-py;
+    if(isSolid(l.x+LW*0.5,l.y+LH)){
+      while(isSolid(l.x+LW*0.5,l.y+LH)&&l.y>0)l.y--;
+      if(l.fallDist>MAX_FALL){l.state='dead';spawnPops(l.x+LW/2,l.y+LH/2,'#ffcc00');}
+      else{l.state='walk';l.vy=0;l.fallDist=0;}
+    }
+  }
+  if(l.y>IH+20)l.state='dead';
+}
+
+// ── GHOSTS ────────────────────────────────────────────────────────────────────
+function updateGhost(g){
+  if(g.stunned>0){g.stunned--;return;}
+
+  g.timer--;
+  if(g.timer<=0){
+    g.timer=40+Math.floor(Math.random()*60);
+    // Wander: new random dir
+    const a=Math.random()*Math.PI*2;
+    g.wanderDir={x:Math.cos(a)*GHOST_SPEED,y:Math.sin(a)*GHOST_SPEED};
+  }
+
+  const dx=p.x+PW/2-(g.x+7);
+  const dy=p.y+PH/2-(g.y+6);
+  const dist=Math.sqrt(dx*dx+dy*dy);
+
+  if(dist<80){
+    // Chase
+    const spd=GHOST_SPEED*1.2;
+    g.vx=dx/dist*spd;
+    g.vy=dy/dist*spd;
+  } else {
+    // Wander
+    g.vx+=(g.wanderDir.x-g.vx)*0.08;
+    g.vy+=(g.wanderDir.y-g.vy)*0.08;
+  }
+
+  // Move
+  const nx=g.x+g.vx;
+  const ny=g.y+g.vy;
+
+  // Bounce off steel walls (not dirt — ghosts pass through dirt)
+  if(tileAt(Math.floor(nx/TILE),Math.floor((g.y+6)/TILE))===2){g.vx*=-1;}
+  else g.x=nx;
+  if(tileAt(Math.floor(g.x/TILE),Math.floor((ny+6)/TILE))===2){g.vy*=-1;}
+  else g.y=ny;
+
+  // Clamp to bounds
+  g.x=Math.max(2,Math.min(IW-16,g.x));
+  g.y=Math.max(2,Math.min(IH-20,g.y));
+
+  // Kill overlapping lemmings
+  lemmings.forEach(l=>{
+    if(l.state==='dead'||l.state==='saved')return;
+    const gdx=l.x+LW/2-(g.x+7);
+    const gdy=l.y+LH/2-(g.y+6);
+    if(Math.sqrt(gdx*gdx+gdy*gdy)<14){
+      l.state='dead';spawnPops(l.x+LW/2,l.y+LH/2,'#cc44ff');
+    }
+  });
+
+  // Hurt player
+  if(p.inv===0){
+    const pdx=p.x+PW/2-(g.x+7);
+    const pdy=p.y+PH/2-(g.y+6);
+    if(Math.sqrt(pdx*pdx+pdy*pdy)<12){hitPlayer();}
+  }
+}
+
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+function update(){
+  if(gameState!=='PLAYING')return;
+
+  tick++;
+  updatePlayer();
+  updateBombs();
+  updateBlasts();
+
+  // Spawn lemmings
+  spawnTimer++;
+  if(spawnTimer>=90&&spawned<MAX_LEMS){
+    lemmings.push(makeLem());
+    spawned++;
+    spawnTimer=0;
+  }
+
+  lemmings.forEach(l=>updateLem(l));
+  ghosts.forEach(g=>updateGhost(g));
+  updatePops();
+
+  // Win condition
+  if(saved>=WIN_TARGET){
+    gameState='WIN';winTimer=180;
+    score+=Math.floor(tick*0.5); // time bonus (inverse — shorter is better, but just reward survival)
+    return;
+  }
+
+  // Lose condition: all lemmings spawned and none alive and not enough saved
+  const alive=lemmings.filter(l=>l.state!=='dead'&&l.state!=='saved').length;
+  if(spawned>=MAX_LEMS&&alive===0&&saved<WIN_TARGET&&gameState==='PLAYING'){
+    gameState='GAMEOVER';goTimer=180;
+  }
+}
+
+// ── DRAW GRID ─────────────────────────────────────────────────────────────────
+function drawGrid(){
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const t=grid[r*COLS+c];
+      if(t===0)continue;
+      const px=c*TILE,py=r*TILE;
+      if(t===2){
+        ctx.fillStyle=C.steel;ctx.fillRect(px,py,TILE,TILE);
+        ctx.fillStyle=C.steelHi;ctx.fillRect(px,py,TILE,1);ctx.fillRect(px,py,1,TILE);
+        ctx.fillStyle='#223344';ctx.fillRect(px+TILE-1,py+TILE-1,1,1);
+      } else {
+        ctx.fillStyle=C.dirt;ctx.fillRect(px,py,TILE,TILE);
+        ctx.fillStyle=C.dirtEdge;ctx.fillRect(px,py,TILE,1);ctx.fillRect(px,py,1,TILE);
+        if(r>0&&tileAt(c,r-1)===0){ctx.fillStyle=C.grass;ctx.fillRect(px,py,TILE,2);}
+      }
+    }
+  }
+}
+
+// ── DRAW LEMMING ──────────────────────────────────────────────────────────────
+function drawLem(l){
+  if(l.state==='dead'||l.state==='saved')return;
+  ctx.save();ctx.translate(Math.round(l.x),Math.round(l.y));
+  // Body
+  ctx.fillStyle=C.lem;
+  ctx.fillRect(2,4,6,6);
+  // Head
+  ctx.fillStyle=C.lem;
+  ctx.beginPath();ctx.arc(LW/2,3,3,0,Math.PI*2);ctx.fill();
+  // Hard hat (blue)
+  ctx.fillStyle=C.lemHat;
+  ctx.fillRect(1,0,LW-2,3);
+  ctx.fillRect(0,2,LW,2);
+  // Legs animate
+  ctx.fillStyle=C.lemDark;
+  const lf=Math.floor(tick/5)%2;
+  if(lf===0){ctx.fillRect(2,8,2,2);ctx.fillRect(5,9,2,1);}
+  else{ctx.fillRect(2,9,2,1);ctx.fillRect(5,8,2,2);}
+  // Eye
+  ctx.fillStyle='#fff';
+  ctx.fillRect(l.dir>0?5:1,2,2,2);
+  ctx.restore();
+}
+
+// ── DRAW PLAYER (Bomberman) ───────────────────────────────────────────────────
+function drawPlayer(){
+  if(p.inv>0&&Math.floor(p.inv/5)%2===1)return;
+  ctx.save();ctx.translate(Math.round(p.x),Math.round(p.y));
+  // Body white
+  ctx.fillStyle=C.player;ctx.fillRect(0,2,PW,PH-2);
+  // Head white
+  ctx.fillRect(1,0,PW-2,5);
+  // Shade
+  ctx.fillStyle=C.playerShade;ctx.fillRect(1,2,2,PH-4);
+  // Eyes
+  ctx.fillStyle=C.playerEye;ctx.fillRect(2,1,2,2);ctx.fillRect(6,1,2,2);
+  // Red belt
+  ctx.fillStyle=C.playerBelt;ctx.fillRect(0,7,PW,2);
+  // Legs
+  ctx.fillStyle='#8899bb';
+  const lf=Math.floor(tick/4)%2;
+  if(p.vx!==0){
+    if(lf===0){ctx.fillRect(1,PH-5,3,5);ctx.fillRect(PW-4,PH-3,3,3);}
+    else{ctx.fillRect(1,PH-3,3,3);ctx.fillRect(PW-4,PH-5,3,5);}
+  } else {
+    ctx.fillRect(1,PH-4,3,4);ctx.fillRect(PW-4,PH-4,3,4);
+  }
+  ctx.restore();
+}
+
+// ── DRAW GHOST ────────────────────────────────────────────────────────────────
+function drawGhost(g){
+  ctx.save();ctx.translate(Math.round(g.x),Math.round(g.y));
+  if(g.stunned>0)ctx.globalAlpha=0.35;
+  ctx.fillStyle=C.ghost1;
+  // Ghost body
+  ctx.beginPath();
+  ctx.arc(7,5,6,Math.PI,0,false);
+  ctx.lineTo(13,13);ctx.lineTo(11,10);ctx.lineTo(9,13);ctx.lineTo(7,10);ctx.lineTo(5,13);ctx.lineTo(3,10);ctx.lineTo(1,13);
+  ctx.closePath();ctx.fill();
+  // Eyes
+  ctx.fillStyle=C.ghostEye;ctx.fillRect(3,3,3,3);ctx.fillRect(8,3,3,3);
+  ctx.fillStyle=C.ghostPup;ctx.fillRect(4,4,2,2);ctx.fillRect(9,4,2,2);
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+// ── DRAW BOMBS ────────────────────────────────────────────────────────────────
+function drawBombs(){
+  bombs.forEach(b=>{
+    const px=b.tx*TILE,py=b.ty*TILE;
+    const flash=b.fuse<60&&Math.floor(b.fuse/5)%2===1;
+    // Glow
+    if(b.fuse<90){
+      ctx.fillStyle=flash?'rgba(255,100,0,0.4)':'rgba(255,80,0,0.2)';
+      ctx.beginPath();ctx.arc(px+TILE/2,py+TILE/2,9,0,Math.PI*2);ctx.fill();
+    }
+    // Body
+    ctx.fillStyle=flash?'#cc2200':C.bomb;
+    ctx.beginPath();ctx.arc(px+TILE/2,py+TILE/2,TILE*0.42,0,Math.PI*2);ctx.fill();
+    // Fuse wiggle
+    ctx.strokeStyle=C.bombFuse;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(px+TILE/2,py+1);ctx.quadraticCurveTo(px+TILE/2+2,py-2,px+TILE/2,py-3);ctx.stroke();
+    // Fuse spark
+    ctx.fillStyle='#ffff44';ctx.fillRect(px+TILE/2-1,py-4,2,2);
+  });
+}
+
+// ── DRAW BLASTS ───────────────────────────────────────────────────────────────
+function drawBlasts(){
+  blasts.forEach(bl=>{
+    const t=bl.life/bl.maxLife;
+    const r=BLAST_R*TILE*(1-t*0.4);
+    if(t>0.66){ctx.fillStyle=C.blast1;}
+    else if(t>0.33){ctx.fillStyle=C.blast2;}
+    else{ctx.fillStyle=C.blast3;}
+    ctx.globalAlpha=t*0.85;
+    ctx.beginPath();ctx.arc(bl.x,bl.y,r,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  });
+}
+
+// ── DRAW BG ───────────────────────────────────────────────────────────────────
+function drawBg(){
+  const g=ctx.createLinearGradient(0,0,0,IH);
+  g.addColorStop(0,C.bg1);g.addColorStop(1,C.bg2);
+  ctx.fillStyle=g;ctx.fillRect(0,0,IW,IH);
+  BGSTARS.forEach(s=>{
+    const alpha=0.3+0.4*Math.sin(tick*0.02+s.ph);
+    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx.fillRect(s.x,s.y,s.r,s.r);
+  });
+}
+
+// ── EXIT MARKER ───────────────────────────────────────────────────────────────
+function drawExit(){
+  const ex=34*TILE,ey=22*TILE;
+  // Glow
+  ctx.fillStyle=C.exitGlow;
+  ctx.fillRect(ex-2,ey-12,4*TILE+4,14);
+  // Gold bar above gap
+  ctx.fillStyle=C.exit;
+  ctx.fillRect(ex,ey-3,4*TILE,3);
+  // Animated arrows pointing down
+  const bounce=Math.floor(tick/15)%3;
+  for(let i=0;i<3;i++){
+    ctx.globalAlpha=(i===bounce)?1:0.35;
+    ctx.fillStyle=C.exitArrow;
+    const ay=ey-11+i*4;
+    ctx.beginPath();
+    ctx.moveTo(ex+4+i*2,ay);
+    ctx.lineTo(ex+2*TILE,ay+3);
+    ctx.lineTo(ex+4*TILE-4-i*2,ay);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  // Label
+  ctx.fillStyle=C.exit;
+  ctx.font='5px Bungee,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('EXIT',ex+2*TILE,ey-14);
+  // Sparkle
+  if(tick%30<8){
+    ctx.fillStyle='#fff';
+    ctx.fillRect(ex+Math.random()*4*TILE,ey-4,1,1);
+  }
+  ctx.textAlign='left';
+}
+
+// ── DRAW HUD (screen coords) ──────────────────────────────────────────────────
+function drawHUD(){
+  const hh=Math.round(H*0.052);
+  ctx.fillStyle=C.hud;ctx.fillRect(0,0,W,Math.round(H*0.075));
+
+  // Lives (hearts)
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i<lives?C.heart:'rgba(255,50,80,0.18)';
+    drawHeart(8+i*Math.round(W*0.028),Math.round(H*0.01),Math.round(H*0.022));
+  }
+
+  // SAVED counter
+  ctx.fillStyle=saved>=WIN_TARGET?'#44ff88':C.scoreC;
+  ctx.font=`bold ${Math.round(hh*0.78)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(`SAVED ${saved}/${WIN_TARGET}`,W/2,hh+1);
+
+  // LEMS spawned
+  ctx.fillStyle=C.ink;
+  ctx.font=`${Math.round(hh*0.62)}px Bungee,sans-serif`;
+  ctx.textAlign='left';
+  ctx.fillText(`LEMS ${spawned}/${MAX_LEMS}`,W/2+W*0.04,hh-1);
+
+  // Score
+  ctx.fillStyle=C.scoreC;
+  ctx.font=`bold ${Math.round(hh*0.72)}px Bungee,sans-serif`;
+  ctx.textAlign='right';
+  ctx.fillText(String(score).padStart(6,'0'),W-6,hh);
+
+  ctx.textAlign='left';
+}
+
+function drawHeart(x,y,s){
+  ctx.beginPath();
+  ctx.moveTo(x+s,y+s*0.35);
+  ctx.bezierCurveTo(x+s,y,x+s*1.85,y,x+s*1.85,y+s*0.45);
+  ctx.bezierCurveTo(x+s*1.85,y+s,x+s,y+s*1.3,x+s,y+s*1.6);
+  ctx.bezierCurveTo(x+s,y+s*1.3,x+s*0.15,y+s,x+s*0.15,y+s*0.45);
+  ctx.bezierCurveTo(x+s*0.15,y,x+s,y,x+s,y+s*0.35);
+  ctx.fill();
+}
+
+// ── DRAW CONTROLS (screen coords) ────────────────────────────────────────────
+function drawControls(){
+  if(gameState!=='PLAYING')return;
+  ctx.save();
+  // Joystick
+  const jcx=W*0.12,jcy=H*0.82,jr=Math.round(H*0.09);
+  ctx.fillStyle='rgba(200,100,255,0.07)';
+  ctx.beginPath();ctx.arc(jcx,jcy,jr,0,Math.PI*2);ctx.fill();
+  const kx=jcx+Math.max(-jr*0.7,Math.min(jr*0.7,js.dx*(W/IW)));
+  const ky=jcy+Math.max(-jr*0.7,Math.min(jr*0.7,js.dy*(H/IH)));
+  ctx.strokeStyle='rgba(200,100,255,0.30)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(jcx-jr*0.6,jcy);ctx.lineTo(jcx-jr*0.18,jcy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(jcx+jr*0.18,jcy);ctx.lineTo(jcx+jr*0.6,jcy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(jcx,jcy-jr*0.18);ctx.lineTo(jcx,jcy-jr*0.6);ctx.stroke();
+  ctx.fillStyle=js.active?'rgba(200,100,255,0.72)':'rgba(200,100,255,0.26)';
+  ctx.beginPath();ctx.arc(kx,ky,jr*0.32,0,Math.PI*2);ctx.fill();
+
+  // Bomb button
+  const bx=W*0.88,by=H*0.82,br=Math.round(H*0.075);
+  ctx.fillStyle='rgba(255,80,0,0.18)';
+  ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,120,0,0.55)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.stroke();
+  // Bomb icon
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath();ctx.arc(bx,by+3,br*0.36,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#ff4400';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(bx,by+3-br*0.36);ctx.quadraticCurveTo(bx+4,by-br*0.3,bx+2,by-br*0.5);ctx.stroke();
+  ctx.fillStyle='#ffff44';ctx.fillRect(bx+1,by-br*0.52-2,3,3);
+  ctx.fillStyle='rgba(255,200,0,0.85)';
+  ctx.font=`bold ${Math.round(br*0.36)}px Bungee,sans-serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('💣',bx,by+br*0.62);
+  ctx.textBaseline='alphabetic';ctx.textAlign='left';
+  ctx.restore();
+}
+
+// ── ATTRACT MINI ANIMATIONS ───────────────────────────────────────────────────
+let attractLemX=40,attractBomberX=20;
+
+function updateAttract(){
+  tick++;
+  attractLemX+=0.5;
+  attractBomberX+=0.4;
+  if(attractLemX>IW+20)attractLemX=-20;
+  if(attractBomberX>IW+10)attractBomberX=-10;
+}
+
+// Draw a mini lemming at given position
+function drawMiniLem(mx,my){
+  ctx.save();ctx.translate(Math.round(mx),Math.round(my));
+  ctx.fillStyle=C.lem;ctx.fillRect(2,4,6,6);
+  ctx.beginPath();ctx.arc(4,3,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=C.lemHat;ctx.fillRect(1,0,6,3);ctx.fillRect(0,2,8,2);
+  ctx.fillStyle=C.lemDark;
+  const lf=Math.floor(tick/5)%2;
+  if(lf===0){ctx.fillRect(2,8,2,2);ctx.fillRect(5,9,2,1);}
+  else{ctx.fillRect(2,9,2,1);ctx.fillRect(5,8,2,2);}
+  ctx.fillStyle='#fff';ctx.fillRect(5,2,2,2);
+  ctx.restore();
+}
+
+// Draw mini Bomberman at given position
+function drawMiniBomber(mx,my){
+  ctx.save();ctx.translate(Math.round(mx),Math.round(my));
+  ctx.fillStyle=C.player;ctx.fillRect(0,2,PW,PH-2);
+  ctx.fillRect(1,0,PW-2,5);
+  ctx.fillStyle=C.playerShade;ctx.fillRect(1,2,2,PH-4);
+  ctx.fillStyle=C.playerEye;ctx.fillRect(2,1,2,2);ctx.fillRect(6,1,2,2);
+  ctx.fillStyle=C.playerBelt;ctx.fillRect(0,7,PW,2);
+  ctx.fillStyle='#8899bb';
+  const lf=Math.floor(tick/4)%2;
+  if(lf===0){ctx.fillRect(1,PH-5,3,5);ctx.fillRect(PW-4,PH-3,3,3);}
+  else{ctx.fillRect(1,PH-3,3,3);ctx.fillRect(PW-4,PH-5,3,5);}
+  ctx.restore();
+}
+
+// ── OVERLAYS ──────────────────────────────────────────────────────────────────
+function drawAttract(){
+  // bg
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0d0020');g.addColorStop(1,'#1a0033');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+
+  // Stars
+  BGSTARS.forEach(s=>{
+    const alpha=0.3+0.4*Math.sin(tick*0.02+s.ph);
+    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx.fillRect(s.x/IW*W,s.y/IH*H,s.r*scaleX,s.r*scaleY);
+  });
+
+  // Walking lem + bomber
+  ctx.save();ctx.scale(scaleX,scaleY);
+  // Ground line
+  const groundY=IH-28;
+  ctx.fillStyle='#334455';ctx.fillRect(0,groundY,IW,2);
+  drawMiniLem(attractLemX,groundY-LH-1);
+  drawMiniBomber(attractBomberX,groundY-PH-1);
+  ctx.restore();
+
+  // Title
+  ctx.shadowColor='#cc44ff';ctx.shadowBlur=22;
+  ctx.fillStyle='#ffdd44';
+  ctx.font=`bold ${Math.round(W*0.088)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('BOMB-LEMMINGS',W/2,H*0.28);
+  ctx.shadowBlur=0;
+
+  // Subtitle
+  ctx.fillStyle='#cc88ff';
+  ctx.font=`${Math.round(W*0.032)}px Bungee,sans-serif`;
+  ctx.fillText('RESCUE THE LEMMINGS!',W/2,H*0.38);
+
+  // Controls hint
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  ctx.font=`${Math.round(W*0.025)}px Bungee,sans-serif`;
+  ctx.fillText('⬅ MOVE   ↑ JUMP   TAP 💣 BOMB',W/2,H*0.50);
+
+  ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.font=`${Math.round(W*0.021)}px Bungee,sans-serif`;
+  ctx.fillText('BOMB DIRT PILLARS · GUIDE LEMMINGS TO EXIT',W/2,H*0.59);
+
+  // Pulsing TAP TO START
+  if(Math.floor(tick/28)%2){
+    ctx.fillStyle='#ffffff';
+    ctx.font=`bold ${Math.round(W*0.048)}px Bungee,sans-serif`;
+    ctx.fillText('TAP TO START',W/2,H*0.73);
+  }
+
+  ctx.textAlign='left';
+}
+
+function drawGameOver(){
+  ctx.fillStyle='rgba(8,0,20,0.84)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#ff3333';
+  ctx.font=`bold ${Math.round(W*0.082)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('GAME OVER',W/2,H*0.38);
+  ctx.fillStyle=C.ink;
+  ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+  ctx.fillText(`${saved} LEMMINGS SAVED`,W/2,H*0.50);
+  ctx.fillStyle=C.scoreC;
+  ctx.font=`${Math.round(W*0.032)}px Bungee,sans-serif`;
+  ctx.fillText('SCORE  '+score,W/2,H*0.60);
+  if(Math.floor(tick/28)%2){
+    ctx.fillStyle='#fff';
+    ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+    ctx.fillText('TAP TO CONTINUE',W/2,H*0.72);
+  }
+  ctx.textAlign='left';
+}
+
+function drawWin(){
+  ctx.fillStyle='rgba(8,0,20,0.84)';ctx.fillRect(0,0,W,H);
+  ctx.shadowColor='#44ff88';ctx.shadowBlur=20;
+  ctx.fillStyle='#44ff88';
+  ctx.font=`bold ${Math.round(W*0.072)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('LEMMINGS SAVED!',W/2,H*0.36);
+  ctx.shadowBlur=0;
+  ctx.fillStyle=C.scoreC;
+  ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+  ctx.fillText(`${saved} / ${WIN_TARGET} RESCUED`,W/2,H*0.49);
+  ctx.fillStyle=C.ink;
+  ctx.font=`${Math.round(W*0.032)}px Bungee,sans-serif`;
+  ctx.fillText('SCORE  '+score,W/2,H*0.60);
+  if(Math.floor(tick/28)%2){
+    ctx.fillStyle='#fff';
+    ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+    ctx.fillText('TAP TO CONTINUE',W/2,H*0.72);
+  }
+  ctx.textAlign='left';
+}
+
+function showFinalScore(){
+  ArcadeScores.show({
+    game:'bomb-lemmings',
+    title:'BOMB-LEMMINGS',
+    score:score,
+    accent:'#cc88ff',
+    onClose:()=>{gameState='ATTRACT';initGame();}
+  });
+}
+
+// ── DRAW ──────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  if(gameState==='ATTRACT'){
+    drawAttract();
+    return;
+  }
+  if(gameState==='GAMEOVER'){
+    // draw game underneath, darkened
+    ctx.save();ctx.scale(scaleX,scaleY);
+    drawBg();drawGrid();drawExit();
+    lemmings.forEach(l=>drawLem(l));
+    drawBombs();drawBlasts();
+    ghosts.forEach(g=>drawGhost(g));
+    drawPlayer();
+    drawPops();
+    ctx.restore();
+    drawGameOver();
+    drawHUD();
+    return;
+  }
+  if(gameState==='WIN'){
+    ctx.save();ctx.scale(scaleX,scaleY);
+    drawBg();drawGrid();drawExit();
+    lemmings.forEach(l=>drawLem(l));
+    drawBombs();drawBlasts();
+    ghosts.forEach(g=>drawGhost(g));
+    drawPlayer();
+    drawPops();
+    ctx.restore();
+    drawWin();
+    drawHUD();
+    return;
+  }
+
+  // PLAYING
+  ctx.save();ctx.scale(scaleX,scaleY);
+  drawBg();
+  drawGrid();
+  drawExit();
+  drawBlasts();
+  drawBombs();
+  lemmings.forEach(l=>drawLem(l));
+  ghosts.forEach(g=>drawGhost(g));
+  drawPlayer();
+  drawPops();
+  ctx.restore();
+
+  drawHUD();
+  drawControls();
+}
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(ts-lastTs<14)return;
+  lastTs=ts;
+
+  if(gameState==='ATTRACT'){updateAttract();}
+  else if(gameState==='PLAYING'){update();}
+  else{
+    // GAMEOVER or WIN — keep ticking for animations/text pulse
+    tick++;
+    updatePops();
+    // Auto-show scores after timer
+    if(gameState==='GAMEOVER'){
+      goTimer--;
+      if(goTimer<=0){showFinalScore();}
+    }
+    if(gameState==='WIN'){
+      winTimer--;
+      if(winTimer<=0){showFinalScore();}
+    }
+  }
+  draw();
+}
+
+// ── RESIZE ────────────────────────────────────────────────────────────────────
+function resize(){
+  W=document.body.clientWidth;H=document.body.clientHeight;
+  canvas.width=W;canvas.height=H;scaleX=W/IW;scaleY=H/IH;
+}
+window.addEventListener('resize',resize);resize();
+
+// ── FULLSCREEN ────────────────────────────────────────────────────────────────
+function tryFullscreen(){
+  const el=document.documentElement;
+  const r=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  if(r)r.call(el).catch(()=>{});
+}
+document.addEventListener('touchend',function f(){tryFullscreen();document.removeEventListener('touchend',f);},{once:true});
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+initGame();
+gameState='ATTRACT';
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

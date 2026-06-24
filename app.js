@@ -181,7 +181,7 @@ function buildCabinet(game) {
     // ArcadeScores board (hop-man, bomb-garden, candy-tris, …)
     try {
       const board = JSON.parse(localStorage.getItem('jnj_board_' + id) || '[]');
-      if (board.length) return Math.max(...board.map(e => e.score || 0)).toLocaleString('en-GB');
+      if (board.length) return Math.max(...board.map(e => e.s || 0)).toLocaleString('en-GB');
     } catch (e) {}
     // Per-game simple keys
     const KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-3d': 'jnj_doom3d_hs',
@@ -1331,8 +1331,9 @@ async function init() {
 
   // /wip lab shows the SAME cabinet cassettes as the real site (Osimo 2026-06-16), from wip-games.json
   const WIP = document.body.dataset.wip === '1';
+  const PATREON = document.body.dataset.patreon === '1';
   try {
-    const src = WIP ? 'wip-games.json' : 'games.json';
+    const src = WIP ? 'wip-games.json' : PATREON ? 'patreon-games.json' : 'games.json';
     const [resp] = await Promise.all([
       fetch(src + '?v=' + Date.now()),
       fetchGlobalPlays(),
@@ -1340,8 +1341,8 @@ async function init() {
     const data = await resp.json();
     const games = data.games || [];
 
-    // main arcade: only unlocked, most-played first. WIP: show every tester game.
-    const live = WIP
+    // main arcade: only unlocked, most-played first. WIP/Patreon: show every game as-is.
+    const live = (WIP || PATREON)
       ? games
       : games.filter(g => isUnlocked(g.releaseDate))
              .sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0) || a.week - b.week);
@@ -1350,12 +1351,17 @@ async function init() {
     if (live.length === 0) {
       hall.innerHTML = '<p class="hall-empty">' + (WIP
         ? 'NO GAMES IN THE LAB RIGHT NOW.'
+        : PATREON ? 'NO GAMES HERE YET.<br>CHECK BACK SOON.'
         : 'ARCADE OPENING SOON.<br>THE MACHINES ARE ON THE TRUCK.') + '</p>';
     } else {
-      live.forEach(g => hall.appendChild(buildCabinet(g)));
+      live.forEach(g => {
+        // Patreon: point play URL at AI-improved version if available
+        if (PATREON && g.ai_improved && g.ai_file) g.url = g.ai_file;
+        hall.appendChild(buildCabinet(g));
+      });
     }
 
-    if (!WIP) {
+    if (!WIP && !PATREON) {
       buildNextStrip(data.games);
       buildSocials(data.social);
     }

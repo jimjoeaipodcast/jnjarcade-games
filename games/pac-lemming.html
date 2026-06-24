@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>PAC-LEMMING</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<script src="../arcade-scores.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#000;touch-action:none;user-select:none}
+canvas{position:fixed;top:0;left:0;display:block}
+#rot{display:none;position:fixed;inset:0;background:#000020;z-index:99;
+  flex-direction:column;align-items:center;justify-content:center;
+  color:#ffff00;font-family:Bungee,sans-serif;gap:18px;text-align:center}
+#rot span{font-size:58px;animation:sp 2s ease-in-out infinite alternate}
+@keyframes sp{to{transform:rotate(90deg)}}
+@media(orientation:portrait){#rot{display:flex}canvas{display:none}}
+</style>
+</head>
+<body>
+<div id="rot"><span>📱</span><p style="font-family:Bungee;font-size:18px;color:#ffff00">ROTATE PHONE</p></div>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ── CANVAS / CTX ─────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H,scaleX,scaleY;
+const js={active:false,id:-1,dx:0,dy:0,_bx:0,_by:0};
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const IW=320,IH=200;
+const DEADZONE=16;
+const TILE=8,COLS=40,ROWS=25;
+
+const PR=7;
+const PSPEED=1.8;
+
+const GR=7;
+const GSPEED=1.3;
+const FRIGHTENED_DUR=300;
+
+const LW=8,LH=10;
+const LSPEED=0.65;
+const MAX_LEMS=15,WIN_LEMS=10;
+
+const DOT_R=1.5;
+const POWER_R=3.5;
+
+const C={
+  bg:'#000000',
+  wall:'#2020ff',
+  wallGlow:'rgba(32,32,255,0.3)',
+  wallHi:'#4040ff',
+  floor:'#111111',
+  floorLine:'#1a3a1a',
+  dot:'#ffb8ff',
+  power:'#ffb8ff',
+  pac:'#ffff00',
+  pacDark:'#cc8800',
+  pacMouth:'#000000',
+  ghost0:'#ff0000',
+  ghost1:'#ffb8ff',
+  ghost2:'#00ffff',
+  ghost3:'#ffb852',
+  ghostFright:'#0000ff',
+  ghostFlash:'#ffffff',
+  ghostEye:'#ffffff',
+  ghostPup:'#0000ff',
+  lem:'#44cc44',lemHat:'#1144cc',lemDark:'#228822',
+  lemBoosted:'#88ff88',
+  exit:'#ffdd00',exitGlow:'rgba(255,221,0,0.35)',
+  hud:'rgba(0,0,0,0.88)',ink:'#ffb8ff',scoreC:'#ffff44',heart:'#ff4466',
+  pop:'#ffcc00',
+  spawn:'#00ff00',
+};
+
+// ── MAZE ─────────────────────────────────────────────────────────────────────
+const maze=new Uint8Array(COLS*ROWS);
+function wallAt(wx,wy){
+  const tx=Math.floor(wx/TILE),ty=Math.floor(wy/TILE);
+  if(tx<0||ty<0||tx>=COLS||ty>=ROWS)return true;
+  return maze[ty*COLS+tx]===1;
+}
+function wallAtTile(tx,ty){if(tx<0||ty<0||tx>=COLS||ty>=ROWS)return true;return maze[ty*COLS+tx]===1;}
+
+function fillRect(x0,y0,x1,y1){
+  for(let r=y0;r<=y1;r++)for(let c=x0;c<=x1;c++)maze[r*COLS+c]=1;
+}
+
+function initMaze(){
+  maze.fill(0);
+  // OUTER BORDER
+  for(let c=0;c<COLS;c++){maze[0*COLS+c]=1;maze[(ROWS-1)*COLS+c]=1;}
+  for(let r=0;r<ROWS;r++){maze[r*COLS+0]=1;maze[r*COLS+COLS-1]=1;}
+
+  // EXIT GAP in right wall: col 39, rows 18-22 = open
+  for(let r=18;r<=22;r++) maze[r*COLS+39]=0;
+
+  // SPAWN GAP in left wall: col 0, rows 18-22 = open
+  for(let r=18;r<=22;r++) maze[r*COLS+0]=0;
+
+  // INTERNAL WALLS — classic Pac-Man style blocks
+  // Top section
+  fillRect(3,2,8,5);
+  fillRect(11,2,18,5);
+  fillRect(21,2,28,5);
+  fillRect(31,2,36,5);
+
+  // Mid-left and mid-right
+  fillRect(3,8,8,11);
+  fillRect(31,8,36,11);
+
+  // Center ghost house
+  fillRect(15,9,24,14);
+  // Ghost house door (top center open)
+  for(let c=18;c<=21;c++) maze[9*COLS+c]=0;
+
+  // Middle section walls
+  fillRect(3,14,8,17);
+  fillRect(11,14,18,17);
+  fillRect(21,14,28,17);
+  fillRect(31,14,36,17);
+
+  // Bottom floor strip (where lemmings walk): rows 19-23 = open space
+  for(let r=19;r<=23;r++) for(let c=1;c<COLS-1;c++) maze[r*COLS+c]=0;
+  // Restore bottom border
+  for(let c=0;c<COLS;c++) maze[(ROWS-1)*COLS+c]=1;
+
+  // Small floor obstacles (above lemming path)
+  fillRect(8,18,10,18);
+  fillRect(18,18,22,18);
+  fillRect(29,18,32,18);
+
+  // Vertical connector walls
+  fillRect(10,6,10,7);
+  fillRect(29,6,29,7);
+
+  // Horizontal mid-corridor walls
+  fillRect(10,12,14,12);
+  fillRect(25,12,29,12);
+}
+
+// ── DOTS ─────────────────────────────────────────────────────────────────────
+let dots=[];
+let powerPellets=[];
+
+function initDots(){
+  dots=[];powerPellets=[];
+  const POWER_POSITIONS=[[2,2],[37,2],[2,22],[37,22]];
+
+  for(let r=1;r<ROWS-1;r++){
+    for(let c=1;c<COLS-1;c++){
+      if(maze[r*COLS+c]!==0)continue;
+      if(r>=19&&r<=23)continue;
+      if(r>=9&&r<=14&&c>=15&&c<=24)continue;
+      const isPower=POWER_POSITIONS.some(([pc,pr])=>pc===c&&pr===r);
+      if(isPower){
+        // Make sure open
+        maze[r*COLS+c]=0;
+        powerPellets.push({x:c*TILE+TILE/2,y:r*TILE+TILE/2,eaten:false});
+      } else {
+        dots.push({x:c*TILE+TILE/2,y:r*TILE+TILE/2,eaten:false});
+      }
+    }
+  }
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let score=0;
+let gameState='ATTRACT';
+let tick=0;
+let pops=[];
+let lemmings=[];
+let saved=0;
+let spawned=0;
+let spawnTimer=0;
+let ghosts=[];
+let frightenTimer=0;
+let lemBoostTimer=0;
+
+const LEM_Y=174;
+const LEM_SPAWN_X=-10;
+const LEM_EXIT_X=312;
+
+// ── PAC-MAN ──────────────────────────────────────────────────────────────────
+let pac={x:20,y:LEM_Y-PR-2,vx:0,vy:0,dir:0,nextDir:0,mouthAngle:0.3,mouthDir:1,lives:3,inv:0};
+
+function updatePac(){
+  if(pac.inv>0)pac.inv--;
+
+  const DIRS=[[PSPEED,0],[-PSPEED,0],[0,PSPEED],[0,-PSPEED]];
+  const nd=DIRS[pac.nextDir];
+  const nx=pac.x+nd[0],ny=pac.y+nd[1];
+  if(!wallAt(nx-PR+1,ny)&&!wallAt(nx+PR-1,ny)&&!wallAt(nx,ny-PR+1)&&!wallAt(nx,ny+PR-1)){
+    pac.dir=pac.nextDir;
+  }
+
+  const d=DIRS[pac.dir];
+  const tx=pac.x+d[0],ty=pac.y+d[1];
+  if(!wallAt(tx-PR+1,ty)&&!wallAt(tx+PR-1,ty)&&!wallAt(tx,ty-PR+1)&&!wallAt(tx,ty+PR-1)){
+    pac.x=tx;pac.y=ty;
+  }
+
+  pac.mouthAngle+=0.08*pac.mouthDir;
+  if(pac.mouthAngle>0.4)pac.mouthDir=-1;
+  if(pac.mouthAngle<0.05)pac.mouthDir=1;
+
+  pac.x=Math.max(PR,Math.min(IW-PR,pac.x));
+  pac.y=Math.max(PR+12,Math.min(IH-PR,pac.y));
+
+  // Eat dots
+  dots.forEach(d=>{
+    if(d.eaten)return;
+    if(Math.hypot(pac.x-d.x,pac.y-d.y)<PR+DOT_R){d.eaten=true;score+=10;}
+  });
+
+  // Eat power pellets
+  powerPellets.forEach(p=>{
+    if(p.eaten)return;
+    if(Math.hypot(pac.x-p.x,pac.y-p.y)<PR+POWER_R+2){
+      p.eaten=true;score+=50;
+      frightenGhosts();
+      boostLemmings();
+    }
+  });
+
+  // Ghost collision
+  ghosts.forEach(g=>{
+    if(Math.hypot(pac.x-g.x,pac.y-g.y)<PR+GR-2){
+      if(g.mode==='frightened'&&g.frightTimer>0){
+        g.mode='eaten';g.frightTimer=0;
+        score+=200;
+        spawnPops(g.x,g.y,g.col);
+      } else if(g.mode!=='eaten'&&pac.inv===0){
+        hitPac();
+      }
+    }
+  });
+}
+
+function hitPac(){
+  if(pac.inv>0)return;
+  pac.lives--;pac.inv=180;
+  spawnPops(pac.x,pac.y,'#ffff00');
+  if(pac.lives<=0){gameState='GAMEOVER';}
+}
+
+// ── GHOSTS ───────────────────────────────────────────────────────────────────
+function initGhosts(){
+  ghosts=[
+    {x:160,y:92,dir:0,mode:'chase',frightTimer:0,col:C.ghost0,spawnX:160,spawnY:92,timer:30,vx:0,vy:0},
+    {x:168,y:100,dir:1,mode:'chase',frightTimer:0,col:C.ghost1,spawnX:168,spawnY:100,timer:60,vx:0,vy:0},
+    {x:152,y:100,dir:0,mode:'scatter',frightTimer:0,col:C.ghost2,spawnX:152,spawnY:100,timer:90,vx:0,vy:0},
+    {x:176,y:92,dir:1,mode:'scatter',frightTimer:0,col:C.ghost3,spawnX:176,spawnY:92,timer:120,vx:0,vy:0},
+  ];
+}
+
+function frightenGhosts(){
+  ghosts.forEach(g=>{if(g.mode!=='eaten'){g.mode='frightened';g.frightTimer=FRIGHTENED_DUR;}});
+}
+
+function boostLemmings(){
+  lemBoostTimer=FRIGHTENED_DUR;
+}
+
+function updateGhosts(){
+  ghosts.forEach(g=>{
+    if(g.mode==='frightened'){
+      g.frightTimer--;
+      if(g.frightTimer<=0){g.mode='chase';g.frightTimer=0;}
+    }
+    if(g.mode==='eaten'){
+      const dx=g.spawnX-g.x,dy=g.spawnY-g.y;
+      if(Math.abs(dx)+Math.abs(dy)<4){g.mode='chase';g.x=g.spawnX;g.y=g.spawnY;return;}
+      g.x+=Math.sign(dx)*GSPEED*2;g.y+=Math.sign(dy)*GSPEED*2;
+      return;
+    }
+
+    let tx2=pac.x,ty2=pac.y;
+    if(g.mode==='scatter'){tx2=g.spawnX>160?IW-20:20;ty2=g.spawnY>90?IH-20:20;}
+    if(g.mode==='frightened'){tx2=IW-pac.x;ty2=IH-pac.y;}
+
+    g.timer--;
+    if(g.timer<=0){
+      g.timer=6;
+      const spd=g.mode==='frightened'?GSPEED*0.7:GSPEED;
+      const candidates=[
+        {vx:spd,vy:0},{vx:-spd,vy:0},{vx:0,vy:spd},{vx:0,vy:-spd}
+      ].filter(c=>{
+        const nx=g.x+c.vx*8,ny=g.y+c.vy*8;
+        return !wallAt(nx,ny)&&!wallAt(nx-GR+1,ny)&&!wallAt(nx+GR-1,ny)&&!wallAt(nx,ny-GR+1)&&!wallAt(nx,ny+GR-1);
+      });
+      if(candidates.length>0){
+        const best=candidates.reduce((a,b)=>{
+          const da=Math.abs(g.x+a.vx*8-tx2)+Math.abs(g.y+a.vy*8-ty2);
+          const db=Math.abs(g.x+b.vx*8-tx2)+Math.abs(g.y+b.vy*8-ty2);
+          return da<db?a:b;
+        });
+        g.vx=best.vx;g.vy=best.vy;
+      } else {
+        // Reverse
+        g.vx=-g.vx;g.vy=-g.vy;
+      }
+    }
+
+    const nx=g.x+(g.vx||0),ny=g.y+(g.vy||0);
+    if(!wallAt(nx-GR+1,ny)&&!wallAt(nx+GR-1,ny)&&!wallAt(nx,ny-GR+1)&&!wallAt(nx,ny+GR-1)){
+      g.x=nx;g.y=ny;
+    } else {
+      g.vx=0;g.vy=0;g.timer=0;
+    }
+
+    g.x=Math.max(GR,Math.min(IW-GR,g.x));
+    g.y=Math.max(GR+12,Math.min(IH-GR,g.y));
+
+    // Kill lemmings
+    if(g.mode!=='frightened'&&g.mode!=='eaten'){
+      lemmings.forEach(l=>{
+        if(l.state!=='walk')return;
+        if(Math.hypot(g.x-(l.x+LW/2),g.y-(l.y+LH/2))<GR+6){
+          l.state='dead';spawnPops(l.x+LW/2,l.y+LH/2,'#ff4400');
+        }
+      });
+    }
+  });
+
+  if(lemBoostTimer>0)lemBoostTimer--;
+}
+
+// ── LEMMINGS ─────────────────────────────────────────────────────────────────
+function initLems(){lemmings=[];saved=0;spawned=0;spawnTimer=0;}
+
+function updateLems(){
+  spawnTimer++;
+  if(spawnTimer>90&&spawned<MAX_LEMS){
+    lemmings.push({x:LEM_SPAWN_X,y:LEM_Y,state:'walk',dir:1,inv:0});
+    spawned++;spawnTimer=0;
+  }
+
+  const spd=lemBoostTimer>0?LSPEED*2:LSPEED;
+
+  lemmings.forEach(l=>{
+    if(l.state!=='walk')return;
+    l.x+=spd*l.dir;
+    if(l.x>LEM_EXIT_X){l.state='saved';saved++;score+=100;spawnPops(LEM_EXIT_X,l.y+LH/2,C.lem);}
+    if(l.x<-20)l.state='dead';
+  });
+}
+
+// ── PARTICLES ────────────────────────────────────────────────────────────────
+function spawnPops(x,y,col){
+  for(let i=0;i<8;i++){
+    const a=Math.random()*Math.PI*2,s=0.8+Math.random()*2;
+    pops.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,life:28,maxLife:28,c:col});
+  }
+}
+function updatePops(){
+  for(let i=pops.length-1;i>=0;i--){
+    const p=pops[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life--;
+    if(p.life<=0)pops.splice(i,1);
+  }
+}
+function drawPops(ctx){
+  pops.forEach(p=>{
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.c;
+    ctx.fillRect(p.x-1,p.y-1,3,3);
+  });
+  ctx.globalAlpha=1;
+}
+
+// ── WIN / LOSE CHECK ─────────────────────────────────────────────────────────
+function checkWinLose(){
+  if(saved>=WIN_LEMS){gameState='WIN';return;}
+  if(pac.lives<=0){gameState='GAMEOVER';return;}
+  const allDone=spawned>=MAX_LEMS&&lemmings.every(l=>l.state!=='walk');
+  if(allDone&&saved<WIN_LEMS){gameState='GAMEOVER';}
+}
+
+// ── INIT GAME ─────────────────────────────────────────────────────────────────
+function initGame(){
+  initMaze();
+  initDots();
+  initGhosts();
+  initLems();
+  pac={x:20,y:LEM_Y-PR-2,vx:0,vy:0,dir:0,nextDir:0,mouthAngle:0.3,mouthDir:1,lives:3,inv:0};
+  score=0;frightenTimer=0;lemBoostTimer=0;
+  pops=[];
+}
+
+// ── DRAW MAZE ────────────────────────────────────────────────────────────────
+function drawMaze(ctx){
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(maze[r*COLS+c]!==1)continue;
+      const px=c*TILE,py=r*TILE;
+      ctx.fillStyle=C.wall;
+      ctx.fillRect(px,py,TILE,TILE);
+      // Highlight exposed edges
+      ctx.fillStyle=C.wallHi;
+      const topOpen=r>0&&maze[(r-1)*COLS+c]===0;
+      const botOpen=r<ROWS-1&&maze[(r+1)*COLS+c]===0;
+      const lOpen=c>0&&maze[r*COLS+c-1]===0;
+      const rOpen=c<COLS-1&&maze[r*COLS+c+1]===0;
+      if(topOpen)ctx.fillRect(px,py,TILE,1);
+      if(lOpen)ctx.fillRect(px,py,1,TILE);
+      if(botOpen)ctx.fillRect(px,py+TILE-1,TILE,1);
+      if(rOpen)ctx.fillRect(px+TILE-1,py,1,TILE);
+    }
+  }
+}
+
+// ── DRAW LEMMING FLOOR ───────────────────────────────────────────────────────
+function drawLemFloor(ctx){
+  // Darker floor strip
+  ctx.fillStyle=C.floor;
+  ctx.fillRect(0,ROWS*TILE-6*TILE,IW,6*TILE);
+  // Green grass top line
+  ctx.fillStyle=C.floorLine;
+  ctx.fillRect(0,(ROWS-6)*TILE,IW,2);
+  // Small grass tufts every 20px
+  ctx.fillStyle='#2a5a2a';
+  for(let x=4;x<IW;x+=20){
+    ctx.fillRect(x,(ROWS-6)*TILE-2,2,3);
+    ctx.fillRect(x+3,(ROWS-6)*TILE-3,2,4);
+    ctx.fillRect(x+7,(ROWS-6)*TILE-1,2,2);
+  }
+}
+
+// ── DRAW EXIT ────────────────────────────────────────────────────────────────
+function drawExit(ctx){
+  // Golden glow at right exit gap
+  const ex=IW-8;
+  const ey=18*TILE;
+  const eh=5*TILE;
+  // Glow gradient
+  const grd=ctx.createLinearGradient(ex-20,ey,ex+8,ey);
+  grd.addColorStop(0,'rgba(255,221,0,0)');
+  grd.addColorStop(1,'rgba(255,221,0,0.4)');
+  ctx.fillStyle=grd;
+  ctx.fillRect(ex-20,ey,28,eh);
+  // Arrow
+  ctx.fillStyle=C.exit;
+  ctx.font='bold 7px monospace';
+  ctx.textAlign='right';
+  ctx.textBaseline='middle';
+  const pulse=0.7+Math.sin(tick*0.12)*0.3;
+  ctx.globalAlpha=pulse;
+  ctx.fillText('EXIT',IW-2,ey+eh/2-4);
+  ctx.fillText('►',IW-2,ey+eh/2+4);
+  ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+// ── DRAW SPAWN INDICATOR ─────────────────────────────────────────────────────
+function drawSpawn(ctx){
+  const pulse=0.5+Math.sin(tick*0.1)*0.3;
+  ctx.globalAlpha=pulse;
+  ctx.fillStyle=C.spawn;
+  ctx.font='6px monospace';
+  ctx.textAlign='left';
+  ctx.textBaseline='middle';
+  ctx.fillText('►',1,19*TILE+2*TILE);
+  ctx.globalAlpha=1;
+}
+
+// ── DRAW DOTS ────────────────────────────────────────────────────────────────
+function drawDots(ctx){
+  ctx.fillStyle=C.dot;
+  dots.forEach(d=>{
+    if(!d.eaten){
+      ctx.beginPath();ctx.arc(d.x,d.y,DOT_R,0,Math.PI*2);ctx.fill();
+    }
+  });
+  const pulse=0.7+Math.sin(tick*0.15)*0.3;
+  powerPellets.forEach(p=>{
+    if(p.eaten)return;
+    ctx.fillStyle=C.power;
+    ctx.globalAlpha=pulse;
+    ctx.beginPath();ctx.arc(p.x,p.y,POWER_R,0,Math.PI*2);ctx.fill();
+    // Inner bright core
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath();ctx.arc(p.x,p.y,1,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+// ── DRAW PAC-MAN ─────────────────────────────────────────────────────────────
+function drawPac(ctx){
+  if(pac.inv>0&&Math.floor(pac.inv/5)%2===1)return;
+  ctx.save();
+  ctx.translate(Math.round(pac.x),Math.round(pac.y));
+  const rots=[0,Math.PI,Math.PI/2,-Math.PI/2];
+  ctx.rotate(rots[pac.dir]);
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.arc(1,2,PR,0,Math.PI*2);
+  ctx.fill();
+  // Body
+  ctx.fillStyle=C.pac;
+  const ma=pac.mouthAngle;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.arc(0,0,PR,ma,Math.PI*2-ma);
+  ctx.closePath();
+  ctx.fill();
+  // Eye
+  ctx.fillStyle='#000';
+  ctx.beginPath();ctx.arc(1,-3,1.2,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+// ── DRAW GHOST ───────────────────────────────────────────────────────────────
+function drawGhost(ctx,g){
+  ctx.save();
+  ctx.translate(Math.round(g.x)-GR,Math.round(g.y)-GR);
+  const W2=GR*2,H2=GR*2+3;
+  const frightFlash=g.frightTimer>0&&g.frightTimer<120&&Math.floor(tick/8)%2===1;
+  let col;
+  if(g.mode==='eaten'){col='rgba(0,0,255,0.2)';}
+  else if(g.mode==='frightened'){col=frightFlash?C.ghostFlash:C.ghostFright;}
+  else{col=g.col;}
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.arc(GR+1,GR+1,GR,Math.PI,0,false);
+  ctx.lineTo(W2+1,H2+1);
+  ctx.lineTo(W2-2,H2-2);
+  ctx.lineTo(W2-5,H2+1);
+  ctx.lineTo(GR,H2+1);
+  ctx.lineTo(3,H2-2);
+  ctx.lineTo(1,H2+1);
+  ctx.closePath();ctx.fill();
+
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  ctx.arc(GR,GR,GR,Math.PI,0,false);
+  ctx.lineTo(W2,H2);
+  ctx.lineTo(W2-3,H2-3);
+  ctx.lineTo(W2-6,H2);
+  ctx.lineTo(W2-9,H2-3);
+  ctx.lineTo(GR,H2);
+  ctx.lineTo(3,H2-3);
+  ctx.lineTo(0,H2);
+  ctx.closePath();ctx.fill();
+
+  if(g.mode==='frightened'){
+    // Frightened face
+    ctx.fillStyle='#fff';
+    ctx.fillRect(2,4,3,3);ctx.fillRect(9,4,3,3);
+    // Wavy mouth
+    ctx.fillStyle='#fff';
+    for(let i=0;i<5;i++){
+      ctx.fillRect(2+i*2.5,(i%2===0?8:10),2,2);
+    }
+  } else if(g.mode!=='eaten'){
+    // Eyes
+    ctx.fillStyle=C.ghostEye;
+    ctx.fillRect(2,3,4,4);ctx.fillRect(GR+2,3,4,4);
+    // Pupils (look toward pac)
+    const px2=pac.x-(Math.round(g.x)-GR+GR),py2=pac.y-(Math.round(g.y)-GR+GR);
+    const pa=Math.atan2(py2,px2);
+    ctx.fillStyle=C.ghostPup;
+    ctx.fillRect(3+Math.round(Math.cos(pa)),4+Math.round(Math.sin(pa)),2,2);
+    ctx.fillRect(GR+3+Math.round(Math.cos(pa)),4+Math.round(Math.sin(pa)),2,2);
+  }
+  ctx.restore();
+}
+
+// ── DRAW LEMMING ─────────────────────────────────────────────────────────────
+function drawLem(ctx,l){
+  if(l.state==='dead'||l.state==='saved')return;
+  ctx.save();
+  ctx.translate(Math.round(l.x),Math.round(l.y));
+  const boosted=lemBoostTimer>0;
+  const lf=Math.floor(tick/5)%2;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.fillRect(2,LH+1,LW-2,2);
+
+  // Body
+  ctx.fillStyle=boosted?C.lemBoosted:C.lem;
+  ctx.fillRect(2,4,LW-2,6);
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(LW/2,3,3,0,Math.PI*2);
+  ctx.fill();
+
+  // Hard hat (blue iconic)
+  ctx.fillStyle=C.lemHat;
+  ctx.fillRect(1,0,LW-2,3);
+  ctx.fillRect(0,2,LW,2);
+  // Hat brim highlights
+  ctx.fillStyle='#3366ff';
+  ctx.fillRect(0,2,LW,1);
+
+  // Legs animate
+  ctx.fillStyle=boosted?'#228844':C.lemDark;
+  if(lf===0){
+    ctx.fillRect(2,9,2,2);
+    ctx.fillRect(5,10,2,1);
+  } else {
+    ctx.fillRect(2,10,2,1);
+    ctx.fillRect(5,9,2,2);
+  }
+
+  // Arms (walking)
+  ctx.fillStyle=boosted?C.lemBoosted:C.lem;
+  if(lf===0){
+    ctx.fillRect(0,5,2,2);
+    ctx.fillRect(LW,6,2,2);
+  } else {
+    ctx.fillRect(0,6,2,2);
+    ctx.fillRect(LW,5,2,2);
+  }
+
+  // Eye (facing right)
+  ctx.fillStyle='#000';
+  ctx.fillRect(5,2,2,2);
+  ctx.fillStyle='#fff';
+  ctx.fillRect(5,2,1,1);
+
+  // Boost sparkle
+  if(boosted&&Math.floor(tick/3)%2===0){
+    ctx.fillStyle='#ffff88';
+    ctx.fillRect(-2+Math.floor(Math.random()*3),-2,2,2);
+  }
+
+  ctx.restore();
+}
+
+// ── DRAW HUD ─────────────────────────────────────────────────────────────────
+function drawHUD(ctx){
+  ctx.fillStyle=C.hud;ctx.fillRect(0,0,IW,12);
+  ctx.font='7px Bungee,monospace';ctx.textBaseline='top';
+
+  // Lives (hearts)
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i<pac.lives?C.heart:'#333';
+    ctx.fillText('♥',4+i*9,2);
+  }
+
+  // Score
+  ctx.fillStyle=C.scoreC;ctx.fillText(`${score}`,34,2);
+
+  // Lems saved
+  ctx.fillStyle=C.lem;ctx.fillText(`SAVED ${saved}/${WIN_LEMS}`,96,2);
+
+  // Boost indicator
+  if(lemBoostTimer>0){
+    const p2=0.7+Math.sin(tick*0.3)*0.3;
+    ctx.globalAlpha=p2;
+    ctx.fillStyle='#88ff88';
+    ctx.fillText('⚡BOOST',196,2);
+    ctx.globalAlpha=1;
+  } else {
+    // Dots remaining
+    ctx.fillStyle=C.ink;
+    const dotsLeft=dots.filter(d=>!d.eaten).length;
+    ctx.fillText(`DOTS:${dotsLeft}`,196,2);
+  }
+
+  // Frightened indicator
+  if(ghosts.some(g=>g.mode==='frightened')){
+    ctx.fillStyle='#8888ff';
+    const ft=ghosts.find(g=>g.mode==='frightened');
+    const bar=ft?Math.floor((ft.frightTimer/FRIGHTENED_DUR)*40):0;
+    ctx.fillRect(255,3,bar,6);
+    ctx.strokeStyle='#4444cc';ctx.lineWidth=1;ctx.strokeRect(255,3,40,6);
+  }
+
+  // Spawned counter
+  ctx.fillStyle='#888';
+  ctx.fillText(`${spawned}/${MAX_LEMS}`,282,2);
+}
+
+// ── ATTRACT SCREEN ────────────────────────────────────────────────────────────
+let attractPac={x:0,y:100,dir:0};
+let attractGhosts=[{x:300,col:C.ghost0},{x:312,col:C.ghost1},{x:324,col:C.ghost2},{x:336,col:C.ghost3}];
+let attractLems=[];
+
+function updateAttract(){
+  tick++;
+  // Pac-Man chase
+  attractPac.x+=1.2;
+  if(attractPac.x>IW+20)attractPac.x=-10;
+  attractPac.mouthAngle=(attractPac.mouthAngle||0.3)+0.08*(attractPac.mouthDir||1);
+  if(attractPac.mouthAngle>0.4)attractPac.mouthDir=-1;
+  if(attractPac.mouthAngle<0.05)attractPac.mouthDir=1;
+  attractGhosts.forEach(g=>{g.x+=0.9;if(g.x>IW+20)g.x=-30;});
+  // Lems
+  if(attractLems.length<5&&Math.random()<0.02)attractLems.push({x:-10,y:LEM_Y+4});
+  attractLems.forEach(l=>{l.x+=0.5;});
+  attractLems=attractLems.filter(l=>l.x<IW+20);
+}
+
+function drawAttract(ctx){
+  // BG
+  ctx.fillStyle='#000';ctx.fillRect(0,0,IW,IH);
+
+  // Maze outline for flavor (simplified)
+  ctx.globalAlpha=0.18;
+  drawMaze(ctx);
+  ctx.globalAlpha=1;
+
+  // Title
+  ctx.font='22px Bungee,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='#000';ctx.fillText('PAC-LEMMING',IW/2+2,IH/2-52);
+  ctx.fillStyle='#ffff00';ctx.fillText('PAC-LEMMING',IW/2,IH/2-52);
+
+  // Subtitle
+  ctx.font='7px Bungee,monospace';
+  ctx.fillStyle=C.lem;ctx.fillText('GUIDE THE LEMMINGS TO SAFETY!',IW/2,IH/2-34);
+
+  // Draw attract Pac-Man
+  ctx.save();
+  ctx.translate(Math.round(attractPac.x),Math.round(attractPac.y));
+  ctx.fillStyle='#ffff00';
+  const ma=attractPac.mouthAngle||0.3;
+  ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,PR,ma,Math.PI*2-ma);ctx.closePath();ctx.fill();
+  ctx.restore();
+
+  // Draw attract ghosts
+  attractGhosts.forEach((g,i)=>{
+    ctx.save();
+    ctx.translate(Math.round(g.x)-GR,IH/2-GR-3);
+    const W2=GR*2,H2=GR*2+3;
+    ctx.fillStyle=g.col;
+    ctx.beginPath();
+    ctx.arc(GR,GR,GR,Math.PI,0,false);
+    ctx.lineTo(W2,H2);ctx.lineTo(W2-3,H2-3);ctx.lineTo(W2-6,H2);
+    ctx.lineTo(W2-9,H2-3);ctx.lineTo(GR,H2);ctx.lineTo(3,H2-3);ctx.lineTo(0,H2);
+    ctx.closePath();ctx.fill();
+    ctx.fillStyle=C.ghostEye;ctx.fillRect(2,3,4,4);ctx.fillRect(GR+2,3,4,4);
+    ctx.fillStyle=C.ghostPup;ctx.fillRect(3,4,2,2);ctx.fillRect(GR+3,4,2,2);
+    ctx.restore();
+  });
+
+  // Attract lemmings
+  attractLems.forEach(l=>{
+    ctx.save();
+    ctx.translate(Math.round(l.x),Math.round(l.y));
+    ctx.fillStyle=C.lem;ctx.fillRect(2,4,6,6);
+    ctx.beginPath();ctx.arc(LW/2,3,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=C.lemHat;ctx.fillRect(1,0,LW-2,3);ctx.fillRect(0,2,LW,2);
+    ctx.restore();
+  });
+
+  // Controls hint
+  ctx.font='6px Bungee,monospace';
+  ctx.fillStyle='#888';
+  ctx.fillText('JOYSTICK = MOVE',IW/2,IH/2-18);
+  ctx.fillText('POWER PELLETS PROTECT LEMMINGS',IW/2,IH/2-10);
+  ctx.fillText('SAVE 10 OF 15 LEMMINGS TO WIN',IW/2,IH/2-2);
+
+  // TAP TO START pulsing
+  const pulse=0.6+Math.sin(tick*0.08)*0.4;
+  ctx.globalAlpha=pulse;
+  ctx.font='10px Bungee,monospace';
+  ctx.fillStyle='#ffb8ff';
+  ctx.fillText('TAP TO START',IW/2,IH/2+18);
+  ctx.globalAlpha=1;
+
+  // Ghost legend
+  const gcols=[C.ghost0,C.ghost1,C.ghost2,C.ghost3];
+  const gnames=['BLINKY','PINKY','INKY','CLYDE'];
+  gcols.forEach((gc,i)=>{
+    ctx.fillStyle=gc;
+    ctx.fillRect(28+i*66,IH-28,6,6);
+    ctx.font='5px Bungee,monospace';
+    ctx.fillStyle='#aaa';
+    ctx.fillText(gnames[i],36+i*66,IH-24);
+  });
+
+  ctx.textAlign='left';
+}
+
+// ── GAMEOVER SCREEN ───────────────────────────────────────────────────────────
+let gameoverTimer=0;
+let scoresShown=false;
+
+function drawGameOver(ctx){
+  ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,IW,IH);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='20px Bungee,monospace';
+  ctx.fillStyle='#000';ctx.fillText('GAME OVER',IW/2+2,IH/2-28);
+  ctx.fillStyle='#ffb8ff';ctx.fillText('GAME OVER',IW/2,IH/2-28);
+  ctx.font='8px Bungee,monospace';
+  ctx.fillStyle='#ffff44';ctx.fillText(`${saved} LEMMINGS SAVED`,IW/2,IH/2-10);
+  ctx.fillStyle='#ffb8ff';ctx.fillText(`SCORE: ${score}`,IW/2,IH/2+4);
+  const pulse=0.6+Math.sin(tick*0.1)*0.4;
+  ctx.globalAlpha=pulse;
+  ctx.fillStyle='#fff';ctx.fillText('TAP TO CONTINUE',IW/2,IH/2+20);
+  ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+// ── WIN SCREEN ────────────────────────────────────────────────────────────────
+let winTimer=0;
+let winScoresShown=false;
+
+function drawWin(ctx){
+  ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,IW,IH);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='14px Bungee,monospace';
+  ctx.fillStyle='#000';ctx.fillText('LEMMINGS SAVED!',IW/2+2,IH/2-28);
+  ctx.fillStyle='#ffff00';ctx.fillText('LEMMINGS SAVED!',IW/2,IH/2-28);
+  ctx.font='8px Bungee,monospace';
+  ctx.fillStyle=C.lem;ctx.fillText(`${saved} OF ${MAX_LEMS} RESCUED`,IW/2,IH/2-10);
+  ctx.fillStyle='#ffff44';ctx.fillText(`FINAL SCORE: ${score}`,IW/2,IH/2+4);
+  const pulse=0.6+Math.sin(tick*0.1)*0.4;
+  ctx.globalAlpha=pulse;
+  ctx.fillStyle='#88ff88';ctx.fillText('TAP TO CONTINUE',IW/2,IH/2+20);
+  ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+function update(){
+  tick++;
+  if(gameState==='ATTRACT'){updateAttract();return;}
+  if(gameState==='GAMEOVER'){
+    gameoverTimer++;
+    if(gameoverTimer>120&&!scoresShown){
+      scoresShown=true;
+      ArcadeScores.show({
+        game:'pac-lemming',
+        title:'PAC-LEMMING',
+        score:score,
+        accent:'#ffff00',
+        onClose:()=>{gameState='ATTRACT';initGame();scoresShown=false;gameoverTimer=0;}
+      });
+    }
+    return;
+  }
+  if(gameState==='WIN'){
+    winTimer++;
+    if(winTimer>120&&!winScoresShown){
+      winScoresShown=true;
+      ArcadeScores.show({
+        game:'pac-lemming',
+        title:'PAC-LEMMING',
+        score:score,
+        accent:'#ffff00',
+        onClose:()=>{gameState='ATTRACT';initGame();winScoresShown=false;winTimer=0;}
+      });
+    }
+    return;
+  }
+  if(gameState!=='PLAYING')return;
+
+  updatePac();
+  updateGhosts();
+  updateLems();
+  updatePops();
+  checkWinLose();
+}
+
+// ── DRAW ─────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  ctx.scale(scaleX,scaleY);
+
+  if(gameState==='ATTRACT'){
+    drawAttract(ctx);
+    ctx.restore();
+    return;
+  }
+
+  // BG
+  ctx.fillStyle=C.bg;
+  ctx.fillRect(0,0,IW,IH);
+
+  drawLemFloor(ctx);
+  drawMaze(ctx);
+  drawExit(ctx);
+  drawSpawn(ctx);
+  drawDots(ctx);
+
+  // Draw lemmings
+  lemmings.forEach(l=>drawLem(ctx,l));
+
+  // Draw ghosts
+  ghosts.forEach(g=>drawGhost(ctx,g));
+
+  // Draw Pac-Man
+  drawPac(ctx);
+
+  drawPops(ctx);
+
+  if(gameState==='GAMEOVER')drawGameOver(ctx);
+  if(gameState==='WIN')drawWin(ctx);
+
+  ctx.restore();
+
+  // HUD (always on top, scaled separately)
+  ctx.save();
+  ctx.scale(scaleX,scaleY);
+  drawHUD(ctx);
+  ctx.restore();
+}
+
+// ── INPUT ─────────────────────────────────────────────────────────────────────
+function lx(sx){return(sx-canvas.getBoundingClientRect().left)/scaleX;}
+function ly(sy){return(sy-canvas.getBoundingClientRect().top)/scaleY;}
+function zoneOf(sx){const x=lx(sx);return x<IW*0.5?'L':'R';}
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(gameState==='ATTRACT'){startGame();return;}
+    if(gameState==='GAMEOVER'||gameState==='WIN'){return;}
+    const z=zoneOf(t.clientX);
+    if(z==='L'&&!js.active){
+      js.active=true;js.id=t.identifier;js.dx=0;js.dy=0;
+      js._bx=lx(t.clientX);js._by=ly(t.clientY);
+    }
+  }
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(js.active&&t.identifier===js.id){
+      js.dx=lx(t.clientX)-js._bx;
+      js.dy=ly(t.clientY)-js._by;
+    }
+  }
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(js.active&&t.identifier===js.id){js.active=false;js.dx=0;js.dy=0;}
+  }
+},{passive:false});
+
+canvas.addEventListener('touchcancel',()=>{js.active=false;js.dx=0;js.dy=0;},{passive:false});
+
+window.addEventListener('keydown',e=>{
+  if(gameState==='ATTRACT'){startGame();return;}
+  if(e.key==='ArrowRight')pac.nextDir=0;
+  if(e.key==='ArrowLeft')pac.nextDir=1;
+  if(e.key==='ArrowDown')pac.nextDir=2;
+  if(e.key==='ArrowUp')pac.nextDir=3;
+  e.preventDefault();
+},{passive:false});
+
+function applyJoystick(){
+  if(!js.active)return;
+  const ax=Math.abs(js.dx),ay=Math.abs(js.dy);
+  if(ax<DEADZONE&&ay<DEADZONE)return;
+  if(ax>=ay){
+    pac.nextDir=js.dx>0?0:1;
+  } else {
+    pac.nextDir=js.dy>0?2:3;
+  }
+}
+
+function startGame(){
+  if(gameState!=='ATTRACT')return;
+  initGame();
+  gameState='PLAYING';
+  gameoverTimer=0;winTimer=0;scoresShown=false;winScoresShown=false;
+}
+
+// ── RESIZE ────────────────────────────────────────────────────────────────────
+function resize(){
+  W=document.body.clientWidth;
+  H=document.body.clientHeight;
+  canvas.width=W;canvas.height=H;
+  scaleX=W/IW;scaleY=H/IH;
+}
+window.addEventListener('resize',resize);resize();
+
+// ── GAME LOOP ─────────────────────────────────────────────────────────────────
+let lastTs=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(ts-lastTs<14)return;lastTs=ts;
+  applyJoystick();
+  update();
+  draw();
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+initMaze();
+initDots();
+initGhosts();
+initLems();
+pac={x:20,y:LEM_Y-PR-2,vx:0,vy:0,dir:0,nextDir:0,mouthAngle:0.3,mouthDir:1,lives:3,inv:0};
+score=0;pops=[];
+
+// Attract animation state
+attractPac={x:0,y:IH/2,dir:0,mouthAngle:0.3,mouthDir:1};
+attractGhosts=[{x:IW+40,col:C.ghost0},{x:IW+52,col:C.ghost1},{x:IW+64,col:C.ghost2},{x:IW+76,col:C.ghost3}];
+attractLems=[];
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

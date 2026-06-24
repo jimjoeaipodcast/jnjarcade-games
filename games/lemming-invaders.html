@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>LEMMING-INVADERS</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<script src="../arcade-scores.js?v=3"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#000;touch-action:none;user-select:none}
+canvas{position:fixed;top:0;left:0;display:block}
+#rot{display:none;position:fixed;inset:0;background:#000011;z-index:99;
+  flex-direction:column;align-items:center;justify-content:center;
+  color:#55ffff;font-family:Bungee,sans-serif;gap:18px;text-align:center}
+#rot span{font-size:58px;animation:sp 2s ease-in-out infinite alternate}
+@keyframes sp{to{transform:rotate(90deg)}}
+@media(orientation:portrait){#rot{display:flex}canvas{display:none}}
+</style>
+</head>
+<body>
+<div id="rot"><span>📱</span><p style="font-family:Bungee;font-size:18px">ROTATE PHONE</p></div>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ── INTERNAL RESOLUTION ───────────────────────────────────────────────────────
+const IW=320,IH=200;
+const DEADZONE=16;
+// LEMMINGS
+const LW=8,LH=10,LSPEED=0.6,MAX_FALL=80;
+const MAX_LEMS=20,WIN_LEMS=12;
+// TURRET
+const TW=18,TH=12,TSPEED=2.2;
+const BULLET_SPEED=6;
+const ABUL_SPEED=2.2;
+// INVADERS
+const INV_COLS=10,INV_ROWS=4;
+const INV_W=18,INV_H=12,INV_GAP_X=5,INV_GAP_Y=6;
+const INV_STEP=12;
+// GROUND / ZONES
+const GROUND_Y=183;
+const LEM_FLOOR=172;
+const LEM_SPAWN_Y=165;
+const TURRET_Y=178;
+
+// ── COLORS ────────────────────────────────────────────────────────────────────
+const C={
+  bg:'#000011',
+  ground:'#003300',
+  groundLine:'#00aa00',
+  grass:'#00ff44',
+  lem:'#44cc44',lemHat:'#1144cc',lemDark:'#228822',
+  lemDead:'#ff4400',
+  inv0:'#ff55ff',inv0dk:'#cc22cc',
+  inv1:'#55ff55',inv1dk:'#22aa22',
+  inv2:'#ffffff',inv2dk:'#aaaaaa',
+  invBullet:'#ff4444',
+  turret:'#00ffff',turretDk:'#0088aa',turretBase:'#004455',
+  bullet:'#ffff44',
+  bunker:'#00aa00',bunkerDk:'#006600',bunkerHit1:'#aacc00',bunkerHit2:'#886600',
+  hud:'rgba(0,0,10,0.88)',ink:'#55ffff',scoreC:'#ffff44',heart:'#ff4466',
+  pop:'#ffcc00',popDead:'#ff4400',
+};
+
+// ── STARFIELD ─────────────────────────────────────────────────────────────────
+const STARS=[];
+for(let i=0;i<120;i++){
+  STARS.push({x:Math.random()*IW,y:Math.random()*GROUND_Y,r:Math.random()<0.7?0.5:1.0});
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let W=1,H=1,scaleX=1,scaleY=1;
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+let gameState='ATTRACT';
+let score=0,tick=0,lastTs=0;
+let attractLems=[];
+let attractInvaders=[];
+let attractTick=0;
+
+// ── INPUT ─────────────────────────────────────────────────────────────────────
+const js={active:false,id:-1,dx:0,dy:0,_bx:0,_by:0};
+const jb={active:false,id:-1,pressed:false};
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(document.fullscreenElement===null){
+    const el=document.documentElement;
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+    if(req)req.call(el).catch(()=>{});
+  }
+  for(const t of e.changedTouches){
+    if(gameState==='ATTRACT'){startGame();return;}
+    if(gameState==='WIN'){return;}
+    if(gameState==='GAMEOVER'){gameState='ATTRACT';initAttract();return;}
+    const lxv=(t.clientX-canvas.getBoundingClientRect().left)*IW/W;
+    if(lxv<IW*0.5){
+      if(!js.active){js.active=true;js.id=t.identifier;js.dx=0;js.dy=0;js._bx=lxv;js._by=(t.clientY-canvas.getBoundingClientRect().top)*IH/H;}
+    } else {
+      if(!jb.active){jb.active=true;jb.id=t.identifier;jb.pressed=true;}
+    }
+  }
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(js.active&&t.identifier===js.id){
+      js.dx=(t.clientX-canvas.getBoundingClientRect().left)*IW/W-js._bx;
+      js.dy=(t.clientY-canvas.getBoundingClientRect().top)*IH/H-js._by;
+    }
+  }
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(js.active&&t.identifier===js.id){js.active=false;js.dx=0;js.dy=0;}
+    if(jb.active&&t.identifier===jb.id){jb.active=false;}
+  }
+},{passive:false});
+canvas.addEventListener('touchcancel',()=>{js.active=false;js.dx=0;js.dy=0;jb.active=false;},{passive:false});
+
+window.addEventListener('keydown',e=>{
+  if(gameState==='ATTRACT'){startGame();return;}
+  if(gameState==='GAMEOVER'){gameState='ATTRACT';initAttract();return;}
+  if(gameState==='WIN'){return;}
+  if(e.key==='ArrowLeft'||e.key==='a'){js.active=true;js.dx=-60;js.dy=0;}
+  if(e.key==='ArrowRight'||e.key==='d'){js.active=true;js.dx=60;js.dy=0;}
+  if(e.key===' '||e.key==='ArrowUp'){jb.pressed=true;}
+  e.preventDefault();
+},{passive:false});
+window.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='ArrowRight'||e.key==='d'){js.active=false;js.dx=0;}
+});
+
+// ── INVADERS ──────────────────────────────────────────────────────────────────
+let invaders=[],formDir=1;
+let alienBullets=[];
+
+function initInvaders(){
+  invaders=[];
+  const startX=14,startY=22;
+  for(let r=0;r<INV_ROWS;r++){
+    for(let c=0;c<INV_COLS;c++){
+      invaders.push({c,r,x:startX+c*(INV_W+INV_GAP_X),y:startY+r*(INV_H+INV_GAP_Y),alive:true,anim:0});
+    }
+  }
+  formDir=1;
+  alienBullets=[];
+}
+
+function updateFormation(){
+  if(!invaders.some(i=>i.alive))return;
+  const alive=invaders.filter(i=>i.alive);
+  const leftmost=Math.min(...alive.map(i=>i.x));
+  const rightmost=Math.max(...alive.map(i=>i.x+INV_W));
+  if(rightmost+formDir*2>IW-6||leftmost+formDir*2<6){
+    formDir*=-1;
+    alive.forEach(i=>i.y+=INV_STEP);
+  } else {
+    const cnt=alive.length;
+    const spd=1+Math.floor((40-cnt)/12)*0.5;
+    alive.forEach(i=>i.x+=formDir*Math.max(0.5,spd));
+  }
+  if(tick%24===0){invaders.forEach(i=>{if(i.alive)i.anim^=1;});}
+  // Random alien fires
+  if(tick%90===0||Math.random()<0.004){
+    const col=Math.floor(Math.random()*INV_COLS);
+    const colAlive=invaders.filter(i=>i.alive&&i.c===col).sort((a,b)=>b.y-a.y);
+    if(colAlive.length>0){
+      const sh=colAlive[0];
+      alienBullets.push({x:sh.x+INV_W/2,y:sh.y+INV_H,vy:ABUL_SPEED,active:true});
+    }
+  }
+}
+
+function drawInvader(ctx2,inv){
+  if(!inv.alive)return;
+  ctx2.save();ctx2.translate(Math.round(inv.x),Math.round(inv.y));
+  const col=inv.r===0?C.inv0:inv.r<=2?C.inv1:C.inv2;
+  const dk=inv.r===0?C.inv0dk:inv.r<=2?C.inv1dk:C.inv2dk;
+  if(inv.r===0){
+    // Squid — magenta
+    ctx2.fillStyle=col;
+    ctx2.fillRect(4,2,10,7);ctx2.fillRect(3,4,12,4);
+    // Antennae up
+    ctx2.fillRect(5,0,2,2);ctx2.fillRect(11,0,2,2);
+    if(inv.anim===0){
+      ctx2.fillRect(2,8,2,3);ctx2.fillRect(6,8,2,3);ctx2.fillRect(10,8,2,3);ctx2.fillRect(14,8,2,3);
+    } else {
+      ctx2.fillRect(1,9,2,3);ctx2.fillRect(6,9,2,3);ctx2.fillRect(10,9,2,3);ctx2.fillRect(15,9,2,3);
+    }
+    ctx2.fillStyle=dk;ctx2.fillRect(5,4,2,2);ctx2.fillRect(11,4,2,2);
+  } else if(inv.r<=2){
+    // Crab — green
+    ctx2.fillStyle=col;
+    ctx2.fillRect(3,1,12,8);ctx2.fillRect(1,3,2,4);ctx2.fillRect(15,3,2,4);
+    // Top claws
+    ctx2.fillRect(1,1,2,2);ctx2.fillRect(15,1,2,2);
+    if(inv.anim===0){
+      ctx2.fillRect(1,8,3,3);ctx2.fillRect(6,8,3,3);ctx2.fillRect(10,8,3,3);ctx2.fillRect(14,8,3,3);
+    } else {
+      ctx2.fillRect(2,9,3,3);ctx2.fillRect(6,9,3,3);ctx2.fillRect(10,9,3,3);ctx2.fillRect(13,9,3,3);
+    }
+    ctx2.fillStyle=dk;ctx2.fillRect(5,3,2,2);ctx2.fillRect(11,3,2,2);
+    // Claw tips alternate
+    ctx2.fillStyle=dk;
+    if(inv.anim===0){ctx2.fillRect(0,2,1,2);ctx2.fillRect(17,2,1,2);}
+    else{ctx2.fillRect(0,3,1,2);ctx2.fillRect(17,3,1,2);}
+  } else {
+    // UFO/octopus — white
+    ctx2.fillStyle=col;
+    ctx2.fillRect(2,3,14,6);ctx2.fillRect(4,1,10,2);
+    ctx2.fillRect(1,5,2,4);ctx2.fillRect(15,5,2,4);
+    // Side bumps
+    ctx2.fillRect(0,6,1,2);ctx2.fillRect(17,6,1,2);
+    if(inv.anim===0){
+      ctx2.fillRect(2,9,3,2);ctx2.fillRect(7,9,3,2);ctx2.fillRect(12,9,3,2);
+    } else {
+      ctx2.fillRect(1,9,3,2);ctx2.fillRect(7,9,3,2);ctx2.fillRect(13,9,3,2);
+    }
+    ctx2.fillStyle=dk;ctx2.fillRect(5,4,2,2);ctx2.fillRect(11,4,2,2);
+  }
+  ctx2.restore();
+}
+
+// ── LEMMINGS ──────────────────────────────────────────────────────────────────
+let lemmings=[],saved=0,spawned=0,spawnTimer=0,dead=0;
+
+function makeLem(){
+  return{x:-8,y:LEM_SPAWN_Y,vy:0,state:'fall',fallDist:0};
+}
+
+function initLemmings(){
+  lemmings=[];saved=0;spawned=0;spawnTimer=0;dead=0;
+}
+
+function updateLems(){
+  spawnTimer++;
+  if(spawnTimer>80&&spawned<MAX_LEMS){
+    lemmings.push(makeLem());spawned++;spawnTimer=0;
+  }
+  lemmings.forEach(l=>{
+    if(l.state==='dead'||l.state==='saved')return;
+    if(l.state==='fall'){
+      l.vy=Math.min(l.vy+0.5,5);l.y+=l.vy;l.fallDist+=l.vy;
+      if(l.y+LH>=LEM_FLOOR){l.y=LEM_FLOOR-LH;l.state='walk';l.vy=0;}
+    } else if(l.state==='walk'){
+      l.x+=LSPEED;
+      if(l.x>IW+10){l.state='saved';saved++;score+=100;}
+    }
+    // Alien bullet collision
+    for(const b of alienBullets){
+      if(b.active!==false&&l.state==='walk'&&
+         Math.abs(b.x-(l.x+LW/2))<8&&Math.abs(b.y-(l.y+LH/2))<10){
+        l.state='dead';b.active=false;dead++;
+        spawnPops(l.x+LW/2,l.y+LH/2,C.lemDead);
+        break;
+      }
+    }
+  });
+}
+
+function drawLem(ctx2,l){
+  if(l.state==='dead'||l.state==='saved')return;
+  ctx2.save();ctx2.translate(Math.round(l.x),Math.round(l.y));
+  // Body
+  ctx2.fillStyle=C.lem;
+  ctx2.fillRect(2,4,6,6);
+  // Head
+  ctx2.beginPath();ctx2.arc(LW/2,3,3,0,Math.PI*2);ctx2.fill();
+  // Hard hat blue
+  ctx2.fillStyle=C.lemHat;
+  ctx2.fillRect(1,0,LW-2,3);ctx2.fillRect(0,2,LW,2);
+  // Hat brim extra
+  ctx2.fillRect(-1,3,LW+2,1);
+  // Legs animated
+  ctx2.fillStyle=C.lemDark;
+  const lf=Math.floor(tick/5)%2;
+  if(lf===0){ctx2.fillRect(2,8,2,2);ctx2.fillRect(5,9,2,1);}
+  else{ctx2.fillRect(2,9,2,1);ctx2.fillRect(5,8,2,2);}
+  // Eye
+  ctx2.fillStyle='#ffffff';ctx2.fillRect(5,2,2,2);
+  ctx2.fillStyle='#000033';ctx2.fillRect(5,2,1,1);
+  ctx2.restore();
+}
+
+// ── TURRET ────────────────────────────────────────────────────────────────────
+let turret={x:IW/2-TW/2,y:TURRET_Y,bullets:[],lives:3,inv:0};
+
+function initTurret(){
+  turret.x=IW/2-TW/2;turret.y=TURRET_Y;turret.bullets=[];turret.lives=3;turret.inv=0;
+}
+
+function updateTurret(){
+  if(turret.inv>0)turret.inv--;
+  const mx=js.active&&Math.abs(js.dx)>DEADZONE?(js.dx>0?1:-1):0;
+  turret.x=Math.max(4,Math.min(IW-TW-4,turret.x+mx*TSPEED));
+  if(jb.pressed){
+    turret.bullets.push({x:turret.x+TW/2,y:turret.y,vy:-BULLET_SPEED,active:true});
+    jb.pressed=false;
+  }
+  // Player bullets move
+  turret.bullets.forEach(b=>{if(b.active)b.y+=b.vy;});
+  // Bullet vs invader
+  turret.bullets.forEach(b=>{
+    if(!b.active)return;
+    for(const inv of invaders){
+      if(!inv.alive)continue;
+      if(b.x>inv.x&&b.x<inv.x+INV_W&&b.y>inv.y&&b.y<inv.y+INV_H){
+        inv.alive=false;b.active=false;
+        score+=(inv.r===0?40:inv.r<=2?20:10);
+        spawnPops(inv.x+INV_W/2,inv.y+INV_H/2,inv.r===0?C.inv0:inv.r<=2?C.inv1:C.inv2);
+        break;
+      }
+    }
+    // Bullet vs bunkers
+    for(const bk of bunkers){
+      if(bk.hp<=0)continue;
+      if(b.x>bk.x&&b.x<bk.x+bk.w&&b.y>bk.y&&b.y<bk.y+bk.h){
+        bk.hp--;b.active=false;break;
+      }
+    }
+  });
+  turret.bullets=turret.bullets.filter(b=>b.y>-10&&b.active!==false);
+  // Alien bullets move + collide
+  alienBullets.forEach(b=>{
+    if(b.active===false)return;
+    b.y+=b.vy;
+    if(b.y>GROUND_Y){b.active=false;return;}
+    // vs bunkers
+    for(const bk of bunkers){
+      if(bk.hp<=0)continue;
+      if(b.x>bk.x&&b.x<bk.x+bk.w&&b.y>bk.y&&b.y<bk.y+bk.h){
+        bk.hp--;b.active=false;return;
+      }
+    }
+    // vs turret
+    if(b.y>TURRET_Y&&b.x>turret.x&&b.x<turret.x+TW&&turret.inv===0){
+      hitTurret();b.active=false;return;
+    }
+  });
+  alienBullets=alienBullets.filter(b=>b.active!==false);
+}
+
+function hitTurret(){
+  turret.lives--;turret.inv=120;
+  spawnPops(turret.x+TW/2,TURRET_Y,'#00ffff');
+  if(turret.lives<=0){gameState='GAMEOVER';}
+}
+
+function drawTurret(ctx2,t){
+  if(t.inv>0&&Math.floor(t.inv/5)%2===1)return;
+  ctx2.save();ctx2.translate(Math.round(t.x),Math.round(t.y));
+  // Base plate
+  ctx2.fillStyle=C.turretBase;ctx2.fillRect(0,TH-3,TW,3);
+  // Body
+  ctx2.fillStyle=C.turretDk;ctx2.fillRect(1,TH-5,TW-2,2);
+  ctx2.fillStyle=C.turret;ctx2.fillRect(2,4,TW-4,TH-4);
+  // Head dome
+  ctx2.fillRect(5,1,TW-10,5);
+  // Cannon barrel
+  ctx2.fillStyle=C.turret;ctx2.fillRect(TW/2-1.5,-5,3,7);
+  // Dome highlight
+  ctx2.fillStyle='rgba(255,255,255,0.3)';ctx2.fillRect(6,2,3,2);
+  ctx2.restore();
+}
+
+// ── SHIELD BUNKERS ────────────────────────────────────────────────────────────
+let bunkers=[];
+function initBunkers(){
+  // Place bunkers above turret level, below lemmings walk zone
+  // TURRET_Y=178, LEM_FLOOR=172 (lems walk at y=162), so bunkers at y=158 sit cleanly above turret
+  bunkers=[
+    {x:40,y:158,w:22,h:14,hp:3},
+    {x:149-11,y:158,w:22,h:14,hp:3},
+    {x:258,y:158,w:22,h:14,hp:3},
+  ];
+}
+
+function drawBunker(ctx2,bk){
+  if(bk.hp<=0)return;
+  const col=bk.hp===3?C.bunker:bk.hp===2?C.bunkerHit1:C.bunkerHit2;
+  ctx2.fillStyle=col;
+  // Bunker shape — arch cutout at bottom center
+  ctx2.fillRect(bk.x,bk.y,bk.w,bk.h);
+  // Dark cutout arch
+  ctx2.fillStyle=C.bg;
+  ctx2.fillRect(bk.x+7,bk.y+7,8,7);
+  // Corner damage for hp<3
+  if(bk.hp<3){
+    ctx2.fillStyle=C.bg;
+    ctx2.fillRect(bk.x,bk.y,4,4);
+    ctx2.fillRect(bk.x+bk.w-4,bk.y,4,4);
+  }
+  if(bk.hp<2){
+    ctx2.fillRect(bk.x,bk.y,7,7);
+    ctx2.fillRect(bk.x+bk.w-7,bk.y,7,7);
+  }
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+let pops=[];
+function spawnPops(x,y,col){
+  for(let i=0;i<8;i++){
+    const a=Math.random()*Math.PI*2,s=0.8+Math.random()*2.5;
+    pops.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1.5,life:30,maxLife:30,c:col});
+  }
+}
+function updatePops(){
+  for(let i=pops.length-1;i>=0;i--){
+    const p=pops[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life--;
+    if(p.life<=0)pops.splice(i,1);
+  }
+}
+function drawPops(ctx2){
+  pops.forEach(p=>{
+    ctx2.globalAlpha=p.life/p.maxLife;ctx2.fillStyle=p.c;
+    ctx2.fillRect(p.x-1,p.y-1,3,3);
+  });
+  ctx2.globalAlpha=1;
+}
+
+// ── WIN / LOSE CHECK ──────────────────────────────────────────────────────────
+function checkWin(){
+  if(gameState!=='PLAYING')return;
+  // Win
+  if(saved>=WIN_LEMS){
+    gameState='WIN';
+    score+=500;
+    setTimeout(()=>{
+      ArcadeScores.show({
+        game:'lemming-invaders',
+        title:'LEMMING-INVADERS',
+        score:score,
+        accent:'#55ffff',
+        onClose:()=>{gameState='ATTRACT';initGame();}
+      });
+    },1800);
+    return;
+  }
+  // Lose — all lemmings accounted for and not enough saved
+  const allDone=spawned>=MAX_LEMS&&lemmings.every(l=>l.state==='dead'||l.state==='saved');
+  if(allDone&&saved<WIN_LEMS){gameState='GAMEOVER';return;}
+  // Lose — invader reaches ground danger zone
+  const dangerInvs=invaders.filter(i=>i.alive&&i.y+INV_H>LEM_SPAWN_Y);
+  if(dangerInvs.length>=3){gameState='GAMEOVER';return;}
+  // Lose — all invaders gone but not enough saved (shouldn't normally happen, but safety)
+  if(!invaders.some(i=>i.alive)&&saved<WIN_LEMS&&allDone){gameState='GAMEOVER';}
+  // Win if invaders all gone and lemmings saved enough eventually — let it play out
+}
+
+// ── GAME INIT ─────────────────────────────────────────────────────────────────
+function initGame(){
+  score=0;tick=0;
+  initInvaders();
+  initLemmings();
+  initTurret();
+  initBunkers();
+  pops=[];
+  alienBullets=[];
+  jb.pressed=false;
+  js.active=false;js.dx=0;js.dy=0;
+}
+
+function startGame(){
+  initGame();
+  gameState='PLAYING';
+}
+
+// ── ATTRACT STATE ─────────────────────────────────────────────────────────────
+function initAttract(){
+  attractLems=[];attractTick=0;
+  // Small invader formation for attract
+  attractInvaders=[];
+  for(let r=0;r<2;r++){
+    for(let c=0;c<7;c++){
+      attractInvaders.push({c,r,x:60+c*(INV_W+INV_GAP_X),y:70+r*(INV_H+INV_GAP_Y),alive:true,anim:0});
+    }
+  }
+}
+initAttract();
+
+// ── DRAWING ───────────────────────────────────────────────────────────────────
+function drawStars(ctx2){
+  ctx2.fillStyle='#000011';ctx2.fillRect(0,0,IW,IH);
+  STARS.forEach(s=>{
+    const alpha=s.r<0.7?0.4:0.7+0.2*Math.sin(tick*0.03+s.x*0.05);
+    ctx2.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx2.fillRect(s.x,s.y,s.r<0.7?1:1.5,s.r<0.7?1:1.5);
+  });
+}
+
+function drawGround(ctx2){
+  // Ground fill
+  ctx2.fillStyle=C.ground;ctx2.fillRect(0,GROUND_Y,IW,IH-GROUND_Y);
+  // Bright ground line
+  ctx2.fillStyle=C.groundLine;ctx2.fillRect(0,GROUND_Y,IW,1);
+  // Grass tufts
+  ctx2.fillStyle=C.grass;
+  for(let gx=2;gx<IW;gx+=8){
+    ctx2.fillRect(gx,GROUND_Y-2,1,3);
+    ctx2.fillRect(gx+2,GROUND_Y-1,1,2);
+    ctx2.fillRect(gx+4,GROUND_Y-3,1,3);
+  }
+}
+
+function drawPlayerBullets(ctx2){
+  turret.bullets.forEach(b=>{
+    if(!b.active)return;
+    ctx2.fillStyle=C.bullet;
+    ctx2.fillRect(b.x-1,b.y,2,6);
+    // Glow
+    ctx2.fillStyle='rgba(255,255,100,0.3)';
+    ctx2.fillRect(b.x-2,b.y,4,6);
+  });
+}
+
+function drawAlienBullets(ctx2){
+  alienBullets.forEach(b=>{
+    if(b.active===false)return;
+    // Zigzag bullet — 2px wide alternating
+    for(let i=0;i<6;i++){
+      const zigx=(Math.floor((b.y+i)/3)%2)===0?0:2;
+      ctx2.fillStyle=C.invBullet;
+      ctx2.fillRect(b.x-1+zigx,b.y+i,2,1);
+    }
+  });
+}
+
+function drawHUD(){
+  // Top bar
+  const hh=Math.round(H*0.065);
+  ctx.fillStyle=C.hud;ctx.fillRect(0,0,W,Math.round(H*0.09));
+  // Lives (hearts)
+  const hs=Math.round(H*0.024);
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i<turret.lives?C.heart:'rgba(255,50,80,0.15)';
+    drawHeart(ctx,8+i*Math.round(W*0.034),Math.round(H*0.015),hs);
+  }
+  // Score center
+  ctx.fillStyle=C.scoreC;
+  ctx.font=`bold ${hh}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(String(score).padStart(6,'0'),W/2,hh+2);
+  // Saved right
+  ctx.fillStyle=C.ink;
+  ctx.font=`bold ${Math.round(hh*0.72)}px Bungee,sans-serif`;
+  ctx.textAlign='right';
+  ctx.fillText('SAVED '+saved+'/'+WIN_LEMS,W-6,hh);
+  ctx.textAlign='left';
+}
+
+function drawHeart(ctx2,x,y,s){
+  ctx2.beginPath();
+  ctx2.moveTo(x+s,y+s*0.35);
+  ctx2.bezierCurveTo(x+s,y,x+s*1.85,y,x+s*1.85,y+s*0.45);
+  ctx2.bezierCurveTo(x+s*1.85,y+s,x+s,y+s*1.3,x+s,y+s*1.6);
+  ctx2.bezierCurveTo(x+s,y+s*1.3,x+s*0.15,y+s,x+s*0.15,y+s*0.45);
+  ctx2.bezierCurveTo(x+s*0.15,y,x+s,y,x+s,y+s*0.35);
+  ctx2.fill();
+}
+
+function drawControls(){
+  if(gameState!=='PLAYING')return;
+  ctx.save();
+  // Joystick zone
+  const jcx=W*0.12,jcy=H*0.84,jr=Math.round(H*0.085);
+  ctx.fillStyle='rgba(0,200,255,0.06)';ctx.beginPath();ctx.arc(jcx,jcy,jr,0,Math.PI*2);ctx.fill();
+  const kx=jcx+Math.max(-jr*0.7,Math.min(jr*0.7,js.dx*(W/IW)));
+  ctx.strokeStyle='rgba(0,200,255,0.3)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(jcx-jr*0.6,jcy);ctx.lineTo(jcx-jr*0.18,jcy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(jcx+jr*0.18,jcy);ctx.lineTo(jcx+jr*0.6,jcy);ctx.stroke();
+  ctx.fillStyle=js.active?'rgba(0,220,255,0.65)':'rgba(0,200,255,0.22)';
+  ctx.beginPath();ctx.arc(kx,jcy,jr*0.34,0,Math.PI*2);ctx.fill();
+  // Fire button
+  const bx=W*0.88,by=H*0.84,br=Math.round(H*0.075);
+  ctx.fillStyle=jb.active?'rgba(255,255,50,0.75)':'rgba(255,255,50,0.22)';
+  ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,255,200,0.9)';
+  ctx.font=`bold ${Math.round(br*0.8)}px Bungee,sans-serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('FIRE',bx,by);
+  ctx.textBaseline='alphabetic';ctx.textAlign='left';
+  ctx.restore();
+}
+
+function drawAttractScreen(){
+  ctx.save();ctx.scale(scaleX,scaleY);
+  drawStars(ctx);
+  drawGround(ctx);
+  // Animated attract invader formation drifting down slowly
+  attractTick++;
+  const aShift=Math.sin(attractTick*0.02)*20;
+  const aDropY=Math.floor(attractTick/180)*5;
+  attractInvaders.forEach(inv=>{
+    const di={...inv,x:inv.x+aShift,y:inv.y+aDropY,anim:Math.floor(attractTick/24)%2};
+    drawInvader(ctx,di);
+  });
+  // Tiny lemmings running across bottom
+  if(attractTick%90===0&&attractLems.length<4){attractLems.push({x:-8,y:LEM_FLOOR-LH});}
+  attractLems.forEach(l=>{l.x+=0.5;});
+  attractLems=attractLems.filter(l=>l.x<IW+10);
+  attractLems.forEach(l=>{
+    const fl={...l,state:'walk'};drawLem(ctx,fl);
+  });
+  ctx.restore();
+  // Overlay panel
+  ctx.fillStyle='rgba(0,0,17,0.70)';ctx.fillRect(0,H*0.27,W,H*0.50);
+  ctx.shadowColor='#55ffff';ctx.shadowBlur=18;
+  ctx.fillStyle='#55ffff';
+  ctx.font=`bold ${Math.round(W*0.090)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('LEMMING',W/2,H*0.42);
+  ctx.fillStyle='#ffff44';
+  ctx.font=`bold ${Math.round(W*0.075)}px Bungee,sans-serif`;
+  ctx.fillText('INVADERS',W/2,H*0.53);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#aaffcc';
+  ctx.font=`${Math.round(W*0.028)}px Bungee,sans-serif`;
+  ctx.fillText('SAVE THE LEMMINGS FROM ALIEN INVASION!',W/2,H*0.61);
+  if(Math.floor(tick/28)%2){
+    ctx.fillStyle='#ffff44';
+    ctx.font=`bold ${Math.round(W*0.042)}px Bungee,sans-serif`;
+    ctx.fillText('TAP TO START',W/2,H*0.72);
+  }
+  ctx.fillStyle='rgba(100,200,255,0.65)';
+  ctx.font=`${Math.round(W*0.024)}px Bungee,sans-serif`;
+  ctx.fillText('← → MOVE   TAP / SPACE FIRE',W/2,H*0.80);
+  ctx.textAlign='left';
+}
+
+function drawGameOver(){
+  ctx.save();ctx.scale(scaleX,scaleY);
+  drawStars(ctx);
+  drawGround(ctx);
+  ctx.restore();
+  ctx.fillStyle='rgba(0,0,17,0.82)';ctx.fillRect(0,H*0.26,W,H*0.50);
+  ctx.fillStyle='#ff3333';
+  ctx.font=`bold ${Math.round(W*0.078)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('GAME OVER',W/2,H*0.47);
+  ctx.fillStyle=C.scoreC;
+  ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+  ctx.fillText('SAVED '+saved+' OF '+WIN_LEMS+' LEMMINGS',W/2,H*0.57);
+  ctx.fillText('SCORE  '+score,W/2,H*0.64);
+  if(Math.floor(tick/30)%2){
+    ctx.fillStyle='#fff';
+    ctx.font=`${Math.round(W*0.038)}px Bungee,sans-serif`;
+    ctx.fillText('TAP TO RETRY',W/2,H*0.74);
+  }
+  ctx.textAlign='left';
+}
+
+function drawWin(){
+  ctx.save();ctx.scale(scaleX,scaleY);
+  drawStars(ctx);
+  drawGround(ctx);
+  ctx.restore();
+  ctx.fillStyle='rgba(0,0,17,0.80)';ctx.fillRect(0,H*0.24,W,H*0.52);
+  ctx.shadowColor='#ffff44';ctx.shadowBlur=20;
+  ctx.fillStyle='#ffff44';
+  ctx.font=`bold ${Math.round(W*0.072)}px Bungee,sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText('YOU SAVED',W/2,H*0.42);
+  ctx.fillStyle='#55ffff';
+  ctx.font=`bold ${Math.round(W*0.085)}px Bungee,sans-serif`;
+  ctx.fillText(saved+' LEMMINGS!',W/2,H*0.53);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#aaffcc';
+  ctx.font=`${Math.round(W*0.036)}px Bungee,sans-serif`;
+  ctx.fillText('SCORE  '+score,W/2,H*0.62);
+  ctx.textAlign='left';
+}
+
+// ── MAIN DRAW ─────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(gameState==='ATTRACT'){drawAttractScreen();return;}
+  if(gameState==='GAMEOVER'){drawGameOver();drawHUD();drawControls();return;}
+  if(gameState==='WIN'){drawWin();return;}
+
+  ctx.save();ctx.scale(scaleX,scaleY);
+  drawStars(ctx);
+  // Invaders
+  invaders.forEach(inv=>drawInvader(ctx,inv));
+  // Bunkers
+  bunkers.forEach(bk=>drawBunker(ctx,bk));
+  // Lemmings
+  lemmings.forEach(l=>drawLem(ctx,l));
+  // Turret
+  drawTurret(ctx,turret);
+  // Bullets
+  drawPlayerBullets(ctx);
+  drawAlienBullets(ctx);
+  // Particles
+  drawPops(ctx);
+  drawGround(ctx);
+  ctx.restore();
+
+  drawHUD();
+  drawControls();
+}
+
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+function update(){
+  if(gameState==='ATTRACT'){return;}
+  if(gameState==='PLAYING'){
+    updateTurret();
+    updateFormation();
+    updateLems();
+    updatePops();
+    checkWin();
+  }
+}
+
+// ── LOOP ──────────────────────────────────────────────────────────────────────
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(ts-lastTs<14)return;lastTs=ts;tick++;
+  update();
+  draw();
+}
+
+// ── RESIZE ────────────────────────────────────────────────────────────────────
+function resize(){
+  W=document.body.clientWidth;H=document.body.clientHeight;
+  canvas.width=W;canvas.height=H;scaleX=W/IW;scaleY=H/IH;
+}
+window.addEventListener('resize',resize);resize();
+
+// Start attract + loop
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

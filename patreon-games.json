@@ -1,0 +1,52 @@
+{
+  "games": [
+    {
+      "id": "snake",
+      "name": "SNAKE BLASTER",
+      "emoji": "\ud83d\udc0d",
+      "genre": "SNAKE \u00d7 ARKANOID",
+      "url": "games/snake.html",
+      "status": "wip",
+      "special": "Game Lab #1",
+      "note": "Snake with a gun. Arkanoid-style brick targets. Classic meets shooter.",
+      "ready": true,
+      "ready_date": "2026-06-24"
+    },
+    {
+      "id": "doom-3d",
+      "name": "DOOM MARI-OH 3D",
+      "emoji": "\ud83d\udc79",
+      "genre": "DOOM \u00d7 MARIO",
+      "url": "games/doom-3d.html",
+      "status": "wip",
+      "special": "Game Lab #1",
+      "note": "Full 3D raycaster. Doom engine, Mario universe.",
+      "ready": true,
+      "ready_date": "2026-06-24"
+    },
+    {
+      "id": "hop-man",
+      "name": "HOP-MAN",
+      "emoji": "\ud83d\udc38",
+      "genre": "PAC-MAN \u00d7 FROGGER",
+      "url": "games/hop-man.html",
+      "status": "wip",
+      "special": "Game Lab #2",
+      "note": "Frog hops four lanes of traffic to collect snacks. Pac-Man maze logic.",
+      "ready": true,
+      "ready_date": "2026-06-24"
+    },
+    {
+      "id": "flap-fight",
+      "name": "FLAP FIGHT",
+      "emoji": "\ud83c\udf88",
+      "genre": "BALLOON FIGHT \u00d7 FLAPPY BIRD",
+      "url": "games/flap-fight.html",
+      "status": "wip",
+      "special": "Game Lab #2",
+      "note": "Stomp parachute guys mid-gap. Bounce into pipes. Still a high score.",
+      "ready": true,
+      "ready_date": "2026-06-24"
+    }
+  ]
+}

@@ -1,50 +1,10 @@
 {
   "games": [
     {
-      "id": "snake",
-      "name": "SNAKE BLASTER",
-      "emoji": "🐍",
-      "genre": "SNAKE × ARKANOID",
-      "url": "games/snake.html",
-      "status": "wip",
-      "special": "Game Lab #1",
-      "note": "Snake with a gun. Arkanoid-style brick targets. Classic meets shooter."
-    },
-    {
-      "id": "doom-3d",
-      "name": "DOOM MARI-OH 3D",
-      "emoji": "👹",
-      "genre": "DOOM × MARIO",
-      "url": "games/doom-3d.html",
-      "status": "wip",
-      "special": "Game Lab #1",
-      "note": "Full 3D raycaster. Doom engine, Mario universe."
-    },
-    {
-      "id": "hop-man",
-      "name": "HOP-MAN",
-      "emoji": "🐸",
-      "genre": "PAC-MAN × FROGGER",
-      "url": "games/hop-man.html",
-      "status": "wip",
-      "special": "Game Lab #2",
-      "note": "Frog hops four lanes of traffic to collect snacks. Pac-Man maze logic."
-    },
-    {
-      "id": "flap-fight",
-      "name": "FLAP FIGHT",
-      "emoji": "🎈",
-      "genre": "BALLOON FIGHT × FLAPPY BIRD",
-      "url": "games/flap-fight.html",
-      "status": "wip",
-      "special": "Game Lab #2",
-      "note": "Stomp parachute guys mid-gap. Bounce into pipes. Still a high score."
-    },
-    {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
-      "emoji": "🏺",
-      "genre": "JUNGLE HUNT × TOMB RAIDER",
+      "emoji": "\ud83c\udffa",
+      "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
       "url": "games/tomb-hunt.html",
       "status": "wip",
       "special": "Game Lab #3",
@@ -53,8 +13,8 @@
     {
       "id": "bomb-garden",
       "name": "BOMB GARDEN",
-      "emoji": "💣",
-      "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
+      "emoji": "\ud83d\udca3",
+      "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
       "url": "games/bomb-garden.html",
       "status": "wip",
       "special": "Game Lab #4",
@@ -63,18 +23,21 @@
     {
       "id": "candy-tris",
       "name": "CRUSHTRIS",
-      "emoji": "🍬",
-      "genre": "CANDY CRUSH × TETRIS",
+      "emoji": "\ud83c\udf6c",
+      "genre": "CANDY CRUSH \u00d7 TETRIS",
       "url": "games/candy-tris.html",
       "status": "wip",
       "special": "Game Lab #5",
-      "note": "2×2 square = bomb (3×3 blast), 5-in-line = wrapped candy, 6+ = colour bomb."
+      "note": "2\u00d72 square = bomb (3\u00d73 blast), 5-in-line = wrapped candy, 6+ = colour bomb.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-06-24",
+      "ai_file": "games/candy-tris-zai.html"
     },
     {
       "id": "pac-lemming",
       "name": "PAC-LEMMING",
-      "emoji": "🟡",
-      "genre": "LEMMINGS × PAC-MAN",
+      "emoji": "\ud83d\udfe1",
+      "genre": "LEMMINGS \u00d7 PAC-MAN",
       "url": "games/pac-lemming.html",
       "status": "wip",
       "special": "Game Lab #6",
@@ -83,8 +46,8 @@
     {
       "id": "bomb-lemmings",
       "name": "BOMB-LEMMINGS",
-      "emoji": "💣",
-      "genre": "LEMMINGS × BOMBERMAN",
+      "emoji": "\ud83d\udca3",
+      "genre": "LEMMINGS \u00d7 BOMBERMAN",
       "url": "games/bomb-lemmings.html",
       "status": "wip",
       "special": "Game Lab #7",
@@ -93,8 +56,8 @@
     {
       "id": "lemming-invaders",
       "name": "LEMMING-INVADERS",
-      "emoji": "👾",
-      "genre": "LEMMINGS × SPACE INVADERS",
+      "emoji": "\ud83d\udc7e",
+      "genre": "LEMMINGS \u00d7 SPACE INVADERS",
       "url": "games/lemming-invaders.html",
       "status": "wip",
       "special": "Game Lab #8",
@@ -103,7 +66,7 @@
     {
       "id": "astro-hop",
       "name": "ASTRO-HOP",
-      "emoji": "🚀",
+      "emoji": "\ud83d\ude80",
       "genre": "PLATFORM MECHANICS SHOWCASE",
       "url": "games/astro-hop.html",
       "status": "wip",
@@ -113,7 +76,7 @@
     {
       "id": "cave-plunge",
       "name": "CAVE-PLUNGE",
-      "emoji": "🪨",
+      "emoji": "\ud83e\udea8",
       "genre": "CAVE EXPLORER",
       "url": "games/cave-plunge.html",
       "status": "wip",
@@ -123,7 +86,7 @@
     {
       "id": "jungle-hop",
       "name": "JUNGLE-HOP",
-      "emoji": "🌴",
+      "emoji": "\ud83c\udf34",
       "genre": "JUNGLE PLATFORM",
       "url": "games/jungle-hop.html",
       "status": "wip",
@@ -133,7 +96,7 @@
     {
       "id": "lupo-alberto",
       "name": "LUPO ALBERTO",
-      "emoji": "🐺",
+      "emoji": "\ud83d\udc3a",
       "genre": "PLATFORM TRAINING CABINET",
       "url": "games/lupo-alberto.html",
       "status": "wip",
