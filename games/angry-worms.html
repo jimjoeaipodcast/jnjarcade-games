@@ -846,13 +846,15 @@ function startGame() {
   buildLevel(1);
   turn = "player";
   wind = (Math.random() - 0.5) * 6;
-  gameState = "playing";
-  // Camera intro pan
-  camera.x = 0;
-  camera.targetX = WORLD_W - W;
+  gameState = "intro";
+  // Teleport to enemy side, hold 700ms, snap back to catapult
+  camera.x = Math.max(0, WORLD_W - W);
+  camera.targetX = camera.x;
   setTimeout(() => {
-    if (gameState === "playing") camera.targetX = 0;
-  }, 2000);
+    camera.x = 0;
+    camera.targetX = 0;
+    gameState = "playing";
+  }, 700);
 }
 
 // ====== ATTRACT MODE ======
