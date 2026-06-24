@@ -1341,11 +1341,13 @@ async function init() {
     const data = await resp.json();
     const games = data.games || [];
 
-    // main arcade: only unlocked, most-played first. WIP/Patreon: show every game as-is.
-    const live = (WIP || PATREON)
+    // main arcade: only unlocked, most-played first. WIP: ai_improved floats to top. Patreon: as-is.
+    const live = PATREON
       ? games
-      : games.filter(g => isUnlocked(g.releaseDate))
-             .sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0) || a.week - b.week);
+      : WIP
+        ? [...games].sort((a, b) => (b.ai_improved ? 1 : 0) - (a.ai_improved ? 1 : 0))
+        : games.filter(g => isUnlocked(g.releaseDate))
+               .sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0) || a.week - b.week);
 
     const hall = document.getElementById('cabinets');
     if (live.length === 0) {
@@ -1355,8 +1357,8 @@ async function init() {
         : 'ARCADE OPENING SOON.<br>THE MACHINES ARE ON THE TRUCK.') + '</p>';
     } else {
       live.forEach(g => {
-        // Patreon: point play URL at AI-improved version if available
-        if (PATREON && g.ai_improved && g.ai_file) g.url = g.ai_file;
+        // WIP + Patreon: load AI-improved version if available
+        if ((WIP || PATREON) && g.ai_improved && g.ai_file) g.url = g.ai_file;
         hall.appendChild(buildCabinet(g));
       });
     }
