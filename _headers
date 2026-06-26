@@ -13,6 +13,12 @@
 /app.js
   Cache-Control: no-cache, must-revalidate
 
+/arcade-scores.js
+  Cache-Control: no-cache, must-revalidate
+
+/wip.html
+  Cache-Control: no-cache, must-revalidate
+
 /games.json
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache

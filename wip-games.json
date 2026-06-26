@@ -1,4 +1,10 @@
 {
+  "social": [
+    {"name":"Shop","emoji":"🛍️","url":"https://jimmy-joe-shop.fourthwall.com/","gradient":["#FF9F0A","#FF6B00"],"label":"Shop"},
+    {"name":"YouTube","emoji":"▶","url":"https://www.youtube.com/@JnJAiStudio","gradient":["#FF453A","#FF2D55"],"label":"YouTube"},
+    {"name":"Patreon","emoji":"☕","url":"https://www.patreon.com/c/JimmyJoeAiPodcast","gradient":["#FF6E4A","#E0420B"],"label":"Patreon"},
+    {"name":"Ko-fi","emoji":"☕","url":"https://ko-fi.com/jimmynjoe","gradient":["#FF5E5B","#E03030"],"label":"KoFi"}
+  ],
   "games": [
     {
       "id": "angry-worms",

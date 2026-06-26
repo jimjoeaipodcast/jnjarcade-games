@@ -1,3 +1,8 @@
+> aired games go here
+> https://jnjarcade.win
+> all upcoming games waiting go here
+> https://jnjarcade.win/wip
+
 # JnJ Arcade — Game Conventions
 
 Locked-in parameters from the June 2026 revamp. Every new cabinet follows these.

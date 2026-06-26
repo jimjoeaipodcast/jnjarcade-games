@@ -238,6 +238,12 @@ button { font: inherit; cursor: pointer; }
 
 @media (min-width: 880px) {
   #cabinets { grid-template-columns: 1fr 1fr; }
+  #cabinets .cab:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    max-width: 680px;
+    width: 100%;
+    margin: 0 auto;
+  }
 }
 
 /* cabinets roll in after the sign lights up */
@@ -354,7 +360,12 @@ button { font: inherit; cursor: pointer; }
   71%, 100% { opacity: 0; }
 }
 
-.cab-info { padding: clamp(18px, 3.4vw, 30px) clamp(18px, 3.4vw, 32px) clamp(22px, 3.6vw, 34px); }
+.cab-info {
+  padding: clamp(18px, 3.4vw, 30px) clamp(18px, 3.4vw, 32px) clamp(22px, 3.6vw, 34px);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
 
 .cab-genre {
   font-weight: 800;
@@ -382,6 +393,7 @@ button { font: inherit; cursor: pointer; }
   border-bottom: 1px solid var(--dim);
   padding: 12px 2px;
   margin-bottom: 18px;
+  flex: 1;
 }
 
 .cab-quote cite {

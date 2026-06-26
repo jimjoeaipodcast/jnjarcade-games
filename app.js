@@ -1348,9 +1348,9 @@ async function init() {
     const data = await resp.json();
     const games = data.games || [];
 
-    // main arcade: only unlocked, most-played first. WIP: ai_improved floats to top. Patreon: as-is.
+    // main arcade: only unlocked, most-played first. WIP: ai_improved floats to top. Patreon: most-played first.
     const live = PATREON
-      ? games
+      ? [...games].sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : WIP
         ? [...games].sort((a, b) => (b.ai_improved ? 1 : 0) - (a.ai_improved ? 1 : 0))
         : games.filter(g => isUnlocked(g.releaseDate))
@@ -1372,6 +1372,8 @@ async function init() {
 
     if (!WIP && !PATREON) {
       buildNextStrip(data.games);
+    }
+    if (data.social && data.social.length) {
       buildSocials(data.social);
     }
   } catch (err) {
