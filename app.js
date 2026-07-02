@@ -525,12 +525,15 @@ function hopAttract(ctx, w, h, t, world, s) {
         s.cars.push({rL, dir, items: [{x: 1},{x: 6.5},{x: 11}]});
       }
     }
-    s.frogL = 0; s.frogC = Math.floor(COLS / 2);
-    s.phase = 'collect'; s.rideTick = 0;
+    s.frogL = 0; s.fx = Math.floor(COLS / 2);
+    s.ridingLog = null;
     s.last = 0; s.stepMs = 420;
   }
 
-  // ── TICK ──
+  // ── TICK — the frog PLANS before it hops (2026-07-02: it used to hop blind into
+  // rivers/roads and sit in water / under cars). Rules: never enter a river row unless
+  // a log is underneath; never enter a road row unless the gap survives a tick; while
+  // exposed on a road, sidestep away from the nearest car. ──
   if (t - s.last > s.stepMs) {
     s.last = t;
     // move logs
@@ -548,44 +551,104 @@ function hopAttract(ctx, w, h, t, world, s) {
         if (car.x < -2) car.x = COLS + 2;
       }
 
+    const LOG_HALF = 1.3;   // logs are 2.6 cells wide
+    const CAR_HALF = 0.92;  // cars are 1.85 cells
+
+    // Can the frog ENTER row rT at column fx right now (and survive the next tick)?
+    function safeEntry(rT, fx) {
+      if (rT >= RCOUNT) return true;                       // off the top = goal
+      const tp = layout[rT];
+      if (tp === 'safe') return true;
+      if (tp === 'river') {
+        const lane = s.logs.find(l => l.rL === rT);
+        return lane && lane.items.find(lg => Math.abs(lg.x + LOG_HALF - fx) < LOG_HALF - 0.25);
+      }
+      if (tp === 'road') {
+        // this row's gap must survive one tick of car movement…
+        const lane = s.cars.find(l => l.rL === rT);
+        if (lane && lane.items.some(c => Math.abs(c.x + CAR_HALF - fx) <= CAR_HALF + 0.95)) return false;
+        // …AND if the NEXT row is also road, its gap must be open one tick from now,
+        // so the frog crosses the double-road in consecutive hops instead of loitering
+        if (layout[rT + 1] === 'road') {
+          const lane2 = s.cars.find(l => l.rL === rT + 1);
+          if (lane2 && lane2.items.some(c =>
+              Math.abs((c.x + lane2.dir * 0.6) + CAR_HALF - fx) <= CAR_HALF + 0.95)) return false;
+        }
+        return true;
+      }
+      return true;
+    }
+    function hopUp() {
+      const rT = s.frogL + 1;
+      if (rT >= RCOUNT) { _hopReset(s, COLS, RCOUNT, layout); return true; }
+      if (!safeEntry(rT, s.fx)) return false;
+      s.frogL = rT;
+      if (layout[rT] === 'river') {
+        const lane = s.logs.find(l => l.rL === rT);
+        s.ridingLog = lane.items.find(lg => Math.abs(lg.x + LOG_HALF - s.fx) < LOG_HALF - 0.25) || null;
+        if (s.ridingLog) s.fx = s.ridingLog.x + LOG_HALF;   // land ON the log
+      } else {
+        s.ridingLog = null;
+        s.fx = Math.round(Math.max(0, Math.min(COLS - 1, s.fx)));
+      }
+      return true;
+    }
+
     const type = layout[s.frogL] || 'safe';
 
-    if (s.phase === 'collect') {
-      // eat current pellet
-      if (s.pellets[s.frogL]) s.pellets[s.frogL][s.frogC] = false;
-      // find next pellet to right; if none, hop up
-      let moved = false;
-      for (let nc = s.frogC + 1; nc < COLS; nc++) {
-        if (s.pellets[s.frogL] && s.pellets[s.frogL][nc]) { s.frogC = nc; moved = true; break; }
+    if (type === 'river') {
+      // stay glued to the log; hop up the moment the next row is enterable
+      if (s.ridingLog) s.fx = s.ridingLog.x + LOG_HALF;
+      if (!s.ridingLog || s.fx < 0.4 || s.fx > COLS - 0.4) {
+        _hopReset(s, COLS, RCOUNT, layout);                 // carried off-screen — respawn
+      } else {
+        hopUp();
       }
-      if (!moved) {
-        // hop up
-        if (s.frogL + 1 < RCOUNT) { s.frogL++; s.phase = 'crossing'; }
-        else { _hopReset(s, COLS, RCOUNT, layout); }
+    } else if (type === 'road') {
+      // exposed — leave ASAP; if the row above is blocked, dodge the nearest car
+      if (!hopUp()) {
+        const lane = s.cars.find(l => l.rL === s.frogL);
+        if (lane) {
+          let nearest = null, nd = 99;
+          for (const c of lane.items) {
+            const d = Math.abs(c.x + CAR_HALF - s.fx);
+            if (d < nd) { nd = d; nearest = c; }
+          }
+          if (nearest && nd < 2.5) {
+            const away = (s.fx < nearest.x + CAR_HALF) ? -1 : 1;
+            s.fx = Math.max(0, Math.min(COLS - 1, Math.round(s.fx + away)));
+          }
+        }
       }
-    } else if (s.phase === 'crossing') {
-      // entering a river or road — decide what to do
-      const t2 = layout[s.frogL] || 'safe';
-      if (t2 === 'river') { s.phase = 'riding'; s.rideTick = 0; }
-      else if (t2 === 'road') { s.phase = 'dodging'; }
-      else { s.phase = 'collect'; }
-    } else if (s.phase === 'riding') {
-      // ride the log — drift with it, hop up after a few ticks
-      const lane = s.logs.find(l => l.rL === s.frogL);
-      if (lane) s.frogC = Math.max(0, Math.min(COLS - 1, Math.round(s.frogC + lane.dir * 0.4)));
-      s.rideTick++;
-      if (s.rideTick > 5) {
-        s.rideTick = 0;
-        if (s.frogL + 1 < RCOUNT) { s.frogL++; s.phase = 'crossing'; }
-        else { _hopReset(s, COLS, RCOUNT, layout); }
+    } else {
+      // safe row: eat pellets, aligning hops with what's coming next
+      const fc = Math.round(s.fx);
+      if (s.pellets[s.frogL]) s.pellets[s.frogL][fc] = false;
+      let target = -1;
+      if (s.pellets[s.frogL]) {
+        let best = 99;
+        for (let c = 0; c < COLS; c++)
+          if (s.pellets[s.frogL][c] && Math.abs(c - fc) < best) { best = Math.abs(c - fc); target = c; }
       }
-    } else if (s.phase === 'dodging') {
-      // check for gap in cars, then hop through
-      const lane = s.cars.find(l => l.rL === s.frogL);
-      const blocked = lane && lane.items.some(c => Math.abs(c.x - s.frogC) < 1.5);
-      if (!blocked) {
-        if (s.frogL + 1 < RCOUNT) { s.frogL++; s.phase = 'crossing'; }
-        else { _hopReset(s, COLS, RCOUNT, layout); }
+      if (target >= 0) {
+        s.fx = fc + Math.sign(target - fc);                 // walk toward nearest pellet
+      } else if (!hopUp()) {
+        // row cleared but can't enter yet — walk toward the best intercept
+        const rT = s.frogL + 1, tp = layout[rT];
+        if (tp === 'river') {
+          const lane = s.logs.find(l => l.rL === rT);
+          if (lane) {
+            let nearest = null, nd = 99;
+            for (const lg of lane.items) {
+              // meet the log where it will be NEXT tick
+              const cx = lg.x + lane.dir * 0.4 + LOG_HALF;
+              const d = Math.abs(cx - s.fx);
+              if (d < nd && cx > 0.5 && cx < COLS - 0.5) { nd = d; nearest = cx; }
+            }
+            if (nearest !== null) s.fx = Math.max(0, Math.min(COLS - 1, s.fx + Math.sign(nearest - s.fx) * Math.min(1, nd)));
+          }
+        }
+        // road: just wait — the gap comes to us
       }
     }
   }
@@ -673,14 +736,14 @@ function hopAttract(ctx, w, h, t, world, s) {
     }
   }
 
-  // frog
-  _drawHopFrog(ctx, s.frogC * cell + cell/2, rowY(s.frogL) + cell/2, cell * 0.3);
+  // frog (fractional x — rides logs smoothly)
+  _drawHopFrog(ctx, s.fx * cell + cell/2, rowY(s.frogL) + cell/2, cell * 0.3);
 
   ctx.globalAlpha = 1;
 }
 
 function _hopReset(s, COLS, RCOUNT, layout) {
-  s.frogL = 0; s.frogC = Math.floor(COLS / 2); s.phase = 'collect';
+  s.frogL = 0; s.fx = Math.floor(COLS / 2); s.ridingLog = null;
   for (let rL = 0; rL < RCOUNT; rL++)
     if (layout[rL] === 'safe') s.pellets[rL] = Array.from({length: COLS}, () => true);
 }
@@ -1383,84 +1446,139 @@ async function init() {
   }
 }
 
+/* CRUSHTRIS attract — a MINI SELF-PLAYING GAME so the cassette looks like the real
+   thing (Osimo 2026-07-02): candy tetrominoes with translucent square wrappers fall
+   onto a stack, full rows flash + clear, stack resets when it tops out. */
 function candyTrisAttract(ctx, w, h, t, world, s) {
-  if (!s.init) {
-    s.init = true; s.last = t;
-    const CELL = Math.max(12, Math.floor(w / 10));
-    s.CELL = CELL;
-    const COLORS = ['#ff2255','#ff8822','#ffdd00','#33dd44','#3399ff','#cc44ff'];
-    s.COLORS = COLORS;
-    // A few falling candy blobs
-    s.blobs = [];
-    for (let i = 0; i < 14; i++) {
-      s.blobs.push({
-        x: Math.random() * w,
-        y: Math.random() * h - h,
-        vy: 0.4 + Math.random() * 0.9,
-        r: CELL * (0.35 + Math.random() * 0.25),
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        spin: (Math.random() - 0.5) * 0.03,
-        a: 0,
+  const COLS = 8;
+  const CELL = Math.max(8, Math.floor(w / COLS));
+  const ROWS = Math.floor(h * 0.86 / CELL);
+  const OX = Math.floor((w - COLS * CELL) / 2);
+  // real game palette (body/light/dark per colour — matches candy-tris.html CANDY[])
+  const PAL = [
+    ['#FFD700','#FFE955','#806800'], ['#FF8C00','#FFB344','#7a4300'],
+    ['#4CAF50','#80e080','#1a4a1e'], ['#1a5ae0','#5599ff','#081a80'],
+    ['#9020c8','#cc66ff','#44007a'], ['#e01228','#ff5566','#7a000e'],
+  ];
+  const SHAPES = [
+    [[0,0],[1,0],[2,0],[3,0]],      // I
+    [[0,0],[1,0],[0,1],[1,1]],      // O
+    [[0,0],[1,0],[2,0],[1,1]],      // T
+    [[0,0],[0,1],[1,1],[2,1]],      // J
+    [[1,0],[2,0],[0,1],[1,1]],      // S
+  ];
+  function newPiece() {
+    const cells = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    const maxC = Math.max(...cells.map(p => p[0]));
+    return {
+      cells,
+      col: Math.floor(Math.random() * (COLS - maxC - 1)),
+      row: -2,
+      colors: cells.map(() => Math.floor(Math.random() * PAL.length)),
+    };
+  }
+  if (!s.init || s.cell !== CELL || s.rows !== ROWS) {
+    s.init = true; s.cell = CELL; s.rows = ROWS; s.last = t; s.drop = 0;
+    s.board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+    // pre-seed a partial stack so it reads as mid-game instantly
+    for (let r = ROWS - 3; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (Math.random() < 0.62) s.board[r][c] = Math.floor(Math.random() * PAL.length);
+    s.piece = newPiece(); s.flash = null; s.flashT = 0; s.sparks = [];
+  }
+  const dt = Math.min(t - s.last, 48); s.last = t;
+
+  // ── tick: gravity every 260ms ──
+  s.drop += dt;
+  if (s.flash) {
+    s.flashT += dt;
+    if (s.flashT > 320) {                    // remove flashed rows, drop stack
+      for (const fr of s.flash) { s.board.splice(fr, 1); s.board.unshift(Array(COLS).fill(null)); }
+      s.flash = null;
+    }
+  } else if (s.drop > 260) {
+    s.drop = 0;
+    const p = s.piece;
+    const collides = (dr) => p.cells.some(([dx,dy]) => {
+      const r = p.row + dy + dr, c = p.col + dx;
+      return r >= ROWS || (r >= 0 && s.board[r][c] !== null);
+    });
+    if (!collides(1)) { p.row++; }
+    else {
+      // lock
+      p.cells.forEach(([dx,dy],i) => {
+        const r = p.row + dy, c = p.col + dx;
+        if (r >= 0 && r < ROWS) s.board[r][c] = p.colors[i];
       });
+      // full rows → flash + sparkle
+      const full = [];
+      for (let r = 0; r < ROWS; r++) if (s.board[r].every(v => v !== null)) full.push(r);
+      if (full.length) {
+        s.flash = full; s.flashT = 0;
+        for (const fr of full) for (let c = 0; c < COLS; c++)
+          s.sparks.push({x: OX + c*CELL + CELL/2, y: fr*CELL + CELL/2,
+                         vx: (Math.random()-0.5)*2.2, vy: -Math.random()*2 - 0.5,
+                         life: 500, color: PAL[s.board[fr][c] ?? 0][1]});
+      }
+      // top-out → fresh board
+      if (s.board[1].some(v => v !== null)) {
+        s.board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+      }
+      s.piece = newPiece();
     }
-    // Static tetromino silhouettes
-    s.tets = [
-      // I piece
-      {cells:[[0,0],[1,0],[2,0],[3,0]], cx:w*0.15, cy:h*0.35, color:'#ff2255'},
-      // T piece
-      {cells:[[0,0],[1,0],[2,0],[1,-1]], cx:w*0.75, cy:h*0.6, color:'#3399ff'},
-      // S piece
-      {cells:[[0,0],[1,0],[1,-1],[2,-1]], cx:w*0.4, cy:h*0.78, color:'#ffdd00'},
-      // L piece
-      {cells:[[0,0],[0,1],[0,2],[1,0]], cx:w*0.82, cy:h*0.25, color:'#cc44ff'},
-    ];
   }
 
-  const dt = Math.min(t - s.last, 32); s.last = t;
-  const CL = s.CELL;
-
+  // ── draw ──
   ctx.fillStyle = '#0a0012'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(255,105,180,0.08)'; ctx.lineWidth = 0.5;
+  for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(OX+c*CELL,0); ctx.lineTo(OX+c*CELL,ROWS*CELL); ctx.stroke(); }
+  for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(OX,r*CELL); ctx.lineTo(OX+COLS*CELL,r*CELL); ctx.stroke(); }
 
-  // Faint grid
-  ctx.strokeStyle = 'rgba(255,105,180,0.07)'; ctx.lineWidth = 0.5;
-  for (let c = 0; c <= 10; c++) { ctx.beginPath(); ctx.moveTo(c*CL,0); ctx.lineTo(c*CL,h); ctx.stroke(); }
-  for (let r = 0; r <= Math.ceil(h/CL); r++) { ctx.beginPath(); ctx.moveTo(0,r*CL); ctx.lineTo(w,r*CL); ctx.stroke(); }
-
-  // Tetromino silhouettes
-  for (const tet of s.tets) {
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = tet.color;
-    for (const [dx,dy] of tet.cells) {
-      ctx.fillRect(tet.cx + dx*CL, tet.cy + dy*CL, CL-2, CL-2);
-    }
+  // one candy cell — translucent square wrapper + glossy candy, echoing the game
+  function drawCell(x, y, ci, bright) {
+    const [body, light, dark] = PAL[ci];
+    ctx.globalAlpha = bright ? 0.9 : 0.42;
+    ctx.fillStyle = dark; ctx.fillRect(x+0.5, y+0.5, CELL-1, CELL-1);
+    const b = Math.max(1, CELL*0.12);
+    ctx.fillStyle = body; ctx.fillRect(x+b, y+b, CELL-b*2, CELL-b*2);
     ctx.globalAlpha = 1;
+    const r = CELL*0.32, cx = x+CELL/2, cy = y+CELL/2;
+    const g = ctx.createRadialGradient(cx-r*0.35, cy-r*0.35, r*0.1, cx, cy, r);
+    g.addColorStop(0, light); g.addColorStop(0.55, body); g.addColorStop(1, dark);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx-r*0.3, cy-r*0.4, r*0.3, r*0.16, -0.5, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
   }
 
-  // Falling candy blobs
-  for (const b of s.blobs) {
-    b.y += b.vy * (dt / 16);
-    b.a += b.spin;
-    if (b.y > h + b.r * 2) { b.y = -b.r * 2; b.x = Math.random() * w; }
-
-    const colorHex = b.color;
-    const g = ctx.createRadialGradient(b.x - b.r*0.3, b.y - b.r*0.3, 0, b.x, b.y, b.r);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.3, colorHex);
-    g.addColorStop(1, colorHex + '55');
-    ctx.shadowColor = colorHex; ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.fill();
-    ctx.shadowBlur = 0;
-    // shine
-    ctx.beginPath(); ctx.ellipse(b.x - b.r*0.2, b.y - b.r*0.3, b.r*0.28, b.r*0.15, -0.4, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (s.board[r][c] === null) continue;
+      if (s.flash && s.flash.includes(r)) {
+        ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5*Math.sin(s.flashT/40)})`;
+        ctx.fillRect(OX + c*CELL, r*CELL, CELL-1, CELL-1);
+      } else drawCell(OX + c*CELL, r*CELL, s.board[r][c], false);
+    }
+  // falling piece — brighter than the stack so the eye tracks it
+  for (let i = 0; i < s.piece.cells.length; i++) {
+    const [dx,dy] = s.piece.cells[i];
+    const r = s.piece.row + dy, c = s.piece.col + dx;
+    if (r >= 0) drawCell(OX + c*CELL, r*CELL, s.piece.colors[i], true);
   }
+  // sparks
+  s.sparks = s.sparks.filter(sp => (sp.life -= dt) > 0);
+  for (const sp of s.sparks) {
+    sp.x += sp.vx; sp.y += sp.vy; sp.vy += 0.06;
+    ctx.globalAlpha = Math.max(0, sp.life / 500);
+    ctx.fillStyle = sp.color;
+    ctx.fillRect(sp.x, sp.y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
 
   // Genre label
   ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255,105,180,0.5)';
-  ctx.fillText('CRUSHTRIS', w/2, h * 0.92);
+  ctx.fillStyle = 'rgba(255,105,180,0.55)';
+  ctx.fillText('CRUSHTRIS', w/2, h * 0.94);
 }
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
