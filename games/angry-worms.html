@@ -343,6 +343,7 @@ function setupInput() {
 
   function onDown(e) {
     e.preventDefault();
+    initAudio();
     const p = getPos(e);
     // Check inventory slots (screen-space HUD)
     if (gameState === "playing" && turn === "player") {
@@ -471,6 +472,34 @@ function checkMuteTap(p) {
 }
 
 let muted = localStorage.getItem("aw_muted") === "1";
+let audioCtx = null;
+function initAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }
+function playTone(freq, dur, type, vol, sweepTo) {
+  if (muted || !audioCtx) return;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if (sweepTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(vol || 0.15, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+function playChord(freqs, dur, type, vol) { freqs.forEach(f => playTone(f, dur, type, vol)); }
+const sfx = {
+  launch:  () => { playTone(180, 0.25, "sawtooth", 0.12, 900); },                              // slingshot whoosh
+  wheee:   () => { playTone(500, 0.55, "sine", 0.1, 1100); },                                  // AB flight cry
+  boom:    () => { playTone(90, 0.5, "sine", 0.3, 25); playTone(200, 0.25, "square", 0.1, 40); },
+  barrel:  () => { playTone(70, 0.6, "sine", 0.35, 20); playTone(300, 0.3, "sawtooth", 0.12, 50); },
+  thud:    () => { playTone(120, 0.12, "sine", 0.18, 55); },
+  boing:   () => { playTone(220, 0.22, "sine", 0.16, 660); },                                  // bouncer ricochet
+  splash:  () => { playTone(400, 0.3, "sine", 0.14, 90); playTone(700, 0.2, "sine", 0.07, 200); },
+  incoming:() => { playTone(660, 0.16, "square", 0.14); setTimeout(() => playTone(520, 0.2, "square", 0.14), 190); setTimeout(() => playTone(660, 0.16, "square", 0.14), 400); },
+  fanfare: () => { playChord([523, 659, 784], 0.35, "triangle", 0.13); setTimeout(() => playChord([659, 784, 1047], 0.5, "triangle", 0.13), 220); },
+  lose:    () => { playTone(330, 0.4, "sawtooth", 0.16, 140); setTimeout(() => playTone(180, 0.7, "sawtooth", 0.16, 60), 250); }
+};
 
 // ====== SLINGSHOT & LOADING ======
 function loadNextWorm() {
@@ -520,7 +549,8 @@ function fireWorm() {
   });
   inventory[selectedType].count--;
   loadedWorm = null;
-  // Camera follows projectile
+  sfx.launch();
+  setTimeout(() => sfx.wheee(), 120);
 }
 
 // ====== ENEMY AI ======
@@ -586,6 +616,7 @@ function updatePhysics(dt) {
           color: "#9fd0f5", type: "spark", gravity: 0.25 });
       }
       p.dead = true;
+      sfx.splash();
     }
     // Terrain collision (armed only after 10 frames — a pulled-back worm sits inside
     // the hillside at launch and used to explode at your feet, Osimo 2026-07-02)
@@ -715,6 +746,7 @@ function updatePhysics(dt) {
           color: "#9fd0f5", type: "spark", gravity: 0.25 });
       }
       if (w.team === "enemy") score += 100;
+      sfx.splash();
     }
     if (w.y > WORLD_H + 50) {
       w.alive = false;
@@ -747,6 +779,7 @@ function updatePhysics(dt) {
 }
 
 function explode(x, y, radius, team) {
+  sfx.boom();
   // Crater
   craterTerrain(x, y, radius * 0.7);
 
@@ -899,6 +932,7 @@ function showEndScreen(won) {
   const eb = document.getElementById("endBtn");
   document.getElementById("endScore").textContent = "SCORE " + score;
   if (won) {
+    sfx.fanfare();
     const ammoLeft = inventory.reduce((n, it) => n + it.count, 0);
     const starCount = ammoLeft >= 3 ? 3 : ammoLeft >= 1 ? 2 : 1;
     score += starCount * 250;
@@ -908,6 +942,7 @@ function showEndScreen(won) {
     et.style.textShadow = "0 0 24px #39ff14, 0 0 48px #39ff14";
     eb.textContent = "NEXT LEVEL";
   } else {
+    sfx.lose();
     et.textContent = "GAME OVER";
     et.style.color = "#e8302a";
     et.style.textShadow = "0 0 24px #e8302a, 0 0 48px #e8302a";
