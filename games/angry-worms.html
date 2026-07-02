@@ -96,6 +96,7 @@ const GRAVITY = 0.25;
 const SLING_X = 220;
 const GROUND_Y = 600;
 const MAX_PULL = 120;
+const SLING_Y = GROUND_Y - 250;  // launch anchor — top of the watchtower turret
 const WATER_Y = 695;   // Worms-style sea — anything below this drowns
 
 // ====== STATE ======
@@ -211,7 +212,7 @@ function buildLevel(lvl) {
   projectiles = [];
   gravestones = [];
 
-  const baseCount = 2 + lvl;
+  const baseCount = Math.min(5, 2 + lvl);
   let bx = 1100;
   for (let i = 0; i < baseCount && bx < 1700; i++) {
     buildStructure(bx, 120 + Math.random() * 60, lvl);
@@ -219,11 +220,22 @@ function buildLevel(lvl) {
   }
 
   // Reset inventory
+  // Tight ammo = the difficulty curve (no more free reds every level)
   inventory = [
-    { type: "red", count: 3 + Math.floor(lvl / 2) },
+    { type: "red", count: 3 },
     { type: "bomber", count: 2 },
-    { type: "splitter", count: 1 }
+    { type: "splitter", count: 1 },
+    { type: "bouncer", count: 1 }
   ];
+
+  // Worms mechanic: TNT barrels scattered near the bunkers — chain reactions
+  const nBarrels = 1 + Math.floor(lvl / 2);
+  for (let bi = 0; bi < nBarrels; bi++) {
+    const bxp = 1050 + Math.random() * 650;
+    blocks.push({ x: bxp, y: terrainHeightAt(bxp + 13) - 34, w: 26, h: 34,
+      hp: 10, maxHp: 10, type: "barrel", vx: 0, vy: 0,
+      falling: false, settled: true, rot: 0 });
+  }
   selectedType = 0;
   loadNextWorm();
 }
@@ -251,7 +263,7 @@ function generateTerrain(lvl) {
 
 function buildStructure(x, width, lvl) {
   const groundY = terrainHeightAt(x + width / 2);
-  const layers = 2 + Math.min(2, lvl);
+  const layers = 2 + Math.min(3, lvl);
   const blockW = 40;
   const blockH = 30;
   let placed = 0;
@@ -348,11 +360,11 @@ function setupInput() {
     // Near the slingshot on your turn = AIM; anywhere else = PAN the camera
     // (Osimo 2026-07-02: "should be able to move back and forth to see my enemies")
     const dx = wpt.x - SLING_X;
-    const dy = wpt.y - (GROUND_Y - 150);
+    const dy = wpt.y - (SLING_Y);
     if (turn === "player" && loadedWorm && Math.sqrt(dx * dx + dy * dy) < 150) {
       aiming = true;
       panMode = false;
-      dragStart = { x: SLING_X, y: GROUND_Y - 150 };
+      dragStart = { x: SLING_X, y: SLING_Y };
       dragCurrent = { x: wpt.x, y: wpt.y };
     } else {
       panMode = true;
@@ -398,6 +410,10 @@ function setupInput() {
       if (p.type === "bomber" && !p.abilityUsed) {
         p.abilityUsed = true;
         explode(p.x, p.y, 80, p.team);
+        p.dead = true;
+      } else if (p.type === "bouncer" && !p.abilityUsed) {
+        p.abilityUsed = true;
+        explode(p.x, p.y, 65, p.team);
         p.dead = true;
       } else if (p.type === "splitter" && !p.abilityUsed) {
         p.abilityUsed = true;
@@ -471,7 +487,7 @@ function loadNextWorm() {
   if (inventory[selectedType].count > 0) {
     loadedWorm = {
       x: SLING_X,
-      y: GROUND_Y - 150,
+      y: SLING_Y,
       type: inventory[selectedType].type,
       team: "player",
       radius: 16
@@ -510,7 +526,7 @@ function fireWorm() {
 // ====== ENEMY AI ======
 function enemyFire() {
   // Pick a target: nearest player worm or slingshot
-  const target = { x: SLING_X, y: GROUND_Y - 150 };
+  const target = { x: SLING_X, y: SLING_Y };
   // Find enemy worm position to fire from
   const shooter = worms.find(w => w.team === "enemy" && w.alive);
   if (!shooter) return;
@@ -521,8 +537,8 @@ function enemyFire() {
   const ty = target.y;
   // Simple ballistic with wind compensation
   const dx = tx - sx;
-  let power = 16 + Math.random() * 2;
-  let angle = Math.atan2(-Math.abs(dx) * 0.4 - 60, dx) + (Math.random() - 0.5) * 0.15;
+  let power = 16 + level * 0.6 + Math.random() * 2;
+  let angle = Math.atan2(-Math.abs(dx) * 0.4 - 60, dx) + (Math.random() - 0.5) * Math.max(0.05, 0.15 - level * 0.02);
   // Adjust for wind
   angle += wind * 0.02;
   const vx = Math.cos(angle) * power * (dx > 0 ? 1 : -1);
@@ -550,6 +566,7 @@ function updatePhysics(dt) {
   // Update projectiles
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const p = projectiles[i];
+    p.age = (p.age || 0) + 1;
     p.trail.push({ x: p.x, y: p.y });
     if (p.trail.length > 15) p.trail.shift();
     p.vy += GRAVITY;
@@ -557,10 +574,8 @@ function updatePhysics(dt) {
     p.x += p.vx;
     p.y += p.vy;
 
-    // Camera follow
-    if (turn === "player" || p.team === "player") {
-      camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, p.x - VIEW.w / 2));
-    }
+    // Camera follows EVERY shot — enemy fire was happening off-screen (Osimo 2026-07-02)
+    camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, p.x - VIEW.w / 2));
 
     // Water splash — the sea eats worms, no boom
     if (p.y > WATER_Y) {
@@ -572,16 +587,26 @@ function updatePhysics(dt) {
       }
       p.dead = true;
     }
-    // Terrain collision
+    // Terrain collision (armed only after 10 frames — a pulled-back worm sits inside
+    // the hillside at launch and used to explode at your feet, Osimo 2026-07-02)
     const groundY = terrainHeightAt(p.x);
-    if (!p.dead && p.y > groundY - p.radius) {
+    if (!p.dead && p.age > 10 && p.y > groundY - p.radius) {
+      // Worms mechanic: BOUNCER ricochets twice before going off
+      if (p.type === "bouncer" && (p.bounces || 0) < 2) {
+        p.bounces = (p.bounces || 0) + 1;
+        p.y = groundY - p.radius;
+        p.vy = -Math.abs(p.vy) * 0.65;
+        p.vx *= 0.85;
+        sfx.boing();
+      } else {
       // Hit ground
       explode(p.x, groundY, 50, p.team);
       p.dead = true;
+      }
     }
     // Block collision
     for (const b of blocks) {
-      if (b.hp <= 0) continue;
+      if (b.hp <= 0 || p.age <= 10) continue;
       if (p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) {
         explode(p.x, p.y, 50, p.team);
         p.dead = true;
@@ -660,6 +685,16 @@ function updatePhysics(dt) {
         w.y += w.vy;
         w.onGround = false;
       } else {
+        // Worms fall damage — knocked off a bunker = it hurts
+        if (w.vy > 9 && w.alive) {
+          const fdmg = (w.vy - 9) * 7;
+          w.hp -= fdmg; w.flashTimer = 10; sfx.thud();
+          if (w.hp <= 0) {
+            w.alive = false; w.deathTimer = 0; w.vy = -4;
+            gravestones.push({ x: w.x, y: terrainHeightAt(w.x), timer: 0 });
+            if (w.team === "enemy") score += 100;
+          }
+        }
         w.y = gy - w.radius;
         w.vy = 0;
         w.onGround = true;
@@ -779,7 +814,8 @@ function explode(x, y, radius, team) {
     }
   }
 
-  // Damage blocks
+  // Damage blocks (barrels chain-react — classic Worms)
+  const chain = [];
   for (const b of blocks) {
     if (b.hp <= 0) continue;
     const cx = b.x + b.w / 2;
@@ -790,11 +826,21 @@ function explode(x, y, radius, team) {
       b.hp -= dmg;
       if (b.hp <= 0) {
         score += 10;
-        b.falling = true;
-        b.vx = (cx - x) / (d + 1) * 2;
-        b.vy = -2;
+        if (b.type === "barrel") {
+          chain.push({ x: cx, y: cy });   // TNT — goes up itself
+          b.settled = true;               // remove instantly, no falling husk
+        } else {
+          b.falling = true;
+          b.vx = (cx - x) / (d + 1) * 2;
+          b.vy = -2;
+        }
       }
     }
+  }
+  // Chain reactions fire a beat later so they READ as a chain
+  for (let ci = 0; ci < chain.length; ci++) {
+    const cpos = chain[ci];
+    setTimeout(() => { if (gameState === "playing") { sfx.barrel(); explode(cpos.x, cpos.y, 75, team); } }, 150 + ci * 130);
   }
 }
 
@@ -827,8 +873,11 @@ function switchTurn() {
 
   if (turn === "player") {
     turn = "enemy";
-    wind = (Math.random() - 0.5) * 6;
+    wind = (Math.random() - 0.5) * (6 + level);
     turnTimer = 90; // 1.5s aim indicator
+    sfx.incoming();
+    const shooter = worms.find(w => w.team === "enemy" && w.alive);
+    if (shooter) camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, shooter.x - VIEW.w / 2));
     setTimeout(() => {
       if (gameState === "playing" && turn === "enemy") {
         enemyFire();
@@ -836,7 +885,7 @@ function switchTurn() {
     }, 1500);
   } else {
     turn = "player";
-    wind = (Math.random() - 0.5) * 6;
+    wind = (Math.random() - 0.5) * (6 + level);
     camera.targetX = 0;   // glide home to the slingshot for your shot
     loadNextWorm();
     camera.targetX = 0;
@@ -857,7 +906,7 @@ function showEndScreen(won) {
     document.getElementById("endScore").textContent = "SCORE " + score;
     et.style.color = "#39ff14";
     et.style.textShadow = "0 0 24px #39ff14, 0 0 48px #39ff14";
-    eb.textContent = level < 3 ? "NEXT LEVEL" : "VICTORY!";
+    eb.textContent = "NEXT LEVEL";
   } else {
     et.textContent = "GAME OVER";
     et.style.color = "#e8302a";
@@ -871,7 +920,7 @@ function onEndBtn() {
   const es = document.getElementById("endScreen");
   es.style.display = "none";
   const enemiesAlive = worms.filter(w => w.team === "enemy" && w.alive).length;
-  if (enemiesAlive === 0 && level < 3) {
+  if (enemiesAlive === 0) {
     // Next level
     buildLevel(level + 1);
     turn = "player";
@@ -940,7 +989,7 @@ function updateAttract() {
     // Fire
     attractProj = {
       x: SLING_X,
-      y: GROUND_Y - 150,
+      y: SLING_Y,
       vx: 14,
       vy: -9,
       type: "red",
@@ -1217,6 +1266,20 @@ function drawBlocks() {
       if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, rr);
       else ctx.rect(b.x, b.y, b.w, b.h);
     };
+    if (b.type === "barrel") {
+      // Worms TNT barrel
+      ctx.fillStyle = "#c8342a"; ctx.strokeStyle = "#5c110b"; ctx.lineWidth = 3;
+      paths(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "#8a2018"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(b.x + 2, b.y + b.h * 0.25); ctx.lineTo(b.x + b.w - 2, b.y + b.h * 0.25);
+      ctx.moveTo(b.x + 2, b.y + b.h * 0.75); ctx.lineTo(b.x + b.w - 2, b.y + b.h * 0.75);
+      ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 9px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("TNT", b.x + b.w / 2, b.y + b.h * 0.58);
+      ctx.restore();
+      continue;
+    }
     if (b.type === "wood") { ctx.fillStyle = "#d9a15e"; ctx.strokeStyle = "#6b4318"; }
     else if (b.type === "ice") { ctx.fillStyle = "rgba(170,222,255,0.75)"; ctx.strokeStyle = "#5e9fd4"; }
     else { ctx.fillStyle = "#a8a8ac"; ctx.strokeStyle = "#57575c"; }
@@ -1293,6 +1356,7 @@ function drawWormBody(w) {
   } else {
     if (w.type === "red")        { bodyColor = "#e8302a"; darkColor = "#8a1a16"; bellyColor = "#f6d7b0"; }
     else if (w.type === "bomber"){ bodyColor = "#ffcc00"; darkColor = "#8a6a00"; bellyColor = "#fff3c0"; }
+    else if (w.type === "bouncer"){ bodyColor = "#8e44e0"; darkColor = "#4a1a80"; bellyColor = "#e2cdf8"; }
     else                         { bodyColor = "#3a8acf"; darkColor = "#1a4a8a"; bellyColor = "#cde7fa"; }
   }
 
@@ -1422,14 +1486,37 @@ function drawHPBar(w) {
 
 function drawSlingshot() {
   const sx = SLING_X;
-  const sy = GROUND_Y - 80;
-  // Wood posts - Y shape
+  // Watchtower turret — lifts the launch clear of the hillside (Osimo 2026-07-02:
+  // low pulls used to bury the worm in the hill and it exploded at your feet)
+  const gy = terrainHeightAt(sx);
+  const platY = SLING_Y + 70;          // deck the slingshot stands on
+  ctx.strokeStyle = "#4a2808";
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  // crossed legs down to the hill
+  ctx.moveTo(sx - 34, gy + 4); ctx.lineTo(sx - 16, platY);
+  ctx.moveTo(sx + 34, gy + 4); ctx.lineTo(sx + 16, platY);
+  ctx.moveTo(sx - 26, gy - (gy - platY) * 0.35); ctx.lineTo(sx + 26, gy - (gy - platY) * 0.7);
+  ctx.moveTo(sx + 26, gy - (gy - platY) * 0.35); ctx.lineTo(sx - 26, gy - (gy - platY) * 0.7);
+  ctx.stroke();
+  // deck
+  ctx.fillStyle = "#9a6428"; ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(sx - 44, platY - 6, 88, 14, 4); else ctx.rect(sx - 44, platY - 6, 88, 14);
+  ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "rgba(74,40,8,0.5)"; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let px = sx - 34; px < sx + 40; px += 12) { ctx.moveTo(px, platY - 5); ctx.lineTo(px, platY + 7); }
+  ctx.stroke();
+
+  // Slingshot Y on the deck
+  const sy = platY - 24;               // trunk top reference
   ctx.fillStyle = "#9a6428";
   ctx.strokeStyle = "#4a2808";
   ctx.lineWidth = 3;
   // Trunk
-  ctx.fillRect(sx - 8, sy - 20, 16, 80);
-  ctx.strokeRect(sx - 8, sy - 20, 16, 80);
+  ctx.fillRect(sx - 8, sy - 20, 16, 40);
+  ctx.strokeRect(sx - 8, sy - 20, 16, 40);
   // Left fork
   ctx.save();
   ctx.translate(sx, sy - 20);
@@ -1445,7 +1532,7 @@ function drawSlingshot() {
   ctx.strokeRect(-7, -45, 14, 50);
   ctx.restore();
 
-  // Fork tips
+  // Fork tips (band anchors — SLING_Y is the launch anchor between them)
   const leftTip = { x: sx - 22, y: sy - 60 };
   const rightTip = { x: sx + 22, y: sy - 60 };
 
@@ -1500,7 +1587,7 @@ function drawLoadedWorm() {
     loadedWorm.y = wy;
   } else {
     wx = SLING_X;
-    wy = GROUND_Y - 150;
+    wy = SLING_Y;
     loadedWorm.x = wx;
     loadedWorm.y = wy;
   }
@@ -1566,6 +1653,7 @@ function drawProjectiles() {
       const a = (i / p.trail.length) * 0.5;
       ctx.fillStyle = p.type === "red" ? "rgba(232,48,42," + a + ")" :
                       p.type === "bomber" ? "rgba(255,204,0," + a + ")" :
+                      p.type === "bouncer" ? "rgba(142,68,224," + a + ")" :
                       "rgba(58,138,207," + a + ")";
       ctx.beginPath();
       ctx.arc(t.x, t.y, 3 + a * 4, 0, Math.PI * 2);
@@ -1733,7 +1821,7 @@ function drawHUD() {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    const name = inventory[i].type === "red" ? "RED" : inventory[i].type === "bomber" ? "BOMB" : "SPLIT";
+    const name = inventory[i].type === "red" ? "RED" : inventory[i].type === "bomber" ? "BOMB" : inventory[i].type === "bouncer" ? "BOUNCE" : "SPLIT";
     ctx.fillText(name, sx + 50, sy + 18);
     ctx.font = "14px Bungee, sans-serif";
     ctx.fillStyle = "#ffcc00";
