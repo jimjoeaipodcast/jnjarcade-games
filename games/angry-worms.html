@@ -158,6 +158,7 @@ function init() {
   requestAnimationFrame(gameLoop);
 }
 
+const VIEW = { scale: 1, w: WORLD_W, h: WORLD_H };
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth;
@@ -167,6 +168,12 @@ function resize() {
   canvas.style.width = W + "px";
   canvas.style.height = H + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // Fit the world VERTICALLY into the viewport — phone-landscape screens are ~400 CSS px
+  // tall, the world is 720: without this the terrain (y 500+) sat below the screen and
+  // players saw nothing but sky (Osimo 2026-07-02).
+  VIEW.scale = H / WORLD_H;
+  VIEW.w = W / VIEW.scale;      // visible world width
+  VIEW.h = WORLD_H;
 }
 
 function generateStars() {
@@ -307,36 +314,49 @@ function terrainHeightAt(x) {
 // ====== INPUT ======
 function setupInput() {
   let pointerActive = false;
+  let panMode = false;
+  let lastPanX = 0;
+  let downAt = null;
+  let movedFar = false;
 
   function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     const t = e.touches ? e.touches[0] : e;
     return { x: t.clientX - rect.left, y: t.clientY - rect.top };
   }
+  // screen px → world coords (the world is scaled to fit the viewport height)
+  function toWorld(p) {
+    return { x: p.x / VIEW.scale + camera.x, y: p.y / VIEW.scale + camera.y };
+  }
 
   function onDown(e) {
     e.preventDefault();
     const p = getPos(e);
-    // Check inventory slots
+    // Check inventory slots (screen-space HUD)
     if (gameState === "playing" && turn === "player") {
       if (checkInventoryTap(p)) return;
     }
     // Check mute button
     if (checkMuteTap(p)) return;
 
-    if (gameState !== "playing" || turn !== "player") return;
-    if (!loadedWorm) return;
-    // Check if tap is near slingshot (in world coords)
-    const wx = p.x + camera.x;
-    const wy = p.y + camera.y;
-    const dx = wx - SLING_X;
-    const dy = wy - (GROUND_Y - 150);
-    if (Math.sqrt(dx * dx + dy * dy) < 80 || true) {
-      // Allow drag from anywhere - more forgiving
+    if (gameState !== "playing") return;
+    const wpt = toWorld(p);
+    downAt = { x: p.x, y: p.y };
+    movedFar = false;
+    pointerActive = true;
+
+    // Near the slingshot on your turn = AIM; anywhere else = PAN the camera
+    // (Osimo 2026-07-02: "should be able to move back and forth to see my enemies")
+    const dx = wpt.x - SLING_X;
+    const dy = wpt.y - (GROUND_Y - 150);
+    if (turn === "player" && loadedWorm && Math.sqrt(dx * dx + dy * dy) < 150) {
       aiming = true;
+      panMode = false;
       dragStart = { x: SLING_X, y: GROUND_Y - 150 };
-      dragCurrent = { x: wx, y: wy };
-      pointerActive = true;
+      dragCurrent = { x: wpt.x, y: wpt.y };
+    } else {
+      panMode = true;
+      lastPanX = p.x;
     }
   }
 
@@ -344,9 +364,16 @@ function setupInput() {
     if (!pointerActive) return;
     e.preventDefault();
     const p = getPos(e);
-    const wx = p.x + camera.x;
-    const wy = p.y + camera.y;
-    dragCurrent = { x: wx, y: wy };
+    if (downAt && Math.abs(p.x - downAt.x) + Math.abs(p.y - downAt.y) > 12) movedFar = true;
+    if (panMode) {
+      // map-style drag: finger right = look left
+      camera.targetX -= (p.x - lastPanX) / VIEW.scale;
+      camera.x = camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, camera.targetX));
+      lastPanX = p.x;
+      return;
+    }
+    const wpt = toWorld(p);
+    dragCurrent = { x: wpt.x, y: wpt.y };
   }
 
   function onUp(e) {
@@ -355,8 +382,12 @@ function setupInput() {
     pointerActive = false;
     if (aiming && loadedWorm) {
       fireWorm();
+    } else if (panMode && !movedFar) {
+      // a clean TAP (no drag) triggers the mid-flight ability
+      onTapAbility(e);
     }
     aiming = false;
+    panMode = false;
   }
 
   // Mid-flight ability tap (separate from drag)
@@ -528,7 +559,7 @@ function updatePhysics(dt) {
 
     // Camera follow
     if (turn === "player" || p.team === "player") {
-      camera.targetX = Math.max(0, Math.min(WORLD_W - W, p.x - W / 2));
+      camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, p.x - VIEW.w / 2));
     }
 
     // Water splash — the sea eats worms, no boom
@@ -806,6 +837,7 @@ function switchTurn() {
   } else {
     turn = "player";
     wind = (Math.random() - 0.5) * 6;
+    camera.targetX = 0;   // glide home to the slingshot for your shot
     loadNextWorm();
     camera.targetX = 0;
   }
@@ -886,7 +918,7 @@ function startGame() {
   wind = (Math.random() - 0.5) * 6;
   gameState = "intro";
   // Teleport to enemy side, hold 700ms, snap back to catapult
-  camera.x = Math.max(0, WORLD_W - W);
+  camera.x = Math.max(0, WORLD_W - VIEW.w);
   camera.targetX = camera.x;
   setTimeout(() => {
     camera.x = 0;
@@ -924,7 +956,7 @@ function updateAttract() {
     attractProj.x += attractProj.vx;
     attractProj.y += attractProj.vy;
     // Camera follow
-    camera.targetX = Math.max(0, Math.min(WORLD_W - W, attractProj.x - W / 2));
+    camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, attractProj.x - VIEW.w / 2));
     const gy = terrainHeightAt(attractProj.x);
     if (attractProj.y > gy - 10) {
       // Explode on structure area
@@ -946,9 +978,10 @@ function updateAttract() {
 
 // ====== CAMERA ======
 function updateCamera() {
+  camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, camera.targetX));
   camera.x += (camera.targetX - camera.x) * 0.08;
   if (camera.x < 0) camera.x = 0;
-  if (camera.x > WORLD_W - W) camera.x = Math.max(0, WORLD_W - W);
+  if (camera.x > WORLD_W - W) camera.x = Math.max(0, WORLD_W - VIEW.w);
   camera.y = 0;
 }
 
@@ -974,6 +1007,7 @@ function render() {
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
+  ctx.scale(VIEW.scale, VIEW.scale);
   ctx.translate(-camera.x, -camera.y);
 
   drawSky();
@@ -1005,7 +1039,7 @@ function drawSky() {
   grad.addColorStop(0.55, "#7cc4f0");
   grad.addColorStop(1, "#cfeefb");
   ctx.fillStyle = grad;
-  ctx.fillRect(camera.x - 10, 0, W + 20, GROUND_Y + 140);
+  ctx.fillRect(camera.x - 10, 0, VIEW.w + 20, GROUND_Y + 140);
 
   // Sun (parallax — barely moves with the camera)
   const sunX = camera.x * 0.1 + 120, sunY = 90;
@@ -1022,20 +1056,20 @@ function drawSky() {
   ctx.fillStyle = "rgba(120,190,140,0.45)";
   ctx.beginPath();
   ctx.moveTo(camera.x - 10, GROUND_Y + 40);
-  for (let x = -10; x <= W + 20; x += 8) {
+  for (let x = -10; x <= VIEW.w + 20; x += 8) {
     const wx = camera.x * 0.35 + x;
     ctx.lineTo(camera.x + x, GROUND_Y - 60 - 45 * Math.sin(wx * 0.006) - 20 * Math.sin(wx * 0.013 + 2));
   }
-  ctx.lineTo(camera.x + W + 20, GROUND_Y + 40);
+  ctx.lineTo(camera.x + VIEW.w + 20, GROUND_Y + 40);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = "rgba(90,170,115,0.55)";
   ctx.beginPath();
   ctx.moveTo(camera.x - 10, GROUND_Y + 60);
-  for (let x = -10; x <= W + 20; x += 8) {
+  for (let x = -10; x <= VIEW.w + 20; x += 8) {
     const wx = camera.x * 0.6 + x;
     ctx.lineTo(camera.x + x, GROUND_Y - 20 - 35 * Math.sin(wx * 0.008 + 4) - 15 * Math.sin(wx * 0.02));
   }
-  ctx.lineTo(camera.x + W + 20, GROUND_Y + 60);
+  ctx.lineTo(camera.x + VIEW.w + 20, GROUND_Y + 60);
   ctx.closePath(); ctx.fill();
 }
 
@@ -1065,21 +1099,21 @@ function drawSea(t) {
   const grad = ctx.createLinearGradient(0, WATER_Y - 8, 0, WORLD_H + 260);
   grad.addColorStop(0, "#2f7fd4");
   grad.addColorStop(1, "#123a78");
-  const seaBottom = camera.y + H + 300;   // fill to the bottom of the SCREEN, not the world
+  const seaBottom = camera.y + VIEW.h + 300;
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(camera.x - 10, seaBottom);
-  for (let x = -10; x <= W + 20; x += 10) {
+  for (let x = -10; x <= VIEW.w + 20; x += 10) {
     const wx = camera.x + x;
     ctx.lineTo(wx, WATER_Y + 3 * Math.sin(wx * 0.03 + time * 2) + 2 * Math.sin(wx * 0.011 - time));
   }
-  ctx.lineTo(camera.x + W + 20, seaBottom);
+  ctx.lineTo(camera.x + VIEW.w + 20, seaBottom);
   ctx.closePath(); ctx.fill();
   // foam line
   ctx.strokeStyle = "rgba(255,255,255,0.55)";
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  for (let x = -10; x <= W + 20; x += 10) {
+  for (let x = -10; x <= VIEW.w + 20; x += 10) {
     const wx = camera.x + x;
     const y = WATER_Y + 3 * Math.sin(wx * 0.03 + time * 2) + 2 * Math.sin(wx * 0.011 - time);
     if (x === -10) ctx.moveTo(wx, y); else ctx.lineTo(wx, y);
