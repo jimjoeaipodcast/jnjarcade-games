@@ -1062,17 +1062,18 @@ function drawClouds() {
 function drawSea(t) {
   // Worms signature — animated sea across the whole world, in FRONT of terrain
   const time = performance.now() / 600;
-  const grad = ctx.createLinearGradient(0, WATER_Y - 8, 0, WORLD_H);
+  const grad = ctx.createLinearGradient(0, WATER_Y - 8, 0, WORLD_H + 260);
   grad.addColorStop(0, "#2f7fd4");
   grad.addColorStop(1, "#123a78");
+  const seaBottom = camera.y + H + 300;   // fill to the bottom of the SCREEN, not the world
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(camera.x - 10, WORLD_H + 10);
+  ctx.moveTo(camera.x - 10, seaBottom);
   for (let x = -10; x <= W + 20; x += 10) {
     const wx = camera.x + x;
     ctx.lineTo(wx, WATER_Y + 3 * Math.sin(wx * 0.03 + time * 2) + 2 * Math.sin(wx * 0.011 - time));
   }
-  ctx.lineTo(camera.x + W + 20, WORLD_H + 10);
+  ctx.lineTo(camera.x + W + 20, seaBottom);
   ctx.closePath(); ctx.fill();
   // foam line
   ctx.strokeStyle = "rgba(255,255,255,0.55)";
