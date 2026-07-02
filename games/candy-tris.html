@@ -644,6 +644,25 @@ function candySprite(colorIdx,type,sz){
 
 function drawCandy(c2d,x,y,sz,colorIdx,type){
   const s=Math.round(sz);if(s<4)return;
+  if(colorIdx>=0&&type!==CB){
+    // translucent square wrapper behind the candy — keeps the tetromino silhouette
+    // readable (Osimo 2026-07-02: do NOT remove; shape recognition depends on it)
+    const b=Math.max(2,Math.round(sz*.11)),bv=Math.max(1,b*.65),rad=Math.max(2,sz*0.15);
+    const C=CANDY[colorIdx];
+    const wrapA=c2d.globalAlpha;c2d.globalAlpha=wrapA*0.42;
+    c2d.fillStyle=C.dark;c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
+    c2d.save();c2d.beginPath();
+    if(c2d.roundRect){c2d.roundRect(x+b,y+b,sz-b*2,sz-b*2,rad);}
+    else{const rx=x+b,ry=y+b,rw=sz-b*2,rh=sz-b*2;c2d.moveTo(rx+rad,ry);c2d.lineTo(rx+rw-rad,ry);c2d.arc(rx+rw-rad,ry+rad,rad,-Math.PI/2,0);c2d.lineTo(rx+rw,ry+rh-rad);c2d.arc(rx+rw-rad,ry+rh-rad,rad,0,Math.PI/2);c2d.lineTo(rx+rad,ry+rh);c2d.arc(rx+rad,ry+rh-rad,rad,Math.PI/2,Math.PI);c2d.lineTo(rx,ry+rad);c2d.arc(rx+rad,ry+rad,rad,Math.PI,-Math.PI/2);c2d.closePath();}
+    c2d.clip();
+    const grd=c2d.createLinearGradient(x+b,y+b,x+sz-b,y+sz-b);
+    grd.addColorStop(0,C.light);grd.addColorStop(.45,C.body);grd.addColorStop(1,C.dark);
+    c2d.fillStyle=grd;c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
+    c2d.fillStyle='rgba(255,255,255,0.32)';c2d.fillRect(x+b,y+b,sz-b*2,bv);c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);
+    c2d.fillStyle='rgba(0,0,0,0.28)';c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);
+    c2d.restore();
+    c2d.globalAlpha=wrapA;
+  }
   c2d.drawImage(candySprite(colorIdx,type,s),x,y);
   if(type===CB){
     // live pulsing aura so the bomb reads as "smash me"
