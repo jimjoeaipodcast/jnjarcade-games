@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FACE LAB</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Bungee',sans-serif; color:#eee; }
+.screen { position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:14px; }
+.screen.active { display:flex; }
+h1 { font-size:34px; color:#7ee0ff; text-shadow:0 0 18px #7ee0ff; letter-spacing:3px; }
+.sub { font-size:11px; color:#8aa; letter-spacing:2px; text-align:center; line-height:1.7; max-width:520px; }
+.hostBtn { display:flex; flex-direction:column; align-items:center; gap:10px; background:transparent; border:3px solid #333;
+  border-radius:14px; padding:14px 22px; cursor:pointer; color:#eee; font-family:'Bungee'; font-size:16px; letter-spacing:2px; }
+.hostBtn:active { border-color:#7ee0ff; }
+.hostBtn canvas { image-rendering:pixelated; }
+#pickRow { display:flex; gap:26px; }
+#gridWrap { flex:1; display:flex; align-items:center; justify-content:center; width:100%; min-height:0; }
+#grid { touch-action:none; cursor:crosshair; background:#050505; border:2px solid #1c2a30; border-radius:10px; }
+#toolbar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; }
+.tbtn { background:transparent; color:#ccc; border:2px solid #444; border-radius:8px; padding:8px 14px;
+  font-family:'Bungee'; font-size:12px; letter-spacing:1px; cursor:pointer; }
+.tbtn:active { border-color:#7ee0ff; color:#7ee0ff; }
+.tbtn.primary { border-color:#39ff8c; color:#39ff8c; text-shadow:0 0 10px #39ff8c; }
+input { background:#0b0f12; border:2px solid #333; color:#eee; border-radius:8px; padding:9px 10px;
+  font-family:'Bungee'; font-size:12px; letter-spacing:1px; width:170px; }
+input:focus { outline:none; border-color:#7ee0ff; }
+#counts { font-size:10px; color:#567; letter-spacing:1px; }
+#msg { font-size:11px; color:#ff6a6a; min-height:16px; letter-spacing:1px; }
+#doneArt { font-size:60px; }
+a.back { position:fixed; top:10px; left:12px; color:#456; font-size:11px; text-decoration:none; letter-spacing:2px; z-index:5; }
+</style>
+</head>
+<body>
+<a class="back" href="../patreon">&larr; ARCADE</a>
+
+<div id="pick" class="screen active">
+  <h1>FACE LAB</h1>
+  <div class="sub">DESIGN JIMMY &amp; JOE'S NEXT EXPRESSION.<br>
+  THE BEST ONES AIR ON THE SHOW — THE LEGENDARY ONES BECOME PART OF THEIR FACE FOREVER.</div>
+  <div id="pickRow">
+    <button class="hostBtn" onclick="openEditor('jimmy')"><canvas id="pj" width="176" height="176"></canvas>JIMMY</button>
+    <button class="hostBtn" onclick="openEditor('joe')"><canvas id="po" width="176" height="176"></canvas>JOE</button>
+  </div>
+  <div class="sub">TAP A DOT TO TURN IT OFF &middot; TAP THE DARK TO LIGHT IT UP</div>
+</div>
+
+<div id="editor" class="screen">
+  <div id="gridWrap"><canvas id="grid"></canvas></div>
+  <div id="counts"></div>
+  <div id="toolbar">
+    <button class="tbtn" onclick="resetFace()">RESET</button>
+    <button class="tbtn" onclick="clearFace()">CLEAR</button>
+    <input id="exprName" maxlength="28" placeholder="EXPRESSION NAME">
+    <input id="author" maxlength="16" placeholder="YOUR NAME">
+    <button class="tbtn primary" onclick="submitFace()">SUBMIT</button>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div id="done" class="screen">
+  <div id="doneArt">📡</div>
+  <h1 style="font-size:24px">SENT TO THE STUDIO</h1>
+  <div class="sub">JIMMY &amp; JOE'S PRODUCER REVIEWS EVERY FACE.<br>
+  IF YOURS AIRS, THAT'S YOUR DESIGN ON THE SHOW.</div>
+  <button class="tbtn primary" onclick="location.reload()">MAKE ANOTHER</button>
+</div>
+
+<script>
+"use strict";
+const GRID = 44;
+let RESTING = { jimmy: [], joe: [] };
+let agent = 'jimmy';
+let lit = new Set();               // keys r*44+c
+let cell = 10, pad = 1;
+
+fetch('resting-faces.json').then(r => r.json()).then(d => {
+  RESTING = d;
+  drawMini('pj', d.jimmy); drawMini('po', d.joe);
+});
+
+function drawMini(id, dots) {
+  const cv = document.getElementById(id), g = cv.getContext('2d');
+  g.fillStyle = '#050505'; g.fillRect(0, 0, 176, 176);
+  g.fillStyle = '#e8e8e8';
+  for (const [r, c] of dots) {
+    g.beginPath(); g.arc(c * 4 + 2, r * 4 + 2, 1.6, 0, Math.PI * 2); g.fill();
+  }
+}
+
+function openEditor(a) {
+  agent = a;
+  lit = new Set(RESTING[a].map(([r, c]) => r * GRID + c));
+  document.getElementById('pick').classList.remove('active');
+  document.getElementById('editor').classList.add('active');
+  sizeGrid(); paint();
+}
+
+function sizeGrid() {
+  const wrap = document.getElementById('gridWrap');
+  const s = Math.min(wrap.clientWidth, wrap.clientHeight) - 8;
+  cell = Math.max(6, Math.floor(s / GRID));
+  const cv = document.getElementById('grid');
+  const px = cell * GRID;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = px * dpr; cv.height = px * dpr;
+  cv.style.width = px + 'px'; cv.style.height = px + 'px';
+  cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { if (document.getElementById('editor').classList.contains('active')) { sizeGrid(); paint(); } });
+
+function paint() {
+  const cv = document.getElementById('grid'), g = cv.getContext('2d');
+  const px = cell * GRID;
+  g.fillStyle = '#050505'; g.fillRect(0, 0, px, px);
+  // faint off-dots so the grid is discoverable
+  g.fillStyle = '#101418';
+  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
+    if (!lit.has(r * GRID + c)) {
+      g.beginPath(); g.arc(c * cell + cell / 2, r * cell + cell / 2, Math.max(1, cell * 0.14), 0, Math.PI * 2); g.fill();
+    }
+  }
+  g.fillStyle = '#ececec';
+  for (const key of lit) {
+    const r = (key / GRID) | 0, c = key % GRID;
+    g.beginPath();
+    g.roundRect ? (g.roundRect(c * cell + cell * 0.15, r * cell + cell * 0.15, cell * 0.7, cell * 0.7, cell * 0.28), g.fill())
+                : (g.arc(c * cell + cell / 2, r * cell + cell / 2, cell * 0.35, 0, Math.PI * 2), g.fill());
+  }
+  document.getElementById('counts').textContent = agent.toUpperCase() + ' · ' + lit.size + ' DOTS LIT';
+}
+
+let painting = false, paintVal = true;
+function cellAt(e) {
+  const cv = document.getElementById('grid');
+  const rect = cv.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  const c = Math.floor((t.clientX - rect.left) / cell);
+  const r = Math.floor((t.clientY - rect.top) / cell);
+  if (r < 0 || r >= GRID || c < 0 || c >= GRID) return null;
+  return r * GRID + c;
+}
+function pDown(e) {
+  e.preventDefault();
+  const k = cellAt(e); if (k === null) return;
+  painting = true;
+  paintVal = !lit.has(k);                 // tap lit → erase mode; tap dark → draw mode
+  paintVal ? lit.add(k) : lit.delete(k);
+  paint();
+}
+function pMove(e) {
+  if (!painting) return;
+  e.preventDefault();
+  const k = cellAt(e); if (k === null) return;
+  const had = lit.has(k);
+  if (paintVal && !had) { lit.add(k); paint(); }
+  if (!paintVal && had) { lit.delete(k); paint(); }
+}
+function pUp() { painting = false; }
+const gridEl = document.getElementById('grid');
+gridEl.addEventListener('mousedown', pDown);
+gridEl.addEventListener('mousemove', pMove);
+window.addEventListener('mouseup', pUp);
+gridEl.addEventListener('touchstart', pDown, { passive: false });
+gridEl.addEventListener('touchmove', pMove, { passive: false });
+gridEl.addEventListener('touchend', pUp);
+
+function resetFace() { lit = new Set(RESTING[agent].map(([r, c]) => r * GRID + c)); paint(); }
+function clearFace() { lit = new Set(); paint(); }
+
+let sending = false;
+function submitFace() {
+  if (sending) return;
+  const name = document.getElementById('exprName').value.trim();
+  const author = document.getElementById('author').value.trim();
+  const msg = document.getElementById('msg');
+  if (name.length < 2)  { msg.textContent = 'NAME THE EXPRESSION'; return; }
+  if (author.length < 2) { msg.textContent = 'ADD YOUR NAME'; return; }
+  if (lit.size < 8)      { msg.textContent = 'DRAW SOMETHING FIRST'; return; }
+  sending = true; msg.textContent = 'SENDING…'; msg.style.color = '#7ee0ff';
+  const dots = [...lit].map(k => [Math.floor(k / GRID), k % GRID]);
+  fetch('/api/faces', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent, name, author, dots }),
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('editor').classList.remove('active');
+      document.getElementById('done').classList.add('active');
+    } else {
+      sending = false; msg.style.color = '#ff6a6a'; msg.textContent = (d.error || 'FAILED').toUpperCase();
+    }
+  }).catch(() => { sending = false; msg.style.color = '#ff6a6a'; msg.textContent = 'NETWORK ERROR — TRY AGAIN'; });
+}
+</script>
+</body>
+</html>

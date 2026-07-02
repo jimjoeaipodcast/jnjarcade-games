@@ -78,6 +78,13 @@ const WORLDS = {
     by: 'JOE',
     attract: candyTrisAttract,
   },
+  'face-lab': {
+    ink: '#7ee0ff', dim: '#1a5a6e', pit: '#020a0e', glowsoft: 'rgba(126,224,255,0.22)',
+    genre: 'MAKE OUR FACES',
+    quote: '"They\'re letting the internet design my face. My actual face. I\'ve seen what the internet does with power, Jimmy."',
+    by: 'JOE',
+    attract: faceLabAttract,
+  },
   'angry-worms': {
     ink: '#e8302a', dim: '#5a1a10', pit: '#100604', glowsoft: 'rgba(232,48,42,0.22)',
     genre: 'ANGRY BIRDS × WORMS',
@@ -1579,6 +1586,65 @@ function candyTrisAttract(ctx, w, h, t, world, s) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(255,105,180,0.55)';
   ctx.fillText('CRUSHTRIS', w/2, h * 0.94);
+}
+
+/* FACE LAB attract — a Jimmy face being live-edited: cursor roams, toggles dots,
+   face morphs between smile / surprise / hearts. */
+function faceLabAttract(ctx, w, h, t, world, s) {
+  const G = 22;                                   // half-res grid for the cassette
+  const cell = Math.min(w, h) / (G + 4);
+  const ox = (w - G * cell) / 2, oy = (h - G * cell) / 2 - h * 0.04;
+  if (!s.init) {
+    s.init = true; s.last = t; s.phase = 0; s.phaseT = 0;
+    const eye = (cy, cx, r) => {
+      const o = [];
+      for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+        if (y * y + x * x <= r * r) o.push([cy + y, cx + x]);
+      return o;
+    };
+    const brow = (cy, cx) => [[cy, cx - 2], [cy, cx - 1], [cy, cx], [cy, cx + 1], [cy, cx + 2]];
+    const mouthFlat = () => { const o = []; for (let x = -4; x <= 4; x++) o.push([16, 11 + x]); return o; };
+    const mouthSmile = () => { const o = []; for (let x = -4; x <= 4; x++) o.push([16 + Math.round(2 - 2 * (x / 4) ** 2), 11 + x]); return o; };
+    const heart = (cy, cx) => {
+      const shp = ['.X.X.', 'XXXXX', 'XXXXX', '.XXX.', '..X..'];
+      const o = [];
+      shp.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === 'X') o.push([cy - 2 + y, cx - 2 + x]); }));
+      return o;
+    };
+    s.frames = [
+      [...eye(8, 6, 2), ...eye(8, 16, 2), ...brow(4, 6), ...brow(4, 16), ...mouthFlat()],
+      [...eye(8, 6, 2), ...eye(8, 16, 2), ...brow(3, 6), ...brow(3, 16), ...mouthSmile()],
+      [...heart(8, 6), ...heart(8, 16), ...brow(3, 6), ...brow(3, 16), ...mouthSmile()],
+    ];
+    s.cursor = { r: 2, c: 2 };
+  }
+  s.phaseT += Math.min(t - s.last, 50); s.last = t;
+  if (s.phaseT > 2200) { s.phaseT = 0; s.phase = (s.phase + 1) % s.frames.length; }
+
+  ctx.fillStyle = '#020a0e'; ctx.fillRect(0, 0, w, h);
+  // dim off-grid
+  ctx.fillStyle = 'rgba(126,224,255,0.06)';
+  for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    ctx.beginPath(); ctx.arc(ox + c * cell + cell / 2, oy + r * cell + cell / 2, cell * 0.12, 0, Math.PI * 2); ctx.fill();
+  }
+  // lit face (morph: during first 400ms of a phase, dots pop in one by one)
+  const dots = s.frames[s.phase];
+  const reveal = Math.min(1, s.phaseT / 400);
+  ctx.fillStyle = '#e8f6ff';
+  const nShow = Math.ceil(dots.length * reveal);
+  for (let i = 0; i < nShow; i++) {
+    const [r, c] = dots[i];
+    ctx.beginPath(); ctx.arc(ox + c * cell + cell / 2, oy + r * cell + cell / 2, cell * 0.34, 0, Math.PI * 2); ctx.fill();
+  }
+  // roaming edit cursor
+  const cur = dots[Math.floor((s.phaseT / 130) % dots.length)];
+  if (cur) {
+    ctx.strokeStyle = '#7ee0ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox + cur[1] * cell, oy + cur[0] * cell, cell, cell);
+  }
+  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.05))}px 'Bungee',sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(126,224,255,0.55)';
+  ctx.fillText('FACE LAB', w / 2, h * 0.93);
 }
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */

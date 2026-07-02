@@ -101,6 +101,18 @@
    "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2\u00d72 = fish. Tap a special candy then a neighbour to smash combos.",
    "ready": true,
    "ready_date": "2026-07-02"
+  },
+  {
+   "id": "face-lab",
+   "name": "FACE LAB",
+   "emoji": "\ud83c\udfa8",
+   "genre": "MAKE JIMMY & JOE'S FACES",
+   "url": "games/face-lab.html",
+   "status": "wip",
+   "special": "Community Lab",
+   "note": "Design an LED expression for Jimmy or Joe. Tap dots on/off from their resting face. Best ones air on the show; legendary ones become part of their face forever.",
+   "ready": true,
+   "ready_date": "2026-07-03"
   }
  ]
 }
