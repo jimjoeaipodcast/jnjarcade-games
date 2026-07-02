@@ -152,8 +152,8 @@ function paintNav() {
   // viewport rectangle
   g.strokeStyle = '#7ee0ff'; g.lineWidth = 2;
   g.strokeRect(vc * nc, vr * nc, VIEW * nc, VIEW * nc);
-  if (mirror) {                     // show the mirrored viewport ghost
-    const mc = GRID - vc - VIEW;
+  if (mirror) {                     // show the mirrored viewport ghost (eye-band axis)
+    const mc = 45 - vc - VIEW;
     g.strokeStyle = 'rgba(57,255,140,0.5)'; g.setLineDash([4, 4]);
     g.strokeRect(mc * nc, vr * nc, VIEW * nc, VIEW * nc);
     g.setLineDash([]);
@@ -179,7 +179,7 @@ function paint() {
   }
   // centre-line hint when mirror is on
   if (mirror) {
-    const mid = GRID / 2;
+    const mid = 22.5;                 // eye-band axis — the face's true centre
     if (mid >= vc && mid <= vc + VIEW) {
       g.strokeStyle = 'rgba(57,255,140,0.35)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo((mid - vc) * cell, 0); g.lineTo((mid - vc) * cell, px); g.stroke();
@@ -197,10 +197,22 @@ function toggleMirror() {
   paintAll();
 }
 
+// FEATURE-LINKED mirror (Osimo 2026-07-03): the face is not grid-symmetric —
+// eyes centre on col 22.5, brows on 23, mouth on 22. Mirroring uses the axis of
+// the feature band the dot is in, so left eye ↔ right eye and left brow ↔ right
+// brow correspond EXACTLY (a global midline was off by 1-2 dots per feature).
+function mirrorCol(gr, gc) {
+  if (gr <= 11) return 46 - gc;        // brow band (axis 23)
+  if (gr <= 25) return 45 - gc;        // eye band  (axis 22.5)
+  return 44 - gc;                       // mouth/chin band (axis 22)
+}
 function setDot(gr, gc, val) {
-  const apply = (r, c) => { val ? lit.add(r * GRID + c) : lit.delete(r * GRID + c); };
+  const apply = (r, c) => {
+    if (c < 0 || c >= GRID) return;
+    val ? lit.add(r * GRID + c) : lit.delete(r * GRID + c);
+  };
   apply(gr, gc);
-  if (mirror) apply(gr, GRID - 1 - gc);
+  if (mirror) apply(gr, mirrorCol(gr, gc));
 }
 
 let painting = false, paintVal = true;
