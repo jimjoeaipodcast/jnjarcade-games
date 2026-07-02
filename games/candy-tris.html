@@ -6,7 +6,7 @@
 <title>CRUSHTRIS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
-<script src="arcade-scores.js?v=3"></script>
+<script src="arcade-scores.js?v=10"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-action:none}
@@ -87,6 +87,7 @@ function resize(){
   const h=wrap.clientHeight-56,w=wrap.clientWidth;
   CELL=Math.max(16,Math.min(Math.floor(h/ROWS),Math.floor((w-8)/COLS)));
   canvas.width=CELL*COLS;canvas.height=CELL*ROWS;
+  spriteCache.clear();
 }
 
 let board,piece,nextPiece,score,level,linesCleared,gameOver,cascading;
@@ -120,11 +121,10 @@ function mkPiece(type){
   return{type,rot:0,r:0,c:Math.floor((COLS-sh[0].length)/2),colors:mkCol(sh)};
 }
 function recolor(p,newRot){
-  const osh=pshape(p),nsh=PIECES[p.type][newRot],list=[];
-  for(let r=0;r<osh.length;r++)for(let c=0;c<osh[r].length;c++)if(osh[r][c])list.push(p.colors[r][c]);
-  const nc=nsh.map(row=>row.map(()=>-1));let i=0;
-  for(let r=0;r<nsh.length;r++)for(let c=0;c<nsh[r].length;c++)if(nsh[r][c])nc[r][c]=list[i++]??randCol();
-  return nc;
+  // every PIECES rot state is the previous one turned 90° CW, so rotate the
+  // colour matrix the same way — each candy keeps its colour through the turn
+  const oc=p.colors,oR=oc.length,oC=oc[0].length;
+  return Array.from({length:oC},(_,r)=>Array.from({length:oR},(_,c)=>oc[oR-1-c][r]));
 }
 
 // ── T-spin ─────────────────────────────────────────────────────────────────
@@ -220,12 +220,13 @@ function findMatches(){
   // fish2x2 bonus
   for(const f of fish2x2)matchScore+=150;
 
+  // CC rules: 4-match → striped perpendicular to the match, 5+ straight → colour
+  // bomb, L/T intersection → wrapped, 2×2 square → fish (CC Soda)
   const hSet=new Set(),toRemove=new Set(),toCreate=[];
   for(const run of hR){
     for(let c=run.c;c<=run.end;c++){hSet.add(ck(run.r,c));toRemove.add(ck(run.r,c));}
-    if(run.len===4)toCreate.push({r:run.r,c:Math.max(run.c,Math.min(run.end,lockC)),cell:{color:run.color,type:SH}});
-    else if(run.len===5)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:run.color,type:WR}});
-    else if(run.len>=6)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:-1,type:CB}});
+    if(run.len===4)toCreate.push({r:run.r,c:Math.max(run.c,Math.min(run.end,lockC)),cell:{color:run.color,type:SV}});
+    else if(run.len>=5)toCreate.push({r:run.r,c:Math.floor((run.c+run.end)/2),cell:{color:-1,type:CB}});
   }
   for(const run of vR){
     for(let r=run.r;r<=run.end;r++){
@@ -234,12 +235,10 @@ function findMatches(){
         toCreate.push({r,c:run.c,cell:{color:board[r][run.c].color,type:WR}});
       toRemove.add(key);
     }
-    if(run.len===4)toCreate.push({r:Math.max(run.r,Math.min(run.end,lockR)),c:run.c,cell:{color:run.color,type:SV}});
-    else if(run.len===5)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:run.color,type:WR}});
-    else if(run.len>=6)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:-1,type:CB}});
+    if(run.len===4)toCreate.push({r:Math.max(run.r,Math.min(run.end,lockR)),c:run.c,cell:{color:run.color,type:SH}});
+    else if(run.len>=5)toCreate.push({r:Math.floor((run.r+run.end)/2),c:run.c,cell:{color:-1,type:CB}});
   }
 
-  // 2×2 square = bomb sweet (WR type) — proper Candy Crush behavior
   for(const f of fish2x2){
     const already=toRemove.has(ck(f.r,f.c))||toRemove.has(ck(f.r,f.c+1))||
                    toRemove.has(ck(f.r+1,f.c))||toRemove.has(ck(f.r+1,f.c+1));
@@ -248,8 +247,7 @@ function findMatches(){
       toRemove.add(ck(f.r,f.c+1));
       toRemove.add(ck(f.r+1,f.c));
       toRemove.add(ck(f.r+1,f.c+1));
-      // Creates a Wrapped Candy (bomb) at the centre of the 2×2
-      toCreate.push({r:f.r,c:f.c+1,cell:{color:f.color,type:WR}});
+      toCreate.push({r:f.r,c:f.c+1,cell:{color:f.color,type:FISH}});
     }
   }
 
@@ -258,7 +256,9 @@ function findMatches(){
 }
 
 // ── Special expansion — iterative so chains fire in one pass ───────────────
-function expandSpecials(toRemove){
+function expandSpecials(toRemove,swapColor=null){
+  // swapColor: colour of the normal candy a colour bomb was smashed into —
+  // CC clears that colour, not the most common one
   // Detect combo when ≥2 specials in the initial match set
   const initSpecials=[];
   for(const key of toRemove){
@@ -283,9 +283,9 @@ function expandSpecials(toRemove){
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)exp.add(ck(r,c));
     showBanner('💥 MEGA BLAST!','#ff44ff',28);
   } else if(bombs.length===1&&stripes.length>=1){
-    // CB+Striped → convert all of most-common colour to that stripe type + fire all
+    // CB+Striped → all candies of the striped candy's colour become striped + fire
     const stripe=stripes[0];
-    const tc=mostCommonColor();
+    const tc=stripe.color>=0?stripe.color:mostCommonColor();
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
       if(board[r][c]&&board[r][c].color===tc){
         board[r][c]={color:tc,type:stripe.type};
@@ -296,8 +296,8 @@ function expandSpecials(toRemove){
     }
     showBanner('⚡ COLOR LASER!','#ffdd00',26);
   } else if(bombs.length===1&&wraps.length>=1){
-    // CB+Wrapped → convert all of most-common colour to wrapped, 3×3 on each
-    const tc=mostCommonColor();
+    // CB+Wrapped → 3×3 blast on every candy of the wrapped candy's colour
+    const tc=wraps[0].color>=0?wraps[0].color:mostCommonColor();
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
       if(board[r][c]&&board[r][c].color===tc){
         for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
@@ -324,6 +324,15 @@ function expandSpecials(toRemove){
       for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,s.c));
     }
     showBanner('✦ DOUBLE STRIPE!','#ff69b4',24);
+  } else if(wraps.length>=2){
+    // Wrapped+Wrapped → giant 5×5 blast around each
+    for(const w of wraps){
+      for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){
+        const nr=w.r+dr,nc=w.c+dc;
+        if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
+      }
+    }
+    showBanner('💣 MEGA WRAP!','#cc44ff',26);
   } else {
     // Single special expansion — also iterative so chained specials fire
     let prev=0;
@@ -340,10 +349,8 @@ function expandSpecials(toRemove){
             if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
           }
         } else if(cell.type===CB){
-          const cnt=Array(COLORS.length).fill(0);
-          for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
-            if(board[rr][cc]&&board[rr][cc].color>=0)cnt[board[rr][cc].color]++;
-          const tc=cnt.indexOf(Math.max(...cnt));
+          // swapColor = the candy the bomb was smashed into; else most common
+          const tc=swapColor!==null?swapColor:mostCommonColor();
           for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
             if(board[rr][cc]&&board[rr][cc].color===tc)exp.add(ck(rr,cc));
         // Change 7: FISH expansion — 3 random non-null cells
@@ -471,7 +478,10 @@ function cascade(depth,afterLineClear){
   const res=findMatches();
   if(!res){
     if(isPerfectClear()){score+=3000*level;showBanner('✨ PERFECT CLEAR!','#ffffff',30);}
-    cascading=false;spawnNext();return;
+    cascading=false;
+    // A swap can fire mid-fall — resume the active piece, don't replace it
+    if(piece)lastDrop=performance.now();else spawnNext();
+    return;
   }
 
   // Change 8: Use per-run matchScore instead of flat count*30
@@ -480,22 +490,36 @@ function cascade(depth,afterLineClear){
   if(comboCount>=3)showBanner(comboCount+'× COMBO!','#ffdd00',24);
   else if(comboCount===2)showBanner('2× COMBO!','#ff9900',22);
 
-  for(const key of res.toRemove){
+  removeSet(res.toRemove);
+  for(const{r,c,cell}of res.toCreate)if(!board[r][c])board[r][c]=cell;
+  gravity(board);
+  updateHUD();
+  // After gravity, go back to step 1 to catch newly filled lines
+  setTimeout(()=>cascade(depth+1,false),Math.max(120,290-depth*22));
+}
+
+// ── Remove a set of cells with the right FX per candy type ────────────────
+function removeSet(keys){
+  for(const key of keys){
     const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];if(!cell)continue;
     const col=cell.color>=0?COLORS[cell.color]:'#fff';
     if(cell.type===N)addPop(c,r,col);
     else if(cell.type===SH||cell.type===SV)addStripedFX(c,r,cell.type,col);
     else if(cell.type===WR)addWrappedFX(c,r,col);
     else if(cell.type===CB)addBombFX(c,r);
-    // Change 9: FISH FX — reuse addWrappedFX with cyan color
     else if(cell.type===FISH)addWrappedFX(c,r,'#00ddff');
     board[r][c]=null;
   }
-  for(const{r,c,cell}of res.toCreate)if(!board[r][c])board[r][c]=cell;
+}
+
+// ── Fire specials directly (swap smash) — no colour match needed ──────────
+function activateSpecials(keys,swapColor){
+  const exp=expandSpecials(new Set(keys),swapColor);
+  score+=exp.size*30*level;
+  removeSet(exp);
   gravity(board);
   updateHUD();
-  // After gravity, go back to step 1 to catch newly filled lines
-  setTimeout(()=>cascade(depth+1,false),Math.max(120,290-depth*22));
+  setTimeout(()=>cascade(0,false),200);
 }
 
 // ── Spawn ──────────────────────────────────────────────────────────────────
@@ -506,7 +530,7 @@ function spawnNext(){
   drawNext();
   if(!valid(piece,board)){
     gameOver=true;cancelAnimationFrame(animId);
-    setTimeout(()=>ArcadeScores.show('candy-tris',score,()=>resetGame()),600);
+    setTimeout(()=>ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score,accent:'#ff69b4',onClose:()=>resetGame()}),600);
     return;
   }
   lastDrop=performance.now();updateHUD();
@@ -515,16 +539,23 @@ function spawnNext(){
 // ── Controls ───────────────────────────────────────────────────────────────
 const SWIPE=18;let tStart=null,holding=false;
 
-// CC swap: tap a settled candy to select it (gold glow), tap adjacent to swap.
-// Swapping a special into another fires a combo even without a 3+ match.
+// CC smash: tap a settled SPECIAL candy to select it (gold glow), tap an
+// adjacent candy to smash them together. Special+special fires the CC combo
+// (stripe+stripe, wrap+wrap, bomb+anything…); special+normal fires the special
+// (colour bomb clears the colour it was smashed into).
 function ccSwapAttempt(r1,c1,r2,c2){
   if(r2<0||r2>=ROWS||c2<0||c2>=COLS)return;
   const a=board[r1][c1],b=board[r2][c2];
   if(!a||!b)return;
   board[r1][c1]=b;board[r2][c2]=a;
-  const isSpecialCombo=a.type!==N||b.type!==N;
-  if(isSpecialCombo||findMatches()){
-    // Valid swap — cascade fires
+  if(a.type!==N||b.type!==N){
+    let swapColor=null;
+    if(a.type===CB&&b.type===N)swapColor=b.color;
+    else if(b.type===CB&&a.type===N)swapColor=a.color;
+    ccSel=null;cascading=true;
+    lockR=r1;lockC=c1;
+    activateSpecials([ck(r1,c1),ck(r2,c2)],swapColor);
+  } else if(findMatches()){
     ccSel=null;cascading=true;
     lockR=r1;lockC=c1;
     setTimeout(()=>cascade(0,false),80);
@@ -547,26 +578,24 @@ document.addEventListener('touchend',e=>{
   const isTap=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
   tStart=null;
 
-  // CC swap mode: tap on a settled board cell (not during active piece movement)
+  // CC smash mode: tap a settled SPECIAL candy to select it; tap an adjacent
+  // candy to smash. Taps on normal candies fall through to rotate, so the
+  // Tetris tap-to-rotate control always works.
   if(isTap&&!cascading){
     const rect=canvas.getBoundingClientRect();
     const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
     const cx=Math.floor((e.changedTouches[0].clientX-rect.left)*scaleX/CELL);
     const cy=Math.floor((e.changedTouches[0].clientY-rect.top)*scaleY/CELL);
-    // Is the tapped cell a settled (non-falling) candy?
-    const isSettled=board[cy]&&board[cy][cx]&&
-                    (!piece||!pCells(piece).some(p=>p.r===cy&&p.c===cx));
-    if(isSettled&&cx>=0&&cx<COLS&&cy>=0&&cy<ROWS){
-      if(!ccSel){
-        ccSel={r:cy,c:cx};
-      } else if(ccSel.r===cy&&ccSel.c===cx){
-        ccSel=null;  // deselect
-      } else if(Math.abs(ccSel.r-cy)+Math.abs(ccSel.c-cx)===1){
-        // Adjacent — attempt swap
-        ccSwapAttempt(ccSel.r,ccSel.c,cy,cx);
-      } else {
-        ccSel={r:cy,c:cx};  // move selection
-      }
+    const inb=cx>=0&&cx<COLS&&cy>=0&&cy<ROWS;
+    const cell=inb?board[cy][cx]:null;
+    const isSettled=!!cell&&(!piece||!pCells(piece).some(p=>p.r===cy&&p.c===cx));
+    if(isSettled&&ccSel&&Math.abs(ccSel.r-cy)+Math.abs(ccSel.c-cx)===1){
+      ccSwapAttempt(ccSel.r,ccSel.c,cy,cx);
+      return;
+    }
+    if(isSettled&&cell.type!==N){
+      if(ccSel&&ccSel.r===cy&&ccSel.c===cx)ccSel=null;
+      else ccSel={r:cy,c:cx};
       return;
     }
     ccSel=null;
@@ -600,96 +629,171 @@ function rotate(){
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
-function drawPattern(c2d,cx,cy,r,idx){
-  const s=r*0.52;
-  c2d.save();
-  c2d.globalAlpha=0.82;
-  c2d.shadowColor='#ffffff';c2d.shadowBlur=r*0.9;
-  c2d.fillStyle='#ffffff';
-  c2d.beginPath();
-  c2d.moveTo(cx,cy-s);c2d.lineTo(cx+s*0.22,cy-s*0.22);
-  c2d.lineTo(cx+s,cy);c2d.lineTo(cx+s*0.22,cy+s*0.22);
-  c2d.lineTo(cx,cy+s);c2d.lineTo(cx-s*0.22,cy+s*0.22);
-  c2d.lineTo(cx-s,cy);c2d.lineTo(cx-s*0.22,cy-s*0.22);
-  c2d.closePath();c2d.fill();
-  c2d.shadowBlur=0;c2d.restore();
-}
-
-function drawTypeOverlay(c2d,cx,cy,r,sz,type){
-  if(type===SH||type===SV){
-    c2d.strokeStyle='rgba(255,255,255,0.55)';c2d.lineWidth=Math.max(1.5,sz*.04);
-    const step=r*.45;
-    if(type===SH){
-      for(let dy=-r*.65;dy<=r*.65;dy+=step){c2d.beginPath();c2d.moveTo(cx-r*.9,cy+dy);c2d.lineTo(cx+r*.9,cy+dy);c2d.stroke();}
-      c2d.fillStyle='rgba(255,255,255,.9)';c2d.font=`bold ${Math.max(8,~~(r*.6))}px sans-serif`;
-      c2d.textAlign='center';c2d.textBaseline='middle';c2d.fillText('↔',cx,cy+1);
-    }else{
-      for(let dx=-r*.65;dx<=r*.65;dx+=step){c2d.beginPath();c2d.moveTo(cx+dx,cy-r*.9);c2d.lineTo(cx+dx,cy+r*.9);c2d.stroke();}
-      c2d.fillStyle='rgba(255,255,255,.9)';c2d.font=`bold ${Math.max(8,~~(r*.6))}px sans-serif`;
-      c2d.textAlign='center';c2d.textBaseline='middle';c2d.fillText('↕',cx,cy+1);
-    }
-  }else if(type===WR){
-    c2d.strokeStyle='rgba(255,255,255,.55)';c2d.lineWidth=Math.max(1.5,sz*.04);
-    c2d.beginPath();c2d.arc(cx,cy,r*.68,0,Math.PI*2);c2d.stroke();
-    c2d.beginPath();c2d.arc(cx,cy,r*.38,0,Math.PI*2);c2d.stroke();
-    c2d.fillStyle='rgba(255,255,255,.9)';c2d.font=`bold ${Math.max(8,~~(r*.65))}px sans-serif`;
-    c2d.textAlign='center';c2d.textBaseline='middle';c2d.fillText('✦',cx,cy+1);
-  }else if(type===FISH){
-    c2d.font=`bold ${Math.max(8,~~(sz*.58))}px sans-serif`;
-    c2d.textAlign='center';c2d.textBaseline='middle';
-    c2d.fillText('🐟',cx,cy+1);
+// ── Candy Crush-style sprites, cached per colour/type/size ─────────────────
+const spriteCache=new Map();
+function candySprite(colorIdx,type,sz){
+  const key=colorIdx+'|'+type+'|'+sz;
+  let s=spriteCache.get(key);
+  if(!s){
+    s=document.createElement('canvas');s.width=s.height=sz;
+    renderCandySprite(s.getContext('2d'),colorIdx,type,sz);
+    spriteCache.set(key,s);
   }
+  return s;
 }
 
 function drawCandy(c2d,x,y,sz,colorIdx,type){
-  const cx=x+sz*.5,cy=y+sz*.5,b=Math.max(2,Math.round(sz*.11));
-  if(colorIdx<0||type===CB){
-    c2d.fillStyle='#080300';c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
-    c2d.fillStyle='#190d05';c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
-    c2d.save();c2d.beginPath();c2d.rect(x+b,y+b,sz-b*2,sz-b*2);c2d.clip();
-    const spin=performance.now()/800;
-    COLORS.forEach((col,i)=>{c2d.beginPath();c2d.moveTo(cx,cy);c2d.arc(cx,cy,sz*.65,(i/6)*Math.PI*2+spin,((i+1)/6)*Math.PI*2+spin);c2d.closePath();c2d.fillStyle=col+'5a';c2d.fill();});
-    c2d.fillStyle='rgba(255,255,255,0.07)';c2d.fillRect(x+b,y+b,sz-b*2,b*.6);c2d.fillRect(x+b,y+b,b*.6,sz-b*2);
-    c2d.restore();
-    c2d.shadowColor='#ff44ff';c2d.shadowBlur=sz*.4;
-    c2d.fillStyle='rgba(255,255,255,.95)';c2d.font=`bold ${Math.max(8,~~(sz*.55))}px sans-serif`;
-    c2d.textAlign='center';c2d.textBaseline='middle';c2d.fillText('★',cx,cy+1);
-    c2d.shadowBlur=0;
-    c2d.beginPath();c2d.ellipse(cx-sz*.13,cy-sz*.19,sz*.12,sz*.065,-.5,0,Math.PI*2);
-    c2d.fillStyle='rgba(255,255,255,.38)';c2d.fill();
+  const s=Math.round(sz);if(s<4)return;
+  c2d.drawImage(candySprite(colorIdx,type,s),x,y);
+  if(type===CB){
+    // live pulsing aura so the bomb reads as "smash me"
+    const ga=c2d.globalAlpha,t=0.5+0.5*Math.sin(performance.now()/300);
+    c2d.globalAlpha=ga*(0.25+0.35*t);
+    c2d.strokeStyle='#ff44ff';c2d.lineWidth=2;
+    c2d.beginPath();c2d.arc(x+s/2,y+s/2,s*0.45,0,Math.PI*2);c2d.stroke();
+    c2d.globalAlpha=ga;
+  }
+}
+
+// One distinct CC candy silhouette per colour:
+// 0 yellow teardrop · 1 orange lozenge · 2 green chiclet · 3 brown bonbon
+// 4 blue sphere · 5 purple flower · 6 red jelly bean
+function bodyPath(idx,cx,cy,R){
+  const p=new Path2D();
+  if(idx===0){
+    p.moveTo(cx,cy-R*1.02);
+    p.bezierCurveTo(cx+R*0.92,cy-R*0.12,cx+R*0.85,cy+R*0.78,cx,cy+R*0.78);
+    p.bezierCurveTo(cx-R*0.85,cy+R*0.78,cx-R*0.92,cy-R*0.12,cx,cy-R*1.02);
+  }else if(idx===1){
+    p.ellipse(cx,cy,R,R*0.70,0,0,Math.PI*2);
+  }else if(idx===2){
+    const h=R*0.88,rad=R*0.42,x0=cx-h,y0=cy-h,w=h*2;
+    p.moveTo(x0+rad,y0);
+    p.arcTo(x0+w,y0,x0+w,y0+w,rad);
+    p.arcTo(x0+w,y0+w,x0,y0+w,rad);
+    p.arcTo(x0,y0+w,x0,y0,rad);
+    p.arcTo(x0,y0,x0+w,y0,rad);
+    p.closePath();
+  }else if(idx===3){
+    p.arc(cx,cy,R*0.92,0,Math.PI*2);
+  }else if(idx===4){
+    p.arc(cx,cy,R*0.95,0,Math.PI*2);
+  }else if(idx===5){
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3-Math.PI/2;
+      const lx=cx+Math.cos(a)*R*0.52,ly=cy+Math.sin(a)*R*0.52;
+      p.moveTo(lx+R*0.48,ly);p.arc(lx,ly,R*0.48,0,Math.PI*2);
+    }
+    p.moveTo(cx+R*0.5,cy);p.arc(cx,cy,R*0.5,0,Math.PI*2);
+  }else{
+    p.ellipse(cx,cy,R,R*0.62,-0.5,0,Math.PI*2);
+  }
+  return p;
+}
+
+function renderBody(g,idx,cx,cy,R,C){
+  const path=bodyPath(idx,cx,cy,R);
+  const grd=g.createRadialGradient(cx-R*0.35,cy-R*0.4,R*0.08,cx,cy,R*1.2);
+  grd.addColorStop(0,C.light);grd.addColorStop(0.55,C.body);grd.addColorStop(1,C.dark);
+  g.fillStyle=grd;g.fill(path);
+  g.lineWidth=Math.max(1,R*0.07);g.strokeStyle='rgba(0,0,0,0.28)';g.stroke(path);
+  if(idx===1){
+    g.save();g.clip(path);
+    g.fillStyle='rgba(255,255,255,0.20)';g.fillRect(cx-R*1.2,cy-R*0.15,R*2.4,R*0.30);
+    g.restore();
+  }
+  if(idx===3){
+    g.strokeStyle='rgba(255,236,200,0.45)';g.lineWidth=Math.max(1,R*0.12);
+    g.beginPath();g.arc(cx,cy,R*0.45,0.3,2.4);g.stroke();
+    g.beginPath();g.arc(cx,cy,R*0.18,2.8,5.4);g.stroke();
+  }
+  g.save();g.clip(path);
+  g.fillStyle='rgba(255,255,255,0.30)';
+  g.beginPath();g.ellipse(cx-R*0.32,cy-R*0.4,R*0.44,R*0.22,-0.5,0,Math.PI*2);g.fill();
+  g.fillStyle='rgba(255,255,255,0.8)';
+  g.beginPath();g.ellipse(cx-R*0.3,cy-R*0.44,R*0.13,R*0.07,-0.5,0,Math.PI*2);g.fill();
+  g.restore();
+  return path;
+}
+
+function drawWrapper(g,cx,cy,sz,C){
+  // sweet-wrapper square with pinched sides behind the candy
+  const h=sz*0.47;
+  const grd=g.createLinearGradient(cx-h,cy-h,cx+h,cy+h);
+  grd.addColorStop(0,C.light);grd.addColorStop(1,C.dark);
+  g.save();
+  g.fillStyle=grd;g.globalAlpha=0.9;
+  g.beginPath();
+  g.moveTo(cx-h,cy-h);g.lineTo(cx,cy-h*0.62);g.lineTo(cx+h,cy-h);
+  g.lineTo(cx+h*0.62,cy);g.lineTo(cx+h,cy+h);g.lineTo(cx,cy+h*0.62);
+  g.lineTo(cx-h,cy+h);g.lineTo(cx-h*0.62,cy);g.closePath();
+  g.fill();
+  g.globalAlpha=1;
+  g.strokeStyle='rgba(255,255,255,0.5)';g.lineWidth=Math.max(1,sz*0.03);g.stroke();
+  g.restore();
+}
+
+function drawFish(g,cx,cy,sz,C){
+  const R=sz*0.40,p=new Path2D();
+  p.ellipse(cx-R*0.15,cy,R*0.72,R*0.48,0,0,Math.PI*2);
+  p.moveTo(cx+R*0.42,cy);
+  p.lineTo(cx+R*1.0,cy-R*0.5);
+  p.lineTo(cx+R*1.0,cy+R*0.5);
+  p.closePath();
+  const grd=g.createRadialGradient(cx-R*0.4,cy-R*0.35,R*0.05,cx,cy,R*1.2);
+  grd.addColorStop(0,C.light);grd.addColorStop(0.55,C.body);grd.addColorStop(1,C.dark);
+  g.fillStyle=grd;g.fill(p);
+  g.strokeStyle='rgba(0,0,0,0.25)';g.lineWidth=Math.max(1,sz*0.025);g.stroke(p);
+  g.fillStyle='#fff';g.beginPath();g.arc(cx-R*0.55,cy-R*0.12,R*0.13,0,Math.PI*2);g.fill();
+  g.fillStyle='#111';g.beginPath();g.arc(cx-R*0.55,cy-R*0.12,R*0.06,0,Math.PI*2);g.fill();
+  g.save();g.clip(p);
+  g.fillStyle='rgba(255,255,255,0.3)';
+  g.beginPath();g.ellipse(cx-R*0.2,cy-R*0.28,R*0.5,R*0.16,-0.15,0,Math.PI*2);g.fill();
+  g.restore();
+}
+
+function drawBombSprite(g,cx,cy,sz){
+  const R=sz*0.42;
+  g.fillStyle='rgba(0,0,0,0.25)';
+  g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
+  const grd=g.createRadialGradient(cx-R*0.3,cy-R*0.35,R*0.1,cx,cy,R*1.2);
+  grd.addColorStop(0,'#6a4a3a');grd.addColorStop(0.5,'#2e1a12');grd.addColorStop(1,'#120806');
+  g.beginPath();g.arc(cx,cy,R,0,Math.PI*2);g.fillStyle=grd;g.fill();
+  const angs=[0.2,0.9,1.7,2.5,3.3,4.1,4.9,5.7];
+  angs.forEach((a,i)=>{
+    const rr=R*(0.35+0.35*((i%3)/2));
+    g.fillStyle=COLORS[i%COLORS.length];
+    g.beginPath();g.arc(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr,Math.max(1.2,R*0.13),0,Math.PI*2);g.fill();
+  });
+  g.fillStyle='rgba(255,255,255,0.35)';
+  g.beginPath();g.ellipse(cx-R*0.35,cy-R*0.42,R*0.34,R*0.18,-0.5,0,Math.PI*2);g.fill();
+}
+
+function renderCandySprite(g,idx,type,sz){
+  const cx=sz/2,cy=sz/2,R=sz*0.40;
+  if(idx<0||type===CB){drawBombSprite(g,cx,cy,sz);return;}
+  const C=CANDY[idx];
+  g.fillStyle='rgba(0,0,0,0.25)';
+  g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
+  if(type===FISH){drawFish(g,cx,cy,sz,C);return;}
+  if(type===WR){
+    drawWrapper(g,cx,cy,sz,C);
+    renderBody(g,idx,cx,cy,R*0.74,C);
     return;
   }
-  const C=CANDY[colorIdx],bv=Math.max(1,b*.65);
-  const rad=Math.max(2,sz*0.15);
-  c2d.fillStyle=C.dark;c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
-  c2d.save();
-  c2d.beginPath();
-  if(c2d.roundRect){
-    c2d.roundRect(x+b,y+b,sz-b*2,sz-b*2,rad);
-  } else {
-    const rx=x+b,ry=y+b,rw=sz-b*2,rh=sz-b*2;
-    c2d.moveTo(rx+rad,ry);
-    c2d.lineTo(rx+rw-rad,ry);
-    c2d.arc(rx+rw-rad,ry+rad,rad,-Math.PI/2,0);
-    c2d.lineTo(rx+rw,ry+rh-rad);
-    c2d.arc(rx+rw-rad,ry+rh-rad,rad,0,Math.PI/2);
-    c2d.lineTo(rx+rad,ry+rh);
-    c2d.arc(rx+rad,ry+rh-rad,rad,Math.PI/2,Math.PI);
-    c2d.lineTo(rx,ry+rad);
-    c2d.arc(rx+rad,ry+rad,rad,Math.PI,-Math.PI/2);
-    c2d.closePath();
+  const path=renderBody(g,idx,cx,cy,R,C);
+  if(type===SH||type===SV){
+    // CC striped candy: three bold white stripes across the body,
+    // stripe direction = blast direction
+    g.save();g.clip(path);
+    g.fillStyle='rgba(255,255,255,0.85)';
+    const w=R*0.26;
+    for(const off of[-R*0.55,0,R*0.55]){
+      if(type===SH)g.fillRect(cx-R*1.3,cy+off-w/2,R*2.6,w);
+      else g.fillRect(cx+off-w/2,cy-R*1.3,w,R*2.6);
+    }
+    g.restore();
   }
-  c2d.clip();
-  const g=c2d.createLinearGradient(x+b,y+b,x+sz-b,y+sz-b);
-  g.addColorStop(0,C.light);g.addColorStop(.45,C.body);g.addColorStop(1,C.dark);
-  c2d.fillStyle=g;c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
-  c2d.fillStyle='rgba(255,255,255,0.32)';c2d.fillRect(x+b,y+b,sz-b*2,bv);c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);
-  c2d.fillStyle='rgba(0,0,0,0.28)';c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);
-  drawPattern(c2d,cx,cy,sz*.36,colorIdx);
-  if(type!==N){drawTypeOverlay(c2d,cx,cy,sz*.36,sz,type);}
-  c2d.restore();
-  c2d.beginPath();c2d.ellipse(cx-sz*.14,cy-sz*.18,sz*.13,sz*.07,-.45,0,Math.PI*2);c2d.fillStyle='rgba(255,255,255,.62)';c2d.fill();
-  c2d.beginPath();c2d.arc(cx+sz*.2,cy-sz*.2,sz*.05,0,Math.PI*2);c2d.fillStyle='rgba(255,255,255,.3)';c2d.fill();
 }
 
 // ── Effects rendering ──────────────────────────────────────────────────────

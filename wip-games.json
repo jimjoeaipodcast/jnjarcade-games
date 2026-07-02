@@ -47,7 +47,7 @@
       "url": "games/candy-tris.html",
       "status": "wip",
       "special": "Game Lab #5",
-      "note": "2\u00d72 square = bomb (3\u00d73 blast), 5-in-line = wrapped candy, 6+ = colour bomb.",
+      "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2\u00d72 = fish. Tap a special candy then a neighbour to smash combos.",
       "ai_improved": true,
       "ai_improved_date": "2026-06-24",
       "ai_file": "games/candy-tris-zai.html"
