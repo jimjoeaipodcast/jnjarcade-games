@@ -1612,15 +1612,22 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
     return a + (b - a) * f;
   }
 
-  // sky
+  // sky — bright AB daytime (matches the in-game 2026-07-02 look pass)
   const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#0a1a2e'); sky.addColorStop(1, '#1a3a5c');
+  sky.addColorStop(0, '#2f9ce8'); sky.addColorStop(0.6, '#7cc4f0'); sky.addColorStop(1, '#cfeefb');
   ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
-
-  // stars
+  // sun
+  ctx.fillStyle = 'rgba(255,243,174,0.9)';
+  ctx.beginPath(); ctx.arc(w*0.82, h*0.14, Math.min(w,h)*0.09, 0, Math.PI*2); ctx.fill();
+  // puffy clouds instead of stars
   for (const st of s.stars) {
-    ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(255,255,220,${st.a})`; ctx.fill();
+    if (st.r < 0.9) continue;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(st.x, st.y * 0.7, st.r * 4, 0, Math.PI*2);
+    ctx.arc(st.x + st.r*3, st.y * 0.7 + 1, st.r * 3, 0, Math.PI*2);
+    ctx.arc(st.x - st.r*3, st.y * 0.7 + 1, st.r * 3, 0, Math.PI*2);
+    ctx.fill();
   }
 
   // terrain gradient fill

@@ -1,126 +1,149 @@
 {
-  "social": [
-    {"name":"Shop","emoji":"🛍️","url":"https://jimmy-joe-shop.fourthwall.com/","gradient":["#FF9F0A","#FF6B00"],"label":"Shop"},
-    {"name":"YouTube","emoji":"▶","url":"https://www.youtube.com/@JnJAiStudio","gradient":["#FF453A","#FF2D55"],"label":"YouTube"},
-    {"name":"Patreon","emoji":"☕","url":"https://www.patreon.com/c/JimmyJoeAiPodcast","gradient":["#FF6E4A","#E0420B"],"label":"Patreon"},
-    {"name":"Ko-fi","emoji":"☕","url":"https://ko-fi.com/jimmynjoe","gradient":["#FF5E5B","#E03030"],"label":"KoFi"}
-  ],
-  "games": [
-    {
-      "id": "angry-worms",
-      "name": "ANGRY WORMS",
-      "emoji": "🐛",
-      "genre": "ANGRY BIRDS × WORMS",
-      "url": "games/angry-worms.html",
-      "status": "wip",
-      "special": "Game Lab #13",
-      "note": "Launch worms from catapult. Mid-flight abilities. Destructible terrain. Wind. Turn-based.",
-      "ai_improved": true,
-      "ai_improved_date": "2026-06-24",
-      "ai_file": "games/angry-worms.html"
-    },
-    {
-      "id": "tomb-hunt",
-      "name": "TOMB HUNT",
-      "emoji": "\ud83c\udffa",
-      "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
-      "url": "games/tomb-hunt.html",
-      "status": "wip",
-      "special": "Game Lab #3",
-      "note": "Multi-platform levels, stomp-to-kill guards, arc-gravity arrows, enemy darts."
-    },
-    {
-      "id": "bomb-garden",
-      "name": "BOMB GARDEN",
-      "emoji": "\ud83d\udca3",
-      "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
-      "url": "games/bomb-garden.html",
-      "status": "wip",
-      "special": "Game Lab #4",
-      "note": "Plant bombs to stop zombie waves. Bomberman blast radius + PvZ lane defence."
-    },
-    {
-      "id": "candy-tris",
-      "name": "CRUSHTRIS",
-      "emoji": "\ud83c\udf6c",
-      "genre": "CANDY CRUSH \u00d7 TETRIS",
-      "url": "games/candy-tris.html",
-      "status": "wip",
-      "special": "Game Lab #5",
-      "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2\u00d72 = fish. Tap a special candy then a neighbour to smash combos.",
-      "ai_improved": true,
-      "ai_improved_date": "2026-06-24",
-      "ai_file": "games/candy-tris-zai.html"
-    },
-    {
-      "id": "pac-lemming",
-      "name": "PAC-LEMMING",
-      "emoji": "\ud83d\udfe1",
-      "genre": "LEMMINGS \u00d7 PAC-MAN",
-      "url": "games/pac-lemming.html",
-      "status": "wip",
-      "special": "Game Lab #6",
-      "note": "Pac-Man eats pellets while lemmings cross the maze. 10/15 lems to win."
-    },
-    {
-      "id": "bomb-lemmings",
-      "name": "BOMB-LEMMINGS",
-      "emoji": "\ud83d\udca3",
-      "genre": "LEMMINGS \u00d7 BOMBERMAN",
-      "url": "games/bomb-lemmings.html",
-      "status": "wip",
-      "special": "Game Lab #7",
-      "note": "Save lemmings by bombing dirt walls open. 10/15 lems to win."
-    },
-    {
-      "id": "lemming-invaders",
-      "name": "LEMMING-INVADERS",
-      "emoji": "\ud83d\udc7e",
-      "genre": "LEMMINGS \u00d7 SPACE INVADERS",
-      "url": "games/lemming-invaders.html",
-      "status": "wip",
-      "special": "Game Lab #8",
-      "note": "Shoot Space Invaders before bombs kill lemmings below. 12/20 lems to win."
-    },
-    {
-      "id": "astro-hop",
-      "name": "ASTRO-HOP",
-      "emoji": "\ud83d\ude80",
-      "genre": "PLATFORM MECHANICS SHOWCASE",
-      "url": "games/astro-hop.html",
-      "status": "wip",
-      "special": "Game Lab #9",
-      "note": "Double jump + coyote time + moving platforms + semi-platforms."
-    },
-    {
-      "id": "cave-plunge",
-      "name": "CAVE-PLUNGE",
-      "emoji": "\ud83e\udea8",
-      "genre": "CAVE EXPLORER",
-      "url": "games/cave-plunge.html",
-      "status": "wip",
-      "special": "Game Lab #10",
-      "note": "Wall slide + wall jump. Bats + crystal platforms + gem collectibles."
-    },
-    {
-      "id": "jungle-hop",
-      "name": "JUNGLE-HOP",
-      "emoji": "\ud83c\udf34",
-      "genre": "JUNGLE PLATFORM",
-      "url": "games/jungle-hop.html",
-      "status": "wip",
-      "special": "Game Lab #11",
-      "note": "Monkey + snake + mossy logs + treasure chest goal."
-    },
-    {
-      "id": "lupo-alberto",
-      "name": "LUPO ALBERTO",
-      "emoji": "\ud83d\udc3a",
-      "genre": "PLATFORM TRAINING CABINET",
-      "url": "games/lupo-alberto.html",
-      "status": "wip",
-      "special": "Game Lab #12",
-      "note": "Platform mechanics template. Reskin = change sprites/palette only."
-    }
-  ]
+ "social": [
+  {
+   "name": "Shop",
+   "emoji": "\ud83d\udecd\ufe0f",
+   "url": "https://jimmy-joe-shop.fourthwall.com/",
+   "gradient": [
+    "#FF9F0A",
+    "#FF6B00"
+   ],
+   "label": "Shop"
+  },
+  {
+   "name": "YouTube",
+   "emoji": "\u25b6",
+   "url": "https://www.youtube.com/@JnJAiStudio",
+   "gradient": [
+    "#FF453A",
+    "#FF2D55"
+   ],
+   "label": "YouTube"
+  },
+  {
+   "name": "Patreon",
+   "emoji": "\u2615",
+   "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
+   "gradient": [
+    "#FF6E4A",
+    "#E0420B"
+   ],
+   "label": "Patreon"
+  },
+  {
+   "name": "Ko-fi",
+   "emoji": "\u2615",
+   "url": "https://ko-fi.com/jimmynjoe",
+   "gradient": [
+    "#FF5E5B",
+    "#E03030"
+   ],
+   "label": "KoFi"
+  }
+ ],
+ "games": [
+  {
+   "id": "angry-worms",
+   "name": "ANGRY WORMS",
+   "emoji": "\ud83d\udc1b",
+   "genre": "ANGRY BIRDS \u00d7 WORMS",
+   "url": "games/angry-worms.html",
+   "status": "wip",
+   "special": "Game Lab #13",
+   "note": "AB\u00d7Worms look pass 2026-07-02: day sky+sun+parallax, sea (drowns worms, craters breach through), AB blocks (wood/stone/ICE), angry-brow worms, POW stars, 3-star clears. Drag to aim, tap mid-flight for ability.",
+   "ai_improved": true,
+   "ai_improved_date": "2026-06-24",
+   "ai_file": "games/angry-worms.html"
+  },
+  {
+   "id": "tomb-hunt",
+   "name": "TOMB HUNT",
+   "emoji": "\ud83c\udffa",
+   "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
+   "url": "games/tomb-hunt.html",
+   "status": "wip",
+   "special": "Game Lab #3",
+   "note": "Multi-platform levels, stomp-to-kill guards, arc-gravity arrows, enemy darts."
+  },
+  {
+   "id": "bomb-garden",
+   "name": "BOMB GARDEN",
+   "emoji": "\ud83d\udca3",
+   "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
+   "url": "games/bomb-garden.html",
+   "status": "wip",
+   "special": "Game Lab #4",
+   "note": "Plant bombs to stop zombie waves. Bomberman blast radius + PvZ lane defence."
+  },
+  {
+   "id": "pac-lemming",
+   "name": "PAC-LEMMING",
+   "emoji": "\ud83d\udfe1",
+   "genre": "LEMMINGS \u00d7 PAC-MAN",
+   "url": "games/pac-lemming.html",
+   "status": "wip",
+   "special": "Game Lab #6",
+   "note": "Pac-Man eats pellets while lemmings cross the maze. 10/15 lems to win."
+  },
+  {
+   "id": "bomb-lemmings",
+   "name": "BOMB-LEMMINGS",
+   "emoji": "\ud83d\udca3",
+   "genre": "LEMMINGS \u00d7 BOMBERMAN",
+   "url": "games/bomb-lemmings.html",
+   "status": "wip",
+   "special": "Game Lab #7",
+   "note": "Save lemmings by bombing dirt walls open. 10/15 lems to win."
+  },
+  {
+   "id": "lemming-invaders",
+   "name": "LEMMING-INVADERS",
+   "emoji": "\ud83d\udc7e",
+   "genre": "LEMMINGS \u00d7 SPACE INVADERS",
+   "url": "games/lemming-invaders.html",
+   "status": "wip",
+   "special": "Game Lab #8",
+   "note": "Shoot Space Invaders before bombs kill lemmings below. 12/20 lems to win."
+  },
+  {
+   "id": "astro-hop",
+   "name": "ASTRO-HOP",
+   "emoji": "\ud83d\ude80",
+   "genre": "PLATFORM MECHANICS SHOWCASE",
+   "url": "games/astro-hop.html",
+   "status": "wip",
+   "special": "Game Lab #9",
+   "note": "Double jump + coyote time + moving platforms + semi-platforms."
+  },
+  {
+   "id": "cave-plunge",
+   "name": "CAVE-PLUNGE",
+   "emoji": "\ud83e\udea8",
+   "genre": "CAVE EXPLORER",
+   "url": "games/cave-plunge.html",
+   "status": "wip",
+   "special": "Game Lab #10",
+   "note": "Wall slide + wall jump. Bats + crystal platforms + gem collectibles."
+  },
+  {
+   "id": "jungle-hop",
+   "name": "JUNGLE-HOP",
+   "emoji": "\ud83c\udf34",
+   "genre": "JUNGLE PLATFORM",
+   "url": "games/jungle-hop.html",
+   "status": "wip",
+   "special": "Game Lab #11",
+   "note": "Monkey + snake + mossy logs + treasure chest goal."
+  },
+  {
+   "id": "lupo-alberto",
+   "name": "LUPO ALBERTO",
+   "emoji": "\ud83d\udc3a",
+   "genre": "PLATFORM TRAINING CABINET",
+   "url": "games/lupo-alberto.html",
+   "status": "wip",
+   "special": "Game Lab #12",
+   "note": "Platform mechanics template. Reskin = change sprites/palette only."
+  }
+ ]
 }

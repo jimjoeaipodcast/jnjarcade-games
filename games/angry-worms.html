@@ -96,6 +96,7 @@ const GRAVITY = 0.25;
 const SLING_X = 220;
 const GROUND_Y = 600;
 const MAX_PULL = 120;
+const WATER_Y = 695;   // Worms-style sea — anything below this drowns
 
 // ====== STATE ======
 let canvas, ctx;
@@ -253,15 +254,18 @@ function buildStructure(x, width, lvl) {
     const startX = x + (width - rowW) / 2;
     for (let c = 0; c < count; c++) {
       if (placed >= 6 + lvl * 2) break;
-      const isStone = Math.random() < 0.3;
+      const roll = Math.random();
+      // AB material mix: wood default, stone tanky, ice (lvl 2+) shatters in one hit
+      const btype = roll < 0.3 ? "stone" : (lvl >= 2 && roll < 0.48 ? "ice" : "wood");
+      const bhp = btype === "stone" ? 60 : btype === "ice" ? 12 : 30;
       blocks.push({
         x: startX + c * blockW,
         y: groundY - (row + 1) * blockH,
         w: blockW,
         h: blockH,
-        hp: isStone ? 60 : 30,
-        maxHp: isStone ? 60 : 30,
-        type: isStone ? "stone" : "wood",
+        hp: bhp,
+        maxHp: bhp,
+        type: btype,
         vx: 0, vy: 0,
         falling: false,
         settled: false,
@@ -527,9 +531,19 @@ function updatePhysics(dt) {
       camera.targetX = Math.max(0, Math.min(WORLD_W - W, p.x - W / 2));
     }
 
+    // Water splash — the sea eats worms, no boom
+    if (p.y > WATER_Y) {
+      for (let s = 0; s < 12; s++) {
+        particles.push({ x: p.x + (Math.random() - 0.5) * 16, y: WATER_Y,
+          vx: (Math.random() - 0.5) * 3, vy: -2.5 - Math.random() * 3.5,
+          life: 32, maxLife: 32, size: 3 + Math.random() * 4,
+          color: "#9fd0f5", type: "spark", gravity: 0.25 });
+      }
+      p.dead = true;
+    }
     // Terrain collision
     const groundY = terrainHeightAt(p.x);
-    if (p.y > groundY - p.radius) {
+    if (!p.dead && p.y > groundY - p.radius) {
       // Hit ground
       explode(p.x, groundY, 50, p.team);
       p.dead = true;
@@ -623,6 +637,19 @@ function updatePhysics(dt) {
       w.vy = 0;
       w.onGround = true;
     }
+    // Worms rule: the sea is lethal — splash + sink
+    if (w.alive && w.y + w.radius > WATER_Y) {
+      w.alive = false;
+      w.deathTimer = 40;
+      w.vy = 1;
+      for (let i = 0; i < 14; i++) {
+        particles.push({ x: w.x + (Math.random() - 0.5) * 20, y: WATER_Y,
+          vx: (Math.random() - 0.5) * 3, vy: -2 - Math.random() * 3,
+          life: 30 + Math.random() * 15, maxLife: 45, size: 3 + Math.random() * 4,
+          color: "#9fd0f5", type: "spark", gravity: 0.25 });
+      }
+      if (w.team === "enemy") score += 100;
+    }
     if (w.y > WORLD_H + 50) {
       w.alive = false;
       w.deathTimer = 100;
@@ -700,6 +727,12 @@ function explode(x, y, radius, team) {
       const dmg = (1 - d / radius) * 80;
       w.hp -= dmg;
       w.flashTimer = 10;
+      for (let s = 0; s < 5; s++) {
+        const sa = Math.random() * Math.PI * 2;
+        particles.push({ x: w.x, y: w.y - 10, vx: Math.cos(sa) * 3, vy: Math.sin(sa) * 3 - 1,
+          life: 22, maxLife: 22, size: 6 + Math.random() * 4,
+          color: "#ffe94d", type: "pow", gravity: 0.05, rot: Math.random() * Math.PI });
+      }
       w.vx = dx / (d + 1) * 5;
       w.vy = -3;
       if (w.hp <= 0) {
@@ -741,7 +774,8 @@ function craterTerrain(x, y, r) {
     if (d < r) {
       const depth = Math.sqrt(r * r - d * d) * 0.6;
       terrain[i].y += depth;
-      if (terrain[i].y > GROUND_Y + 40) terrain[i].y = GROUND_Y + 40;
+      // craters may breach clean through to the sea (Worms rule — drop them in the drink)
+      if (terrain[i].y > WATER_Y + 15) terrain[i].y = WATER_Y + 15;
     }
   }
 }
@@ -784,7 +818,11 @@ function showEndScreen(won) {
   const eb = document.getElementById("endBtn");
   document.getElementById("endScore").textContent = "SCORE " + score;
   if (won) {
-    et.textContent = "LEVEL CLEAR!";
+    const ammoLeft = inventory.reduce((n, it) => n + it.count, 0);
+    const starCount = ammoLeft >= 3 ? 3 : ammoLeft >= 1 ? 2 : 1;
+    score += starCount * 250;
+    et.textContent = "\u2b50".repeat(starCount) + " LEVEL CLEAR!";
+    document.getElementById("endScore").textContent = "SCORE " + score;
     et.style.color = "#39ff14";
     et.style.textShadow = "0 0 24px #39ff14, 0 0 48px #39ff14";
     eb.textContent = level < 3 ? "NEXT LEVEL" : "VICTORY!";
@@ -811,7 +849,7 @@ function onEndBtn() {
   } else {
     // Game over - use ArcadeScores
     if (window.ArcadeScores) {
-      ArcadeScores.show("angry-worms", score, resetGame);
+      ArcadeScores.show({game:"angry-worms",title:"ANGRY WORMS",score:score,accent:"#e8302a",onClose:resetGame});
     } else {
       resetGame();
     }
@@ -939,7 +977,6 @@ function render() {
   ctx.translate(-camera.x, -camera.y);
 
   drawSky();
-  drawStars();
   drawClouds();
   drawTerrain();
   drawGravestones();
@@ -949,6 +986,7 @@ function render() {
   if (loadedWorm && gameState === "playing") drawLoadedWorm();
   if (aiming && dragCurrent) drawAim();
   drawProjectiles();
+  drawSea();
   drawParticles();
 
   ctx.restore();
@@ -961,45 +999,96 @@ function render() {
 }
 
 function drawSky() {
+  // Bright Angry-Birds daytime — azure fading to a warm horizon
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  grad.addColorStop(0, "#1a1a4e");
-  grad.addColorStop(0.5, "#3a5a9e");
-  grad.addColorStop(1, "#7ab0e0");
+  grad.addColorStop(0, "#2f9ce8");
+  grad.addColorStop(0.55, "#7cc4f0");
+  grad.addColorStop(1, "#cfeefb");
   ctx.fillStyle = grad;
-  ctx.fillRect(camera.x - 10, 0, W + 20, GROUND_Y + 100);
+  ctx.fillRect(camera.x - 10, 0, W + 20, GROUND_Y + 140);
+
+  // Sun (parallax — barely moves with the camera)
+  const sunX = camera.x * 0.1 + 120, sunY = 90;
+  const sg = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 70);
+  sg.addColorStop(0, "rgba(255,246,180,0.95)");
+  sg.addColorStop(0.4, "rgba(255,238,140,0.55)");
+  sg.addColorStop(1, "rgba(255,238,140,0)");
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.arc(sunX, sunY, 70, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff3ae";
+  ctx.beginPath(); ctx.arc(sunX, sunY, 26, 0, Math.PI * 2); ctx.fill();
+
+  // Parallax hill bands behind the playfield (AB backdrop depth)
+  ctx.fillStyle = "rgba(120,190,140,0.45)";
+  ctx.beginPath();
+  ctx.moveTo(camera.x - 10, GROUND_Y + 40);
+  for (let x = -10; x <= W + 20; x += 8) {
+    const wx = camera.x * 0.35 + x;
+    ctx.lineTo(camera.x + x, GROUND_Y - 60 - 45 * Math.sin(wx * 0.006) - 20 * Math.sin(wx * 0.013 + 2));
+  }
+  ctx.lineTo(camera.x + W + 20, GROUND_Y + 40);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(90,170,115,0.55)";
+  ctx.beginPath();
+  ctx.moveTo(camera.x - 10, GROUND_Y + 60);
+  for (let x = -10; x <= W + 20; x += 8) {
+    const wx = camera.x * 0.6 + x;
+    ctx.lineTo(camera.x + x, GROUND_Y - 20 - 35 * Math.sin(wx * 0.008 + 4) - 15 * Math.sin(wx * 0.02));
+  }
+  ctx.lineTo(camera.x + W + 20, GROUND_Y + 60);
+  ctx.closePath(); ctx.fill();
 }
 
-function drawStars() {
-  for (const s of stars) {
-    s.tw += s.tws;
-    const alpha = 0.4 + Math.sin(s.tw) * 0.4;
-    ctx.fillStyle = "rgba(255,255,200," + alpha + ")";
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
+function drawStars() { /* retired — daytime sky (Osimo 2026-07-02: AB look) */ }
 
 function drawClouds() {
+  // Chunky flat AB clouds — pure white blobs, no outline
   for (const c of clouds) {
     c.x += c.s;
     if (c.x > WORLD_W + 50) c.x = -50;
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.strokeStyle = "rgba(100,120,160,0.6)";
-    ctx.lineWidth = 2;
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
     ctx.beginPath();
     ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-    ctx.arc(c.x + c.r * 0.7, c.y + 5, c.r * 0.8, 0, Math.PI * 2);
-    ctx.arc(c.x - c.r * 0.7, c.y + 5, c.r * 0.8, 0, Math.PI * 2);
-    ctx.arc(c.x, c.y - c.r * 0.4, c.r * 0.7, 0, Math.PI * 2);
+    ctx.arc(c.x + c.r * 0.85, c.y + c.r * 0.15, c.r * 0.75, 0, Math.PI * 2);
+    ctx.arc(c.x - c.r * 0.85, c.y + c.r * 0.15, c.r * 0.75, 0, Math.PI * 2);
+    ctx.arc(c.x + c.r * 0.35, c.y - c.r * 0.45, c.r * 0.65, 0, Math.PI * 2);
+    ctx.arc(c.x - c.r * 0.4, c.y - c.r * 0.35, c.r * 0.55, 0, Math.PI * 2);
     ctx.fill();
-    ctx.stroke();
+    // flat base
+    ctx.fillRect(c.x - c.r * 1.4, c.y, c.r * 2.8, c.r * 0.55);
   }
 }
 
+function drawSea(t) {
+  // Worms signature — animated sea across the whole world, in FRONT of terrain
+  const time = performance.now() / 600;
+  const grad = ctx.createLinearGradient(0, WATER_Y - 8, 0, WORLD_H);
+  grad.addColorStop(0, "#2f7fd4");
+  grad.addColorStop(1, "#123a78");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(camera.x - 10, WORLD_H + 10);
+  for (let x = -10; x <= W + 20; x += 10) {
+    const wx = camera.x + x;
+    ctx.lineTo(wx, WATER_Y + 3 * Math.sin(wx * 0.03 + time * 2) + 2 * Math.sin(wx * 0.011 - time));
+  }
+  ctx.lineTo(camera.x + W + 20, WORLD_H + 10);
+  ctx.closePath(); ctx.fill();
+  // foam line
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let x = -10; x <= W + 20; x += 10) {
+    const wx = camera.x + x;
+    const y = WATER_Y + 3 * Math.sin(wx * 0.03 + time * 2) + 2 * Math.sin(wx * 0.011 - time);
+    if (x === -10) ctx.moveTo(wx, y); else ctx.lineTo(wx, y);
+  }
+  ctx.stroke();
+}
+
 function drawTerrain() {
-  // Grass top
-  ctx.fillStyle = "#4ade2a";
+  // Grass top — bright Worms green
+  ctx.fillStyle = "#5bd431";
   ctx.strokeStyle = "#1a4a0a";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1012,7 +1101,7 @@ function drawTerrain() {
   ctx.fill();
 
   // Grass strip highlight
-  ctx.fillStyle = "#6aea4a";
+  ctx.fillStyle = "#82f05a";
   ctx.beginPath();
   for (let i = 0; i < terrain.length; i++) {
     const t = terrain[i];
@@ -1024,6 +1113,15 @@ function drawTerrain() {
   }
   ctx.closePath();
   ctx.fill();
+  // grass tufts on the lip (deterministic — no per-frame flicker)
+  ctx.strokeStyle = "#2f8a12"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 8; i < terrain.length - 8; i += 14) {
+    const t = terrain[i];
+    ctx.moveTo(t.x, t.y + 2); ctx.lineTo(t.x - 3, t.y - 7);
+    ctx.moveTo(t.x + 4, t.y + 2); ctx.lineTo(t.x + 6, t.y - 6);
+  }
+  ctx.stroke();
 
   // Soil layer
   ctx.fillStyle = "#8b5a2a";
@@ -1046,6 +1144,14 @@ function drawTerrain() {
   ctx.lineTo(WORLD_W, WORLD_H);
   ctx.closePath();
   ctx.fill();
+  // dirt speckles (Worms texture — deterministic pseudo-random)
+  ctx.fillStyle = "rgba(60,36,14,0.55)";
+  for (let i = 0; i < terrain.length; i += 10) {
+    const t = terrain[i];
+    const seed = (i * 2654435761) % 97;
+    ctx.fillRect(t.x + (seed % 30), t.y + 28 + (seed % 46), 3, 3);
+    ctx.fillRect(t.x + ((seed * 7) % 34), t.y + 60 + ((seed * 3) % 38), 4, 3);
+  }
 
   // Top outline
   ctx.strokeStyle = "#1a4a0a";
@@ -1069,32 +1175,40 @@ function drawBlocks() {
       ctx.translate(-b.w / 2, -b.h / 2);
       ctx.translate(-b.x, -b.y);
     }
-    if (b.type === "wood") {
-      ctx.fillStyle = "#c8945a";
-      ctx.strokeStyle = "#5a3a1a";
-    } else {
-      ctx.fillStyle = "#999";
-      ctx.strokeStyle = "#444";
-    }
-    ctx.lineWidth = 2;
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    // Wood grain
-    if (b.type === "wood") {
-      ctx.strokeStyle = "rgba(90,58,26,0.4)";
+    // AB-style chunky blocks: rounded corners, bevel light/shadow, thick outline
+    const rr = 5;
+    const paths = () => {
       ctx.beginPath();
-      ctx.moveTo(b.x + 5, b.y + 8);
-      ctx.lineTo(b.x + b.w - 5, b.y + 8);
-      ctx.moveTo(b.x + 5, b.y + b.h - 8);
-      ctx.lineTo(b.x + b.w - 5, b.y + b.h - 8);
+      if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, rr);
+      else ctx.rect(b.x, b.y, b.w, b.h);
+    };
+    if (b.type === "wood") { ctx.fillStyle = "#d9a15e"; ctx.strokeStyle = "#6b4318"; }
+    else if (b.type === "ice") { ctx.fillStyle = "rgba(170,222,255,0.75)"; ctx.strokeStyle = "#5e9fd4"; }
+    else { ctx.fillStyle = "#a8a8ac"; ctx.strokeStyle = "#57575c"; }
+    ctx.lineWidth = 3;
+    paths(); ctx.fill(); ctx.stroke();
+    // bevel: light top, dark bottom
+    ctx.fillStyle = "rgba(255,255,255,0.30)";
+    ctx.fillRect(b.x + 3, b.y + 2, b.w - 6, Math.max(2, b.h * 0.18));
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(b.x + 3, b.y + b.h - Math.max(2, b.h * 0.16) - 2, b.w - 6, Math.max(2, b.h * 0.16));
+    if (b.type === "wood") {
+      ctx.strokeStyle = "rgba(107,67,24,0.5)"; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(b.x + 6, b.y + b.h * 0.4); ctx.lineTo(b.x + b.w - 6, b.y + b.h * 0.4);
+      ctx.moveTo(b.x + 6, b.y + b.h * 0.68); ctx.lineTo(b.x + b.w * 0.6, b.y + b.h * 0.68);
+      ctx.stroke();
+    } else if (b.type === "ice") {
+      // glassy shine
+      ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(b.x + b.w * 0.2, b.y + b.h * 0.7); ctx.lineTo(b.x + b.w * 0.45, b.y + b.h * 0.25);
       ctx.stroke();
     } else {
-      // Stone texture
-      ctx.strokeStyle = "rgba(60,60,60,0.5)";
-      ctx.beginPath();
-      ctx.moveTo(b.x + b.w / 2, b.y);
-      ctx.lineTo(b.x + b.w / 2, b.y + b.h);
-      ctx.stroke();
+      // stone rivets
+      ctx.fillStyle = "rgba(70,70,76,0.6)";
+      ctx.beginPath(); ctx.arc(b.x + 7, b.y + 7, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x + b.w - 7, b.y + 7, 2, 0, Math.PI * 2); ctx.fill();
     }
     // Damage cracks
     if (b.hp < b.maxHp * 0.5) {
@@ -1129,91 +1243,122 @@ function drawWorms() {
 }
 
 function drawWormBody(w) {
+  // 2026-07-02 look pass: BIGGER cartoon worms, 3px outlines, Angry-Birds brows on the
+  // player team, army-green Worms grunts with helmets + sweat on the other side.
   const x = w.x;
   const y = w.y;
-  const r = w.radius;
+  const S = 1.35;                      // visual scale (hitbox radius unchanged)
   const wiggle = Math.sin(w.wiggle) * 2;
+  const F = w.facing;
 
-  // Body color by team
-  let bodyColor, darkColor;
+  let bodyColor, darkColor, bellyColor;
   if (w.team === "enemy") {
-    bodyColor = w.flashTimer > 0 ? "#fff" : "#5acf3a";
-    darkColor = "#2a7a1a";
+    bodyColor = w.flashTimer > 0 ? "#fff" : "#6fce4a";
+    darkColor = "#2a7a1a"; bellyColor = "#c9edb0";
   } else {
-    if (w.type === "red") { bodyColor = "#e8302a"; darkColor = "#8a1a16"; }
-    else if (w.type === "bomber") { bodyColor = "#ffcc00"; darkColor = "#8a6a00"; }
-    else { bodyColor = "#3a8acf"; darkColor = "#1a4a8a"; }
+    if (w.type === "red")        { bodyColor = "#e8302a"; darkColor = "#8a1a16"; bellyColor = "#f6d7b0"; }
+    else if (w.type === "bomber"){ bodyColor = "#ffcc00"; darkColor = "#8a6a00"; bellyColor = "#fff3c0"; }
+    else                         { bodyColor = "#3a8acf"; darkColor = "#1a4a8a"; bellyColor = "#cde7fa"; }
   }
 
-  // Segmented body - 3 segments
   ctx.fillStyle = bodyColor;
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#1a1208";
+  ctx.lineWidth = 3;
+  // Tail tip (curled)
+  ctx.beginPath();
+  ctx.ellipse(x - 20 * S * F, y + 8 * 1 + wiggle, 5 * S, 6 * S, 0.5 * F, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
   // Back segment
   ctx.beginPath();
-  ctx.ellipse(x - 12 * w.facing, y + 5 + wiggle, 8, 10, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.ellipse(x - 12 * S * F, y + 5 + wiggle, 8 * S, 10 * S, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
   // Mid segment
   ctx.beginPath();
-  ctx.ellipse(x - 4 * w.facing, y + wiggle, 10, 12, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  // Head segment
+  ctx.ellipse(x - 4 * S * F, y + wiggle, 10 * S, 12 * S, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Head segment (big — AB energy)
   ctx.beginPath();
-  ctx.ellipse(x + 6 * w.facing, y + wiggle, 12, 13, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 7 * S * F, y - 2 + wiggle, 13 * S, 14 * S, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Belly patch on the head (AB signature)
+  ctx.fillStyle = bellyColor;
+  ctx.beginPath();
+  ctx.ellipse(x + 7 * S * F, y + 6 * S + wiggle, 8 * S, 5.5 * S, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.stroke();
 
-  // Eyes
+  const hx = x + 7 * S * F, hy = y - 2 + wiggle;
+
+  // Eyes — big whites
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  ctx.arc(x + 6 * w.facing + 3 * w.facing, y - 3 + wiggle, 4, 0, Math.PI * 2);
-  ctx.arc(x + 6 * w.facing - 2 * w.facing, y - 3 + wiggle, 4, 0, Math.PI * 2);
+  ctx.arc(hx + 4.5 * S * F, hy - 4 * S, 5.5 * S, 0, Math.PI * 2);
+  ctx.arc(hx - 3 * S * F, hy - 4 * S, 5 * S, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 2; ctx.stroke();
   // Pupils
-  ctx.fillStyle = "#000";
+  ctx.fillStyle = "#1a1208";
   ctx.beginPath();
-  ctx.arc(x + 6 * w.facing + 4 * w.facing, y - 3 + wiggle, 2, 0, Math.PI * 2);
-  ctx.arc(x + 6 * w.facing - 1 * w.facing, y - 3 + wiggle, 2, 0, Math.PI * 2);
+  ctx.arc(hx + 5.5 * S * F, hy - 4 * S, 2.4 * S, 0, Math.PI * 2);
+  ctx.arc(hx - 2 * S * F, hy - 4 * S, 2.2 * S, 0, Math.PI * 2);
   ctx.fill();
 
-  // Mouth - determined for player, nervous for enemy
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
   if (w.team === "player") {
-    ctx.arc(x + 6 * w.facing, y + 4 + wiggle, 3, 0, Math.PI);
-  } else {
-    ctx.moveTo(x + 3 * w.facing, y + 5 + wiggle);
-    ctx.lineTo(x + 9 * w.facing, y + 5 + wiggle);
-  }
-  ctx.stroke();
-
-  // Helmet for enemy
-  if (w.team === "enemy") {
-    ctx.fillStyle = "#888";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
+    // ANGRY unibrow — the Angry Birds signature
+    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 4.5; ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(x + 6 * w.facing, y - 6 + wiggle, 11, Math.PI, 0);
-    ctx.fill();
+    ctx.moveTo(hx - 8 * S * F, hy - 12 * S);
+    ctx.lineTo(hx + 1 * S * F, hy - 8 * S);
+    ctx.moveTo(hx + 10 * S * F, hy - 12 * S);
+    ctx.lineTo(hx + 2 * S * F, hy - 8 * S);
     ctx.stroke();
-    // Helmet shine
-    ctx.fillStyle = "#ccc";
+    ctx.lineCap = "butt";
+    // Determined frown-grin
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(x + 6 * w.facing - 3, y - 9 + wiggle, 3, 0, Math.PI * 2);
+    ctx.arc(hx + 1 * S * F, hy + 6 * S, 4 * S, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+  } else {
+    // Worried brows + wobbly mouth
+    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx - 7 * S * F, hy - 9 * S);
+    ctx.lineTo(hx - 1 * S * F, hy - 11 * S);
+    ctx.moveTo(hx + 8 * S * F, hy - 9 * S);
+    ctx.lineTo(hx + 3 * S * F, hy - 11 * S);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(hx - 3 * S * F, hy + 7 * S);
+    ctx.quadraticCurveTo(hx + 1 * S * F, hy + 4 * S, hx + 5 * S * F, hy + 7 * S);
+    ctx.stroke();
+    // Sweat drop
+    ctx.fillStyle = "#7cc4f0";
+    ctx.beginPath();
+    ctx.ellipse(hx - 10 * S * F, hy - 10 * S + (w.wiggle % 6), 2.2, 3.4, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Army helmet
+    ctx.fillStyle = "#5d6b46";
+    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(hx, hy - 8 * S, 12 * S, Math.PI, 0);
+    ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "#3d4930"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(hx - 12 * S, hy - 8 * S); ctx.lineTo(hx + 12 * S, hy - 8 * S);
+    ctx.stroke();
+    ctx.fillStyle = "#77875a";
+    ctx.beginPath(); ctx.arc(hx - 4 * S, hy - 13 * S, 3, 0, Math.PI * 2); ctx.fill();
   }
 
-  // Bomber stripe
-  if (w.type === "bomber" && w.team === "player") {
-    ctx.fillStyle = "#000";
-    for (let i = -1; i <= 1; i++) {
-      ctx.fillRect(x - 12 + i * 8, y - 4, 3, 8);
+  // Bomber stripes / splitter dots
+  if (w.team === "player" && w.type === "bomber") {
+    ctx.fillStyle = "#1a1208";
+    for (let i = -1; i <= 1; i++) ctx.fillRect(x - (14 - i * 9) * F - 2, y - 5 + wiggle, 4, 11);
+  }
+  if (w.team === "player" && w.type === "splitter") {
+    ctx.fillStyle = "#fff";
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.arc(x - (14 - i * 8) * F, y + wiggle, 2.5, 0, Math.PI * 2); ctx.fill();
     }
   }
 }
@@ -1244,9 +1389,9 @@ function drawSlingshot() {
   const sx = SLING_X;
   const sy = GROUND_Y - 80;
   // Wood posts - Y shape
-  ctx.fillStyle = "#7a4a1a";
-  ctx.strokeStyle = "#3a1a00";
-  ctx.lineWidth = 2;
+  ctx.fillStyle = "#9a6428";
+  ctx.strokeStyle = "#4a2808";
+  ctx.lineWidth = 3;
   // Trunk
   ctx.fillRect(sx - 8, sy - 20, 16, 80);
   ctx.strokeRect(sx - 8, sy - 20, 16, 80);
@@ -1272,8 +1417,8 @@ function drawSlingshot() {
   // Elastic band
   if (loadedWorm && aiming && dragCurrent) {
     // Stretched - back band
-    ctx.strokeStyle = "#3a1a00";
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#7a2418";
+    ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(leftTip.x, leftTip.y);
     ctx.lineTo(loadedWorm.x, loadedWorm.y);
@@ -1285,8 +1430,8 @@ function drawSlingshot() {
     // Front band (drawn after worm)
   } else if (loadedWorm) {
     // Relaxed band
-    ctx.strokeStyle = "#3a1a00";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#7a2418";
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.moveTo(leftTip.x, leftTip.y);
     ctx.lineTo(rightTip.x, rightTip.y);
@@ -1414,7 +1559,21 @@ function drawProjectiles() {
 function drawParticles() {
   for (const pt of particles) {
     const a = pt.life / pt.maxLife;
-    if (pt.type === "smoke") {
+    if (pt.type === "pow") {
+      // 5-point AB impact star
+      ctx.save();
+      ctx.translate(pt.x, pt.y); ctx.rotate((pt.rot || 0) + (1 - a) * 2);
+      ctx.fillStyle = pt.color; ctx.globalAlpha = a;
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const rr = (k % 2 === 0 ? pt.size : pt.size * 0.45) * (0.5 + a * 0.5);
+        const aa = (k / 10) * Math.PI * 2 - Math.PI / 2;
+        if (k === 0) ctx.moveTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+        else ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1; ctx.restore();
+    } else if (pt.type === "smoke") {
       ctx.fillStyle = "rgba(40,40,40," + a * 0.7 + ")";
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, pt.size * (2 - a), 0, Math.PI * 2);

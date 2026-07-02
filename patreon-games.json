@@ -1,58 +1,106 @@
 {
-  "social": [
-    {"name":"Shop","emoji":"🛍️","url":"https://jimmy-joe-shop.fourthwall.com/","gradient":["#FF9F0A","#FF6B00"],"label":"Shop"},
-    {"name":"YouTube","emoji":"▶","url":"https://www.youtube.com/@JnJAiStudio","gradient":["#FF453A","#FF2D55"],"label":"YouTube"},
-    {"name":"Patreon","emoji":"☕","url":"https://www.patreon.com/c/JimmyJoeAiPodcast","gradient":["#FF6E4A","#E0420B"],"label":"Patreon"},
-    {"name":"Ko-fi","emoji":"☕","url":"https://ko-fi.com/jimmynjoe","gradient":["#FF5E5B","#E03030"],"label":"KoFi"}
-  ],
-  "games": [
-    {
-      "id": "snake",
-      "name": "SNAKE BLASTER",
-      "emoji": "\ud83d\udc0d",
-      "genre": "SNAKE \u00d7 ARKANOID",
-      "url": "games/snake.html",
-      "status": "wip",
-      "special": "Game Lab #1",
-      "note": "Snake with a gun. Arkanoid-style brick targets. Classic meets shooter.",
-      "ready": true,
-      "ready_date": "2026-06-24"
-    },
-    {
-      "id": "doom-3d",
-      "name": "DOOM MARI-OH 3D",
-      "emoji": "\ud83d\udc79",
-      "genre": "DOOM \u00d7 MARIO",
-      "url": "games/doom-3d.html",
-      "status": "wip",
-      "special": "Game Lab #1",
-      "note": "Full 3D raycaster. Doom engine, Mario universe.",
-      "ready": true,
-      "ready_date": "2026-06-24"
-    },
-    {
-      "id": "hop-man",
-      "name": "HOP-MAN",
-      "emoji": "\ud83d\udc38",
-      "genre": "PAC-MAN \u00d7 FROGGER",
-      "url": "games/hop-man.html",
-      "status": "wip",
-      "special": "Game Lab #2",
-      "note": "Frog hops four lanes of traffic to collect snacks. Pac-Man maze logic.",
-      "ready": true,
-      "ready_date": "2026-06-24"
-    },
-    {
-      "id": "flap-fight",
-      "name": "FLAP FIGHT",
-      "emoji": "\ud83c\udf88",
-      "genre": "BALLOON FIGHT \u00d7 FLAPPY BIRD",
-      "url": "games/flap-fight.html",
-      "status": "wip",
-      "special": "Game Lab #2",
-      "note": "Stomp parachute guys mid-gap. Bounce into pipes. Still a high score.",
-      "ready": true,
-      "ready_date": "2026-06-24"
-    }
-  ]
+ "social": [
+  {
+   "name": "Shop",
+   "emoji": "\ud83d\udecd\ufe0f",
+   "url": "https://jimmy-joe-shop.fourthwall.com/",
+   "gradient": [
+    "#FF9F0A",
+    "#FF6B00"
+   ],
+   "label": "Shop"
+  },
+  {
+   "name": "YouTube",
+   "emoji": "\u25b6",
+   "url": "https://www.youtube.com/@JnJAiStudio",
+   "gradient": [
+    "#FF453A",
+    "#FF2D55"
+   ],
+   "label": "YouTube"
+  },
+  {
+   "name": "Patreon",
+   "emoji": "\u2615",
+   "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
+   "gradient": [
+    "#FF6E4A",
+    "#E0420B"
+   ],
+   "label": "Patreon"
+  },
+  {
+   "name": "Ko-fi",
+   "emoji": "\u2615",
+   "url": "https://ko-fi.com/jimmynjoe",
+   "gradient": [
+    "#FF5E5B",
+    "#E03030"
+   ],
+   "label": "KoFi"
+  }
+ ],
+ "games": [
+  {
+   "id": "snake",
+   "name": "SNAKE BLASTER",
+   "emoji": "\ud83d\udc0d",
+   "genre": "SNAKE \u00d7 ARKANOID",
+   "url": "games/snake.html",
+   "status": "wip",
+   "special": "Game Lab #1",
+   "note": "Snake with a gun. Arkanoid-style brick targets. Classic meets shooter.",
+   "ready": true,
+   "ready_date": "2026-06-24"
+  },
+  {
+   "id": "doom-3d",
+   "name": "DOOM MARI-OH 3D",
+   "emoji": "\ud83d\udc79",
+   "genre": "DOOM \u00d7 MARIO",
+   "url": "games/doom-3d.html",
+   "status": "wip",
+   "special": "Game Lab #1",
+   "note": "Full 3D raycaster. Doom engine, Mario universe.",
+   "ready": true,
+   "ready_date": "2026-06-24"
+  },
+  {
+   "id": "hop-man",
+   "name": "HOP-MAN",
+   "emoji": "\ud83d\udc38",
+   "genre": "PAC-MAN \u00d7 FROGGER",
+   "url": "games/hop-man.html",
+   "status": "wip",
+   "special": "Game Lab #2",
+   "note": "Frog hops four lanes of traffic to collect snacks. Pac-Man maze logic.",
+   "ready": true,
+   "ready_date": "2026-06-24"
+  },
+  {
+   "id": "flap-fight",
+   "name": "FLAP FIGHT",
+   "emoji": "\ud83c\udf88",
+   "genre": "BALLOON FIGHT \u00d7 FLAPPY BIRD",
+   "url": "games/flap-fight.html",
+   "status": "wip",
+   "special": "Game Lab #2",
+   "note": "Stomp parachute guys mid-gap. Bounce into pipes. Still a high score.",
+   "ready": true,
+   "ready_date": "2026-06-24"
+  },
+  {
+   "id": "candy-tris",
+   "name": "CRUSHTRIS",
+   "emoji": "\ud83c\udf6c",
+   "genre": "CANDY CRUSH \u00d7 TETRIS",
+   "url": "games/candy-tris.html",
+   "status": "wip",
+   "special": "Game Lab #5",
+   "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2\u00d72 = fish. Tap a special candy then a neighbour to smash combos.",
+   "ready": true,
+   "ready_date": "2026-07-02"
+  }
+ ]
 }
