@@ -17,7 +17,10 @@ h1 { font-size:34px; color:#7ee0ff; text-shadow:0 0 18px #7ee0ff; letter-spacing
 .hostBtn:active { border-color:#7ee0ff; }
 .hostBtn canvas { image-rendering:pixelated; }
 #pickRow { display:flex; gap:26px; }
+#topRow { display:flex; justify-content:center; }
+#nav { touch-action:none; cursor:pointer; background:#050505; border:2px solid #1c2a30; border-radius:8px; }
 #gridWrap { flex:1; display:flex; align-items:center; justify-content:center; width:100%; min-height:0; }
+.tbtn.on { border-color:#39ff8c; color:#39ff8c; }
 #grid { touch-action:none; cursor:crosshair; background:#050505; border:2px solid #1c2a30; border-radius:10px; }
 #toolbar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; }
 .tbtn { background:transparent; color:#ccc; border:2px solid #444; border-radius:8px; padding:8px 14px;
@@ -48,9 +51,16 @@ a.back { position:fixed; top:10px; left:12px; color:#456; font-size:11px; text-d
 </div>
 
 <div id="editor" class="screen">
+  <div id="topRow">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <canvas id="nav"></canvas>
+      <div style="font-size:9px;color:#567;letter-spacing:1px">LIVE FACE · TAP TO AIM ZOOM</div>
+    </div>
+  </div>
   <div id="gridWrap"><canvas id="grid"></canvas></div>
   <div id="counts"></div>
   <div id="toolbar">
+    <button class="tbtn" id="mirrorBtn" onclick="toggleMirror()">🪞 MIRROR: OFF</button>
     <button class="tbtn" onclick="resetFace()">RESET</button>
     <button class="tbtn" onclick="clearFace()">CLEAR</button>
     <input id="exprName" maxlength="28" placeholder="EXPRESSION NAME">
@@ -90,46 +100,107 @@ function drawMini(id, dots) {
   }
 }
 
+const VIEW = 16;                    // zoom window: 16×16 fat cells
+let vr = 12, vc = 4;                // viewport top-left (row, col)
+let mirror = false;
+
 function openEditor(a) {
   agent = a;
   lit = new Set(RESTING[a].map(([r, c]) => r * GRID + c));
   document.getElementById('pick').classList.remove('active');
   document.getElementById('editor').classList.add('active');
-  sizeGrid(); paint();
+  sizeGrid(); paintAll();
 }
 
 function sizeGrid() {
   const wrap = document.getElementById('gridWrap');
   const s = Math.min(wrap.clientWidth, wrap.clientHeight) - 8;
-  cell = Math.max(6, Math.floor(s / GRID));
+  cell = Math.max(14, Math.floor(s / VIEW));
   const cv = document.getElementById('grid');
-  const px = cell * GRID;
+  const px = cell * VIEW;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = px * dpr; cv.height = px * dpr;
   cv.style.width = px + 'px'; cv.style.height = px + 'px';
   cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  // navigator: whole face, small
+  const nav = document.getElementById('nav');
+  const ns = Math.min(200, Math.floor(window.innerWidth * 0.42));
+  const ncell = ns / GRID;
+  nav.width = ns * dpr; nav.height = ns * dpr;
+  nav.style.width = ns + 'px'; nav.style.height = ns + 'px';
+  nav.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  nav._ncell = ncell; nav._ns = ns;
 }
-window.addEventListener('resize', () => { if (document.getElementById('editor').classList.contains('active')) { sizeGrid(); paint(); } });
+window.addEventListener('resize', () => { if (document.getElementById('editor').classList.contains('active')) { sizeGrid(); paintAll(); } });
 
-function paint() {
-  const cv = document.getElementById('grid'), g = cv.getContext('2d');
-  const px = cell * GRID;
-  g.fillStyle = '#050505'; g.fillRect(0, 0, px, px);
-  // faint off-dots so the grid is discoverable
-  g.fillStyle = '#101418';
-  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
-    if (!lit.has(r * GRID + c)) {
-      g.beginPath(); g.arc(c * cell + cell / 2, r * cell + cell / 2, Math.max(1, cell * 0.14), 0, Math.PI * 2); g.fill();
-    }
-  }
+function clampView() {
+  vr = Math.max(0, Math.min(GRID - VIEW, vr));
+  vc = Math.max(0, Math.min(GRID - VIEW, vc));
+}
+
+function paintAll() { paintNav(); paint(); }
+
+function paintNav() {
+  const nav = document.getElementById('nav'), g = nav.getContext('2d');
+  const nc = nav._ncell, ns = nav._ns;
+  g.fillStyle = '#050505'; g.fillRect(0, 0, ns, ns);
   g.fillStyle = '#ececec';
   for (const key of lit) {
     const r = (key / GRID) | 0, c = key % GRID;
-    g.beginPath();
-    g.roundRect ? (g.roundRect(c * cell + cell * 0.15, r * cell + cell * 0.15, cell * 0.7, cell * 0.7, cell * 0.28), g.fill())
-                : (g.arc(c * cell + cell / 2, r * cell + cell / 2, cell * 0.35, 0, Math.PI * 2), g.fill());
+    g.beginPath(); g.arc(c * nc + nc / 2, r * nc + nc / 2, Math.max(1, nc * 0.38), 0, Math.PI * 2); g.fill();
   }
-  document.getElementById('counts').textContent = agent.toUpperCase() + ' · ' + lit.size + ' DOTS LIT';
+  // viewport rectangle
+  g.strokeStyle = '#7ee0ff'; g.lineWidth = 2;
+  g.strokeRect(vc * nc, vr * nc, VIEW * nc, VIEW * nc);
+  if (mirror) {                     // show the mirrored viewport ghost
+    const mc = GRID - vc - VIEW;
+    g.strokeStyle = 'rgba(57,255,140,0.5)'; g.setLineDash([4, 4]);
+    g.strokeRect(mc * nc, vr * nc, VIEW * nc, VIEW * nc);
+    g.setLineDash([]);
+  }
+}
+
+function paint() {
+  const cv = document.getElementById('grid'), g = cv.getContext('2d');
+  const px = cell * VIEW;
+  g.fillStyle = '#050505'; g.fillRect(0, 0, px, px);
+  for (let r = 0; r < VIEW; r++) for (let c = 0; c < VIEW; c++) {
+    const gr = vr + r, gc = vc + c;
+    const on = lit.has(gr * GRID + gc);
+    if (on) {
+      g.fillStyle = '#ececec';
+      g.beginPath();
+      g.roundRect ? (g.roundRect(c * cell + cell * 0.12, r * cell + cell * 0.12, cell * 0.76, cell * 0.76, cell * 0.3), g.fill())
+                  : (g.arc(c * cell + cell / 2, r * cell + cell / 2, cell * 0.38, 0, Math.PI * 2), g.fill());
+    } else {
+      g.fillStyle = '#141a1f';
+      g.beginPath(); g.arc(c * cell + cell / 2, r * cell + cell / 2, Math.max(1.5, cell * 0.10), 0, Math.PI * 2); g.fill();
+    }
+  }
+  // centre-line hint when mirror is on
+  if (mirror) {
+    const mid = GRID / 2;
+    if (mid >= vc && mid <= vc + VIEW) {
+      g.strokeStyle = 'rgba(57,255,140,0.35)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo((mid - vc) * cell, 0); g.lineTo((mid - vc) * cell, px); g.stroke();
+    }
+  }
+  document.getElementById('counts').textContent =
+    agent.toUpperCase() + ' · ' + lit.size + ' DOTS LIT · ZOOM ' + (vr) + ',' + (vc);
+}
+
+function toggleMirror() {
+  mirror = !mirror;
+  const b = document.getElementById('mirrorBtn');
+  b.textContent = '🪞 MIRROR: ' + (mirror ? 'ON' : 'OFF');
+  b.classList.toggle('on', mirror);
+  paintAll();
+}
+
+function setDot(gr, gc, val) {
+  const apply = (r, c) => { val ? lit.add(r * GRID + c) : lit.delete(r * GRID + c); };
+  apply(gr, gc);
+  if (mirror) apply(gr, GRID - 1 - gc);
 }
 
 let painting = false, paintVal = true;
@@ -139,24 +210,23 @@ function cellAt(e) {
   const t = e.touches ? e.touches[0] : e;
   const c = Math.floor((t.clientX - rect.left) / cell);
   const r = Math.floor((t.clientY - rect.top) / cell);
-  if (r < 0 || r >= GRID || c < 0 || c >= GRID) return null;
-  return r * GRID + c;
+  if (r < 0 || r >= VIEW || c < 0 || c >= VIEW) return null;
+  return [vr + r, vc + c];
 }
 function pDown(e) {
   e.preventDefault();
-  const k = cellAt(e); if (k === null) return;
+  const p = cellAt(e); if (!p) return;
   painting = true;
-  paintVal = !lit.has(k);                 // tap lit → erase mode; tap dark → draw mode
-  paintVal ? lit.add(k) : lit.delete(k);
-  paint();
+  paintVal = !lit.has(p[0] * GRID + p[1]);
+  setDot(p[0], p[1], paintVal);
+  paintAll();
 }
 function pMove(e) {
   if (!painting) return;
   e.preventDefault();
-  const k = cellAt(e); if (k === null) return;
-  const had = lit.has(k);
-  if (paintVal && !had) { lit.add(k); paint(); }
-  if (!paintVal && had) { lit.delete(k); paint(); }
+  const p = cellAt(e); if (!p) return;
+  const had = lit.has(p[0] * GRID + p[1]);
+  if (paintVal !== had) { setDot(p[0], p[1], paintVal); paintAll(); }
 }
 function pUp() { painting = false; }
 const gridEl = document.getElementById('grid');
@@ -167,8 +237,27 @@ gridEl.addEventListener('touchstart', pDown, { passive: false });
 gridEl.addEventListener('touchmove', pMove, { passive: false });
 gridEl.addEventListener('touchend', pUp);
 
-function resetFace() { lit = new Set(RESTING[agent].map(([r, c]) => r * GRID + c)); paint(); }
-function clearFace() { lit = new Set(); paint(); }
+// navigator: tap/drag = aim the zoom window (centred on the tap)
+let navDrag = false;
+function navAim(e) {
+  const nav = document.getElementById('nav');
+  const rect = nav.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  const c = (t.clientX - rect.left) / nav._ncell;
+  const r = (t.clientY - rect.top) / nav._ncell;
+  vr = Math.round(r - VIEW / 2); vc = Math.round(c - VIEW / 2);
+  clampView(); paintAll();
+}
+const navEl = document.getElementById('nav');
+navEl.addEventListener('mousedown', e => { navDrag = true; navAim(e); });
+navEl.addEventListener('mousemove', e => { if (navDrag) navAim(e); });
+window.addEventListener('mouseup', () => { navDrag = false; });
+navEl.addEventListener('touchstart', e => { e.preventDefault(); navDrag = true; navAim(e); }, { passive: false });
+navEl.addEventListener('touchmove', e => { if (navDrag) { e.preventDefault(); navAim(e); } }, { passive: false });
+navEl.addEventListener('touchend', () => { navDrag = false; });
+
+function resetFace() { lit = new Set(RESTING[agent].map(([r, c]) => r * GRID + c)); paintAll(); }
+function clearFace() { lit = new Set(); paintAll(); }
 
 let sending = false;
 function submitFace() {
