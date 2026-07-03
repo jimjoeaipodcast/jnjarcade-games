@@ -52,6 +52,14 @@ const C={
   rocket1:'#8b6914',rocket2:'#ccaa22',rocketFlame:'#ff9900',
   hud:'rgba(8,12,4,0.82)',ink:'#88dd33',scoreC:'#ffdd44',
   heart:'#ff3366',pop1:'#88dd33',pop2:'#ffcc44',pop3:'#ffe066',
+  vine:'#4a7a1f',vineHi:'#79c93c',leaf:'#3f9425',
+  water:'#1c4d6e',waterHi:'#3d85b0',
+  croc:'#3f7a2a',crocDk:'#1f4a12',crocJaw:'#d8e8c8',crocEye:'#ffdd22',
+  log:'#6b4218',logDk:'#3f2408',logRing:'#8a5c2c',
+  snakeC:'#c9a227',snakeDk:'#6e5510',snakeTongue:'#ff4444',
+  banana:'#ffe135',bananaDk:'#c9a800',
+  gold:'#ffd700',goldHi:'#fff3a0',
+  chestC:'#7a4a1a',chestDk:'#4a2a08',chestGold:'#ffd700',
 };
 
 // Fixed background star field (repurposed as firefly positions)
@@ -90,36 +98,85 @@ function platH(d){
 }
 
 let PLATS=[],COLLECTIBLES=[],POPS=[];
+let VINES=[],PITS=[],CROCS=[],LOGS=[],LOGSPAWNS=[],SNAKES=[],GOLDS=[],CHEST=null;
+let WWlvl=2400;
 
-function buildLevel(){
-  PLATS=PD.map(d=>({
-    x:d[0],y:d[1],w:d[2],h:platH(d),type:d[3],
-    mv:d[3]==='move',mvRange:d[4],mvSpeed:d[5],baseX:d[0],
-    phase:Math.random()*Math.PI*2,_prevX:d[0],
-    semi:d[3]==='semi',
-  }));
+// ── PITFALL × DK JR level generator (game-builder: RNG dresses, never decides) ──
+// Course = alternating GROUND runs and WATER pits. Pits are crossed by VINES
+// (the signature) or CROC-HEAD stepping stones (jaws open/close). Ground runs
+// carry rolling LOGS, patrol SNAKES, platforms with bananas; GOLD hangs on vine
+// arcs; the TREASURE CHEST ends the course. L1: short, vines only, no crocs/snakes.
+function genLevel(lvl){
+  PLATS=[];VINES=[];PITS=[];CROCS=[];LOGS=[];LOGSPAWNS=[];SNAKES=[];
+  COLLECTIBLES=[];GOLDS=[];CHEST=null;
+  const nSections=Math.min(3+lvl,7);           // ramp ONE axis: course length
+  const pitEvery=lvl>=2?2:3;                   // pit frequency
+  let x=0,sec=0;
+  const groundRun=(w)=>{
+    PLATS.push({x:x,y:GY,w:w,h:IH-GY+10,type:'ground',mv:false,semi:false,
+      baseX:x,phase:0,_prevX:x,mvRange:0,mvSpeed:0});
+    for(let bx=30;bx<w-20;bx+=55)
+      COLLECTIBLES.push({x:x+bx,y:GY-14,got:false,idx:COLLECTIBLES.length});
+    if(sec%2===1&&w>=150){
+      const pw=70,px=x+w/2-pw/2,py=GY-52;
+      PLATS.push({x:px,y:py,w:pw,h:9,type:'semi',mv:false,semi:true,
+        baseX:px,phase:0,_prevX:px,mvRange:0,mvSpeed:0});
+      COLLECTIBLES.push({x:px+18,y:py-14,got:false,idx:COLLECTIBLES.length});
+      COLLECTIBLES.push({x:px+pw-24,y:py-14,got:false,idx:COLLECTIBLES.length});
+    }
+    if(w>=170&&!(lvl===1&&sec===0))
+      LOGSPAWNS.push({x0:x,x1:x+w,next:120+Math.random()*140,
+        speed:0.9+lvl*0.12});
+    if(lvl>=2&&w>=140&&sec>=1&&(lvl>=3||sec%2===0)){
+      const sx=x+40+Math.random()*(w-110);
+      SNAKES.push({x:sx,x0:x+22,x1:x+w-40,dir:1,walk:0});
+    }
+    x+=w;sec++;
+  };
+  const pit=(w,useCrocs)=>{
+    PITS.push({x:x,w:w});
+    if(useCrocs){
+      const n=Math.max(2,Math.round(w/56));
+      for(let i=0;i<n;i++)
+        CROCS.push({x:x+w*(i+0.5)/n-14,y:GY-4,phase:i*1.7,idx:i});
+    }else{
+      const n=Math.max(1,Math.round(w/85));
+      for(let i=0;i<n;i++){
+        const ax=x+w*(i+0.5)/n;
+        VINES.push({ax:ax,ay:26+((i%2)*10),len:GY-70-((i%2)*10)});
+        if(lvl>=2&&i===Math.floor(n/2))
+          GOLDS.push({x:ax-6,y:GY-96,got:false});
+      }
+    }
+    x+=w;
+  };
 
-  // Stars on each platform
-  COLLECTIBLES=[];
-  const sp=[
-    [0,[80,200,360,480]],[1,[20,55]],[2,[20,55]],[3,[20,55]],
-    [4,[20,48]],[5,[20,48]],[6,[20,48]],
-    [7,[20,60]],[8,[20,60]],[9,[20,60]],
-    [10,[80,250,440,580]],[11,[25,65]],[12,[25,65]],
-  ];
-  for(const[pi,offs] of sp){
-    if(pi>=PLATS.length)continue;
-    const pl=PLATS[pi];
-    for(const off of offs){
-      if(off>pl.w-14)continue;
-      COLLECTIBLES.push({x:pl.x+off,y:pl.y-13,got:false,idx:COLLECTIBLES.length});
+  groundRun(200+(lvl===1?60:0));
+  let pitN=0;
+  for(let s2=1;s2<nSections;s2++){
+    const wide=lvl>=3&&s2>=2;
+    if(s2%pitEvery===0){
+      // ALTERNATE pit types — vines are the signature, EVERY level gets them;
+      // crocs join from L2 on every second pit
+      const useCrocs=lvl>=2&&(pitN%2===1);
+      pit(useCrocs?(wide?150:110):(wide?170:95),useCrocs);
+      pitN++;
+      groundRun(150+Math.random()*60);
+    }else{
+      groundRun(170+Math.random()*70);
     }
   }
+  groundRun(180);
+  const last=PLATS.filter(pl=>pl.type==='ground').pop();
+  CHEST={x:last.x+last.w-46,y:GY-24,opened:false};
+  WWlvl=x+40;
 
   POPS=[];
   resetPlayer();resetAlien();
   cam.x=0;
 }
+
+function buildLevel(){ genLevel(level||1); }
 
 const p={x:0,y:0,vx:0,vy:0,prevY:0,grounded:false,
          jumpCount:0,coyote:0,standingOn:null,facing:1,walk:0,inv:0};
@@ -131,7 +188,42 @@ let gameState='ATTRACT',deathTimer=0,clearTimer=0,tick=0;
 let W=1,H=1,scaleX=1,scaleY=1;
 const cam={x:0};
 
+// ── SFX (house style: lazy ctx, gesture unlock, mute, attract-silent) ──
+let audioCtx=null,sfxMuted=localStorage.getItem('sfxMuted_junglehop')==='1';
+function unlockAudio(){
+  if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+}
+document.addEventListener('pointerdown',unlockAudio,{once:true});
+function tone(f0,f1,dur,type,vol,delay){
+  if(sfxMuted||!audioCtx||gameState==='ATTRACT')return;
+  try{
+    const t0=audioCtx.currentTime+(delay||0);
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||'square';o.frequency.setValueAtTime(f0,t0);
+    if(f1)o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t0+dur);
+    g.gain.setValueAtTime(vol||0.14,t0);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g);g.connect(audioCtx.destination);o.start(t0);o.stop(t0+dur);
+  }catch(e){}
+}
+const sfx={
+  jump:  ()=>tone(300,520,0.09,'triangle',0.12),
+  jump2: ()=>tone(420,700,0.09,'triangle',0.12),
+  grab:  ()=>tone(240,180,0.08,'square',0.15),
+  whoosh:()=>tone(140,480,0.22,'sine',0.10),
+  release:()=>tone(380,760,0.14,'triangle',0.14),
+  banana:()=>tone(880,1320,0.08,'square',0.13),
+  gold:  ()=>{tone(1046,0,0.07,'square',0.15);tone(1568,0,0.09,'square',0.15,0.07);},
+  hurt:  ()=>tone(220,70,0.25,'sawtooth',0.2),
+  splash:()=>{tone(500,120,0.3,'sine',0.16);tone(300,80,0.35,'sine',0.12,0.05);},
+  chomp: ()=>tone(160,50,0.15,'sawtooth',0.2),
+  fanfare:()=>{[523,659,784,1046].forEach((f,i)=>tone(f,0,0.16,'triangle',0.16,i*0.1));},
+  death: ()=>tone(440,55,0.7,'sawtooth',0.2),
+};
+
 function resetPlayer(){
+  p.vine=null;p.vAng=0;p.vVel=0;
   p.x=60;p.y=GY-PH;p.vx=0;p.vy=0;p.grounded=true;
   p.jumpCount=0;p.coyote=0;p.standingOn=null;p.facing=1;p.walk=0;p.inv=140;
 }
@@ -186,6 +278,11 @@ canvas.addEventListener('touchstart',e=>{
   for(const t of e.changedTouches){
     if(gameState==='ATTRACT'){startGame();return;}
     if(gameState==='GAMEOVER'){endGame();return;}
+    // mute toggle: top-right HUD corner
+    if(lx(t.clientX)>IW-26&&ly(t.clientY)<20){
+      sfxMuted=!sfxMuted;localStorage.setItem('sfxMuted_junglehop',sfxMuted?'1':'0');
+      continue;
+    }
     const z=zoneOf(t.clientX);
     if(z==='L'&&!js.active){
       js.active=true;js.id=t.identifier;js.dx=0;js.dy=0;
@@ -237,17 +334,48 @@ function update(dt){
   // We process jump BEFORE moveEnt so we use last frame's grounded state.
   // Coyote: if was grounded last frame but not this frame → still allow jump for COYOTE frames.
   if(jb.pressed){
-    if(p.grounded||p.coyote>0){
+    if(p.vine){
+      // RELEASE — momentum carries (tip velocity of the pendulum + a lift boost)
+      const v=p.vine,om=p.vVel;
+      p.vx=Math.cos(p.vAng)*om*v.len*1.12;
+      p.vy=Math.sin(p.vAng)*om*v.len*-1.0-2.6;
+      p.vx=Math.max(-6.5,Math.min(6.5,p.vx));
+      p.vine=null;p.jumpCount=1;p.grounded=false;
+      pop(p.x+PW/2,p.y+PH*0.4,C.vineHi);
+      sfx.release();
+    } else if(p.grounded||p.coyote>0){
       // Normal ground jump (or coyote)
       p.vy=-JUMP;p.grounded=false;p.jumpCount=1;p.coyote=0;
       pop(p.x+PW/2,p.y+PH,C.gndEdge);
+      sfx.jump();
+    } else if(grabVine()){
+      // SIGNATURE: airborne grab — latch the nearest vine rope
+      sfx.grab();
     } else if(p.jumpCount===1){
       // Double jump in air
       p.vy=-JUMP2;p.jumpCount=2;
       pop(p.x+PW/2,p.y+PH*0.5,C.pop1);
       pop(p.x+PW/2,p.y+PH*0.5,C.pop3);
+      sfx.jump2();
     }
     jb.pressed=false;
+  }
+
+  // ── VINE SWING (pendulum) — the signature mechanic ──
+  if(p.vine){
+    const v=p.vine;
+    p.vVel+=-Math.sin(p.vAng)*0.0115;         // gravity torque
+    // pump the swing with the stick (DK Jr body-lean)
+    const Lh=js.active&&js.dx<-DEADZONE,Rh=js.active&&js.dx>DEADZONE;
+    if(Rh)p.vVel+=0.00042; if(Lh)p.vVel-=0.00042;
+    p.vVel*=0.996;
+    p.vAng+=p.vVel*dt*0.06;
+    p.x=v.ax+Math.sin(p.vAng)*v.len-PW/2;
+    p.y=v.ay+Math.cos(p.vAng)*v.len-PH*0.35;
+    p.vx=0;p.vy=0;p.grounded=false;
+    // whoosh at the bottom of a strong swing
+    if(Math.abs(p.vAng)<0.06&&Math.abs(p.vVel)>0.028&&!p._whooshed){p._whooshed=true;sfx.whoosh();}
+    if(Math.abs(p.vAng)>0.3)p._whooshed=false;
   }
   if(Math.abs(p.vx)>0.3)p.walk++;
   if(p.inv>0)p.inv--;
@@ -260,7 +388,7 @@ function update(dt){
     pl.x=pl.baseX+Math.sin(pl.phase)*pl.mvRange;
   }
 
-  moveEnt(p,PW,PH);
+  if(!p.vine)moveEnt(p,PW,PH);
 
   // Coyote update AFTER physics (knows real grounded state)
   if(p.grounded){p.jumpCount=0;p.coyote=COYOTE;}
@@ -306,23 +434,17 @@ function update(dt){
   for(const c of COLLECTIBLES){
     if(c.got)continue;
     if(Math.abs(p.x+PW/2-(c.x+6))<18&&Math.abs(p.y+PH/2-(c.y+6))<18){
-      c.got=true;score+=100;pop(c.x+6,c.y,C.star);
+      c.got=true;score+=100;pop(c.x+6,c.y,C.banana);sfx.banana();
     }
   }
 
   timerMs+=dt;timer=Math.max(0,120-Math.floor(timerMs/1000));
   if(timer<=0)killPlayer();
 
-  if(nLeft()===0){
-    const gp=goalPl();
-    if(p.x+PW>gp.x&&p.x<gp.x+gp.w&&p.prevY+PH<=gp.y+2&&p.y+PH>=gp.y){
-      gameState='CLEAR';clearTimer=200;score+=500+timer*10+lives*100;
-      pop(p.x+PW/2,p.y,C.star);pop(p.x+PW/2,p.y,C.pop1);
-    }
-  }
+  updateHazards(dt);   // logs, snakes, crocs, water, gold, chest (Pitfall layer)
 
   // Camera
-  cam.x+=(Math.max(0,Math.min(WW-IW,p.x-IW*0.38))-cam.x)*0.12;
+  cam.x+=(Math.max(0,Math.min(WWlvl-IW,p.x-IW*0.38))-cam.x)*0.12;
 
   // Particles
   for(let i=POPS.length-1;i>=0;i--){
@@ -332,9 +454,109 @@ function update(dt){
   }
 }
 
+function grabVine(){
+  for(const v of VINES){
+    // grab anywhere on the rope's lower 60%
+    const tipX=v.ax+Math.sin(0)*v.len; // rope hangs near-vertical for the check
+    if(Math.abs(p.x+PW/2-v.ax)<20&&p.y>v.ay+v.len*0.35&&p.y<v.ay+v.len+14){
+      p.vine=v;
+      p.vAng=Math.atan2(p.x+PW/2-v.ax,(p.y+PH*0.35)-v.ay);
+      // inherit momentum into angular velocity
+      p.vVel=Math.max(-0.05,Math.min(0.05,p.vx*0.006))+ (p.vAng>0?-0.004:0.004);
+      p.jumpCount=0;
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateHazards(dt){
+  // rolling logs
+  for(const sp2 of LOGSPAWNS){
+    sp2.next-=1;
+    if(sp2.next<=0){
+      LOGS.push({x:sp2.x1-14,y:GY-12,vx:-sp2.speed,r:7,rot:0});
+      sp2.next=200+Math.random()*220-Math.min(120,level*14);
+    }
+  }
+  for(let i=LOGS.length-1;i>=0;i--){
+    const L2=LOGS[i];
+    L2.x+=L2.vx;L2.rot-=0.12;
+    if(L2.x<L2x0(L2)-20||L2.x<-30){LOGS.splice(i,1);continue;}
+    // hit player (hitbox 15% forgiving)
+    if(p.inv<=0&&!p.vine&&
+       Math.abs(p.x+PW/2-L2.x)<(PW/2+L2.r)*0.85&&
+       Math.abs(p.y+PH-(L2.y+L2.r))<PH*0.7){
+      hurtPlayer();L2.x-=8;
+    }
+  }
+  // snakes patrol
+  for(const s2 of SNAKES){
+    s2.x+=s2.dir*0.5;s2.walk++;
+    if(s2.x<s2.x0)s2.dir=1;
+    if(s2.x>s2.x1)s2.dir=-1;
+    if(p.inv<=0&&!p.vine&&
+       Math.abs(p.x+PW/2-(s2.x+11))<15&&Math.abs(p.y+PH-GY)<10){
+      hurtPlayer();
+    }
+  }
+  // crocs: jaw cycle — closed = safe stepping stone, open = death bite
+  for(const c2 of CROCS){
+    c2.phase+=0.016+level*0.0012;
+    const open=Math.sin(c2.phase)>0.35;      // ~40% open time
+    c2.open=open;
+    const onX=p.x+PW>c2.x+3&&p.x<c2.x+25;
+    if(onX&&p.prevY+PH<=c2.y+2&&p.y+PH>=c2.y&&p.vy>=0&&!p.vine){
+      if(open){drownPlayer(true);}          // bit — jaws were open
+      else{p.y=c2.y-PH;p.vy=0;p.grounded=true;p.jumpCount=0;p.coyote=COYOTE;}
+    }
+  }
+  // water: falling into a pit below ground level = drown
+  if(!p.vine&&p.y+PH>GY+8){
+    for(const pit2 of PITS){
+      if(p.x+PW/2>pit2.x&&p.x+PW/2<pit2.x+pit2.w){drownPlayer(false);break;}
+    }
+  }
+  // gold pickup (usually mid-swing)
+  for(const g2 of GOLDS){
+    if(g2.got)continue;
+    if(Math.abs(p.x+PW/2-(g2.x+7))<16&&Math.abs(p.y+PH/2-(g2.y+5))<18){
+      g2.got=true;score+=250;pop(g2.x+7,g2.y,C.gold);sfx.gold();
+    }
+  }
+  // treasure chest = level clear
+  if(CHEST&&!CHEST.opened&&
+     p.x+PW>CHEST.x&&p.x<CHEST.x+30&&Math.abs(p.y+PH-GY)<14){
+    CHEST.opened=true;
+    gameState='CLEAR';clearTimer=200;
+    const bTot=COLLECTIBLES.length,bGot=COLLECTIBLES.filter(c=>c.got).length;
+    score+=500+timer*10+lives*100+(bGot===bTot?300:0);
+    pop(CHEST.x+15,CHEST.y,C.gold);pop(CHEST.x+15,CHEST.y-8,C.star);
+    sfx.fanfare();
+  }
+}
+function L2x0(L2){for(const s2 of LOGSPAWNS)if(L2.x<=s2.x1&&L2.x>=s2.x0-24)return s2.x0;return 0;}
+
+function hurtPlayer(){
+  lives--;p.inv=70;p.vy=-4.5;p.vx=p.facing*-2.5;
+  pop(p.x+PW/2,p.y+PH/2,'#ff4422');sfx.hurt();
+  if(lives<=0){gameState='GAMEOVER';sfx.death();}
+}
+function drownPlayer(bitten){
+  for(let i2=0;i2<10;i2++)pop(p.x+PW/2,GY+4,bitten?'#ff4422':C.waterHi);
+  sfx.splash();
+  lives--;
+  if(lives<=0){gameState='GAMEOVER';sfx.death();return;}
+  gameState='DEAD';deathTimer=90;
+  // respawn at the start of the current ground section (checkpoint feel)
+  let rx=8;
+  for(const pl of PLATS)if(pl.type==='ground'&&pl.x<p.x)rx=pl.x+10;
+  p._respawnX=rx;
+}
+
 function killPlayer(){
-  lives--;pop(p.x+PW/2,p.y+PH/2,'#ff4422');
-  if(lives<=0){gameState='GAMEOVER';return;}
+  lives--;pop(p.x+PW/2,p.y+PH/2,'#ff4422');sfx.hurt();
+  if(lives<=0){gameState='GAMEOVER';sfx.death();return;}
   gameState='DEAD';deathTimer=90;timer=120;timerMs=0;
 }
 function pop(x,y,color){
@@ -347,14 +569,33 @@ function pop(x,y,color){
 function tickStates(){
   if(al.state==='stunned'){if(--al.stunTimer<=0)al.state='normal';}
   if(al.state==='dead'){if(--al.stunTimer<=0)resetAlien();}
-  if(gameState==='DEAD'){if(--deathTimer<=0){resetPlayer();resetAlien();gameState='PLAYING';timerMs=0;}}
+  if(gameState==='DEAD'){if(--deathTimer<=0){const rx=p._respawnX;resetPlayer();resetAlien();if(rx){p.x=rx;p._respawnX=0;}gameState='PLAYING';timerMs=0;}}
   if(gameState==='CLEAR'){if(--clearTimer<=0){level++;buildLevel();gameState='PLAYING';timerMs=0;}}
   if(gameState==='ATTRACT'||gameState==='GAMEOVER')tick++;
 }
 
 function attractUpdate(){
   tick++;
-  const R=true;
+  // vine swing showcase — the attract's job is selling the signature mechanic
+  if(p.vine){
+    const v=p.vine;
+    p.vVel+=-Math.sin(p.vAng)*0.0115;
+    p.vVel+=0.0004;                       // lean forward
+    p.vVel*=0.996;
+    p.vAng+=p.vVel;
+    p.x=v.ax+Math.sin(p.vAng)*v.len-PW/2;
+    p.y=v.ay+Math.cos(p.vAng)*v.len-PH*0.35;
+    p._swingT=(p._swingT||0)+1;
+    // release on a forward upswing after ~1.5 periods
+    if(p._swingT>110&&p.vAng>0.35&&p.vVel>0){
+      p.vx=Math.cos(p.vAng)*p.vVel*v.len*1.12;
+      p.vy=Math.sin(p.vAng)*p.vVel*v.len*-1.0-2.6;
+      p.vine=null;p._swingT=0;
+      pop(p.x+PW/2,p.y+PH*0.4,C.vineHi);
+    }
+    cam.x+=(Math.max(0,p.x-IW*0.38)-cam.x)*0.09;
+    return;
+  }
   p.vx=Math.min(p.vx+ACC,SPEED_MAX);p.facing=1;p.walk++;
   if(p.grounded){p.coyote=COYOTE;p.jumpCount=0;}
   else p.coyote=Math.max(0,p.coyote-1);
@@ -368,10 +609,29 @@ function attractUpdate(){
       p.y=pl.y-PH;p.vy=0;p.grounded=true;p.standingOn=pl;p.jumpCount=0;
     }
   }
-  if(p.grounded&&Math.random()<0.018){p.vy=-JUMP*0.85;p.grounded=false;p.jumpCount=1;}
-  if(p.x>WW-IW/2){p.x=0;p.y=GY-PH;p.vx=0;p.vy=0;}
+  // hop just before a pit edge, then grab the vine over it mid-air
+  if(p.grounded){
+    for(const pit2 of PITS){
+      if(p.x+PW>pit2.x-16&&p.x<pit2.x){p.vy=-JUMP*0.9;p.grounded=false;break;}
+    }
+  }
+  if(!p.grounded&&p.vy>-2){
+    for(const v of VINES){
+      if(Math.abs(p.x+PW/2-v.ax)<22&&p.y>v.ay+v.len*0.3&&p.y<v.ay+v.len+16){
+        p.vine=v;p.vAng=Math.atan2(p.x+PW/2-v.ax,(p.y+PH*0.35)-v.ay);
+        p.vVel=0.02;p._swingT=0;break;
+      }
+    }
+  }
+  // hop logs
+  if(p.grounded)for(const L2 of LOGS){
+    if(L2.x>p.x&&L2.x-p.x<34){p.vy=-JUMP*0.8;p.grounded=false;break;}
+  }
+  // fell in water — quiet reset to keep the loop clean
+  if(p.y>IH+10){p.x=0;p.y=GY-PH;p.vx=0;p.vy=0;p.vine=null;}
+  if(p.x>WWlvl-IW/2){p.x=0;p.y=GY-PH;p.vx=0;p.vy=0;p.vine=null;}
   cam.x+=(Math.max(0,p.x-IW*0.38)-cam.x)*0.09;
-  al.x+=0.9;al.walk++;if(al.x>WW)al.x=0;
+  al.x+=0.9;al.walk++;if(al.x>WWlvl)al.x=0;
   for(const pl of PLATS){
     if(!pl.mv)continue;
     pl._prevX=pl.x;pl.phase+=pl.mvSpeed;
@@ -385,9 +645,16 @@ function draw(){
 
   drawBg();
   ctx.save();ctx.translate(-Math.round(cam.x),0);
+  drawWater();
+  drawVines();
   drawPlatforms();
   drawCollectibles();
-  drawGoal();
+  drawGolds();
+  drawChest();
+  // (old drawGoal retired — the chest IS the goal)
+  drawCrocs();
+  drawLogs();
+  drawSnakes();
   if(al.state!=='dead')drawAlien();
   drawPlayer();
   ctx.globalAlpha=1;
@@ -475,8 +742,140 @@ function drawPlatforms(){
 function drawCollectibles(){
   for(const c of COLLECTIBLES){
     if(c.got)continue;
-    const pulse=1+0.14*Math.sin(tick*0.11+c.idx*1.2);
-    drawStar5(c.x+6,c.y+6,6*pulse,C.star,C.starGlow);
+    // BANANA (Pitfall treasure meets DK Jr fruit)
+    const bob=Math.sin(tick*0.09+c.idx*1.2)*1.5;
+    ctx.save();ctx.translate(c.x+6,c.y+6+bob);ctx.rotate(-0.5);
+    ctx.strokeStyle=C.banana;ctx.lineWidth=4;ctx.lineCap='round';
+    ctx.shadowColor=C.banana;ctx.shadowBlur=5;
+    ctx.beginPath();ctx.arc(0,0,5.5,0.35,Math.PI-0.35);ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=C.bananaDk;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(0,0,5.5,0.5,Math.PI-0.5);ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawWater(){
+  for(const pit2 of PITS){
+    const g=ctx.createLinearGradient(0,GY,0,IH);
+    g.addColorStop(0,C.waterHi);g.addColorStop(1,C.water);
+    ctx.fillStyle=g;
+    ctx.fillRect(pit2.x,GY+2,pit2.w,IH-GY);
+    ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let wx=pit2.x;wx<=pit2.x+pit2.w;wx+=6)
+      ctx.lineTo(wx,GY+3+Math.sin(wx*0.25+tick*0.08)*1.4);
+    ctx.stroke();
+  }
+}
+function drawVines(){
+  for(const v of VINES){
+    const held=p.vine===v;
+    const ang=held?p.vAng:Math.sin(tick*0.02+v.ax*0.07)*0.08;
+    const ex=v.ax+Math.sin(ang)*v.len,ey=v.ay+Math.cos(ang)*v.len;
+    ctx.strokeStyle=held?C.vineHi:C.vine;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(v.ax,v.ay);
+    ctx.quadraticCurveTo(v.ax+Math.sin(ang)*v.len*0.5,v.ay+v.len*0.55,ex,ey);
+    ctx.stroke();
+    // leaves along the rope
+    ctx.fillStyle=C.leaf;
+    for(let f2=0.3;f2<1;f2+=0.3){
+      const lx2=v.ax+Math.sin(ang)*v.len*f2,ly2=v.ay+v.len*f2;
+      ctx.beginPath();ctx.ellipse(lx2+3,ly2,4,2,0.6,0,Math.PI*2);ctx.fill();
+    }
+    // canopy anchor
+    ctx.fillStyle=C.leaf;
+    ctx.beginPath();ctx.arc(v.ax,v.ay,4,0,Math.PI*2);ctx.fill();
+  }
+}
+function drawCrocs(){
+  for(const c2 of CROCS){
+    const jaw=c2.open?6:1;
+    ctx.fillStyle=C.croc;ctx.strokeStyle=C.crocDk;ctx.lineWidth=1.5;
+    // head
+    ctx.beginPath();ctx.roundRect(c2.x,c2.y,28,9,3);ctx.fill();ctx.stroke();
+    // snout + jaw
+    ctx.fillStyle=C.croc;
+    ctx.beginPath();ctx.moveTo(c2.x+28,c2.y+2);ctx.lineTo(c2.x+38,c2.y+2-jaw*0.4);
+    ctx.lineTo(c2.x+38,c2.y+4-jaw*0.4);ctx.lineTo(c2.x+28,c2.y+5);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(c2.x+28,c2.y+6);ctx.lineTo(c2.x+38,c2.y+6+jaw);
+    ctx.lineTo(c2.x+38,c2.y+8+jaw);ctx.lineTo(c2.x+28,c2.y+9);ctx.closePath();ctx.fill();ctx.stroke();
+    // teeth when open
+    if(c2.open){
+      ctx.fillStyle=C.crocJaw;
+      for(let t2=0;t2<3;t2++)ctx.fillRect(c2.x+29+t2*3,c2.y+4-jaw*0.2+t2*0.2,2,2);
+    }
+    // eye
+    ctx.fillStyle=C.crocEye;ctx.fillRect(c2.x+4,c2.y+2,3,3);
+    ctx.fillStyle='#000';ctx.fillRect(c2.x+5,c2.y+3,1.5,1.5);
+  }
+}
+function drawLogs(){
+  for(const L2 of LOGS){
+    ctx.save();ctx.translate(L2.x,L2.y+L2.r);ctx.rotate(L2.rot);
+    ctx.fillStyle=C.log;ctx.strokeStyle=C.logDk;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(0,0,L2.r,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.strokeStyle=C.logRing;ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(0,0,L2.r*0.55,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-L2.r,0);ctx.lineTo(L2.r,0);ctx.stroke();
+    ctx.restore();
+  }
+}
+function drawSnakes(){
+  for(const s2 of SNAKES){
+    const wig=Math.sin(s2.walk*0.2)*1.5;
+    ctx.strokeStyle=C.snakeC;ctx.lineWidth=4;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(s2.x,GY-3);
+    ctx.quadraticCurveTo(s2.x+7,GY-3+wig,s2.x+14,GY-3);
+    ctx.quadraticCurveTo(s2.x+18,GY-3-wig,s2.x+22,GY-5);
+    ctx.stroke();
+    // head
+    ctx.fillStyle=C.snakeC;ctx.strokeStyle=C.snakeDk;ctx.lineWidth=1;
+    const hx=s2.dir>0?s2.x+22:s2.x;
+    ctx.beginPath();ctx.arc(hx,GY-6,3.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#000';ctx.fillRect(hx+(s2.dir>0?1:-2),GY-7.5,1.5,1.5);
+    // flicking tongue
+    if(s2.walk%40<12){
+      ctx.strokeStyle=C.snakeTongue;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(hx+s2.dir*3,GY-6);ctx.lineTo(hx+s2.dir*7,GY-7);ctx.stroke();
+    }
+  }
+}
+function drawGolds(){
+  for(const g2 of GOLDS){
+    if(g2.got)continue;
+    const shine=Math.sin(tick*0.15)*0.5+0.5;
+    ctx.fillStyle=C.gold;ctx.strokeStyle=C.goldHi;ctx.lineWidth=1;
+    ctx.shadowColor=C.gold;ctx.shadowBlur=6+shine*4;
+    ctx.beginPath();ctx.moveTo(g2.x,g2.y+8);ctx.lineTo(g2.x+3,g2.y);
+    ctx.lineTo(g2.x+11,g2.y);ctx.lineTo(g2.x+14,g2.y+8);ctx.closePath();
+    ctx.fill();ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+}
+function drawChest(){
+  if(!CHEST)return;
+  const c2=CHEST;
+  ctx.fillStyle=C.chestC;ctx.strokeStyle=C.chestDk;ctx.lineWidth=2;
+  ctx.beginPath();ctx.roundRect(c2.x,c2.y+8,30,16,2);ctx.fill();ctx.stroke();
+  // lid (opens on clear)
+  ctx.save();ctx.translate(c2.x,c2.y+8);
+  if(c2.opened)ctx.rotate(-0.9);
+  ctx.fillStyle=C.chestC;
+  ctx.beginPath();ctx.roundRect(0,-8,30,10,3);ctx.fill();ctx.stroke();
+  ctx.restore();
+  // gold band + glow when open
+  ctx.fillStyle=C.chestGold;
+  ctx.fillRect(c2.x+13,c2.y+8,4,16);
+  if(c2.opened){
+    ctx.shadowColor=C.gold;ctx.shadowBlur=12;
+    ctx.fillStyle=C.gold;ctx.fillRect(c2.x+5,c2.y+4,20,4);
+    ctx.shadowBlur=0;
+  }else{
+    const pulse=Math.sin(tick*0.1)*0.5+0.5;
+    ctx.shadowColor=C.gold;ctx.shadowBlur=4+pulse*6;
+    ctx.fillStyle=C.chestGold;ctx.fillRect(c2.x+13,c2.y+8,4,3);
+    ctx.shadowBlur=0;
   }
 }
 
@@ -648,6 +1047,8 @@ function drawAlien(){
 
 function drawHUD(){
   ctx.fillStyle=C.hud;ctx.fillRect(0,0,W,Math.round(H*0.09));
+  ctx.font=`${Math.round(H*0.045)}px sans-serif`;ctx.textAlign='right';ctx.textBaseline='top';
+  ctx.fillStyle='#fff';ctx.fillText(sfxMuted?'🔇':'🔊',W-8,4);
   const hh=Math.round(H*0.065);
   // Lives
   for(let i=0;i<3;i++){
@@ -796,7 +1197,17 @@ function loop(ts){
   tick++;
   tickStates();
   if(gameState==='PLAYING'||gameState==='DEAD')update(dt);
-  else if(gameState==='ATTRACT'||gameState==='GAMEOVER')attractUpdate();
+  else if(gameState==='ATTRACT'||gameState==='GAMEOVER'){
+    attractUpdate();
+    // hazards animate in attract too (no damage path — attract never calls hurt)
+    for(const sp2 of LOGSPAWNS){sp2.next-=1;
+      if(sp2.next<=0){LOGS.push({x:sp2.x1-14,y:GY-12,vx:-sp2.speed,r:7,rot:0});sp2.next=260;}}
+    for(let i=LOGS.length-1;i>=0;i--){const L2=LOGS[i];L2.x+=L2.vx;L2.rot-=0.12;
+      if(L2.x<-30)LOGS.splice(i,1);}
+    for(const s2 of SNAKES){s2.x+=s2.dir*0.5;s2.walk++;
+      if(s2.x<s2.x0)s2.dir=1;if(s2.x>s2.x1)s2.dir=-1;}
+    for(const c2 of CROCS){c2.phase+=0.016;c2.open=Math.sin(c2.phase)>0.35;}
+  }
   draw();
 }
 requestAnimationFrame(loop);

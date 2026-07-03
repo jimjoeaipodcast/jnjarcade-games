@@ -85,10 +85,17 @@ const WORLDS = {
     by: 'JOE',
     attract: faceLabAttract,
   },
+  'jungle-hop': {
+    ink: '#79c93c', dim: '#2e5414', pit: '#0a1405', glowsoft: 'rgba(121,201,60,0.22)',
+    genre: 'PITFALL × DK JR',
+    quote: '"He swung across a crocodile pit for a banana. There was a bridge. I counted three bridges."',
+    by: 'JOE',
+    attract: jungleHopAttract,
+  },
   'angry-worms': {
     ink: '#e8302a', dim: '#5a1a10', pit: '#100604', glowsoft: 'rgba(232,48,42,0.22)',
     genre: 'ANGRY BIRDS × WORMS',
-    quote: '"A worm. In a catapult. As a weapon. I have so many questions and I don\'t want the answers to any of them."',
+    quote: '"They never shoot back. Some of them land, dig in, and open fire. Jimmy calls that balance. I call it a war crime with a slingshot."',
     by: 'JOE',
     attract: angryWormsAttract,
   },
@@ -1648,6 +1655,84 @@ function faceLabAttract(ctx, w, h, t, world, s) {
 }
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
+function jungleHopAttract(ctx, w, h, t, world, s) {
+  if (!s.init) {
+    s.init = true; s.last = t;
+    s.ang = -0.9; s.vel = 0; s.phase = 0; s.crocPhase = 0;
+    s.leaves = Array.from({length: 10}, () => ({
+      x: Math.random() * w, y: Math.random() * h * 0.5,
+      r: 2 + Math.random() * 3, sp: 0.2 + Math.random() * 0.4 }));
+  }
+  const dt = Math.min(t - s.last, 32); s.last = t;
+
+  // deep jungle backdrop
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#0d1f08'); sky.addColorStop(1, '#1e3d12');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+  // canopy
+  ctx.fillStyle = '#2a5a18';
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath(); ctx.arc(w * (i / 5), h * 0.06, w * 0.14, 0, Math.PI * 2); ctx.fill();
+  }
+  // drifting leaves
+  ctx.fillStyle = 'rgba(121,201,60,0.5)';
+  for (const l of s.leaves) {
+    l.y += l.sp; l.x += Math.sin(l.y * 0.05) * 0.3;
+    if (l.y > h) { l.y = -4; l.x = Math.random() * w; }
+    ctx.beginPath(); ctx.ellipse(l.x, l.y, l.r, l.r * 0.5, 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+  // water strip + croc
+  const wy = h * 0.82;
+  ctx.fillStyle = '#1c4d6e'; ctx.fillRect(0, wy, w, h - wy);
+  s.crocPhase += 0.02;
+  const jaw = Math.sin(s.crocPhase) > 0.3 ? 5 : 1;
+  const cx = w * 0.52, cy = wy - 4;
+  ctx.fillStyle = '#3f7a2a';
+  ctx.fillRect(cx, cy, w * 0.1, 5);
+  ctx.beginPath(); ctx.moveTo(cx + w * 0.1, cy + 1); ctx.lineTo(cx + w * 0.14, cy + 1 - jaw * 0.4); ctx.lineTo(cx + w * 0.14, cy + 2 - jaw * 0.4); ctx.lineTo(cx + w * 0.1, cy + 2.5); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + w * 0.1, cy + 3.5); ctx.lineTo(cx + w * 0.14, cy + 3.5 + jaw); ctx.lineTo(cx + w * 0.14, cy + 4.5 + jaw); ctx.lineTo(cx + w * 0.1, cy + 5); ctx.fill();
+  ctx.fillStyle = '#ffdd22'; ctx.fillRect(cx + 2, cy + 1, 2, 2);
+
+  // THE SWING — pendulum monkey
+  s.vel += -Math.sin(s.ang) * 0.0022 * dt;
+  s.vel *= 0.998;
+  s.ang += s.vel * dt * 0.016;
+  const ax = w * 0.5, ay = h * 0.1, len = h * 0.55;
+  const mx = ax + Math.sin(s.ang) * len, my = ay + Math.cos(s.ang) * len;
+  ctx.strokeStyle = '#4a7a1f'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ax, ay);
+  ctx.quadraticCurveTo(ax + Math.sin(s.ang) * len * 0.5, ay + len * 0.55, mx, my);
+  ctx.stroke();
+  ctx.fillStyle = '#3f9425';
+  for (let f = 0.35; f < 1; f += 0.3) {
+    ctx.beginPath(); ctx.ellipse(ax + Math.sin(s.ang) * len * f + 2, ay + len * f, 3, 1.5, 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+  // monkey (arms up on the vine)
+  ctx.save(); ctx.translate(mx, my); ctx.rotate(s.ang * 0.5);
+  ctx.strokeStyle = '#885522'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, 2); ctx.quadraticCurveTo(-6, 8, -3, 13); ctx.stroke(); // tail
+  ctx.fillStyle = '#cc8833';
+  ctx.beginPath(); ctx.arc(0, 6, 5, 0, Math.PI * 2); ctx.fill();      // body
+  ctx.beginPath(); ctx.arc(0, -1, 4, 0, Math.PI * 2); ctx.fill();     // head
+  ctx.fillStyle = '#ffeecc';
+  ctx.beginPath(); ctx.arc(1, -1, 2.2, 0, Math.PI * 2); ctx.fill();   // face
+  ctx.fillStyle = '#000'; ctx.fillRect(1.4, -2, 1.2, 1.2);            // eye
+  ctx.strokeStyle = '#cc8833'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(-1, -4); ctx.stroke(); // arm to vine
+  ctx.restore();
+
+  // bananas arc hint
+  ctx.strokeStyle = '#ffe135'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  for (const bx of [0.2, 0.8]) {
+    ctx.beginPath(); ctx.arc(w * bx, h * 0.45, 4, 0.4, Math.PI - 0.4); ctx.stroke();
+  }
+
+  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(121,201,60,0.55)';
+  ctx.fillText('JUNGLE-HOP', w / 2, h * 0.93);
+}
+
 function angryWormsAttract(ctx, w, h, t, world, s) {
   if (!s.init) {
     s.init = true; s.last = t; s.phase = 0; s.phaseT = 0;
@@ -1722,14 +1807,17 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
   ctx.lineTo(catX + w*0.04, catTY); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(catX - w*0.02, catTY - h*0.03); ctx.lineTo(catX + w*0.02, catTY - h*0.06); ctx.stroke();
 
-  // enemy worm on far hill
+  // enemy worm on far hill — flashes then DETONATES after the hit (v4 death mechanic)
   const ewX = w * 0.76, ewY = terrainY(ewX) - 8;
-  ctx.fillStyle = '#2ec44e';
-  for (let seg = 0; seg < 3; seg++) {
-    ctx.beginPath(); ctx.arc(ewX + seg*5, ewY - seg*2, 7-seg, 0, Math.PI*2); ctx.fill();
+  if (!s.enemyDead) {
+    const dyingBlink = s.phase === 2 && (s.phaseT % (s.phaseT > 500 ? 90 : 180)) < (s.phaseT > 500 ? 45 : 90);
+    ctx.fillStyle = dyingBlink ? '#ffffff' : '#2ec44e';
+    for (let seg = 0; seg < 3; seg++) {
+      ctx.beginPath(); ctx.arc(ewX + seg*5, ewY - seg*2, 7-seg, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ewX+3, ewY-2, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ewX+4, ewY-2, 1.2, 0, Math.PI*2); ctx.fill();
   }
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ewX+3, ewY-2, 2.5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ewX+4, ewY-2, 1.2, 0, Math.PI*2); ctx.fill();
 
   // PHASE 0: worm sitting on catapult (0–800ms)
   if (s.phaseT < 800) {
@@ -1804,9 +1892,18 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
     ctx.globalAlpha = 1;
   }
 
-  // PHASE 2: hold 1.2s then reset
-  if (s.phase === 2 && s.phaseT > 1200) {
-    s.phase = 0; s.phaseT = 0; s.particles = [];
+  // PHASE 2: the hit worm flashes ~0.9s then DETONATES, then reset
+  if (s.phase === 2 && !s.enemyDead && s.phaseT > 900) {
+    s.enemyDead = true;
+    s.craters.push({x: ewX, y: ewY + 4, r: w*0.05});
+    for (let p2 = 0; p2 < 20; p2++) {
+      const ang = Math.random() * Math.PI * 2, spd = 1.8 + Math.random() * 3.2;
+      s.particles.push({x: ewX, y: ewY, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 2.8,
+        life: 1, r: 3+Math.random()*5, col: Math.random()>0.4 ? '#ff5a1f' : '#ffd23d'});
+    }
+  }
+  if (s.phase === 2 && s.phaseT > 2100) {
+    s.phase = 0; s.phaseT = 0; s.particles = []; s.enemyDead = false;
     if (s.craters.length > 3) s.craters.shift();
   }
 

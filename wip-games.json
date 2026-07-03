@@ -43,17 +43,14 @@
  ],
  "games": [
   {
-   "id": "angry-worms",
-   "name": "ANGRY WORMS",
-   "emoji": "\ud83d\udc1b",
-   "genre": "ANGRY BIRDS \u00d7 WORMS",
-   "url": "games/angry-worms.html",
+   "id": "jungle-hop",
+   "name": "JUNGLE-HOP",
+   "emoji": "\ud83c\udf34",
+   "genre": "PITFALL \u00d7 DK JR",
+   "url": "games/jungle-hop.html",
    "status": "wip",
-   "special": "Game Lab #13",
-   "note": "AB\u00d7Worms look pass 2026-07-02: day sky+sun+parallax, sea (drowns worms, craters breach through), AB blocks (wood/stone/ICE), angry-brow worms, POW stars, 3-star clears. Drag to aim, tap mid-flight for ability.",
-   "ai_improved": true,
-   "ai_improved_date": "2026-06-24",
-   "ai_file": "games/angry-worms.html"
+   "special": "Game Lab #11",
+   "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards \u2014 rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn \u2014 bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
   },
   {
    "id": "tomb-hunt",
@@ -124,16 +121,6 @@
    "status": "wip",
    "special": "Game Lab #10",
    "note": "Wall slide + wall jump. Bats + crystal platforms + gem collectibles."
-  },
-  {
-   "id": "jungle-hop",
-   "name": "JUNGLE-HOP",
-   "emoji": "\ud83c\udf34",
-   "genre": "JUNGLE PLATFORM",
-   "url": "games/jungle-hop.html",
-   "status": "wip",
-   "special": "Game Lab #11",
-   "note": "Monkey + snake + mossy logs + treasure chest goal."
   },
   {
    "id": "lupo-alberto",
