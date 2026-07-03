@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>TEMPLATE — JnJ Arcade</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  JnJ CABINET TEMPLATE (game-builder skill STEP 0.5) — a RUNNABLE starter with
+  every mandatory anatomy piece stubbed. Copy to <slug>.html, rename the 3
+  TEMPLATE markers, delete the demo gameplay, build yours in its place.
+  NOT a shipped game: underscore prefix = exempt from the wip-games.json rule.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none; }
+  #gameCanvas { display: block; width: 100vw; height: 100vh; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             font-family: 'Courier New', monospace; color: #fff; text-align: center; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(28px, 8vw, 64px); letter-spacing: .06em;
+                color: var(--ink, #ffcf3d); text-shadow: 0 0 24px var(--ink, #ffcf3d); }
+  #overlay p { margin: 14px 0 26px; font-size: 14px; color: #9aa; max-width: 80vw; }
+  #coinBtn { font: bold 18px 'Courier New', monospace; letter-spacing: .1em;
+             padding: 16px 38px; background: var(--ink, #ffcf3d); color: #000;
+             border: none; border-radius: 10px; cursor: pointer;
+             box-shadow: 0 0 30px var(--ink, #ffcf3d); }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="overlay">
+  <h1>TEMPLATE</h1><!-- TEMPLATE marker 1: game name -->
+  <p>Swipe to move · tap to act</p><!-- controls one-liner -->
+  <button id="coinBtn">🪙 INSERT COIN</button>
+</div>
+<script src="../arcade-scores.js?v=10"></script>
+<script>
+(function () {
+'use strict';
+// ── IDENTITY ─────────────────────────────────────────────────────────────────
+const SLUG  = 'template';              // TEMPLATE marker 2: kebab-case id
+const TITLE = 'TEMPLATE';              // TEMPLATE marker 3
+const INK   = '#ffcf3d';               // signature colour — must match WORLDS.ink
+document.documentElement.style.setProperty('--ink', INK);
+
+// ── CANVAS + VIEW SCALING (mandatory: world fits ANY phone, test 390×844) ────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const WORLD_W = 800, WORLD_H = 600;    // your logical world — draw in these units
+const VIEW = { scale: 1, ox: 0, oy: 0 };
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR;
+  const s = Math.min(innerWidth / WORLD_W, innerHeight / WORLD_H);
+  VIEW.scale = s * DPR;
+  VIEW.ox = (canvas.width  - WORLD_W * VIEW.scale) / 2;
+  VIEW.oy = (canvas.height - WORLD_H * VIEW.scale) / 2;
+}
+addEventListener('resize', resize); resize();
+
+// ── SFX — house style: lazy ctx, gesture unlock, mute + localStorage ────────
+let audioCtx = null, muted = localStorage.getItem('sfxMuted_' + SLUG) === '1';
+function unlockAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+document.addEventListener('pointerdown', unlockAudio, { once: true });
+function tone(f0, f1, dur, type, vol) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(f0, audioCtx.currentTime);
+    if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), audioCtx.currentTime + dur);
+    g.gain.setValueAtTime(vol || 0.15, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+const sfx = {                            // one per MEANINGFUL event — never autofire
+  act:   () => tone(440, 660, 0.08, 'square', 0.12),
+  score: () => tone(880, 1320, 0.1, 'square', 0.15),
+  hurt:  () => tone(220, 60, 0.25, 'sawtooth', 0.2),
+  over:  () => tone(440, 55, 0.7, 'sawtooth', 0.2),
+};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = 'attract';                  // attract → playing → (ArcadeScores) → playing
+let score = 0, shakeT = 0, tPrev = 0;
+// demo gameplay state (DELETE — build yours):
+const demo = { x: WORLD_W / 2, y: WORLD_H / 2, vx: 2.4, vy: 1.8, r: 26, hp: 3 };
+const particles = [];
+
+// ── INPUT — swipe/tap only, DEADZONE so taps ≠ swipes, mouse parity ─────────
+const DEADZONE = 17;
+let touchStart = null;
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top)  * DPR - VIEW.oy) / VIEW.scale };
+}
+function onDown(e) {
+  const p = e.touches ? e.touches[0] : e;
+  touchStart = { x: p.clientX, y: p.clientY };
+  if (e.cancelable) e.preventDefault();
+}
+function onUp(e) {
+  if (!touchStart || state !== 'playing') { touchStart = null; return; }
+  const p = e.changedTouches ? e.changedTouches[0] : e;
+  const dx = p.clientX - touchStart.x, dy = p.clientY - touchStart.y;
+  if (Math.hypot(dx, dy) < DEADZONE) {
+    onTap(toWorld(p.clientX, p.clientY));                    // TAP
+  } else {
+    onSwipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left')
+                                        : (dy > 0 ? 'down' : 'up'));   // SWIPE
+  }
+  touchStart = null;
+  if (e.cancelable) e.preventDefault();
+}
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchend', onUp, { passive: false });
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mouseup', onUp);
+
+// demo handlers (DELETE — build yours):
+function onTap(w)   { sfx.act(); score += 10; burst(w.x, w.y); }
+function onSwipe(d) { sfx.act(); demo.vx = d === 'left' ? -3 : d === 'right' ? 3 : demo.vx;
+                      demo.vy = d === 'up' ? -3 : d === 'down' ? 3 : demo.vy; }
+
+// ── JUICE helpers — particles + shake are NOT optional ──────────────────────
+function burst(x, y, n, col) {
+  for (let i = 0; i < (n || 10); i++) {
+    const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 3;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5,
+                     life: 28, max: 28, r: 2 + Math.random() * 3, col: col || INK });
+  }
+}
+
+// ── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dt) {
+  // demo gameplay (DELETE — build yours):
+  demo.x += demo.vx; demo.y += demo.vy;
+  if (demo.x < demo.r || demo.x > WORLD_W - demo.r) { demo.vx *= -1; if (state === 'playing') { sfx.hurt(); shakeT = 6; } }
+  if (demo.y < demo.r || demo.y > WORLD_H - demo.r) { demo.vy *= -1; }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ── GAME OVER — straight to the scoreboard, options object, never positional ─
+function gameOver() {
+  state = 'ended';
+  sfx.over();
+  if (window.ArcadeScores) {
+    ArcadeScores.show({ game: SLUG, title: TITLE, score: score, accent: INK, onClose: startGame });
+  } else { startGame(); }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0a0c10'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (shakeT > 0) { shakeT--; ctx.translate((Math.random() - .5) * shakeT, (Math.random() - .5) * shakeT); }
+
+  // demo draw (DELETE — build yours):
+  ctx.fillStyle = INK; ctx.shadowColor = INK; ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(demo.x, demo.y, demo.r, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / p.max;
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // HUD (world units — scales with view)
+  ctx.font = 'bold 22px "Courier New", monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE ' + score, 14, 12);
+  // mute button (tap zone checked in onTap for real games; kept simple here)
+  ctx.textAlign = 'right';
+  ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 12);
+}
+
+// ── LOOP ─────────────────────────────────────────────────────────────────────
+function loop(t) {
+  const dt = Math.min(32, t - tPrev); tPrev = t;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ── COIN / START (fullscreen attempt is best-effort, never blocks) ───────────
+function startGame() {
+  state = 'playing'; score = 0; demo.hp = 3;
+}
+document.getElementById('coinBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  unlockAudio();
+  startGame();
+});
+
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
