@@ -183,11 +183,19 @@ function sayRun(onDone) { dlg.onDone = onDone || null; if (!dlg.current) nextLin
 function nextLine() {
   dlg.current = dlg.queue.shift() || null;
   dlg.shownAt = worldT;
+  dlg.audioDur = 0;
   if (dlg.current) {
     if (dlg.current.who === 'JIMMY') player.talkT = 900; else if (dlg.current.who === 'JOE') joe.talkT = 900;
-  } else if (dlg.onDone) { const f = dlg.onDone; dlg.onDone = null; f(); }
+    playVoice(dlg.current.who, dlg.current.text);
+  } else {
+    stopVoice();
+    if (dlg.onDone) { const f = dlg.onDone; dlg.onDone = null; f(); }
+  }
 }
-function lineDur(text) { return Math.max(1500, (text.split(' ').length / 3) * 1000 + 350); }
+function lineDur(text) {
+  const textMs = Math.max(1500, (text.split(' ').length / 3) * 1000 + 350);
+  return dlg.audioDur ? Math.max(textMs, dlg.audioDur + 420) : textMs;
+}
 function talkActive() { return !!dlg.current; }
 
 // Global wrong-use rotation (MI law 4 — never silence)
@@ -236,59 +244,117 @@ function invAt(wx, wy) {
   return null;
 }
 
-// ── ROOM + HOTSPOT DATA ──────────────────────────────────────────────────────
-// Hotspots: rect {x,y,w,h}, walkX = where Jimmy stands, look = long-press lines,
-// tap = default interaction handled in interact(). counter = comeback source.
+// ── ROOM + HOTSPOT DATA (coords mapped to the pixel-art plates) ─────────────
+// Hotspots: rect {x,y,w,h}, walkX = where Jimmy stands. Array order matters on
+// overlaps: FIRST hit wins, so front-most objects come first.
 const ROOMS = {
   studio: {
     name: 'THE STUDIO',
     spawns: { start: 300, corridor: 880 },
     hotspots: [
-      { id: 'joe',        x: 585, y: 260, w: 130, h: 190, walkX: 520, label: 'JOE' },
-      { id: 'screen',     x: 375, y: 95,  w: 220, h: 115, walkX: 480, label: 'THE BIG SCREEN' },
-      { id: 'clock',      x: 460, y: 28,  w: 56,  h: 56,  walkX: 480, label: 'THE CLOCK', counter: 'clock' },
-      { id: 'portraitL',  x: 150, y: 110, w: 90,  h: 110, walkX: 200, label: 'PORTRAIT (PIPE)', counter: 'portraits' },
-      { id: 'portraitR',  x: 730, y: 110, w: 90,  h: 110, walkX: 770, label: 'PORTRAIT (CIGAR)', counter: 'portraits' },
-      { id: 'table',      x: 380, y: 385, w: 210, h: 70,  walkX: 350, label: 'THE TABLE' },
-      { id: 'decanter',   x: 398, y: 350, w: 36,  h: 46,  walkX: 360, label: 'THE DECANTER', counter: 'decanter' },
-      { id: 'lolliTray',  x: 530, y: 368, w: 46,  h: 26,  walkX: 480, label: 'THE OUTRO TRAY' },
-      { id: 'jimmyChair', x: 130, y: 300, w: 120, h: 150, walkX: 250, label: "JIMMY'S CHAIR" },
-      { id: 'broomSpot',  x: 30,  y: 250, w: 36,  h: 200, walkX: 90,  label: 'THE BROOM', hideWhen: () => flags.gotBroom },
-      { id: 'fridge',     x: 790, y: 428, w: 70,  h: 74,  walkX: 750, label: 'MINI-FRIDGE' },
-      { id: 'cableSpot',  x: 470, y: 452, w: 60,  h: 26,  walkX: 440, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
-      { id: 'socket',     x: 748, y: 430, w: 30,  h: 34,  walkX: 720, label: 'WALL SOCKET' },
-      { id: 'exitR',      x: 920, y: 200, w: 40,  h: 280, walkX: 930, label: 'TO THE ARCADE', exit: { to: 'corridor', spawn: 'studio' } },
+      { id: 'joe',        x: 556, y: 300, w: 120, h: 200, walkX: 495, label: 'JOE' },
+      { id: 'decanter',   x: 385, y: 398, w: 52,  h: 100, walkX: 345, label: 'THE DECANTER', counter: 'decanter' },
+      { id: 'lolliTray',  x: 545, y: 465, w: 62,  h: 42,  walkX: 640, label: 'THE OUTRO TRAY' },
+      { id: 'cableSpot',  x: 450, y: 498, w: 78,  h: 32,  walkX: 415, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
+      { id: 'broomSpot',  x: 78,  y: 296, w: 52,  h: 180, walkX: 150, label: 'THE BROOM', hideWhen: () => flags.gotBroom },
+      { id: 'fridge',     x: 12,  y: 446, w: 88,  h: 92,  walkX: 150, label: 'MINI-FRIDGE' },
+      { id: 'socket',     x: 690, y: 292, w: 40,  h: 46,  walkX: 655, label: 'WALL SOCKET' },
+      { id: 'table',      x: 348, y: 418, w: 275, h: 114, walkX: 320, label: 'THE TABLE' },
+      { id: 'clock',      x: 430, y: 4,   w: 96,  h: 88,  walkX: 478, label: 'THE CLOCK', counter: 'clock' },
+      { id: 'screen',     x: 328, y: 102, w: 304, h: 184, walkX: 478, label: 'THE BIG SCREEN' },
+      { id: 'portraitL',  x: 94,  y: 74,  w: 164, h: 206, walkX: 215, label: 'PORTRAIT (PIPE)', counter: 'portraits' },
+      { id: 'portraitR',  x: 710, y: 78,  w: 162, h: 202, walkX: 758, label: 'PORTRAIT (CIGAR)', counter: 'portraits' },
+      { id: 'jimmyChair', x: 300, y: 332, w: 155, h: 162, walkX: 258, label: "JIMMY'S CHAIR" },
+      { id: 'sofaL',      x: 0,   y: 350, w: 232, h: 100, walkX: 245, label: 'THE CHESTERFIELD' },
+      { id: 'sofaR',      x: 732, y: 350, w: 228, h: 100, walkX: 715, label: 'THE OTHER CHESTERFIELD' },
+      { id: 'exitR',      x: 918, y: 180, w: 42,  h: 300, walkX: 905, label: 'TO THE ARCADE', exit: { to: 'corridor', spawn: 'studio' } },
     ],
   },
   corridor: {
     name: 'THE ARCADE CORRIDOR',
-    spawns: { studio: 80, prop: 880 },
+    spawns: { studio: 90, prop: 520 },
     hotspots: [
-      { id: 'exitL',      x: 0,   y: 200, w: 40,  h: 280, walkX: 30,  label: 'TO THE STUDIO', exit: { to: 'studio', spawn: 'corridor' } },
-      { id: 'hopmanCab',  x: 120, y: 160, w: 120, h: 300, walkX: 260, label: 'HOP-MAN CABINET' },
-      { id: 'wormsCab',   x: 300, y: 160, w: 120, h: 300, walkX: 440, label: 'ANGRY WORMS CABINET', counter: 'wormsCab' },
-      { id: 'candyCab',   x: 480, y: 160, w: 120, h: 300, walkX: 430, label: 'CANDY-TRIS CABINET' },
-      { id: 'changeMachine', x: 640, y: 210, w: 80, h: 250, walkX: 600, label: 'CHANGE MACHINE' },
-      { id: 'vending',    x: 740, y: 170, w: 90,  h: 290, walkX: 700, label: 'VENDING MACHINE', counter: 'vending' },
-      { id: 'cooler',     x: 850, y: 250, w: 50,  h: 210, walkX: 810, label: 'WATER COOLER' },
-      { id: 'propDoor',   x: 908, y: 170, w: 52,  h: 290, walkX: 870, label: 'PROP ROOM DOOR', exit: { to: 'prop', spawn: 'corridor', locked: () => !flags.propUnlocked } },
+      { id: 'exitL',      x: 0,   y: 200, w: 42,  h: 280, walkX: 70,  label: 'TO THE STUDIO', exit: { to: 'studio', spawn: 'corridor' } },
+      { id: 'candyCab',   x: 352, y: 142, w: 82,  h: 292, walkX: 470, label: 'CANDY-TRIS CABINET' },
+      { id: 'wormsCab',   x: 262, y: 118, w: 118, h: 326, walkX: 440, label: 'ANGRY WORMS CABINET', counter: 'wormsCab' },
+      { id: 'hopmanCab',  x: 78,  y: 86,  w: 226, h: 398, walkX: 335, label: 'HOP-MAN CABINET' },
+      { id: 'propDoor',   x: 438, y: 126, w: 104, h: 222, walkX: 480, label: 'PROP ROOM DOOR', exit: { to: 'prop', spawn: 'corridor', locked: () => !flags.propUnlocked } },
+      { id: 'changeMachine', x: 662, y: 182, w: 120, h: 280, walkX: 610, label: 'CHANGE MACHINE' },
+      { id: 'vending',    x: 596, y: 138, w: 94,  h: 268, walkX: 550, label: 'VENDING MACHINE', counter: 'vending' },
+      { id: 'cooler',     x: 782, y: 166, w: 130, h: 350, walkX: 722, label: 'WATER COOLER' },
     ],
   },
   prop: {
     name: 'THE PROP ROOM',
-    spawns: { corridor: 100 },
+    spawns: { corridor: 110 },
     hotspots: [
-      { id: 'exitP',      x: 0,   y: 200, w: 40,  h: 280, walkX: 30,  label: 'BACK TO THE ARCADE', exit: { to: 'corridor', spawn: 'prop' } },
-      { id: 'shelves',    x: 120, y: 90,  w: 320, h: 190, walkX: 280, label: 'THE SHELVES' },
-      { id: 'kettleSpot', x: 200, y: 150, w: 54,  h: 44,  walkX: 230, label: 'THE KETTLE', hideWhen: () => flags.gotKettle },
-      { id: 'bitsBox',    x: 500, y: 360, w: 130, h: 90,  walkX: 450, label: 'BITS BOX — DO NOT OPEN' },
-      { id: 'ostrich',    x: 735, y: 395, w: 110, h: 65,  walkX: 700, label: 'OSTRICH PILLOW', counter: 'ostrich' },
-      { id: 'sharkBlanket', x: 330, y: 395, w: 110, h: 65, walkX: 290, label: 'SHARK BLANKET' },
-      { id: 'cassettes',  x: 620, y: 380, w: 140, h: 90,  walkX: 580, label: 'CASSETTE PILE' },
-      { id: 'plant',      x: 850, y: 300, w: 70,  h: 170, walkX: 800, label: 'FAKE PLANT' },
+      { id: 'exitP',      x: 0,   y: 200, w: 42,  h: 280, walkX: 70,  label: 'BACK TO THE ARCADE', exit: { to: 'corridor', spawn: 'prop' } },
+      { id: 'kettleSpot', x: 48,  y: 276, w: 100, h: 82,  walkX: 185, label: 'THE KETTLE', hideWhen: () => flags.gotKettle },
+      { id: 'ostrich',    x: 322, y: 336, w: 162, h: 118, walkX: 300, label: 'OSTRICH PILLOW', counter: 'ostrich' },
+      { id: 'sharkBlanket', x: 410, y: 414, w: 184, h: 104, walkX: 375, label: 'SHARK BLANKET' },
+      { id: 'bitsBox',    x: 462, y: 298, w: 242, h: 104, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
+      { id: 'cassettes',  x: 604, y: 402, w: 280, h: 124, walkX: 558, label: 'CASSETTE PILE' },
+      { id: 'plant',      x: 754, y: 262, w: 160, h: 234, walkX: 700, label: 'FAKE PLANT' },
+      { id: 'shelves',    x: 0,   y: 28,  w: 332, h: 314, walkX: 230, label: 'THE SHELVES' },
     ],
   },
 };
+
+// ── ART PACK (pixel plates + sprite sheets + VO) — lazy, canvas fallback ────
+const PLATES = {};              // roomId -> Image (320x180, drawn x3, smoothing off)
+const SPR = {};                 // jimmyFront/jimmySide/jimmyWalk[]/joeFront/joeWalk[]
+let VOICE = null;               // djb2(who|text) -> base64 mp3
+const voiceBuffers = {};
+let voiceSource = null;
+let packState = 'idle';
+function mkImg(uri, cb) { const im = new Image(); im.onload = () => cb(im); im.src = uri; }
+function loadPack() {
+  if (packState !== 'idle') return;
+  packState = 'loading';
+  fetch('jnj-on-air-pack.json').then(r => r.json()).then(p => {
+    for (const k of ['studio', 'corridor', 'prop'])
+      if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
+    if (p.sprites) {
+      for (const k of ['jimmyFront', 'jimmySide', 'joeFront'])
+        if (p.sprites[k]) mkImg(p.sprites[k], im => { SPR[k] = im; });
+      for (const k of ['jimmyWalk', 'joeWalk'])
+        if (p.sprites[k]) { SPR[k] = []; p.sprites[k].forEach((u, i) => mkImg(u, im => { SPR[k][i] = im; })); }
+    }
+    VOICE = p.voice || null;
+    packState = 'ready';
+  }).catch(() => { packState = 'failed'; });   // no pack: canvas rooms + text-only
+}
+function djb2(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+function stopVoice() {
+  if (voiceSource) { try { voiceSource.stop(); } catch (e) {} voiceSource = null; }
+}
+function playVoice(who, text) {
+  stopVoice();
+  dlg.audioDur = 0;
+  if (!VOICE || !audioCtx || muted || state === 'attract') return;
+  const key = djb2(who + '|' + text);
+  const b64 = VOICE[key];
+  if (!b64) return;
+  const start = (buf) => {
+    if (!dlg.current || dlg.current.text !== text) return;   // line already skipped
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const g = audioCtx.createGain(); g.gain.value = 0.95;
+    src.connect(g); g.connect(audioCtx.destination);
+    src.start();
+    voiceSource = src;
+    dlg.audioDur = buf.duration * 1000;
+    dlg.shownAt = worldT;                                    // re-time line to audio start
+  };
+  if (voiceBuffers[key]) { start(voiceBuffers[key]); return; }
+  const bin = atob(b64), arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  audioCtx.decodeAudioData(arr.buffer, buf => { voiceBuffers[key] = buf; start(buf); }, () => {});
+}
 
 // look lines (long-press) — every hotspot answers, always
 const LOOKS = {
@@ -323,6 +389,8 @@ const LOOKS = {
   sharkBlanket: [['JIMMY', "The shark blanket from the Buy or ByeBye pilot. It got a BUY. We keep it forever."]],
   cassettes: [['JIMMY', "A pile of game cassettes. Our entire arcade, in physical form, unalphabetised. Joe would faint."]],
   plant: [['JIMMY', "A fake plant. We watered it for a month before anyone checked."]],
+  sofaL: [['JIMMY', "The guest sofa. Chesterfield. Seats four, has held eleven."]],
+  sofaR: [['JIMMY', "The other sofa. Identical, but Joe says it sits better. It's his side, is why."]],
 };
 
 // ── SAVE / LOAD (state-replay style: flags + inventory + position) ──────────
@@ -358,7 +426,7 @@ function interact(hs, item) {
   // ITEM-ON-HOTSPOT uses first
   if (item) {
     if (hs.id === 'changeMachine' && item === 'rig') {
-      removeItem('rig'); addItem('key'); flags.gotKey = true; burst(680, 320, 16);
+      removeItem('rig'); addItem('key'); flags.gotKey = true; burst(724, 430, 16);
       say('JIMMY', "Easy... easy... GOT IT. Magnet fishing champion, corridor division.");
       say('JOE', "You can hear him celebrating from two rooms away.");
       sayRun(); saveGame(); return;
@@ -368,7 +436,7 @@ function interact(hs, item) {
       sayRun(); return;
     }
     if (hs.id === 'propDoor' && item === 'key') {
-      removeItem('key'); flags.propUnlocked = true; sfx.door(); burst(930, 320, 14);
+      removeItem('key'); flags.propUnlocked = true; sfx.door(); burst(489, 250, 14);
       say('JIMMY', "And we're IN. Prop room, baby!");
       sayRun(); saveGame(); return;
     }
@@ -384,25 +452,25 @@ function interact(hs, item) {
         sayRun(); return;
       }
       removeItem('kettleFull'); removeItem('teabag'); addItem('tea'); flags.teaMade = true;
-      sfx.kettle(); burst(760, 440, 18);
+      sfx.kettle(); burst(710, 316, 18);
       say('JIMMY', "Kettle on... bubbling... teabag in... and THAT is a broadcast-grade cup of tea.");
       say('JOE', "If it's stewed, the duel starts early.");
       sayRun(); saveGame(); return;
     }
     if (hs.id === 'hopmanCab' && item === 'broom') {
-      flags.lolliDown = true; addItem('lolliSticky'); burst(180, 240, 20, '#ff7ab0');
+      flags.lolliDown = true; addItem('lolliSticky'); burst(234, 180, 20, '#ff7ab0');
       say('JIMMY', "One gentle broom-nudge aaaand — caught it! Caught the lollipop! With my FACE, but caught it!");
       say('JOE', "The frog kept it safer than we ever did.");
       sayRun(); saveGame(); return;
     }
     if (hs.id === 'joe' && item === 'tea') {
-      removeItem('tea'); flags.teaGiven = true; score += 300; toast('+300', 640, 260);
+      removeItem('tea'); flags.teaGiven = true; score += 300; toast('+300', 614, 330);
       say('JOE', "Hm. Right colour. Right steam."); say('JOE', "...Acceptable.");
       say('JIMMY', "'Acceptable'! You all heard it! Put it on the poster!");
       sayRun(checkReady); saveGame(); return;
     }
     if ((hs.id === 'lolliTray' || hs.id === 'joe') && item === 'lolli') {
-      removeItem('lolli'); flags.lolliGiven = true; score += 300; toast('+300', 553, 360);
+      removeItem('lolli'); flags.lolliGiven = true; score += 300; toast('+300', 575, 440);
       say('JIMMY', "Lollipop, on the tray, exactly where the outro needs it. The show has its soul back.");
       say('JOE', "It has its sugar back. The soul is negotiable.");
       sayRun(checkReady); saveGame(); return;
@@ -493,7 +561,7 @@ function interact(hs, item) {
       flags.gotKettle = true; addItem('kettle');
       say('JIMMY', "The kettle! Come here, you beautiful appliance."); sayRun(); return;
     case 'bitsBox':
-      if (!flags.gotTeabag) { flags.gotTeabag = true; addItem('teabag'); burst(560, 390, 14);
+      if (!flags.gotTeabag) { flags.gotTeabag = true; addItem('teabag'); burst(565, 340, 14);
         say('JIMMY', "Opening the do-not-open box. Inside: Joe's secret teabag stash. He HID them. From ME.");
         say('JOE', "And I was right to."); sayRun(); saveGame(); return; }
       say('JIMMY', "The box has nothing left but shame and packing foam."); sayRun(); return;
@@ -505,6 +573,10 @@ function interact(hs, item) {
       say('JIMMY', "Hop-man, angry worms, candy-tris... our greatest hits, gathering glorious dust."); sayRun(); return;
     case 'plant':
       say('JIMMY', "Still fake. Still thriving. Honestly, an inspiration."); sayRun(); return;
+    case 'sofaL':
+      say('JIMMY', "One day we'll have guests again. The sofa believes. So do I."); sayRun(); return;
+    case 'sofaR':
+      say('JOE', "Don't bounce on the furniture."); sayRun(); return;
     default:
       say('JIMMY', "Yep. That's a thing that exists."); sayRun(); return;
   }
@@ -801,6 +873,14 @@ function update(dt) {
     if (attractQuipT > 5200) { attractQuipT = 0; attractQuipI++; }
   }
 
+  // keep the speaker animated for the whole line (VO can be long)
+  if (dlg.current) {
+    if (dlg.current.who === 'JIMMY') player.talkT = 200; else if (dlg.current.who === 'JOE') joe.talkT = 200;
+  }
+  for (const m of motes) {
+    m.x += m.vx * dt; m.y += m.vy * dt;
+    if (m.x > 960 || m.y > 400) { m.x = Math.random() * 900; m.y = 30 + Math.random() * 200; }
+  }
   for (let i = toasts.length - 1; i >= 0; i--) {
     const t = toasts[i]; t.t += dt; t.y -= dt * 0.03;
     if (t.t > 1400) toasts.splice(i, 1);
@@ -812,7 +892,48 @@ function update(dt) {
   }
 }
 
-// ── DRAW: CHARACTERS ─────────────────────────────────────────────────────────
+// ── DRAW: CHARACTERS (sprite sheets from Osimo 2026-07-04; canvas fallback) ──
+function drawSprite(img, x, feetY, h, flip, bob) {
+  // x = center, feetY = feet line, h = world height; sprites face LEFT natively
+  const w = img.width / img.height * h;
+  const y = feetY - h + (bob || 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  // soft ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(x, feetY - 2, w * 0.34, 7, 0, 0, Math.PI * 2); ctx.fill();
+  if (flip) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.drawImage(img, -w / 2, y, w, h); }
+  else ctx.drawImage(img, x - w / 2, y, w, h);
+  ctx.restore();
+}
+function drawJimmySprite(x, feetY) {
+  const walking = player.targetX != null;
+  const talkBob = player.talkT > 0 ? Math.sin(worldT * 0.02) * 2 : 0;
+  if (walking && SPR.jimmyWalk && SPR.jimmyWalk.length === 8 && SPR.jimmyWalk.every(Boolean)) {
+    const f = Math.floor(player.walkPhase * 0.55) % 8;
+    drawSprite(SPR.jimmyWalk[f], x, feetY, 171, player.facing > 0, 0);
+    return true;
+  }
+  if (!walking && SPR.jimmyFront) { drawSprite(SPR.jimmyFront, x, feetY, 171, false, talkBob); return true; }
+  if (SPR.jimmySide) { drawSprite(SPR.jimmySide, x, feetY, 171, player.facing > 0, talkBob); return true; }
+  return false;
+}
+function drawJoeSprite(x, feetY) {
+  if (!SPR.joeFront) return false;
+  const talkBob = joe.talkT > 0 ? Math.sin(worldT * 0.018) * 2 : 0;
+  drawSprite(SPR.joeFront, x, feetY, 180, false, talkBob);
+  if (flags.teaGiven) {              // steam wisps by his hand — the tea is HELD, obviously
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    for (let i = 0; i < 2; i++) {
+      const ph = worldT * 0.0016 + i * 2.1;
+      ctx.beginPath();
+      ctx.moveTo(x + 44 + i * 8, feetY - 92);
+      ctx.quadraticCurveTo(x + 48 + i * 8 + Math.sin(ph) * 5, feetY - 108, x + 44 + i * 8 + Math.sin(ph + 1) * 6, feetY - 122);
+      ctx.stroke();
+    }
+  }
+  return true;
+}
 function drawLEDFace(x, y, w, mood, talking) {
   // black visor + white glowing dot-expression (canon: Face Lab language)
   ctx.fillStyle = C.visor;
@@ -1037,12 +1158,160 @@ function drawStudio(camX) {
   // wall socket
   ctx.fillStyle = '#d8d2c4'; ctx.beginPath(); ctx.roundRect(748, 430, 30, 34, 4); ctx.fill();
   ctx.fillStyle = '#333'; ctx.fillRect(756, 438, 5, 8); ctx.fillRect(766, 438, 5, 8);
-  // characters
-  drawJoeSeated(650, 452);
   // exit arrow
   drawExitArrow(WORLD_W - 26, 330, 1);
   ctx.restore();
 }
+
+// ── PLATE OVERLAYS — interactive props painted over the pixel-art photos ────
+function overlayStudio() {
+  // functional clock hands over the photo clock
+  const ccx = 478, ccy = 48;
+  const frac = 1 - Math.max(0, timeLeft) / 600000;
+  ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(ccx, ccy);
+  ctx.lineTo(ccx + Math.sin(frac * Math.PI * 2) * 24, ccy - Math.cos(frac * Math.PI * 2) * 24); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ccx, ccy);
+  ctx.lineTo(ccx + Math.sin(worldT * 0.0012) * 15, ccy - Math.cos(worldT * 0.0012) * 15); ctx.stroke();
+  // ON AIR sign on the brick between clock and right portrait
+  ctx.fillStyle = flags.onAir ? '#ff3b3b' : '#2e1212';
+  if (flags.onAir) { ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = 20; }
+  ctx.beginPath(); ctx.roundRect(586, 30, 106, 40, 5); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#161010'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = flags.onAir ? '#fff' : '#6e3a3a'; ctx.font = 'bold 17px "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ON AIR', 639, 51);
+  // broom leaning on the left sofa
+  if (!flags.gotBroom) {
+    ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(92, 306); ctx.lineTo(112, 452); ctx.stroke();
+    ctx.fillStyle = '#c9a35c'; ctx.beginPath();
+    ctx.moveTo(98, 448); ctx.lineTo(128, 442); ctx.lineTo(136, 478); ctx.lineTo(106, 484); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#8a6a34'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(104 + i * 7, 448); ctx.lineTo(110 + i * 7, 480); ctx.stroke(); }
+  }
+  // mini-fridge, foreground left
+  ctx.fillStyle = '#d8dce0'; ctx.beginPath(); ctx.roundRect(16, 448, 82, 88, 6); ctx.fill();
+  ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 2; ctx.strokeRect(24, 458, 66, 68);
+  ctx.fillStyle = '#9aa0a8'; ctx.fillRect(82, 470, 5, 18);
+  if (!flags.gotMagnet) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(38, 466, 28, 36);
+    ctx.fillStyle = '#ff5a8a'; ctx.beginPath(); ctx.arc(52, 463, 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(52, 469); ctx.lineTo(52, 476); ctx.stroke();
+  }
+  // cable coil under the table
+  if (!flags.gotCable) {
+    ctx.strokeStyle = '#23232b'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.ellipse(488, 512, 30, 10, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = '#33333d'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.ellipse(488, 508, 22, 8, 0, 0, 7); ctx.stroke();
+  }
+  // wall socket on the brick, right of Joe's chair
+  ctx.fillStyle = '#ddd5c4'; ctx.beginPath(); ctx.roundRect(694, 296, 32, 38, 4); ctx.fill();
+  ctx.strokeStyle = '#4a4038'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#333'; ctx.fillRect(702, 306, 5, 9); ctx.fillRect(713, 306, 5, 9);
+  // outro tray on the table's right end
+  ctx.fillStyle = '#caa54c'; ctx.beginPath(); ctx.ellipse(575, 486, 28, 9, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#8a6a2c'; ctx.beginPath(); ctx.ellipse(575, 486, 20, 6, 0, 0, 7); ctx.fill();
+  if (flags.lolliGiven) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(575, 484); ctx.lineTo(575, 458); ctx.stroke();
+    ctx.fillStyle = '#ff5a8a'; ctx.shadowColor = '#ff5a8a'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(575, 450, 10, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(575, 450, 5.5, 0.5, 4.2); ctx.stroke();
+  }
+  // sticky wrapper hint under Jimmy's chair
+  if (!flags.wrapper) {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath(); ctx.moveTo(352, 492); ctx.lineTo(368, 488); ctx.lineTo(362, 500); ctx.closePath(); ctx.fill();
+  }
+  // candle flicker on the table
+  const fl = 0.05 + Math.abs(Math.sin(worldT * 0.011)) * 0.07;
+  const g = ctx.createRadialGradient(500, 452, 4, 500, 452, 60);
+  g.addColorStop(0, 'rgba(255,190,110,' + fl + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(430, 390, 140, 130);
+  drawExitArrow(WORLD_W - 24, 330, 1);
+}
+function overlayCorridor() {
+  // THE LOLLIPOP stuck on hop-man's screen
+  if (!flags.lolliDown) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(230, 212); ctx.lineTo(233, 186); ctx.stroke();
+    ctx.fillStyle = '#ff5a8a'; ctx.shadowColor = '#ff5a8a'; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(234, 178, 10, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(234, 178, 5.5, 0.5, 4.2); ctx.stroke();
+  }
+  // key glinting in the change machine's coin return
+  if (!flags.gotKey) {
+    const tw = 0.5 + Math.sin(worldT * 0.006) * 0.5;
+    ctx.fillStyle = C.brass; ctx.shadowColor = C.brass; ctx.shadowBlur = 6 + tw * 8;
+    ctx.beginPath(); ctx.arc(722, 430, 5, 0, 7); ctx.fill();
+    ctx.fillRect(726, 428, 13, 4); ctx.fillRect(735, 432, 3, 5);
+    ctx.shadowBlur = 0;
+  }
+  // padlock on the prop room door
+  if (!flags.propUnlocked) {
+    ctx.fillStyle = '#caa54c'; ctx.beginPath(); ctx.roundRect(480, 246, 18, 14, 3); ctx.fill();
+    ctx.strokeStyle = '#caa54c'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(489, 246, 6, Math.PI, 0); ctx.stroke();
+  }
+  drawExitArrow(24, 330, -1);
+}
+function overlayProp() {
+  // BITS BOX label on the cardboard box
+  ctx.save(); ctx.translate(560, 344); ctx.rotate(-0.04);
+  ctx.fillStyle = '#3c2c1c'; ctx.font = 'bold 15px "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('BITS BOX', 0, 0);
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.fillText(flags.gotTeabag ? '(OPENED. SORRY JOE)' : 'DO NOT OPEN', 0, 18);
+  ctx.restore();
+  // kettle gone: shadowed empty shelf patch
+  if (flags.gotKettle) {
+    ctx.fillStyle = 'rgba(28,18,12,0.92)';
+    ctx.beginPath(); ctx.roundRect(52, 280, 92, 74, 8); ctx.fill();
+  }
+  drawExitArrow(24, 330, -1);
+}
+const OVERLAYS = { studio: overlayStudio, corridor: overlayCorridor, prop: overlayProp };
+
+// ── ROOM BG DISPATCH: pixel plate if loaded, canvas fallback otherwise ───────
+function drawRoomBG(id) {
+  if (PLATES[id]) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(PLATES[id], 0, 0, WORLD_W, WORLD_H);
+    ctx.imageSmoothingEnabled = true;
+    OVERLAYS[id]();
+  } else {
+    if (id === 'studio') drawStudio(0);
+    else if (id === 'corridor') drawCorridor(0);
+    else drawProp(0);
+    // no-pack degraded mode: hotspots moved to plate coords, so show faint outlines
+    ctx.strokeStyle = 'rgba(232,161,60,0.28)'; ctx.lineWidth = 1;
+    ctx.font = '9px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    for (const hs of ROOMS[id].hotspots) {
+      if (hs.hideWhen && hs.hideWhen()) continue;
+      ctx.strokeRect(hs.x, hs.y, hs.w, hs.h);
+      ctx.fillStyle = 'rgba(232,161,60,0.5)'; ctx.fillText(hs.label, hs.x + 3, hs.y + 3);
+    }
+  }
+  // warm vignette
+  const v = ctx.createRadialGradient(WORLD_W / 2, WORLD_H * 0.45, WORLD_H * 0.45, WORLD_W / 2, WORLD_H / 2, WORLD_W * 0.72);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(10,4,2,0.42)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  // dust motes in the sconce light
+  ctx.fillStyle = 'rgba(255,220,170,0.5)';
+  for (const m of motes) {
+    ctx.globalAlpha = 0.14 + 0.18 * Math.abs(Math.sin(m.ph + worldT * 0.001));
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+const motes = [];
+for (let i = 0; i < 16; i++) motes.push({ x: Math.random() * 960, y: 40 + Math.random() * 320, r: 0.8 + Math.random() * 1.6, ph: Math.random() * 7, vx: 0.004 + Math.random() * 0.01, vy: 0.002 + Math.random() * 0.008 });
 function drawCorridor(camX) {
   ctx.save(); ctx.translate(-camX, 0);
   ctx.fillStyle = '#241c26'; ctx.fillRect(0, 0, WORLD_W, 470);   // darker arcade wall
@@ -1219,13 +1488,13 @@ function drawInventory() {
   }
 }
 function drawHUD() {
-  // timer
+  // timer — top-right, clear of the studio's wall clock
   const t = Math.max(0, timeLeft);
   const m = Math.floor(t / 60000), s = Math.floor((t % 60000) / 1000);
-  ctx.font = 'bold 24px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.font = 'bold 22px "Courier New", monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
   ctx.fillStyle = t < 60000 ? '#ff5a5a' : '#f0ede4';
   if (t < 60000) { ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 10; }
-  ctx.fillText(m + ':' + String(s).padStart(2, '0'), WORLD_W / 2, 8);
+  ctx.fillText(m + ':' + String(s).padStart(2, '0'), WORLD_W - 52, 10);
   ctx.shadowBlur = 0;
   // score
   ctx.font = 'bold 18px "Courier New", monospace'; ctx.textAlign = 'left';
@@ -1238,7 +1507,6 @@ function drawHUD() {
   ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 10);
 }
 function drawDuelUI() {
-  ctx.fillStyle = 'rgba(6,6,10,0.55)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   ctx.fillStyle = INK; ctx.font = 'bold 26px "Courier New", monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.shadowColor = INK; ctx.shadowBlur = 14;
@@ -1260,7 +1528,8 @@ function drawDuelUI() {
   }
 }
 function drawAttract() {
-  drawStudio(0);
+  drawRoomBG('studio');
+  if (!drawJoeSprite(614, 498)) drawJoeSeated(614, 470);
   drawJimmyIdle(300 + attractPan);
   ctx.fillStyle = 'rgba(4,4,8,0.45)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   ctx.fillStyle = INK; ctx.font = 'bold 40px "Courier New", monospace';
@@ -1283,9 +1552,11 @@ function drawAttract() {
   }
 }
 function drawJimmyIdle(x) {
+  const cx = Math.max(150, Math.min(800, x));
+  if (SPR.jimmyFront) { drawSprite(SPR.jimmyFront, cx, 502, 171, false, Math.sin(worldT * 0.003) * 2); return; }
   const saveFacing = player.facing, saveTalk = player.talkT;
   player.facing = 1; player.talkT = 0;
-  drawJimmy(Math.max(150, Math.min(800, x)), 470);
+  drawJimmy(cx, 496);
   player.facing = saveFacing; player.talkT = saveTalk;
 }
 
@@ -1299,12 +1570,21 @@ function render() {
 
   if (state === 'attract') { drawAttract(); drawHUDMuteOnly(); return; }
 
-  if (roomId === 'studio') drawStudio(0);
-  else if (roomId === 'corridor') drawCorridor(0);
-  else drawProp(0);
+  drawRoomBG(roomId);
 
+  if (roomId === 'studio') {
+    if (!drawJoeSprite(614, 498)) drawJoeSeated(614, 470);
+  }
   if (state === 'playing' || state === 'duel' || state === 'cutscene' || state === 'ended') {
-    drawJimmy(player.x, 470);
+    if (!drawJimmySprite(player.x, 502)) drawJimmy(player.x, 496);
+  }
+  if (state === 'duel') {              // spotlight the duel — everything else dims
+    ctx.fillStyle = 'rgba(4,4,8,0.5)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    const sp = ctx.createRadialGradient(560, 380, 40, 560, 380, 260);
+    sp.addColorStop(0, 'rgba(255,214,150,0.16)'); sp.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sp; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    if (!drawJoeSprite(614, 498)) drawJoeSeated(614, 470);
+    if (!drawJimmySprite(player.x, 502)) drawJimmy(player.x, 496);
   }
   // room label
   ctx.fillStyle = 'rgba(232,161,60,0.5)'; ctx.font = 'bold 12px "Courier New", monospace';
@@ -1374,6 +1654,7 @@ function beginGame(resume) {
   document.getElementById('overlay').classList.add('hidden');
   try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
   unlockAudio();
+  loadPack();
   if (resume && loadGame()) {
     state = 'playing';
     say('JIMMY', "Right. Where was I. Tea, lollipop, show. The dream lives on.");
@@ -1389,6 +1670,7 @@ function beginGame(resume) {
   saveGame();
 }
 buildButtons();
+loadPack();
 if (IS_ATTRACT_PARAM) { document.getElementById('overlay').classList.add('hidden'); }
 
 // test hook — playtest-by-evaluate (game-builder QA gate); not a cheat surface worth guarding

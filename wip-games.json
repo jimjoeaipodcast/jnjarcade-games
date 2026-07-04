@@ -50,7 +50,7 @@
    "url": "games/jnj-on-air.html",
    "status": "wip",
    "special": "Game Lab #12 — first ADVENTURE cabinet",
-   "note": "v1 2026-07-04: 3-room point-and-click. You are Jimmy; show starts in 10 min. Tap walk/poke, hold to look, tap item→thing to use. Two parallel puzzle chains (tea + lollipop), every hotspot gets a Joe line, collect 6 COMEBACKS by exploring → BANTER DUEL finale vs Joe (dialogue combat, best of 3). No deaths (MI law 1), auto-save, timer = score."
+   "note": "v2 2026-07-04: FULL VOICE (145 lines, real Jimmy+Joe Chatterbox VO) + pixel-art rooms from Osimo's studio photo (corridor+prop generated to match) + Osimo's sprite sheets (8-frame walk). 3-room point-and-click, parallel tea+lollipop chains, every hotspot answers, 6 collectible COMEBACKS → BANTER DUEL finale vs Joe. No deaths, auto-save/resume, timer = score."
   },
   {
    "id": "jungle-hop",
