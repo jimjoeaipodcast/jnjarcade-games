@@ -2,7 +2,7 @@
  "social": [
   {
    "name": "Shop",
-   "emoji": "\ud83d\udecd\ufe0f",
+   "emoji": "🛍️",
    "url": "https://jimmy-joe-shop.fourthwall.com/",
    "gradient": [
     "#FF9F0A",
@@ -12,7 +12,7 @@
   },
   {
    "name": "YouTube",
-   "emoji": "\u25b6",
+   "emoji": "▶",
    "url": "https://www.youtube.com/@JnJAiStudio",
    "gradient": [
     "#FF453A",
@@ -22,7 +22,7 @@
   },
   {
    "name": "Patreon",
-   "emoji": "\u2615",
+   "emoji": "☕",
    "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
    "gradient": [
     "#FF6E4A",
@@ -32,7 +32,7 @@
   },
   {
    "name": "Ko-fi",
-   "emoji": "\u2615",
+   "emoji": "☕",
    "url": "https://ko-fi.com/jimmynjoe",
    "gradient": [
     "#FF5E5B",
@@ -43,20 +43,30 @@
  ],
  "games": [
   {
+   "id": "jnj-on-air",
+   "name": "JNJ: ON AIR IN 10 MINUTES",
+   "emoji": "🎙️",
+   "genre": "MONKEY ISLAND × TALK SHOW",
+   "url": "games/jnj-on-air.html",
+   "status": "wip",
+   "special": "Game Lab #12 — first ADVENTURE cabinet",
+   "note": "v1 2026-07-04: 3-room point-and-click. You are Jimmy; show starts in 10 min. Tap walk/poke, hold to look, tap item→thing to use. Two parallel puzzle chains (tea + lollipop), every hotspot gets a Joe line, collect 6 COMEBACKS by exploring → BANTER DUEL finale vs Joe (dialogue combat, best of 3). No deaths (MI law 1), auto-save, timer = score."
+  },
+  {
    "id": "jungle-hop",
    "name": "JUNGLE-HOP",
-   "emoji": "\ud83c\udf34",
-   "genre": "PITFALL \u00d7 DK JR",
+   "emoji": "🌴",
+   "genre": "PITFALL × DK JR",
    "url": "games/jungle-hop.html",
    "status": "wip",
    "special": "Game Lab #11",
-   "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards \u2014 rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn \u2014 bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
+   "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards — rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn — bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
   },
   {
    "id": "tomb-hunt",
    "name": "TOMB HUNT",
-   "emoji": "\ud83c\udffa",
-   "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
+   "emoji": "🏺",
+   "genre": "JUNGLE HUNT × TOMB RAIDER",
    "url": "games/tomb-hunt.html",
    "status": "wip",
    "special": "Game Lab #3",
@@ -65,8 +75,8 @@
   {
    "id": "bomb-garden",
    "name": "BOMB GARDEN",
-   "emoji": "\ud83d\udca3",
-   "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
+   "emoji": "💣",
+   "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
    "url": "games/bomb-garden.html",
    "status": "wip",
    "special": "Game Lab #4",
@@ -75,8 +85,8 @@
   {
    "id": "pac-lemming",
    "name": "PAC-LEMMING",
-   "emoji": "\ud83d\udfe1",
-   "genre": "LEMMINGS \u00d7 PAC-MAN",
+   "emoji": "🟡",
+   "genre": "LEMMINGS × PAC-MAN",
    "url": "games/pac-lemming.html",
    "status": "wip",
    "special": "Game Lab #6",
@@ -85,8 +95,8 @@
   {
    "id": "bomb-lemmings",
    "name": "BOMB-LEMMINGS",
-   "emoji": "\ud83d\udca3",
-   "genre": "LEMMINGS \u00d7 BOMBERMAN",
+   "emoji": "💣",
+   "genre": "LEMMINGS × BOMBERMAN",
    "url": "games/bomb-lemmings.html",
    "status": "wip",
    "special": "Game Lab #7",
@@ -95,8 +105,8 @@
   {
    "id": "lemming-invaders",
    "name": "LEMMING-INVADERS",
-   "emoji": "\ud83d\udc7e",
-   "genre": "LEMMINGS \u00d7 SPACE INVADERS",
+   "emoji": "👾",
+   "genre": "LEMMINGS × SPACE INVADERS",
    "url": "games/lemming-invaders.html",
    "status": "wip",
    "special": "Game Lab #8",
@@ -105,7 +115,7 @@
   {
    "id": "astro-hop",
    "name": "ASTRO-HOP",
-   "emoji": "\ud83d\ude80",
+   "emoji": "🚀",
    "genre": "PLATFORM MECHANICS SHOWCASE",
    "url": "games/astro-hop.html",
    "status": "wip",
@@ -115,7 +125,7 @@
   {
    "id": "cave-plunge",
    "name": "CAVE-PLUNGE",
-   "emoji": "\ud83e\udea8",
+   "emoji": "🪨",
    "genre": "CAVE EXPLORER",
    "url": "games/cave-plunge.html",
    "status": "wip",
@@ -125,7 +135,7 @@
   {
    "id": "lupo-alberto",
    "name": "LUPO ALBERTO",
-   "emoji": "\ud83d\udc3a",
+   "emoji": "🐺",
    "genre": "PLATFORM TRAINING CABINET",
    "url": "games/lupo-alberto.html",
    "status": "wip",
