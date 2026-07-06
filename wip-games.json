@@ -43,6 +43,16 @@
  ],
  "games": [
   {
+   "id": "pin-vaders",
+   "name": "PIN-VADERS",
+   "emoji": "🛸",
+   "genre": "PINBALL × SPACE INVADERS",
+   "url": "games/pin-vaders.html",
+   "status": "wip",
+   "special": "Game Lab #13 — first PINBALL cabinet",
+   "note": "v1 2026-07-06: full pinball physics (capsule flippers with tip-flick, restitution zoning, drag plunger, nudge + TILT) where the target field is a Space Invaders grid that MARCHES DOWN toward your flippers. Aliens kick like bumpers and die on ball contact; grid reaching the invasion line costs the ball. UFO jackpot, wave multiplier, speeding march heartbeat. Hold halves = flippers, drag lane = plunger, swipe up = nudge."
+  },
+  {
    "id": "jnj-on-air",
    "name": "JNJ: ON AIR IN 10 MINUTES",
    "emoji": "🎙️",

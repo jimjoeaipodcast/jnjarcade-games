@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PIN-VADERS — JnJ Arcade</title>
+<!-- PINBALL × SPACE INVADERS — the playfield invades. Alien grid marches down at
+     your flippers; the ball is your only gun. Physics per GAME_BIBLE §14
+     (pinball-schminball MIT patterns, Igor Zinken — constants adapted). -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none; }
+  #gameCanvas { display: block; width: 100vw; height: 100vh; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             font-family: 'Courier New', monospace; color: #fff; text-align: center; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(28px, 8vw, 64px); letter-spacing: .06em;
+                color: var(--ink, #b76bff); text-shadow: 0 0 24px var(--ink, #b76bff); }
+  #overlay p { margin: 14px 0 26px; font-size: 14px; color: #9aa; max-width: 80vw; line-height: 1.6; }
+  #coinBtn { font: bold 18px 'Courier New', monospace; letter-spacing: .1em;
+             padding: 16px 38px; background: var(--ink, #b76bff); color: #000;
+             border: none; border-radius: 10px; cursor: pointer;
+             box-shadow: 0 0 30px var(--ink, #b76bff); }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="overlay">
+  <h1>PIN-VADERS</h1>
+  <p>Hold LEFT / RIGHT half = flippers<br>Drag DOWN in the lane = plunger<br>Quick swipe UP = nudge (3 = TILT!)<br>Don't let them reach the line.</p>
+  <button id="coinBtn">🪙 INSERT COIN</button>
+</div>
+<script src="arcade-scores.js?v=10"></script>
+<script>
+(function () {
+'use strict';
+// ── IDENTITY ─────────────────────────────────────────────────────────────────
+const SLUG  = 'pin-vaders';
+const TITLE = 'PIN-VADERS';
+const INK   = '#b76bff';
+document.documentElement.style.setProperty('--ink', INK);
+
+// ── CANVAS + VIEW SCALING ────────────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const WORLD_W = 480, WORLD_H = 800;          // portrait table
+const VIEW = { scale: 1, ox: 0, oy: 0 };
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR;
+  const s = Math.min(innerWidth / WORLD_W, innerHeight / WORLD_H);
+  VIEW.scale = s * DPR;
+  VIEW.ox = (canvas.width  - WORLD_W * VIEW.scale) / 2;
+  VIEW.oy = (canvas.height - WORLD_H * VIEW.scale) / 2;
+}
+addEventListener('resize', resize); resize();
+
+// ── SFX — house style ────────────────────────────────────────────────────────
+let audioCtx = null, muted = localStorage.getItem('sfxMuted_' + SLUG) === '1';
+function unlockAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+document.addEventListener('pointerdown', unlockAudio, { once: true });
+function tone(f0, f1, dur, type, vol) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(f0, audioCtx.currentTime);
+    if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), audioCtx.currentTime + dur);
+    g.gain.setValueAtTime(vol || 0.15, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+const MARCH_NOTES = [62, 55, 49, 44];        // the invaders heartbeat, low + quiet
+let marchIdx = 0;
+const sfx = {
+  flip:   () => tone(180, 240, 0.05, 'square', 0.10),
+  bumper: () => tone(520, 780, 0.07, 'square', 0.14),
+  sling:  () => tone(340, 520, 0.06, 'square', 0.12),
+  alien:  () => tone(880 + Math.random() * 160, 220, 0.12, 'square', 0.16),
+  march:  () => { tone(MARCH_NOTES[marchIdx], 0, 0.09, 'square', 0.07); marchIdx = (marchIdx + 1) % 4; },
+  ufo:    () => tone(660, 990, 0.25, 'triangle', 0.12),
+  jackpot:() => { tone(660, 1320, 0.18, 'square', 0.16); tone(880, 1760, 0.3, 'square', 0.12); },
+  launch: () => tone(140, 620, 0.25, 'sawtooth', 0.14),
+  drain:  () => tone(300, 50, 0.5, 'sawtooth', 0.18),
+  wave:   () => { tone(440, 880, 0.15, 'square', 0.14); tone(554, 1108, 0.25, 'square', 0.12); },
+  siren:  () => tone(700, 380, 0.3, 'sawtooth', 0.13),
+  tilt:   () => tone(120, 45, 0.6, 'sawtooth', 0.2),
+  over:   () => tone(440, 55, 0.7, 'sawtooth', 0.2),
+};
+
+// ── PHYSICS CONSTANTS (GAME_BIBLE §14) ───────────────────────────────────────
+const G = 1750;                              // world-units / s²
+const MAXV = 1900;                           // per-axis cap — kills tunneling (max rise v²/2G ≈ 1031 > lane's 570)
+const WALL_REST = 0.28;
+const BUMPER_KICK = 780, SLING_KICK = 880, ALIEN_KICK = 660;
+const SUB = 1 / 240;                         // fixed substep (s)
+
+// ── TABLE GEOMETRY ───────────────────────────────────────────────────────────
+// playfield 14..436, launch lane 436..466, drain below y=800
+const SEGS = [
+  { x1: 14,  y1: 110, x2: 14,  y2: 760, rest: WALL_REST },   // left wall
+  { x1: 14,  y1: 110, x2: 120, y2: 20,  rest: WALL_REST },   // left slant
+  { x1: 120, y1: 20,  x2: 300, y2: 14,  rest: WALL_REST },   // top
+  { x1: 300, y1: 14,  x2: 390, y2: 40,  rest: WALL_REST },   // arch 1
+  { x1: 390, y1: 40,  x2: 450, y2: 110, rest: WALL_REST },   // arch 2
+  { x1: 450, y1: 110, x2: 466, y2: 190, rest: WALL_REST },   // arch 3
+  { x1: 466, y1: 190, x2: 466, y2: 758, rest: 0.1 },         // lane outer wall
+  { x1: 436, y1: 205, x2: 436, y2: 600, rest: 0.1 },         // lane divider
+  { x1: 436, y1: 600, x2: 334, y2: 708, rest: 0.15 },        // right funnel — ends ON the flipper base (no dead pocket)
+  { x1: 14,  y1: 600, x2: 146, y2: 708, rest: 0.15 },        // left funnel — same
+  { x1: 436, y1: 758, x2: 466, y2: 758, rest: 0 },           // lane floor
+];
+const GATE = { x1: 436, y1: 205, x2: 466, y2: 178, rest: 0.05 }; // one-way: blocks re-entry
+const TIP  = { x: 436, y: 205, r: 5 };                       // divider rounded tip
+const BUMPERS = [
+  { x: 155, y: 330, r: 17, kick: BUMPER_KICK, flash: 0 },
+  { x: 325, y: 330, r: 17, kick: BUMPER_KICK, flash: 0 },
+  { x: 240, y: 415, r: 17, kick: BUMPER_KICK, flash: 0 },
+];
+const SLINGS = [
+  { x: 120, y: 626, r: 14, kick: SLING_KICK, flash: 0 },
+  { x: 352, y: 626, r: 14, kick: SLING_KICK, flash: 0 },
+];
+const FLIPPERS = [
+  { px: 148, py: 716, len: 82, thick: 11, restAng: 0.50, raisedAng: -0.55,
+    ang: 0.50, angVel: 0, pressed: false },
+  { px: 332, py: 716, len: 82, thick: 11, restAng: Math.PI - 0.50, raisedAng: Math.PI + 0.55,
+    ang: Math.PI - 0.50, angVel: 0, pressed: false },
+];
+const INVASION_Y = 585;
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = 'attract';                       // attract | playing | ended
+let score = 0, wave = 1, balls = 3, shakeT = 0, tPrev = 0, acc = 0;
+let tilted = false, bumps = [], launchedAt = 0;
+const particles = [], labels = [];
+let msg = null;                              // { txt, life }
+const ball = { x: 451, y: 730, vx: 0, vy: 0, r: 11, inLane: true, held: true };
+const plunger = { pull: 0, dragId: null, dragY0: 0 };
+const stars = Array.from({ length: 60 }, () => ({
+  x: Math.random() * WORLD_W, y: Math.random() * WORLD_H, r: Math.random() * 1.4 + 0.4,
+  tw: Math.random() * Math.PI * 2 }));
+
+// ── INVADERS ─────────────────────────────────────────────────────────────────
+const INV = { x: 60, y: 110, cols: 6, rows: 3, cw: 48, rh: 40, dir: 1,
+              beatBase: 820, tAcc: 0, frame: 0, alive: [], count: 0, total: 1 };
+function spawnWave(w) {
+  INV.rows = Math.min(3 + ((w - 1) >> 1), 5);
+  INV.beatBase = Math.max(820 - (w - 1) * 70, 420);
+  INV.x = 60; INV.y = 110; INV.dir = 1; INV.tAcc = 0; INV.frame = 0;
+  INV.alive = Array.from({ length: INV.rows }, () => Array(INV.cols).fill(true));
+  INV.count = INV.total = INV.rows * INV.cols;
+}
+function alienPos(r, c) { return { x: INV.x + c * INV.cw + 24, y: INV.y + r * INV.rh + 16 }; }
+function lowestAlienY() {
+  for (let r = INV.rows - 1; r >= 0; r--)
+    for (let c = 0; c < INV.cols; c++)
+      if (INV.alive[r][c]) return alienPos(r, 0).y + 12;
+  return -1;
+}
+const UFO = { active: false, x: -30, y: 66, r: 13, vx: 0, timer: 9000 };
+
+// pixel-art bitmaps (classic crab, 2 frames) — 11 wide × 8 tall
+const BM_A = ['00100000100','00010001000','00111111100','01101110110','11111111111','10111111101','10100000101','00011011000'];
+const BM_B = ['00100000100','10010001001','10111111101','11101110111','11111111111','01111111110','00100000100','01000000010'];
+const ROW_COL = ['#9fff8a', '#6ee7ff', '#ffffff', '#ffd05a', '#ff8ab5'];
+
+// ── JUICE ────────────────────────────────────────────────────────────────────
+function burst(x, y, n, col) {
+  for (let i = 0; i < (n || 10); i++) {
+    const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 3;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5,
+                     life: 28, max: 28, r: 2 + Math.random() * 3, col: col || INK });
+  }
+}
+function label(x, y, txt, col) { labels.push({ x, y, txt, col: col || '#fff', life: 55 }); }
+function say(txt, life) { msg = { txt, life: life || 110 }; }
+
+// ── INPUT — halves = flippers, lane drag = plunger, swipe up = nudge ─────────
+const touches = new Map();                   // id -> {x0,y0,t0,zone}
+const MUTE_RECT = { x: WORLD_W - 46, y: 6, w: 40, h: 34 };
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top)  * DPR - VIEW.oy) / VIEW.scale };
+}
+function inRect(w, rc) { return w.x >= rc.x && w.x <= rc.x + rc.w && w.y >= rc.y && w.y <= rc.y + rc.h; }
+function pressDown(id, cx, cy) {
+  const w = toWorld(cx, cy);
+  if (inRect(w, MUTE_RECT)) { touches.set(id, { zone: 'mute', x0: cx, y0: cy, t0: performance.now() }); return; }
+  if (state !== 'playing') { touches.set(id, { zone: 'none', x0: cx, y0: cy, t0: performance.now() }); return; }
+  if (ball.inLane && w.x > 400) {            // plunger drag (generous zone)
+    plunger.dragId = id; plunger.dragY0 = cy;
+    touches.set(id, { zone: 'plunger', x0: cx, y0: cy, t0: performance.now() });
+    return;
+  }
+  const zone = w.x < WORLD_W / 2 ? 'L' : 'R';
+  touches.set(id, { zone, x0: cx, y0: cy, t0: performance.now() });
+  if (!tilted) {
+    FLIPPERS[zone === 'L' ? 0 : 1].pressed = true;
+    sfx.flip();
+  }
+}
+function pressUp(id, cx, cy) {
+  const t = touches.get(id); touches.delete(id);
+  if (!t) return;
+  if (t.zone === 'mute') {
+    const w = toWorld(cx, cy);
+    if (inRect(w, MUTE_RECT)) { muted = !muted; localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0'); }
+    return;
+  }
+  if (t.zone === 'plunger' && plunger.dragId === id) {
+    firePlunger(); plunger.dragId = null;
+    return;
+  }
+  if (t.zone === 'L') FLIPPERS[0].pressed = false;
+  if (t.zone === 'R') FLIPPERS[1].pressed = false;
+  // nudge: fast upward swipe
+  const dy = cy - t.y0, dt = performance.now() - t.t0;
+  if (state === 'playing' && dy < -90 && dt < 400) nudge();
+}
+function pressMove(id, cx, cy) {
+  if (plunger.dragId === id) plunger.pull = Math.max(0, Math.min(120, cy - plunger.dragY0));
+}
+canvas.addEventListener('touchstart', e => { for (const t of e.changedTouches) pressDown(t.identifier, t.clientX, t.clientY); if (e.cancelable) e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchend',   e => { for (const t of e.changedTouches) pressUp(t.identifier, t.clientX, t.clientY);   if (e.cancelable) e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchmove',  e => { for (const t of e.changedTouches) pressMove(t.identifier, t.clientX, t.clientY); if (e.cancelable) e.preventDefault(); }, { passive: false });
+canvas.addEventListener('mousedown', e => pressDown('m', e.clientX, e.clientY));
+canvas.addEventListener('mouseup',   e => pressUp('m', e.clientX, e.clientY));
+canvas.addEventListener('mousemove', e => pressMove('m', e.clientX, e.clientY));
+addEventListener('keydown', e => {           // desktop parity bonus (never required)
+  if (state !== 'playing' || tilted) return;
+  if (e.key === 'ArrowLeft'  || e.key === 'z') { if (!FLIPPERS[0].pressed) sfx.flip(); FLIPPERS[0].pressed = true; }
+  if (e.key === 'ArrowRight' || e.key === '/') { if (!FLIPPERS[1].pressed) sfx.flip(); FLIPPERS[1].pressed = true; }
+  if (e.key === ' ' && ball.inLane) { plunger.pull = Math.min(120, plunger.pull + 14); e.preventDefault(); }
+});
+addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft'  || e.key === 'z') FLIPPERS[0].pressed = false;
+  if (e.key === 'ArrowRight' || e.key === '/') FLIPPERS[1].pressed = false;
+  if (e.key === ' ' && ball.inLane && plunger.pull > 0) firePlunger();
+});
+function firePlunger() {
+  if (!ball.inLane || plunger.pull < 4) { plunger.pull = 0; return; }
+  ball.held = false;
+  ball.vy = -(600 + plunger.pull * 11);      // pull 80+ clears the lane (rise 625 > 570); soft pull falls back
+  ball.vx = 0;
+  plunger.pull = 0;
+  launchedAt = performance.now();
+  sfx.launch();
+}
+function nudge() {
+  if (tilted) return;
+  const now = performance.now();
+  bumps = bumps.filter(t => now - t < 2000);
+  bumps.push(now);
+  ball.vy -= 150; ball.vx += (Math.random() - 0.5) * 120;
+  shakeT = 5;
+  if (bumps.length > 3) {
+    tilted = true;
+    FLIPPERS[0].pressed = FLIPPERS[1].pressed = false;
+    say('T I L T', 200); sfx.tilt(); shakeT = 14;
+  }
+}
+
+// ── PHYSICS ──────────────────────────────────────────────────────────────────
+function collideSeg(b, s) {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1, L2 = dx * dx + dy * dy;
+  const t = Math.max(0, Math.min(1, ((b.x - s.x1) * dx + (b.y - s.y1) * dy) / L2));
+  const cx = s.x1 + t * dx, cy = s.y1 + t * dy;
+  let nx = b.x - cx, ny = b.y - cy, d = Math.hypot(nx, ny);
+  if (!d || d > b.r) return false;
+  nx /= d; ny /= d;
+  b.x = cx + nx * b.r; b.y = cy + ny * b.r;
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) { b.vx -= (1 + s.rest) * vn * nx; b.vy -= (1 + s.rest) * vn * ny; }
+  return true;
+}
+function collideCircle(b, p, kick) {         // bumper-style: SET velocity outward
+  let nx = b.x - p.x, ny = b.y - p.y, d = Math.hypot(nx, ny);
+  if (!d || d > b.r + p.r) return false;
+  nx /= d; ny /= d;
+  b.x = p.x + nx * (b.r + p.r);
+  b.vx = nx * kick; b.vy = ny * kick - 60;   // slight upward bias keeps play alive
+  return true;
+}
+function collideStatic(b, p) {               // dead circle (divider tip)
+  let nx = b.x - p.x, ny = b.y - p.y, d = Math.hypot(nx, ny);
+  if (!d || d > b.r + p.r) return false;
+  nx /= d; ny /= d;
+  b.x = p.x + nx * (b.r + p.r);
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) { b.vx -= (1 + WALL_REST) * vn * nx; b.vy -= (1 + WALL_REST) * vn * ny; }
+  return true;
+}
+function collideFlipper(b, f) {
+  const dx = Math.cos(f.ang) * f.len, dy = Math.sin(f.ang) * f.len;
+  const t = Math.max(0, Math.min(1, ((b.x - f.px) * dx + (b.y - f.py) * dy) / (dx * dx + dy * dy)));
+  const cx = f.px + t * dx, cy = f.py + t * dy;
+  let nx = b.x - cx, ny = b.y - cy, d = Math.hypot(nx, ny) || 1;
+  if (d > b.r + f.thick) return;
+  nx /= d; ny /= d;
+  b.x = cx + nx * (b.r + f.thick); b.y = cy + ny * (b.r + f.thick);
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) { b.vx -= 1.1 * vn * nx; b.vy -= 1.1 * vn * ny; }
+  const surfV = f.angVel * t * f.len;        // tip moves fastest — the flick
+  b.vx += -Math.sin(f.ang) * surfV; b.vy += Math.cos(f.ang) * surfV;
+}
+function stepFlipper(f, dt) {
+  const target = f.pressed && !tilted ? f.raisedAng : f.restAng, SWING = 14;
+  const dir = Math.sign(target - f.ang);
+  if (dir === 0) { f.angVel = 0; return; }
+  f.angVel = dir * SWING;
+  f.ang += f.angVel * dt;
+  if ((dir > 0 && f.ang >= target) || (dir < 0 && f.ang <= target)) { f.ang = target; f.angVel = 0; }
+}
+function stepBall(dt) {
+  if (ball.held || state === 'ended') return;
+  ball.vy += G * dt;
+  ball.vx = Math.max(-MAXV, Math.min(MAXV, ball.vx));
+  ball.vy = Math.max(-MAXV, Math.min(MAXV, ball.vy));
+  ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+
+  if (ball.inLane && ball.y < 160) ball.inLane = false;   // exited over the gate
+
+  for (const s of SEGS) collideSeg(ball, s);
+  if (!ball.inLane) collideSeg(ball, GATE);
+  collideStatic(ball, TIP);
+  for (const f of FLIPPERS) collideFlipper(ball, f);
+
+  for (const p of BUMPERS)
+    if (collideCircle(ball, p, p.kick)) {
+      p.flash = 8; score += 25; label(p.x, p.y - 22, '+25'); burst(p.x, p.y, 8, '#6ee7ff');
+      sfx.bumper(); shakeT = Math.max(shakeT, 3);
+    }
+  for (const p of SLINGS)
+    if (collideCircle(ball, p, p.kick)) {
+      p.flash = 8; score += 10; sfx.sling(); burst(p.x, p.y, 6, '#ffd05a');
+    }
+
+  // aliens: depleting bumper field — the signature
+  if (!ball.inLane)
+    outer:
+    for (let r = 0; r < INV.rows; r++)
+      for (let c = 0; c < INV.cols; c++) {
+        if (!INV.alive[r][c]) continue;
+        const a = alienPos(r, c);
+        if (collideCircle(ball, { x: a.x, y: a.y, r: 15 }, ALIEN_KICK)) {
+          INV.alive[r][c] = false; INV.count--;
+          const v = 50 * wave;
+          score += v; label(a.x, a.y - 18, '+' + v, ROW_COL[r % ROW_COL.length]);
+          burst(a.x, a.y, 14, ROW_COL[r % ROW_COL.length]);
+          sfx.alien(); shakeT = Math.max(shakeT, 4);
+          if (INV.count === 0) waveClear();
+          break outer;                       // one alien per substep
+        }
+      }
+
+  if (UFO.active && collideCircle(ball, UFO, 700)) {
+    UFO.active = false;
+    const v = 500 * wave;
+    score += v; label(UFO.x, UFO.y + 24, 'JACKPOT +' + v, '#ff5470');
+    burst(UFO.x, UFO.y, 26, '#ff5470'); sfx.jackpot(); shakeT = 12;
+  }
+
+  if (ball.y > WORLD_H + ball.r * 2) ballLost(false);
+}
+// ── FLOW ─────────────────────────────────────────────────────────────────────
+function resetBall() {
+  ball.x = 451; ball.y = 730; ball.vx = 0; ball.vy = 0;
+  ball.inLane = true; ball.held = true;
+  plunger.pull = 0; plunger.dragId = null;
+  tilted = false; bumps = [];
+}
+function ballLost(fromInvasion) {
+  if (ball.held) return;
+  if (state === 'attract') { resetBall(); return; }   // attract NEVER reaches game-over UI
+  sfx.drain();
+  const quick = !fromInvasion && performance.now() - launchedAt < 3000;
+  if (quick) { say('SHOOT AGAIN', 100); resetBall(); return; }
+  balls--;
+  if (balls <= 0) { gameOver(); return; }
+  say(fromInvasion ? 'INVADED! BALL LOST' : 'BALL LOST', 110);
+  resetBall();
+}
+function invade() {
+  sfx.siren(); shakeT = 14;
+  burst(ball.x, ball.y, 20, '#ff5470');
+  INV.y = Math.max(110, INV.y - 120);        // grid pushed back — next ball is fair
+  ballLost(true);
+}
+function waveClear() {
+  const bonus = 500 * wave;
+  score += bonus;
+  say('WAVE ' + wave + ' CLEAR  +' + bonus, 140);
+  sfx.wave();
+  wave++;
+  spawnWave(wave);
+}
+function gameOver() {
+  state = 'ended';
+  ball.held = true;                          // freeze physics — no post-mortem drains
+  sfx.over();
+  if (window.ArcadeScores) {
+    ArcadeScores.show({ game: SLUG, title: TITLE, score: score, accent: INK, onClose: startGame });
+  } else { startGame(); }
+}
+function startGame() {
+  state = 'playing'; score = 0; wave = 1; balls = 3;
+  msg = null; particles.length = 0; labels.length = 0;
+  spawnWave(1); resetBall();
+  UFO.active = false; UFO.timer = 9000;
+}
+
+// ── ATTRACT AI (competent: aims flips, auto-plunges) — silent by tone() guard ─
+let attractT = 0, attractStill = 0;
+function attractAI(dtMs) {
+  attractT += dtMs;
+  if (ball.held && attractT > 1200) { plunger.pull = 90 + Math.random() * 30; firePlunger(); attractT = 0; }
+  // a resting ball never has vy>40 — stillness detector wakes the flipper under it
+  const speed = Math.hypot(ball.vx, ball.vy);
+  attractStill = (!ball.held && speed < 40 && ball.y > 600) ? attractStill + dtMs : 0;
+  for (let i = 0; i < 2; i++) {
+    const f = FLIPPERS[i];
+    const midX = f.px + Math.cos(f.restAng) * f.len * 0.5;
+    const near = Math.abs(ball.x - midX) < 80 && ball.y > 630 && ball.y < 775;
+    // moving ball: hold to flick · resting ball: PULSE (hold = ball balances on a raised flipper)
+    f.pressed = near && (ball.vy > 40 || (attractStill > 700 && (attractT % 800) < 260));
+  }
+  if (balls <= 0 || state === 'ended') { state = 'attract'; score = 0; wave = 1; balls = 3; spawnWave(1); resetBall(); }
+}
+
+// ── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dtMs) {
+  if (state === 'attract') attractAI(dtMs);
+
+  for (const f of FLIPPERS) stepFlipper(f, dtMs / 1000);
+
+  // fixed-timestep ball physics
+  acc += dtMs / 1000;
+  let n = 0;
+  while (acc >= SUB && n < 10) { stepBall(SUB); acc -= SUB; n++; }
+  if (n === 10) acc = 0;                     // lag spiral guard
+
+  // invaders march
+  if (state !== 'ended' && INV.count > 0) {
+    INV.tAcc += dtMs;
+    const beat = Math.max(160, INV.beatBase * (0.35 + 0.65 * INV.count / INV.total));
+    if (INV.tAcc >= beat) {
+      INV.tAcc = 0; INV.frame ^= 1;
+      INV.x += 12 * INV.dir;
+      const maxX = 436 - INV.cols * INV.cw - 26;
+      if (INV.x < 26 || INV.x > maxX) {
+        INV.x = Math.max(26, Math.min(maxX, INV.x));
+        INV.dir *= -1; INV.y += 16;
+      }
+      sfx.march();
+      const low = lowestAlienY();
+      if (low > INVASION_Y - 60 && low < INVASION_Y) sfx.siren();
+      if (low >= INVASION_Y && state === 'playing' && !ball.held) invade();
+      else if (low >= INVASION_Y) INV.y = Math.max(110, INV.y - 120);
+    }
+  }
+
+  // UFO
+  UFO.timer -= dtMs;
+  if (!UFO.active && UFO.timer <= 0) {
+    UFO.active = true; UFO.x = Math.random() < 0.5 ? -20 : WORLD_W + 20;
+    UFO.vx = UFO.x < 0 ? 130 : -130;
+    UFO.timer = 12000 + Math.random() * 6000;
+    sfx.ufo();
+  }
+  if (UFO.active) {
+    UFO.x += UFO.vx * dtMs / 1000;
+    if (UFO.x < -30 || UFO.x > WORLD_W + 30) UFO.active = false;
+  }
+
+  for (const p of BUMPERS) if (p.flash > 0) p.flash--;
+  for (const p of SLINGS)  if (p.flash > 0) p.flash--;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const l = labels[i]; l.y -= 0.7; l.life--;
+    if (l.life <= 0) labels.splice(i, 1);
+  }
+  if (msg && --msg.life <= 0) msg = null;
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function drawAlien(x, y, frame, col) {
+  const bm = frame ? BM_B : BM_A, s = 2.6;
+  ctx.fillStyle = col;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 11; c++)
+      if (bm[r][c] === '1') ctx.fillRect(x - 5.5 * s + c * s, y - 4 * s + r * s, s, s);
+}
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#05030c'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (shakeT > 0) { shakeT--; ctx.translate((Math.random() - .5) * shakeT, (Math.random() - .5) * shakeT); }
+
+  // starfield
+  for (const s of stars) {
+    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(t / 900 + s.tw);
+    ctx.fillStyle = '#cfe6ff';
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  }
+  ctx.globalAlpha = 1;
+
+  // invasion line
+  ctx.strokeStyle = 'rgba(255,84,112,0.75)'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(16, INVASION_Y); ctx.lineTo(434, INVASION_Y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,84,112,0.8)';
+  ctx.font = 'bold 10px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText('INVASION LINE', 20, INVASION_Y - 4);
+
+  // table walls
+  ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.shadowColor = INK; ctx.shadowBlur = 14;
+  ctx.beginPath();
+  for (const s of SEGS) { ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); }
+  ctx.stroke();
+  // one-way gate (drawn thinner)
+  ctx.lineWidth = 2; ctx.globalAlpha = 0.5;
+  ctx.beginPath(); ctx.moveTo(GATE.x1, GATE.y1); ctx.lineTo(GATE.x2, GATE.y2); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+
+  // slings (drawn as kicker diamonds)
+  for (const p of SLINGS) {
+    ctx.fillStyle = p.flash > 0 ? '#fff' : '#ffd05a';
+    ctx.shadowColor = '#ffd05a'; ctx.shadowBlur = p.flash > 0 ? 18 : 8;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - p.r); ctx.lineTo(p.x + p.r, p.y);
+    ctx.lineTo(p.x, p.y + p.r); ctx.lineTo(p.x - p.r, p.y);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  // bumpers
+  for (const p of BUMPERS) {
+    ctx.strokeStyle = p.flash > 0 ? '#fff' : '#6ee7ff';
+    ctx.shadowColor = '#6ee7ff'; ctx.shadowBlur = p.flash > 0 ? 20 : 10;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = p.flash > 0 ? '#6ee7ff' : 'rgba(110,231,255,0.25)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 6, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // aliens
+  for (let r = 0; r < INV.rows; r++)
+    for (let c = 0; c < INV.cols; c++) {
+      if (!INV.alive[r][c]) continue;
+      const a = alienPos(r, c);
+      drawAlien(a.x, a.y, INV.frame, ROW_COL[r % ROW_COL.length]);
+    }
+
+  // UFO
+  if (UFO.active) {
+    ctx.fillStyle = '#ff5470'; ctx.shadowColor = '#ff5470'; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.ellipse(UFO.x, UFO.y, 16, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd0da';
+    ctx.beginPath(); ctx.ellipse(UFO.x, UFO.y - 5, 7, 4, 0, Math.PI, 0); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // flippers
+  for (const f of FLIPPERS) {
+    const tx = f.px + Math.cos(f.ang) * f.len, ty = f.py + Math.sin(f.ang) * f.len;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = f.thick * 2; ctx.lineCap = 'round';
+    ctx.shadowColor = INK; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.strokeStyle = INK; ctx.lineWidth = f.thick * 2 - 6;
+    ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // plunger spring
+  const py0 = 758 - plunger.pull * 0.25;
+  ctx.strokeStyle = '#ff8ab5'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const yy = py0 + i * 5 + plunger.pull * 0.06 * i;
+    ctx.moveTo(440, yy); ctx.lineTo(462, yy + 2.5);
+  }
+  ctx.stroke();
+
+  // ball
+  if (!(state === 'ended')) {
+    ctx.fillStyle = '#f4f7ff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(183,107,255,0.6)';
+    ctx.beginPath(); ctx.arc(ball.x - 3, ball.y - 3, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // particles + labels
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / p.max;
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = 'bold 15px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const l of labels) {
+    ctx.globalAlpha = Math.min(1, l.life / 20);
+    ctx.fillStyle = l.col;
+    ctx.fillText(l.txt, l.x, l.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // HUD
+  ctx.font = 'bold 20px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE ' + score, 14, 12);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = INK;
+  ctx.fillText('WAVE ' + wave, WORLD_W / 2, 12);
+  ctx.textAlign = 'left';
+  for (let i = 0; i < balls; i++) {
+    ctx.fillStyle = '#f4f7ff';
+    ctx.beginPath(); ctx.arc(24 + i * 20, 52, 6, 0, Math.PI * 2); ctx.fill();
+  }
+  if (tilted) {
+    ctx.fillStyle = '#ff5470'; ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.fillText('TILT', 14, 70);
+  }
+  ctx.font = 'bold 22px "Courier New", monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 12, 12);
+
+  // hint while ball held
+  if (ball.held && state === 'playing') {
+    ctx.font = 'bold 13px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.4 * Math.sin(t / 300)) + ')';
+    ctx.fillText('⇣ DRAG DOWN IN LANE ⇣', 380, 640);
+  }
+
+  // centre message
+  if (msg) {
+    ctx.font = 'bold 30px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK; ctx.shadowColor = INK; ctx.shadowBlur = 18;
+    ctx.fillText(msg.txt, WORLD_W / 2, 300);
+    ctx.shadowBlur = 0;
+  }
+}
+
+// ── LOOP ─────────────────────────────────────────────────────────────────────
+function loop(t) {
+  const dt = Math.min(32, t - tPrev); tPrev = t;
+  update(dt);
+  render(t);
+  requestAnimationFrame(loop);
+}
+
+// ── COIN / START ─────────────────────────────────────────────────────────────
+document.getElementById('coinBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  unlockAudio();
+  startGame();
+});
+
+spawnWave(1);
+resetBall();
+requestAnimationFrame(loop);
+
+// QA hook (playtest-by-evaluate — read state, force scenarios; not a cheat surface: no score set)
+window.__PV = {
+  get: () => ({ state, score, wave, balls, x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy,
+                inLane: ball.inLane, held: ball.held, invCount: INV.count, invY: INV.y, tilted }),
+  fire: p => { plunger.pull = p || 100; firePlunger(); },
+  setBall: (x, y, vx, vy) => { ball.x = x; ball.y = y; ball.vx = vx; ball.vy = vy;
+                               ball.held = false; ball.inLane = false; },
+  flip: (i, on) => { FLIPPERS[i].pressed = !!on; },
+};
+})();
+</script>
+</body>
+</html>
