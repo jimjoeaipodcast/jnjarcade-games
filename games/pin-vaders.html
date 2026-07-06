@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>PIN-VADERS — JnJ Arcade</title>
-<!-- PINBALL × SPACE INVADERS v3 — the playfield invades. v3: pixel-art table pass
-     (pre-rendered static layer: painted playfield, tube rails, aprons, shooter lane),
-     real flipper bats + pop-bumper caps, plunger rod with ball-follow + power meter,
-     flippers stepped at 240Hz with the ball (v2 sweep-through bug). Physics per
-     GAME_BIBLE §14 (pinball-schminball MIT patterns, Igor Zinken — constants adapted). -->
+<!-- PINBALL × SPACE INVADERS v4 — the playfield invades. v4: full-cabinet presentation
+     (viewport bands = backbox marquee + lockdown bar, no letterbox), half-res pixelation
+     pass over the whole world (cohesive pixel-art look), lamp inserts + rail chases +
+     posts + decals. Physics per GAME_BIBLE §14 (pinball-schminball MIT patterns,
+     Igor Zinken — constants adapted). -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #000; overflow: hidden;
+  html, body { width: 100%; height: 100%; background: #0b0618; overflow: hidden;
                touch-action: none; -webkit-user-select: none; user-select: none; }
-  #gameCanvas { display: block; width: 100vw; height: 100vh; }
+  #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
   #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
              display: flex; flex-direction: column; align-items: center; justify-content: center;
              font-family: 'Courier New', monospace; color: #fff; text-align: center; }
@@ -123,19 +123,19 @@ const SUB = 1 / 240;
 
 // ── TABLE GEOMETRY ───────────────────────────────────────────────────────────
 const SEGS = [
-  { x1: 14,  y1: 110, x2: 14,  y2: 760, rest: WALL_REST },   // left wall
-  { x1: 14,  y1: 110, x2: 120, y2: 20,  rest: WALL_REST },   // left slant
-  { x1: 120, y1: 20,  x2: 300, y2: 14,  rest: WALL_REST },   // top
-  { x1: 300, y1: 14,  x2: 390, y2: 40,  rest: WALL_REST },   // arch 1
-  { x1: 390, y1: 40,  x2: 450, y2: 110, rest: WALL_REST },   // arch 2
-  { x1: 450, y1: 110, x2: 466, y2: 190, rest: WALL_REST },   // arch 3
-  { x1: 466, y1: 190, x2: 466, y2: 758, rest: 0.1 },         // lane outer
-  { x1: 436, y1: 205, x2: 436, y2: 600, rest: 0.1 },         // lane divider
-  { x1: 436, y1: 600, x2: 334, y2: 708, rest: 0.15 },        // right funnel → flipper base
-  { x1: 14,  y1: 600, x2: 146, y2: 708, rest: 0.15 },        // left funnel → flipper base
-  { x1: 436, y1: 758, x2: 466, y2: 758, rest: 0 },           // lane floor
-  { x1: 205, y1: 74,  x2: 205, y2: 112, rest: 0.2 },         // rollover stub A
-  { x1: 275, y1: 74,  x2: 275, y2: 112, rest: 0.2 },         // rollover stub B
+  { x1: 14,  y1: 110, x2: 14,  y2: 760, rest: WALL_REST },
+  { x1: 14,  y1: 110, x2: 120, y2: 20,  rest: WALL_REST },
+  { x1: 120, y1: 20,  x2: 300, y2: 14,  rest: WALL_REST },
+  { x1: 300, y1: 14,  x2: 390, y2: 40,  rest: WALL_REST },
+  { x1: 390, y1: 40,  x2: 450, y2: 110, rest: WALL_REST },
+  { x1: 450, y1: 110, x2: 466, y2: 190, rest: WALL_REST },
+  { x1: 466, y1: 190, x2: 466, y2: 758, rest: 0.1 },
+  { x1: 436, y1: 205, x2: 436, y2: 600, rest: 0.1 },
+  { x1: 436, y1: 600, x2: 334, y2: 708, rest: 0.15 },
+  { x1: 14,  y1: 600, x2: 146, y2: 708, rest: 0.15 },
+  { x1: 436, y1: 758, x2: 466, y2: 758, rest: 0 },
+  { x1: 205, y1: 74,  x2: 205, y2: 112, rest: 0.2 },
+  { x1: 275, y1: 74,  x2: 275, y2: 112, rest: 0.2 },
 ];
 const GATE = { x1: 436, y1: 205, x2: 466, y2: 178, rest: 0.05 };
 const TIP  = { x: 436, y: 205, r: 5 };
@@ -175,8 +175,6 @@ let msg = null;
 const plunger = { pull: 0, dragId: null, dragY0: 0, snap: 0 };
 const dmd = { text: 'PIN-VADERS', x: 340, timer: 0 };
 function dmdSay(t) { dmd.text = t; dmd.x = 340; }
-const twinkles = Array.from({ length: 16 }, () => ({
-  x: 30 + Math.random() * 400, y: 30 + Math.random() * 500, tw: Math.random() * Math.PI * 2 }));
 
 function makeBall(x, y, vx, vy) {
   return { x: x ?? 451, y: y ?? 730, vx: vx || 0, vy: vy || 0, r: 11,
@@ -220,7 +218,7 @@ function callUFO() {
   sfx.ufo();
 }
 
-// pixel bitmaps — crab 11×8 two frames · mothership 15×6 · bunker 7×4
+// pixel bitmaps
 const BM_A = ['00100000100','00010001000','00111111100','01101110110','11111111111','10111111101','10100000101','00011011000'];
 const BM_B = ['00100000100','10010001001','10111111101','11101110111','11111111111','01111111110','00100000100','01000000010'];
 const BM_BOSS = ['000011111110000','001111111111100','011111111111110','110110110110011','011111111111110','000110000110000'];
@@ -641,27 +639,23 @@ function attractAI(dtMs) {
 function update(dtMs) {
   if (state === 'attract') attractAI(dtMs);
 
-  // ball rides the plunger rod while pulled
   {
     const lb = laneBall();
     if (lb) lb.y = Math.min(742, 730 + plunger.pull * 0.11);
   }
   if (plunger.snap > 0) plunger.snap--;
 
-  // saucer hold/eject
   if (SAUCER.heldBall) {
     SAUCER.holdT -= dtMs;
     if (SAUCER.holdT <= 0) ejectSaucer();
   }
   if (SAUCER.flash > 0) SAUCER.flash--;
 
-  // cannon rail
   CANNON.cd = Math.max(0, CANNON.cd - dtMs);
   CANNON.beam = Math.max(0, CANNON.beam - dtMs);
   CANNON.x += CANNON.dir * 40 * dtMs / 1000;
   if (CANNON.x < 170 || CANNON.x > 310) CANNON.dir *= -1;
 
-  // spinner payout
   SPINNER.cd = Math.max(0, SPINNER.cd - dtMs);
   if (SPINNER.spins > 0) {
     SPINNER.ang += dtMs * 0.03;
@@ -671,7 +665,7 @@ function update(dtMs) {
   }
 
   // physics — flippers step at the same 240Hz as the ball (per-frame stepping
-  // teleports the blade between substeps and sweeps THROUGH the ball — v2 bug)
+  // teleports the blade between substeps and sweeps THROUGH the ball)
   acc += dtMs / 1000;
   let n = 0;
   while (acc >= SUB && n < 10) {
@@ -689,7 +683,6 @@ function update(dtMs) {
   }
   if (n === 10) acc = 0;
 
-  // invaders march / boss descent
   if (state !== 'ended') {
     INV.tAcc += dtMs;
     const beat = BOSS.active
@@ -717,7 +710,6 @@ function update(dtMs) {
     }
   }
 
-  // UFO
   UFO.timer -= dtMs;
   if (!UFO.active && UFO.timer <= 0) { callUFO(); UFO.timer = 13000 + Math.random() * 6000; }
   if (UFO.active) {
@@ -744,10 +736,17 @@ function update(dtMs) {
   if (dmd.x < -tw) dmd.x = 200;
 }
 
-// ── STATIC TABLE LAYER (pre-rendered once — the pixel-art pass) ──────────────
-const TSCALE = 2;
+// ── PIXEL PIPELINE ───────────────────────────────────────────────────────────
+// world renders at half res (240×400) then integer-upscales with smoothing off —
+// everything quantizes to chunky pixels; HUD/DMD text drawn crisp on top.
+const PIXF = 0.5;
+const worldCanvas = document.createElement('canvas');
+worldCanvas.width = WORLD_W * PIXF; worldCanvas.height = WORLD_H * PIXF;
+const wctx = worldCanvas.getContext('2d');
+
+// ── STATIC TABLE LAYER (built once at pixel res) ─────────────────────────────
 const tableCanvas = document.createElement('canvas');
-tableCanvas.width = WORLD_W * TSCALE; tableCanvas.height = WORLD_H * TSCALE;
+tableCanvas.width = WORLD_W * PIXF; tableCanvas.height = WORLD_H * PIXF;
 function bmOn(c2, bm, x, y, s, col) {
   c2.fillStyle = col;
   const rows = bm.length, cols = bm[0].length;
@@ -755,16 +754,25 @@ function bmOn(c2, bm, x, y, s, col) {
     for (let cc = 0; cc < cols; cc++)
       if (bm[r][cc] === '1') c2.fillRect(x - cols / 2 * s + cc * s, y - rows / 2 * s + r * s, s, s);
 }
+// outer boundary for rail chase lamps
+const RAIL_PATH = [[14,760],[14,110],[120,20],[300,14],[390,40],[450,110],[466,190],[466,758]];
+const CHASE = [];
+(function () {
+  for (let i = 0; i < RAIL_PATH.length - 1; i++) {
+    const [x1, y1] = RAIL_PATH[i], [x2, y2] = RAIL_PATH[i + 1];
+    const d = Math.hypot(x2 - x1, y2 - y1), steps = Math.max(1, Math.round(d / 30));
+    for (let s = 0; s < steps; s++)
+      CHASE.push([x1 + (x2 - x1) * s / steps, y1 + (y2 - y1) * s / steps]);
+  }
+})();
 function buildTable() {
   const c = tableCanvas.getContext('2d');
-  c.setTransform(TSCALE, 0, 0, TSCALE, 0, 0);
+  c.setTransform(PIXF, 0, 0, PIXF, 0, 0);
 
-  // cabinet body (everything outside the playfield)
   c.fillStyle = '#191030'; c.fillRect(0, 0, WORLD_W, WORLD_H);
   c.fillStyle = 'rgba(0,0,0,0.25)';
-  for (let x = 0; x < WORLD_W; x += 8) c.fillRect(x, 0, 4, WORLD_H);   // brushed texture
+  for (let x = 0; x < WORLD_W; x += 8) c.fillRect(x, 0, 4, WORLD_H);
 
-  // playfield shape
   const PF = [[14,110],[120,20],[300,14],[390,40],[450,110],[466,190],[466,758],[14,758]];
   c.save();
   c.beginPath();
@@ -773,7 +781,6 @@ function buildTable() {
   c.closePath();
   c.clip();
 
-  // playfield paint: vertical gradient + nebula
   const pg = c.createLinearGradient(0, 0, 0, WORLD_H);
   pg.addColorStop(0, '#221850'); pg.addColorStop(0.5, '#171040'); pg.addColorStop(1, '#0d0a2c');
   c.fillStyle = pg; c.fillRect(0, 0, WORLD_W, WORLD_H);
@@ -781,22 +788,30 @@ function buildTable() {
   neb.addColorStop(0, 'rgba(120,70,200,0.18)'); neb.addColorStop(0.6, 'rgba(60,30,120,0.10)'); neb.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = neb; c.fillRect(0, 0, WORLD_W, WORLD_H);
 
-  // baked starfield + dither grain
   for (let i = 0; i < 90; i++) {
     c.globalAlpha = 0.15 + Math.random() * 0.5;
     c.fillStyle = ['#cfe6ff', '#e8dcff', '#ffffff'][i % 3];
-    c.fillRect(20 + Math.random() * 440, 20 + Math.random() * 720, 1.4, 1.4);
+    c.fillRect(20 + Math.random() * 440, 20 + Math.random() * 720, 2, 2);
   }
-  c.globalAlpha = 0.05; c.fillStyle = '#ffffff';
-  for (let i = 0; i < 500; i++) c.fillRect(Math.random() * WORLD_W, Math.random() * WORLD_H, 1, 1);
+  c.globalAlpha = 0.06; c.fillStyle = '#ffffff';
+  for (let i = 0; i < 400; i++) c.fillRect(Math.random() * WORLD_W, Math.random() * WORLD_H, 2, 2);
   c.globalAlpha = 1;
 
-  // giant watermark invader (table centre art)
+  // decals: watermark invader, ringed planet, comet
   c.globalAlpha = 0.09;
   bmOn(c, BM_A, 225, 335, 14, '#b76bff');
   c.globalAlpha = 1;
+  // planet
+  c.fillStyle = '#2a5a7a';
+  c.beginPath(); c.arc(52, 545, 13, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#3d7a9a'; c.beginPath(); c.arc(48, 541, 5, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#ffd05a'; c.lineWidth = 2.5;
+  c.beginPath(); c.ellipse(52, 545, 21, 6, -0.35, 0, Math.PI * 2); c.stroke();
+  // comet
+  c.strokeStyle = 'rgba(110,231,255,0.5)'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(330, 60); c.lineTo(368, 84); c.stroke();
+  c.fillStyle = '#cfe6ff'; c.beginPath(); c.arc(368, 84, 3.5, 0, Math.PI * 2); c.fill();
 
-  // painted halos under features
   const halo = (x, y, r, col) => {
     const g = c.createRadialGradient(x, y, 2, x, y, r);
     g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -807,15 +822,13 @@ function buildTable() {
   halo(SPINNER.x + 8, SPINNER.y, 32, 'rgba(110,231,255,0.10)');
   for (const s of SLINGS) halo(s.x, s.y, 30, 'rgba(255,208,90,0.10)');
 
-  // painted rings around bumper cluster (classic table art)
   c.strokeStyle = 'rgba(110,231,255,0.25)'; c.lineWidth = 2;
   c.beginPath(); c.arc(240, 322, 68, 0, Math.PI * 2); c.stroke();
   c.setLineDash([4, 6]);
   c.beginPath(); c.arc(240, 322, 82, 0, Math.PI * 2); c.stroke();
   c.setLineDash([]);
 
-  // drop-bank zone paint: brackets + baseline
-  for (const [bank, col] of [[DROPS_L, '#3d9a28'], [DROPS_R, '#3d9a28']]) {
+  for (const bank of [DROPS_L, DROPS_R]) {
     const x0 = bank[0].x - 20, x1 = bank[2].x + 20, y = bank[0].y;
     c.strokeStyle = 'rgba(61,154,40,0.5)'; c.lineWidth = 2;
     c.strokeRect(x0, y - 16, x1 - x0, 34);
@@ -823,7 +836,6 @@ function buildTable() {
     c.fillRect(x0, y - 16, x1 - x0, 34);
   }
 
-  // rollover lane paint
   for (const rl of ROLLS) {
     c.strokeStyle = 'rgba(159,255,138,0.35)'; c.lineWidth = 2;
     c.beginPath();
@@ -833,7 +845,6 @@ function buildTable() {
     c.stroke();
   }
 
-  // static dim chevrons (bright pulse drawn live)
   for (let i = 0; i < 4; i++) {
     const cy = 540 - i * 66;
     for (const cx of [34, 416]) {
@@ -846,7 +857,6 @@ function buildTable() {
   }
   c.globalAlpha = 1;
 
-  // invasion hazard band
   c.save();
   c.beginPath(); c.rect(16, INVASION_Y - 5, 418, 10); c.clip();
   for (let x = 0; x < 460; x += 16) {
@@ -857,28 +867,21 @@ function buildTable() {
     c.closePath(); c.fill();
   }
   c.restore();
-  c.fillStyle = 'rgba(255,84,112,0.85)';
-  c.font = 'bold 10px "Courier New", monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom';
-  c.fillText('INVASION LINE', 20, INVASION_Y - 7);
 
-  // cannon rail groove
   c.strokeStyle = 'rgba(110,231,255,0.35)'; c.lineWidth = 5; c.lineCap = 'round';
   c.beginPath(); c.moveTo(168, CANNON.y + 12); c.lineTo(312, CANNON.y + 12); c.stroke();
   c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 2;
   c.beginPath(); c.moveTo(168, CANNON.y + 12); c.lineTo(312, CANNON.y + 12); c.stroke();
 
-  // shooter lane floor art
   c.fillStyle = '#141034'; c.fillRect(437, 190, 29, 568);
   c.fillStyle = 'rgba(255,138,181,0.5)';
   for (let y = 700; y > 260; y -= 60) {
     c.beginPath();
     c.moveTo(451, y - 10); c.lineTo(444, y); c.lineTo(458, y); c.closePath(); c.fill();
   }
-  // power meter frame
   c.strokeStyle = '#4a2470'; c.lineWidth = 2;
   c.strokeRect(438.5, 620, 5, 126);
 
-  // apron panels (below funnels, beside flippers)
   const apron = (pts) => {
     c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
@@ -890,18 +893,21 @@ function buildTable() {
   };
   apron([[16, 604], [144, 712], [144, 756], [16, 756]]);
   apron([[434, 604], [336, 712], [336, 756], [434, 756]]);
-  // apron deco: mini invader + stripes
   c.globalAlpha = 0.8;
   bmOn(c, BM_A, 58, 700, 2.2, '#9fff8a');
   bmOn(c, BM_A, 396, 700, 2.2, '#6ee7ff');
   c.globalAlpha = 1;
-  c.fillStyle = 'rgba(255,208,90,0.5)';
-  c.font = 'bold 9px "Courier New", monospace'; c.textAlign = 'center';
-  c.fillText('JNJ', 58, 726); c.fillText('#13', 396, 726);
 
-  c.restore(); // unclip playfield
+  // rubber posts at lane mouths + funnel tops
+  const posts = [[160, 96], [220, 96], [258, 96], [318, 96], [26, 590], [424, 590]];
+  for (const [px, py] of posts) {
+    c.fillStyle = '#120a28'; c.beginPath(); c.arc(px, py, 6, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ff5470'; c.beginPath(); c.arc(px, py, 4.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(px - 3, py - 3, 2, 2);
+  }
 
-  // ── rails: 3-stroke tube over every wall ──
+  c.restore();
+
   const tube = (x1, y1, x2, y2) => {
     c.lineCap = 'round';
     c.strokeStyle = '#241245'; c.lineWidth = 10;
@@ -912,12 +918,10 @@ function buildTable() {
     c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
   };
   for (const s of SEGS) tube(s.x1, s.y1, s.x2, s.y2);
-  // gate (thin, half-tone)
   c.globalAlpha = 0.5;
   c.strokeStyle = '#8a55e0'; c.lineWidth = 3;
   c.beginPath(); c.moveTo(GATE.x1, GATE.y1); c.lineTo(GATE.x2, GATE.y2); c.stroke();
   c.globalAlpha = 1;
-  // bolts at rail joints
   const bolts = [[14,110],[120,20],[300,14],[390,40],[450,110],[466,190],[436,205],[14,600],[436,600],[146,708],[334,708],[14,760],[466,758]];
   for (const [bx, by] of bolts) {
     c.fillStyle = '#120a28'; c.beginPath(); c.arc(bx, by, 5, 0, Math.PI * 2); c.fill();
@@ -925,7 +929,6 @@ function buildTable() {
     c.fillStyle = '#7a5fb0'; c.fillRect(bx - 2.4, by - 0.7, 4.8, 1.4);
   }
 
-  // DMD bezel
   c.fillStyle = '#0a0618'; c.fillRect(146, 30, 188, 34);
   c.strokeStyle = '#4a2470'; c.lineWidth = 3; c.strokeRect(146, 30, 188, 34);
   c.strokeStyle = '#8a55e0'; c.lineWidth = 1; c.strokeRect(149, 33, 182, 28);
@@ -933,122 +936,406 @@ function buildTable() {
 }
 buildTable();
 
-// ── DYNAMIC DRAW HELPERS ─────────────────────────────────────────────────────
-function drawBitmap(bm, x, y, s, col) { bmOn(ctx, bm, x, y, s, col); }
-function drawFlipper(f) {
+// ── LAMP INSERTS (real pinball visual language: lit = feature ready) ─────────
+const INSERTS = [
+  { x: 398, y: 186, shape: 'arrow', rot: 0,          color: '#ff8ab5', lit: () => state !== 'ended' && !multiball && !SAUCER.heldBall },
+  { x: 60,  y: 300, shape: 'arrow', rot: 0,          color: '#6ee7ff', lit: () => SPINNER.spins === 0 },
+  { x: 240, y: 636, shape: 'circle',                 color: '#6ee7ff', lit: () => CANNON.cd <= 0 },
+  { x: 168, y: 646, shape: 'arrow', rot: -0.5,       color: '#9fff8a', lit: () => true },
+  { x: 312, y: 646, shape: 'arrow', rot: 0.5,        color: '#9fff8a', lit: () => true },
+  { x: 105, y: 442, shape: 'circle',                 color: '#9fff8a', lit: () => !shieldArmed },
+  { x: 375, y: 442, shape: 'circle',                 color: '#ff5470', lit: () => !UFO.active },
+];
+function drawInsert(c2, ins, t) {
+  const on = ins.lit() && ((t / 320 | 0) % 2 === 0);
+  c2.save();
+  c2.translate(ins.x, ins.y);
+  if (ins.rot) c2.rotate(ins.rot);
+  if (ins.shape === 'arrow') {
+    c2.fillStyle = '#120a28';
+    c2.beginPath(); c2.moveTo(0, -11); c2.lineTo(9, 9); c2.lineTo(-9, 9); c2.closePath(); c2.fill();
+    c2.fillStyle = on ? ins.color : 'rgba(255,255,255,0.08)';
+    if (on) { c2.shadowColor = ins.color; c2.shadowBlur = 8; }
+    c2.beginPath(); c2.moveTo(0, -8); c2.lineTo(6.5, 6.5); c2.lineTo(-6.5, 6.5); c2.closePath(); c2.fill();
+  } else {
+    c2.fillStyle = '#120a28';
+    c2.beginPath(); c2.arc(0, 0, 8, 0, Math.PI * 2); c2.fill();
+    c2.fillStyle = on ? ins.color : 'rgba(255,255,255,0.08)';
+    if (on) { c2.shadowColor = ins.color; c2.shadowBlur = 8; }
+    c2.beginPath(); c2.arc(0, 0, 5.5, 0, Math.PI * 2); c2.fill();
+  }
+  c2.shadowBlur = 0;
+  c2.restore();
+}
+
+// ── DYNAMIC WORLD DRAW ───────────────────────────────────────────────────────
+function drawFlipper(c2, f) {
   const a = f.ang, ca = Math.cos(a), sa = Math.sin(a);
   const bR = 13, tR = 7;
   const tx = f.px + ca * f.len, ty = f.py + sa * f.len;
-  // drop shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.beginPath();
-  ctx.arc(f.px + 2, f.py + 3, bR, a + Math.PI / 2, a - Math.PI / 2);
-  ctx.arc(tx + 2, ty + 3, tR, a - Math.PI / 2, a + Math.PI / 2);
-  ctx.closePath(); ctx.fill();
-  // bat body
-  ctx.beginPath();
-  ctx.arc(f.px, f.py, bR, a + Math.PI / 2, a - Math.PI / 2);
-  ctx.arc(tx, ty, tR, a - Math.PI / 2, a + Math.PI / 2);
-  ctx.closePath();
+  c2.fillStyle = 'rgba(0,0,0,0.4)';
+  c2.beginPath();
+  c2.arc(f.px + 2, f.py + 3, bR, a + Math.PI / 2, a - Math.PI / 2);
+  c2.arc(tx + 2, ty + 3, tR, a - Math.PI / 2, a + Math.PI / 2);
+  c2.closePath(); c2.fill();
+  c2.beginPath();
+  c2.arc(f.px, f.py, bR, a + Math.PI / 2, a - Math.PI / 2);
+  c2.arc(tx, ty, tR, a - Math.PI / 2, a + Math.PI / 2);
+  c2.closePath();
   const nx = -sa, ny = ca;
-  const g = ctx.createLinearGradient(f.px - nx * bR, f.py - ny * bR, f.px + nx * bR, f.py + ny * bR);
+  const g = c2.createLinearGradient(f.px - nx * bR, f.py - ny * bR, f.px + nx * bR, f.py + ny * bR);
   g.addColorStop(0, '#5c33a0'); g.addColorStop(0.45, '#a76aff'); g.addColorStop(0.8, '#e6d6ff');
-  ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = '#2a1745'; ctx.lineWidth = 2.5; ctx.stroke();
-  // rubber tip
-  ctx.fillStyle = '#ff5470';
-  ctx.beginPath(); ctx.arc(tx, ty, tR - 1, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#8a1f35'; ctx.lineWidth = 1.5; ctx.stroke();
-  // pivot cap
-  ctx.fillStyle = '#e2ccff';
-  ctx.beginPath(); ctx.arc(f.px, f.py, 5.5, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#2a1745'; ctx.lineWidth = 1.5; ctx.stroke();
+  c2.fillStyle = g; c2.fill();
+  c2.strokeStyle = '#2a1745'; c2.lineWidth = 2.5; c2.stroke();
+  c2.fillStyle = '#ff5470';
+  c2.beginPath(); c2.arc(tx, ty, tR - 1, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#8a1f35'; c2.lineWidth = 1.5; c2.stroke();
+  c2.fillStyle = '#e2ccff';
+  c2.beginPath(); c2.arc(f.px, f.py, 5.5, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#2a1745'; c2.lineWidth = 1.5; c2.stroke();
 }
-function drawBumper(p) {
+function drawBumper(c2, p) {
   if (p.pop > 0) {
-    ctx.globalAlpha = p.pop / 12;
-    ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r + (12 - p.pop) * 2.2, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
+    c2.globalAlpha = p.pop / 12;
+    c2.strokeStyle = '#6ee7ff'; c2.lineWidth = 3;
+    c2.beginPath(); c2.arc(p.x, p.y, p.r + (12 - p.pop) * 2.2, 0, Math.PI * 2); c2.stroke();
+    c2.globalAlpha = 1;
   }
-  // skirt
-  ctx.fillStyle = '#123048';
-  ctx.beginPath(); ctx.arc(p.x, p.y + 2, p.r + 4, 0, Math.PI * 2); ctx.fill();
-  // body ring
-  ctx.fillStyle = p.flash > 0 ? '#bffaff' : '#2a7d9a';
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = p.flash > 0 ? '#ffffff' : '#6ee7ff';
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 3, 0, Math.PI * 2); ctx.fill();
-  // red cap
-  ctx.fillStyle = p.flash > 0 ? '#ffd0da' : '#ff5470';
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 8, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#8a1f35'; ctx.lineWidth = 1.5; ctx.stroke();
-  // specular arc
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(p.x - 2, p.y - 3, p.r - 10, Math.PI * 0.9, Math.PI * 1.5); ctx.stroke();
+  c2.fillStyle = '#123048';
+  c2.beginPath(); c2.arc(p.x, p.y + 2, p.r + 4, 0, Math.PI * 2); c2.fill();
+  c2.fillStyle = p.flash > 0 ? '#bffaff' : '#2a7d9a';
+  c2.beginPath(); c2.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); c2.fill();
+  c2.fillStyle = p.flash > 0 ? '#ffffff' : '#6ee7ff';
+  c2.beginPath(); c2.arc(p.x, p.y, p.r - 3, 0, Math.PI * 2); c2.fill();
+  c2.fillStyle = p.flash > 0 ? '#ffd0da' : '#ff5470';
+  c2.beginPath(); c2.arc(p.x, p.y, p.r - 8, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#8a1f35'; c2.lineWidth = 1.5; c2.stroke();
+  c2.strokeStyle = 'rgba(255,255,255,0.8)'; c2.lineWidth = 2;
+  c2.beginPath(); c2.arc(p.x - 2, p.y - 3, p.r - 10, Math.PI * 0.9, Math.PI * 1.5); c2.stroke();
   if (p.flash > 0) {
-    ctx.shadowColor = '#6ee7ff'; ctx.shadowBlur = 22;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); ctx.stroke();
-    ctx.shadowBlur = 0;
+    c2.shadowColor = '#6ee7ff'; c2.shadowBlur = 22;
+    c2.strokeStyle = '#fff'; c2.lineWidth = 2;
+    c2.beginPath(); c2.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); c2.stroke();
+    c2.shadowBlur = 0;
   }
 }
-function drawSling(p) {
-  // rubber triangle with kicker face
-  ctx.fillStyle = p.flash > 0 ? '#fff2c8' : '#3a2c10';
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y - p.r - 2); ctx.lineTo(p.x + p.r + 2, p.y + p.r - 2); ctx.lineTo(p.x - p.r - 2, p.y + p.r - 2);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = p.flash > 0 ? '#ffffff' : '#ffd05a'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-  ctx.stroke();
-  ctx.fillStyle = p.flash > 0 ? '#fff' : '#ffd05a';
-  ctx.beginPath(); ctx.arc(p.x, p.y + 2, 4, 0, Math.PI * 2); ctx.fill();
-  if (p.flash > 0) {
-    ctx.shadowColor = '#ffd05a'; ctx.shadowBlur = 16;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
+function drawSling(c2, p) {
+  c2.fillStyle = p.flash > 0 ? '#fff2c8' : '#3a2c10';
+  c2.beginPath();
+  c2.moveTo(p.x, p.y - p.r - 2); c2.lineTo(p.x + p.r + 2, p.y + p.r - 2); c2.lineTo(p.x - p.r - 2, p.y + p.r - 2);
+  c2.closePath(); c2.fill();
+  c2.strokeStyle = p.flash > 0 ? '#ffffff' : '#ffd05a'; c2.lineWidth = 3; c2.lineJoin = 'round';
+  c2.stroke();
+  c2.fillStyle = p.flash > 0 ? '#fff' : '#ffd05a';
+  c2.beginPath(); c2.arc(p.x, p.y + 2, 4, 0, Math.PI * 2); c2.fill();
 }
-function drawBall(b) {
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath(); ctx.ellipse(b.x + 2, b.y + 4, b.r * 0.9, b.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-  const g = ctx.createRadialGradient(b.x - 4, b.y - 4, 1, b.x, b.y, b.r);
+function drawBall(c2, b) {
+  c2.fillStyle = 'rgba(0,0,0,0.35)';
+  c2.beginPath(); c2.ellipse(b.x + 2, b.y + 4, b.r * 0.9, b.r * 0.5, 0, 0, Math.PI * 2); c2.fill();
+  const g = c2.createRadialGradient(b.x - 4, b.y - 4, 1, b.x, b.y, b.r);
   g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#d8dcea'); g.addColorStop(1, '#7a80a0');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(20,20,40,0.6)'; ctx.lineWidth = 1; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.beginPath(); ctx.arc(b.x - 4, b.y - 4, 2.6, 0, Math.PI * 2); ctx.fill();
+  c2.fillStyle = g;
+  c2.beginPath(); c2.arc(b.x, b.y, b.r, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = 'rgba(20,20,40,0.6)'; c2.lineWidth = 1; c2.stroke();
+  c2.fillStyle = 'rgba(255,255,255,0.9)';
+  c2.beginPath(); c2.arc(b.x - 4, b.y - 4, 2.6, 0, Math.PI * 2); c2.fill();
 }
+function renderWorld(t) {
+  const c2 = wctx;
+  c2.setTransform(PIXF, 0, 0, PIXF, 0, 0);
+  c2.imageSmoothingEnabled = false;
+  c2.drawImage(tableCanvas, 0, 0, WORLD_W, WORLD_H);
 
-// ── RENDER ───────────────────────────────────────────────────────────────────
-function render(t) {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#05030c'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
-  if (shakeT > 0) { shakeT--; ctx.translate((Math.random() - .5) * shakeT, (Math.random() - .5) * shakeT); }
-
-  // static table
-  ctx.drawImage(tableCanvas, 0, 0, WORLD_W, WORLD_H);
-
-  // twinkle overlay
-  for (const s of twinkles) {
-    ctx.globalAlpha = 0.25 + 0.35 * Math.sin(t / 700 + s.tw);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(s.x, s.y, 1.6, 1.6);
+  // rail chase lamps
+  const head = (t / 90) % CHASE.length;
+  for (let i = 0; i < CHASE.length; i++) {
+    let d = (head - i + CHASE.length) % CHASE.length;
+    if (d > 6) continue;
+    c2.globalAlpha = (1 - d / 6) * 0.9;
+    c2.fillStyle = '#e2ccff';
+    c2.fillRect(CHASE[i][0] - 2, CHASE[i][1] - 2, 4, 4);
   }
-  ctx.globalAlpha = 1;
+  c2.globalAlpha = 1;
 
-  // chevron pulse (bright arrow walks up)
+  // chevron pulse
   const chevPulse = (t / 160) % 4 | 0;
   const cy = 540 - chevPulse * 66;
   for (const cx of [34, 416]) {
-    ctx.strokeStyle = '#ffd05a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.shadowColor = '#ffd05a'; ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.moveTo(cx - 8, cy + 7); ctx.lineTo(cx, cy - 5); ctx.lineTo(cx + 8, cy + 7);
-    ctx.stroke(); ctx.shadowBlur = 0;
+    c2.strokeStyle = '#ffd05a'; c2.lineWidth = 3; c2.lineCap = 'round';
+    c2.shadowColor = '#ffd05a'; c2.shadowBlur = 8;
+    c2.beginPath();
+    c2.moveTo(cx - 8, cy + 7); c2.lineTo(cx, cy - 5); c2.lineTo(cx + 8, cy + 7);
+    c2.stroke(); c2.shadowBlur = 0;
   }
+
+  // lamp inserts
+  for (const ins of INSERTS) drawInsert(c2, ins, t);
+
+  // rollover lamps
+  for (let i = 0; i < 3; i++) {
+    const rl = ROLLS[i];
+    c2.fillStyle = rl.lit ? '#9fff8a' : 'rgba(159,255,138,0.15)';
+    c2.shadowColor = '#9fff8a'; c2.shadowBlur = rl.lit ? 12 : 0;
+    c2.beginPath(); c2.arc(rl.x, SOS_Y, 10, 0, Math.PI * 2); c2.fill();
+    c2.shadowBlur = 0;
+    c2.strokeStyle = 'rgba(159,255,138,0.6)'; c2.lineWidth = 1.5; c2.stroke();
+  }
+
+  // spinner
+  c2.fillStyle = '#123048';
+  c2.fillRect(SPINNER.x - 3, SPINNER.y - 19, 6, 4);
+  c2.fillRect(SPINNER.x - 3, SPINNER.y + 15, 6, 4);
+  c2.save();
+  c2.translate(SPINNER.x, SPINNER.y);
+  const spAng = SPINNER.spins > 0 ? SPINNER.ang : 0.4;
+  const spW = Math.abs(Math.cos(spAng));
+  c2.strokeStyle = '#6ee7ff'; c2.lineWidth = 3 + 2 * spW; c2.lineCap = 'round';
+  c2.shadowColor = '#6ee7ff'; c2.shadowBlur = SPINNER.spins > 0 ? 12 : 4;
+  c2.beginPath(); c2.moveTo(0, -14); c2.lineTo(0, 14); c2.stroke();
+  c2.restore(); c2.shadowBlur = 0;
+
+  // bunkers
+  for (const bank of [DROPS_L, DROPS_R])
+    for (const d of bank) {
+      if (d.up) {
+        bmOn(c2, BM_BUNKER, d.x, d.y + 1, 4, '#123008');
+        bmOn(c2, BM_BUNKER, d.x, d.y, 4, '#3d9a28');
+        bmOn(c2, ['0111110'], d.x, d.y - 6, 4, '#7ddd55');
+      } else {
+        c2.fillStyle = 'rgba(61,154,40,0.2)'; c2.fillRect(d.x - 14, d.y + 2, 28, 5);
+      }
+    }
+
+  for (const p of SLINGS) drawSling(c2, p);
+  for (const p of BUMPERS) drawBumper(c2, p);
+
+  // saucer
+  c2.fillStyle = '#120a28';
+  c2.beginPath(); c2.arc(SAUCER.x, SAUCER.y, SAUCER.r, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = SAUCER.flash > 0 ? '#fff' : '#ff8ab5';
+  c2.shadowColor = '#ff8ab5'; c2.shadowBlur = SAUCER.flash > 0 ? 16 : 6;
+  c2.lineWidth = 3;
+  c2.beginPath(); c2.arc(SAUCER.x, SAUCER.y, SAUCER.r, 0, Math.PI * 2); c2.stroke();
+  c2.shadowBlur = 0;
+  c2.strokeStyle = 'rgba(255,138,181,0.5)'; c2.lineWidth = 1.5;
+  c2.beginPath(); c2.arc(SAUCER.x, SAUCER.y, SAUCER.r - 5, 0, Math.PI * 2); c2.stroke();
+
+  // cannon
+  if (CANNON.beam > 0) {
+    c2.globalAlpha = CANNON.beam / 260;
+    c2.strokeStyle = '#6ee7ff'; c2.lineWidth = 4;
+    c2.shadowColor = '#6ee7ff'; c2.shadowBlur = 8;
+    c2.beginPath(); c2.moveTo(CANNON.beamX, CANNON.y - 10); c2.lineTo(CANNON.beamX, 60); c2.stroke();
+    c2.globalAlpha = 1; c2.shadowBlur = 0;
+  }
+  const cReady = CANNON.cd <= 0;
+  c2.fillStyle = '#0d2438';
+  c2.fillRect(CANNON.x - 13, CANNON.y + 1, 26, 8);
+  c2.fillStyle = cReady ? '#6ee7ff' : 'rgba(110,231,255,0.4)';
+  c2.fillRect(CANNON.x - 12, CANNON.y - 3, 24, 8);
+  c2.fillRect(CANNON.x - 4, CANNON.y - 9, 8, 7);
+  c2.fillRect(CANNON.x - 1.5, CANNON.y - 13, 3, 5);
+  if (cReady) { c2.fillStyle = '#ffffff'; c2.fillRect(CANNON.x - 1.5, CANNON.y - 13, 3, 2); }
+
+  // aliens / boss
+  if (BOSS.active) {
+    bmOn(c2, BM_BOSS, BOSS.x + 2, BOSS.y + 3, 7, 'rgba(0,0,0,0.4)');
+    bmOn(c2, BM_BOSS, BOSS.x, BOSS.y, 7, BOSS.flash > 0 ? '#ffffff' : '#ff5470');
+    bmOn(c2, ['011111110'], BOSS.x, BOSS.y - 8, 7, BOSS.flash > 0 ? '#fff' : '#ffd0da');
+    c2.fillStyle = '#ff5470';
+    for (let i = 0; i < BOSS.hp; i++) c2.fillRect(BOSS.x - BOSS.maxHp * 4 + i * 8, BOSS.y - 40, 6, 4);
+  } else {
+    for (let r = 0; r < INV.rows; r++)
+      for (let c = 0; c < INV.cols; c++) {
+        if (!INV.alive[r][c]) continue;
+        const a = alienPos(r, c);
+        bmOn(c2, INV.frame ? BM_B : BM_A, a.x + 1, a.y + 2, 2.6, 'rgba(0,0,0,0.35)');
+        bmOn(c2, INV.frame ? BM_B : BM_A, a.x, a.y, 2.6, ROW_COL[r % ROW_COL.length]);
+      }
+  }
+
+  if (UFO.active) {
+    c2.fillStyle = '#ff5470'; c2.shadowColor = '#ff5470'; c2.shadowBlur = 12;
+    c2.beginPath(); c2.ellipse(UFO.x, UFO.y, 16, 7, 0, 0, Math.PI * 2); c2.fill();
+    c2.fillStyle = '#ffd0da';
+    c2.beginPath(); c2.ellipse(UFO.x, UFO.y - 5, 7, 4, 0, Math.PI, 0); c2.fill();
+    c2.shadowBlur = 0;
+  }
+
+  if (shieldArmed) {
+    c2.strokeStyle = '#9fff8a'; c2.lineWidth = 4; c2.lineCap = 'round';
+    c2.shadowColor = '#9fff8a'; c2.shadowBlur = 10;
+    c2.globalAlpha = 0.6 + 0.3 * Math.sin(t / 150);
+    c2.beginPath(); c2.moveTo(158, 764); c2.lineTo(322, 764); c2.stroke();
+    c2.globalAlpha = 1; c2.shadowBlur = 0;
+    c2.fillStyle = '#9fff8a';
+    c2.fillRect(154, 760, 4, 8); c2.fillRect(322, 760, 4, 8);
+  }
+
+  for (const f of FLIPPERS) drawFlipper(c2, f);
+
+  // plunger
+  const lb = laneBall();
+  const rodTop = lb ? lb.y + lb.r : (742 + 11) - (plunger.snap > 0 ? plunger.snap * 1.4 : 0);
+  const coils = 7, span = 756 - rodTop;
+  c2.strokeStyle = '#c8a24a'; c2.lineWidth = 2.5; c2.lineCap = 'round';
+  c2.beginPath();
+  for (let i = 0; i <= coils; i++) {
+    const yy = rodTop + (span / coils) * i;
+    const xx = i % 2 === 0 ? 444 : 458;
+    if (i === 0) c2.moveTo(451, yy); else c2.lineTo(xx, yy);
+  }
+  c2.lineTo(451, 756);
+  c2.stroke();
+  c2.fillStyle = '#8a8fa8';
+  c2.fillRect(448.5, rodTop, 5, 756 - rodTop);
+  c2.fillStyle = '#ff5470';
+  c2.beginPath(); c2.arc(451, 754, 7, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#8a1f35'; c2.lineWidth = 1.5; c2.stroke();
+  if (plunger.pull > 0) {
+    const ph = (plunger.pull / 120) * 122;
+    const pgr = c2.createLinearGradient(0, 744, 0, 744 - 122);
+    pgr.addColorStop(0, '#9fff8a'); pgr.addColorStop(0.6, '#ffd05a'); pgr.addColorStop(1, '#ff5470');
+    c2.fillStyle = pgr;
+    c2.fillRect(439.5, 744 - ph, 3, ph);
+  }
+
+  for (const b of ballsInPlay) drawBall(c2, b);
+
+  for (const p of particles) {
+    c2.globalAlpha = p.life / p.max;
+    c2.fillStyle = p.col;
+    c2.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+  }
+  c2.globalAlpha = 1;
+}
+
+// ── CABINET (screen-space: the viewport bands ARE the machine) ───────────────
+function drawCabinet(t) {
+  const W = canvas.width, H = canvas.height;
+  const topH = VIEW.oy, botY = VIEW.oy + WORLD_H * VIEW.scale, botH = H - botY;
+  const sideW = VIEW.ox;
+
+  // cabinet base everywhere
+  ctx.fillStyle = '#0b0618'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  for (let x = 0; x < W; x += 12 * DPR) ctx.fillRect(x, 0, 5 * DPR, H);
+
+  // side rails
+  if (sideW > 8) {
+    for (const sx of [0, W - sideW]) {
+      const g = ctx.createLinearGradient(sx, 0, sx + sideW, 0);
+      g.addColorStop(0, '#160d2e'); g.addColorStop(0.5, '#241548'); g.addColorStop(1, '#160d2e');
+      ctx.fillStyle = g; ctx.fillRect(sx, 0, sideW, H);
+    }
+    ctx.fillStyle = '#8a55e0';
+    ctx.fillRect(sideW - 3 * DPR, 0, 3 * DPR, H);
+    ctx.fillRect(W - sideW, 0, 3 * DPR, H);
+  }
+
+  // ── BACKBOX (top band) ──
+  if (topH > 14 * DPR) {
+    const pad = Math.min(10 * DPR, topH * 0.1);
+    // box
+    const bg = ctx.createLinearGradient(0, 0, 0, topH);
+    bg.addColorStop(0, '#2a1a52'); bg.addColorStop(1, '#150c2e');
+    ctx.fillStyle = bg; ctx.fillRect(pad, pad * 0.6, W - pad * 2, topH - pad * 1.2);
+    ctx.strokeStyle = '#8a55e0'; ctx.lineWidth = 2 * DPR;
+    ctx.strokeRect(pad, pad * 0.6, W - pad * 2, topH - pad * 1.2);
+    // marquee lamp chase around border
+    const per = 24;
+    const bw = W - pad * 2, bh = topH - pad * 1.2;
+    for (let i = 0; i < per; i++) {
+      const u = i / per, head = (t / 120) % per;
+      let px2, py2;
+      const c4 = u * 4;
+      if (c4 < 1) { px2 = pad + bw * c4; py2 = pad * 0.6; }
+      else if (c4 < 2) { px2 = pad + bw; py2 = pad * 0.6 + bh * (c4 - 1); }
+      else if (c4 < 3) { px2 = pad + bw * (3 - c4); py2 = pad * 0.6 + bh; }
+      else { px2 = pad; py2 = pad * 0.6 + bh * (4 - c4); }
+      const d = Math.min(Math.abs(head - i), per - Math.abs(head - i));
+      ctx.globalAlpha = d < 3 ? 1 - d / 3.5 : 0.15;
+      ctx.fillStyle = ['#ffd05a', '#ff8ab5', '#6ee7ff'][i % 3];
+      ctx.fillRect(px2 - 2 * DPR, py2 - 2 * DPR, 4 * DPR, 4 * DPR);
+    }
+    ctx.globalAlpha = 1;
+    // title + hiscore + flanking aliens
+    const fs = Math.min(topH * 0.4, W * 0.07);
+    ctx.font = 'bold ' + fs + 'px "Courier New", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#2a1745';
+    ctx.fillText('PIN-VADERS', W / 2 + 2 * DPR, topH * 0.42 + 2 * DPR);
+    ctx.fillStyle = '#b76bff';
+    ctx.shadowColor = '#b76bff'; ctx.shadowBlur = 12 * DPR;
+    ctx.fillText('PIN-VADERS', W / 2, topH * 0.42);
+    ctx.shadowBlur = 0;
+    if (topH > 40 * DPR) {
+      let hi = 0;
+      try {
+        const board = JSON.parse(localStorage.getItem('jnj_board_' + SLUG) || '[]');
+        if (board.length) hi = Math.max(...board.map(e => e.s || 0));
+      } catch (e) {}
+      ctx.font = 'bold ' + (fs * 0.38) + 'px "Courier New", monospace';
+      ctx.fillStyle = '#ffd05a';
+      ctx.fillText('HI-SCORE  ' + (hi || 999999).toLocaleString('en-GB'), W / 2, topH * 0.75);
+      // aliens flank the title
+      const as = Math.max(2, topH * 0.028);
+      const frame = (t / 500 | 0) % 2;
+      bmMain(frame ? BM_B : BM_A, W * 0.16, topH * 0.5, as, '#9fff8a');
+      bmMain(frame ? BM_A : BM_B, W * 0.84, topH * 0.5, as, '#6ee7ff');
+    }
+  }
+
+  // ── LOCKDOWN BAR + COIN DOOR (bottom band) ──
+  if (botH > 10 * DPR) {
+    const bg = ctx.createLinearGradient(0, botY, 0, botY + botH);
+    bg.addColorStop(0, '#3a2a68'); bg.addColorStop(0.25, '#241548'); bg.addColorStop(1, '#0e0820');
+    ctx.fillStyle = bg; ctx.fillRect(0, botY, W, botH);
+    ctx.fillStyle = '#8a55e0'; ctx.fillRect(0, botY, W, 3 * DPR);
+    ctx.fillStyle = 'rgba(226,204,255,0.5)'; ctx.fillRect(0, botY + 3 * DPR, W, 1.5 * DPR);
+    if (botH > 34 * DPR) {
+      // coin door
+      const dw = Math.min(60 * DPR, W * 0.15), dh = botH * 0.5;
+      const dx = W / 2 - dw / 2, dy = botY + botH * 0.28;
+      ctx.fillStyle = '#160d2e'; ctx.fillRect(dx, dy, dw, dh);
+      ctx.strokeStyle = '#8a55e0'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(dx, dy, dw, dh);
+      ctx.fillStyle = '#ffd05a'; ctx.fillRect(W / 2 - 2 * DPR, dy + dh * 0.2, 4 * DPR, dh * 0.35);
+      ctx.fillStyle = '#ff5470';
+      ctx.beginPath(); ctx.arc(W / 2, dy + dh * 0.78, 4 * DPR, 0, Math.PI * 2); ctx.fill();
+      // flipper button hints
+      ctx.font = 'bold ' + (botH * 0.22) + 'px "Courier New", monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(226,204,255,0.65)';
+      ctx.fillText('◀ HOLD', W * 0.18, botY + botH * 0.55);
+      ctx.fillText('HOLD ▶', W * 0.82, botY + botH * 0.55);
+      ctx.fillStyle = '#ff5470';
+      ctx.beginPath(); ctx.arc(W * 0.07, botY + botH * 0.55, 6 * DPR, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(W * 0.93, botY + botH * 0.55, 6 * DPR, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+function bmMain(bm, x, y, s, col) {
+  ctx.fillStyle = col;
+  const rows = bm.length, cols = bm[0].length;
+  for (let r = 0; r < rows; r++)
+    for (let cc = 0; cc < cols; cc++)
+      if (bm[r][cc] === '1') ctx.fillRect(x - cols / 2 * s + cc * s, y - rows / 2 * s + r * s, s, s);
+}
+
+// ── RENDER (composite: cabinet → pixel world → crisp text layer) ─────────────
+function render(t) {
+  renderWorld(t);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawCabinet(t);
+
+  let sx = 0, sy = 0;
+  if (shakeT > 0) { shakeT--; sx = (Math.random() - .5) * shakeT * DPR; sy = (Math.random() - .5) * shakeT * DPR; }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(worldCanvas, VIEW.ox + sx, VIEW.oy + sy, WORLD_W * VIEW.scale, WORLD_H * VIEW.scale);
+
+  // crisp layer (world coords)
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox + sx, VIEW.oy + sy);
 
   // DMD text
   ctx.save();
@@ -1058,169 +1345,23 @@ function render(t) {
   ctx.fillText(dmd.text, 153 + dmd.x, 48);
   ctx.restore(); ctx.shadowBlur = 0;
 
-  // rollover S-O-S lamps
+  // S-O-S letters (lamps are pixel; letters crisp)
   const SOS = ['S', 'O', 'S'];
   for (let i = 0; i < 3; i++) {
-    const rl = ROLLS[i];
-    ctx.fillStyle = rl.lit ? '#9fff8a' : 'rgba(159,255,138,0.15)';
-    ctx.shadowColor = '#9fff8a'; ctx.shadowBlur = rl.lit ? 14 : 0;
-    ctx.beginPath(); ctx.arc(rl.x, SOS_Y, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(159,255,138,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = rl.lit ? '#04140a' : '#9fff8a';
+    ctx.fillStyle = ROLLS[i].lit ? '#04140a' : '#9fff8a';
     ctx.font = 'bold 12px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(SOS[i], rl.x, SOS_Y + 1);
+    ctx.fillText(SOS[i], ROLLS[i].x, SOS_Y + 1);
   }
-
-  // spinner
-  ctx.fillStyle = '#123048';
-  ctx.fillRect(SPINNER.x - 3, SPINNER.y - 19, 6, 4);
-  ctx.fillRect(SPINNER.x - 3, SPINNER.y + 15, 6, 4);
-  ctx.save();
-  ctx.translate(SPINNER.x, SPINNER.y);
-  const spAng = SPINNER.spins > 0 ? SPINNER.ang : 0.4;
-  const spW = Math.abs(Math.cos(spAng));
-  ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 3 + 2 * spW; ctx.lineCap = 'round';
-  ctx.shadowColor = '#6ee7ff'; ctx.shadowBlur = SPINNER.spins > 0 ? 14 : 4;
-  ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, 14); ctx.stroke();
-  ctx.restore(); ctx.shadowBlur = 0;
-
-  // drop-target bunkers
-  for (const bank of [DROPS_L, DROPS_R])
-    for (const d of bank) {
-      if (d.up) {
-        drawBitmap(BM_BUNKER, d.x, d.y + 1, 4, '#123008');
-        drawBitmap(BM_BUNKER, d.x, d.y, 4, '#3d9a28');
-        drawBitmap(['0111110'], d.x, d.y - 6, 4, '#7ddd55');
-      } else {
-        ctx.fillStyle = 'rgba(61,154,40,0.2)'; ctx.fillRect(d.x - 14, d.y + 2, 28, 5);
-      }
-    }
+  // feature tags
   ctx.font = 'bold 10px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  ctx.fillStyle = shieldArmed ? '#9fff8a' : 'rgba(159,255,138,0.35)';
+  ctx.fillStyle = shieldArmed ? '#9fff8a' : 'rgba(159,255,138,0.4)';
   ctx.fillText('SHIELD', 105, 490);
-  ctx.fillStyle = UFO.active ? '#ff5470' : 'rgba(255,84,112,0.35)';
+  ctx.fillStyle = UFO.active ? '#ff5470' : 'rgba(255,84,112,0.4)';
   ctx.fillText('UFO', 375, 490);
-
-  // slings + bumpers
-  for (const p of SLINGS) drawSling(p);
-  for (const p of BUMPERS) drawBumper(p);
-
-  // saucer
-  ctx.fillStyle = '#120a28';
-  ctx.beginPath(); ctx.arc(SAUCER.x, SAUCER.y, SAUCER.r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = SAUCER.flash > 0 ? '#fff' : '#ff8ab5';
-  ctx.shadowColor = '#ff8ab5'; ctx.shadowBlur = SAUCER.flash > 0 ? 18 : 8;
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(SAUCER.x, SAUCER.y, SAUCER.r, 0, Math.PI * 2); ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,138,181,0.5)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(SAUCER.x, SAUCER.y, SAUCER.r - 5, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = '#ff8ab5'; ctx.font = 'bold 9px "Courier New", monospace';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(multiball ? '2X' : 'LOCK ' + lockedCount + '/2', SAUCER.x, SAUCER.y + SAUCER.r + 4);
 
-  // cannon
-  if (CANNON.beam > 0) {
-    ctx.globalAlpha = CANNON.beam / 260;
-    ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 4;
-    ctx.shadowColor = '#6ee7ff'; ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.moveTo(CANNON.beamX, CANNON.y - 10); ctx.lineTo(CANNON.beamX, 60); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-  }
-  const cReady = CANNON.cd <= 0;
-  ctx.fillStyle = '#0d2438';
-  ctx.fillRect(CANNON.x - 13, CANNON.y + 1, 26, 8);
-  ctx.fillStyle = cReady ? '#6ee7ff' : 'rgba(110,231,255,0.4)';
-  ctx.fillRect(CANNON.x - 12, CANNON.y - 3, 24, 8);
-  ctx.fillRect(CANNON.x - 4, CANNON.y - 9, 8, 7);
-  ctx.fillRect(CANNON.x - 1.5, CANNON.y - 13, 3, 5);
-  if (cReady) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(CANNON.x - 1.5, CANNON.y - 13, 3, 2);
-  }
-
-  // aliens / boss
-  if (BOSS.active) {
-    drawBitmap(BM_BOSS, BOSS.x + 2, BOSS.y + 3, 7, 'rgba(0,0,0,0.4)');
-    drawBitmap(BM_BOSS, BOSS.x, BOSS.y, 7, BOSS.flash > 0 ? '#ffffff' : '#ff5470');
-    drawBitmap(['011111110'], BOSS.x, BOSS.y - 8, 7, BOSS.flash > 0 ? '#fff' : '#ffd0da');
-    ctx.fillStyle = '#ff5470';
-    for (let i = 0; i < BOSS.hp; i++) ctx.fillRect(BOSS.x - BOSS.maxHp * 4 + i * 8, BOSS.y - 40, 6, 4);
-  } else {
-    for (let r = 0; r < INV.rows; r++)
-      for (let c = 0; c < INV.cols; c++) {
-        if (!INV.alive[r][c]) continue;
-        const a = alienPos(r, c);
-        drawBitmap(INV.frame ? BM_B : BM_A, a.x + 1, a.y + 2, 2.6, 'rgba(0,0,0,0.35)');
-        drawBitmap(INV.frame ? BM_B : BM_A, a.x, a.y, 2.6, ROW_COL[r % ROW_COL.length]);
-      }
-  }
-
-  // UFO
-  if (UFO.active) {
-    ctx.fillStyle = '#ff5470'; ctx.shadowColor = '#ff5470'; ctx.shadowBlur = 16;
-    ctx.beginPath(); ctx.ellipse(UFO.x, UFO.y, 16, 7, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffd0da';
-    ctx.beginPath(); ctx.ellipse(UFO.x, UFO.y - 5, 7, 4, 0, Math.PI, 0); ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // shield bar
-  if (shieldArmed) {
-    ctx.strokeStyle = '#9fff8a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-    ctx.shadowColor = '#9fff8a'; ctx.shadowBlur = 12;
-    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(t / 150);
-    ctx.beginPath(); ctx.moveTo(158, 764); ctx.lineTo(322, 764); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-    ctx.fillStyle = '#9fff8a';
-    ctx.fillRect(154, 760, 4, 8); ctx.fillRect(322, 760, 4, 8);
-  }
-
-  // flippers
-  for (const f of FLIPPERS) drawFlipper(f);
-
-  // ── plunger: rod + spring + knob + power meter ──
-  const lb = laneBall();
-  const rodTop = lb ? lb.y + lb.r : (742 + 11) - (plunger.snap > 0 ? plunger.snap * 1.4 : 0);
-  // spring coils compress between rodTop and floor
-  const coils = 7, span = 756 - rodTop;
-  ctx.strokeStyle = '#c8a24a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (let i = 0; i <= coils; i++) {
-    const yy = rodTop + (span / coils) * i;
-    const xx = i % 2 === 0 ? 444 : 458;
-    if (i === 0) ctx.moveTo(451, yy); else ctx.lineTo(xx, yy);
-  }
-  ctx.lineTo(451, 756);
-  ctx.stroke();
-  // rod + knob
-  ctx.fillStyle = '#8a8fa8';
-  ctx.fillRect(448.5, rodTop, 5, 756 - rodTop);
-  ctx.fillStyle = '#ff5470';
-  ctx.beginPath(); ctx.arc(451, 754, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#8a1f35'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.beginPath(); ctx.arc(449, 752, 2, 0, Math.PI * 2); ctx.fill();
-  // power meter
-  if (plunger.pull > 0) {
-    const ph = (plunger.pull / 120) * 122;
-    const pgr = ctx.createLinearGradient(0, 744, 0, 744 - 122);
-    pgr.addColorStop(0, '#9fff8a'); pgr.addColorStop(0.6, '#ffd05a'); pgr.addColorStop(1, '#ff5470');
-    ctx.fillStyle = pgr;
-    ctx.fillRect(439.5, 744 - ph, 3, ph);
-  }
-
-  // balls
-  for (const b of ballsInPlay) drawBall(b);
-
-  // particles + labels
-  for (const p of particles) {
-    ctx.globalAlpha = p.life / p.max;
-    ctx.fillStyle = p.col;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
+  // floating labels
   ctx.font = 'bold 15px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const l of labels) {
     ctx.globalAlpha = Math.min(1, l.life / 20);
@@ -1253,14 +1394,12 @@ function render(t) {
   ctx.fillStyle = '#fff';
   ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 12, 12);
 
-  // launch hint
-  if (lb && state === 'playing') {
+  if (laneBall() && state === 'playing') {
     ctx.font = 'bold 13px "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.4 * Math.sin(t / 300)) + ')';
     ctx.fillText('⇣ DRAG DOWN ⇣', 390, 620);
   }
 
-  // centre message
   if (msg) {
     ctx.font = 'bold 28px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = INK; ctx.shadowColor = INK; ctx.shadowBlur = 18;
