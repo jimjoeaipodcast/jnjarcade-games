@@ -50,7 +50,7 @@
    "url": "games/pin-vaders.html",
    "status": "wip",
    "special": "Game Lab #13 — first PINBALL cabinet",
-   "note": "v1 2026-07-06: full pinball physics (capsule flippers with tip-flick, restitution zoning, drag plunger, nudge + TILT) where the target field is a Space Invaders grid that MARCHES DOWN toward your flippers. Aliens kick like bumpers and die on ball contact; grid reaching the invasion line costs the ball. UFO jackpot, wave multiplier, speeding march heartbeat. Hold halves = flippers, drag lane = plunger, swipe up = nudge."
+   "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT)."
   },
   {
    "id": "jnj-on-air",
