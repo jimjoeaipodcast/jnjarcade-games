@@ -135,6 +135,17 @@
       transition: opacity 0.4s; white-space: nowrap; z-index: 10;
     }
     .hud-msg.hidden { opacity: 0; }
+
+    /* SFX mute toggle — bottom-left corner, above overlays */
+    .sfx-btn {
+      position: absolute; bottom: 12px; left: 12px; z-index: 20;
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.55); border: 1px solid var(--border);
+      font-size: 16px; line-height: 1; cursor: pointer; padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sfx-btn:active { transform: scale(0.92); }
   </style>
 </head>
 <body>
@@ -168,6 +179,7 @@
   <div class="canvas-wrap" id="canvasWrap">
     <canvas id="gameCanvas"></canvas>
     <div class="hud-msg hidden" id="hudMsg"></div>
+    <button class="sfx-btn" id="sfxBtn" aria-label="Toggle sound">🔊</button>
 
     <div class="overlay" id="startOverlay">
       <div class="overlay-emoji">🐍💥</div>
@@ -273,6 +285,62 @@ let running = false, animId;
 let msgTimer = null;
 let theme;
 let growPending = 0;
+
+// ─── SFX — pure WebAudio, no files ────────────────────────────────────────────
+let audioCtx = null;
+let sfxMuted = localStorage.getItem('sfxMuted_snake') === '1';
+
+function unlockAudio() {
+  // lazy-create + resume on first user gesture (iOS requires this)
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { return; }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+// one oscillator + gain envelope; optional pitch glide f0→f1, optional start delay
+function tone(type, f0, f1, dur, vol, delay) {
+  if (sfxMuted || !audioCtx) return;
+  try {
+    const t0 = audioCtx.currentTime + (delay || 0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.03);
+  } catch (e) {}
+}
+
+const sfx = {
+  eat()  { tone('square', 520, 1040, 0.09, 0.15); },              // bright rising blip
+  turn() { tone('square', 220, 220, 0.025, 0.05); },              // very subtle tick
+  power(){ tone('triangle', 660, 660, 0.07, 0.16);                // pickup: two-note chirp
+           tone('triangle', 990, 990, 0.09, 0.16, 0.07); },
+  hit()  { tone('sawtooth', 300, 70, 0.3, 0.2); },                // life lost: short down-buzz
+  gameover() { tone('sawtooth', 440, 55, 0.7, 0.22);              // long descending sweep
+               tone('square',   220, 55, 0.7, 0.1); },
+  levelUp() {                                                     // little rising arpeggio
+    [523, 659, 784, 1047].forEach((f, i) => tone('square', f, f, 0.12, 0.16, i * 0.09));
+  },
+  highScore() {                                                   // longer victory arpeggio
+    [523, 659, 784, 1047, 1319].forEach((f, i) => tone('triangle', f, f, 0.14, 0.18, i * 0.1));
+  },
+};
+
+const sfxBtn = document.getElementById('sfxBtn');
+function renderSfxBtn() { sfxBtn.textContent = sfxMuted ? '🔇' : '🔊'; }
+sfxBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  sfxMuted = !sfxMuted;
+  localStorage.setItem('sfxMuted_snake', sfxMuted ? '1' : '0');
+  renderSfxBtn();
+  if (!sfxMuted) { unlockAudio(); sfx.eat(); } // audible confirmation
+});
+renderSfxBtn();
 
 // ─── SIZING ───────────────────────────────────────────────────────────────────
 function resize() {
@@ -439,6 +507,7 @@ function spawnHazard(type) {
 function handleCursed() {
   glitching = true; glitchFrames = 24;
   gunTier = levelStartGun;
+  sfx.hit();
   lives--;
   if (lives <= 0) { setTimeout(() => endGame(), 900); return; }
   showMsg('☠️ CURSED! Snake reset to 1!', 2200);
@@ -473,6 +542,7 @@ function collectPowerUp(type) {
     handleCursed();
     return;
   }
+  sfx.power(); // good pickups only — hazards returned above
   updateHUD();
 }
 
@@ -594,6 +664,7 @@ function updatePellets() {
 function eatFood(idx) {
   score++; levelScore++;
   growPending++;
+  sfx.eat();
   scoreEl.textContent = score;
   if (Math.random() < 0.16) spawnPowerUp(food[idx].x, food[idx].y, PU_FOOD);
   else if (Math.random() < 0.04) spawnPowerUp(food[idx].x, food[idx].y, ['life']); // very rare heart
@@ -644,6 +715,7 @@ function checkLevelComplete() {
   // Show level complete briefly then continue
   running = false;
   cancelAnimationFrame(animId);
+  sfx.levelUp();
   const lo = levelOverlay;
   document.getElementById('loTitle').textContent = 'Level ' + (level-1) + ' Complete!';
   document.getElementById('loBadge').textContent = '+1 Life · Speed +20%';
@@ -700,6 +772,7 @@ function snakeTick() {
 function handleHit(reason) {
   glitching = true; glitchFrames = 18;
   gunTier = levelStartGun;
+  sfx.hit();
 
   // Both wall and self: lose a life
   lives--;
@@ -757,6 +830,8 @@ function endGame() {
   cancelAnimationFrame(animId);
   const isHS = score > highScore;
   if (isHS) { highScore = score; localStorage.setItem('jnj_snakeblaster_hs', score); }
+  sfx.gameover();
+  if (isHS && score > 0) setTimeout(() => sfx.highScore(), 750); // arpeggio after the sweep
 
   document.getElementById('goEmoji').textContent = lives <= 0 ? '💀' : '😵';
   document.getElementById('goTitle').textContent = 'GAME OVER';
@@ -1013,6 +1088,7 @@ function changeDir(d) {
   const nd = DIRS[d];
   if (!nd) return;
   if (nd.x === -dir.x && nd.y === -dir.y) return;
+  if (nd.x !== nextDir.x || nd.y !== nextDir.y) sfx.turn(); // only on a real change
   nextDir = nd;
 }
 
@@ -1022,6 +1098,7 @@ document.addEventListener('keydown', e => {
     w:'UP', s:'DOWN', a:'LEFT', d:'RIGHT',
     W:'UP', S:'DOWN', A:'LEFT', D:'RIGHT',
   };
+  if (map[e.key] || e.key === ' ' || e.key === 'Enter') unlockAudio();
   if (map[e.key]) { e.preventDefault(); if (!running) startGame(); else changeDir(map[e.key]); }
   if (e.key === ' ') { e.preventDefault(); if (!running) startGame(); else fire(); }
   if (e.key === 'Enter') { e.preventDefault(); if (!running) startGame(); }
@@ -1031,6 +1108,7 @@ document.addEventListener('keydown', e => {
 const canvasWrap = document.getElementById('canvasWrap');
 let swipeStart = null;
 canvasWrap.addEventListener('touchstart', e => {
+  unlockAudio(); // iOS: claim/resume audio on first touch
   swipeStart = {x:e.changedTouches[0].clientX, y:e.changedTouches[0].clientY};
 }, {passive:true});
 canvasWrap.addEventListener('touchmove', e => {
@@ -1054,9 +1132,10 @@ function tryFullscreen() {
   if (req) req.call(el).catch(() => {});
 }
 
-document.getElementById('startBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
-document.getElementById('retryBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
-// first touch anywhere also claims fullscreen (mobile)
+document.getElementById('startBtn').addEventListener('click', () => { unlockAudio(); tryFullscreen(); startGame(); });
+document.getElementById('retryBtn').addEventListener('click', () => { unlockAudio(); tryFullscreen(); startGame(); });
+// first touch anywhere also claims fullscreen (mobile) + unlocks audio
+document.addEventListener('pointerdown', function auOnce() { unlockAudio(); document.removeEventListener('pointerdown', auOnce); });
 document.addEventListener('touchend', function fsOnce() { tryFullscreen(); document.removeEventListener('touchend', fsOnce); });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Install JnJ Arcade</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <!-- Capture beforeinstallprompt EARLY — before body parses -->
+  <script>
+    window._installPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      window._installPrompt = e;
+      var btn = document.getElementById('androidInstallBtn');
+      var fallback = document.getElementById('androidFallback');
+      var title = document.getElementById('cardTitle');
+      if (btn) { btn.style.display = 'block'; }
+      if (fallback) { fallback.style.display = 'none'; }
+      if (title) { title.textContent = 'Install JnJ Arcade'; }
+    });
+    window.addEventListener('appinstalled', function() {
+      window._installPrompt = null;
+      showSuccess();
+    });
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #f5c518;
+      --bg:  #16120c;
+      --pit: #0d0b07;
+      --dim: #5c4800;
+      --txt: #e8dcc8;
+      --sub: #8a7a60;
+    }
+    html, body {
+      min-height: 100dvh;
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px 48px;
+      gap: 0;
+    }
+
+    /* logo */
+    .logo-wrap {
+      width: clamp(80px, 22vw, 110px);
+      height: clamp(80px, 22vw, 110px);
+      border-radius: 50%;
+      overflow: hidden;
+      margin-bottom: 18px;
+      box-shadow: 0 0 36px rgba(245,197,24,0.35);
+      flex-shrink: 0;
+    }
+    .logo { width: 125%; height: 125%; margin: -12.5%; display: block; }
+
+    h1 {
+      font-size: clamp(1.6rem, 5vw, 2.1rem);
+      font-weight: 800;
+      color: var(--ink);
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .tagline {
+      font-size: 0.8rem;
+      color: var(--sub);
+      letter-spacing: 0.1em;
+      margin-bottom: 32px;
+    }
+
+    /* card */
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--pit);
+      border: 1px solid var(--dim);
+      border-radius: 18px;
+      padding: 28px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    .card-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: var(--ink);
+      text-transform: uppercase;
+    }
+
+    /* big install button (Android native prompt) */
+    #androidInstallBtn {
+      display: none;
+      width: 100%;
+      padding: 18px;
+      background: var(--ink);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    #androidInstallBtn:active { opacity: 0.8; }
+
+    /* Android fallback — single visual CTA */
+    #androidFallback {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+    }
+    .menu-cta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #1a140a;
+      border: 1px solid var(--dim);
+      border-radius: 12px;
+      padding: 16px 18px;
+      width: 100%;
+    }
+    .menu-icon {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--ink);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .menu-icon span {
+      display: block;
+      width: 4px;
+      height: 4px;
+      background: #000;
+      border-radius: 50%;
+    }
+    .menu-cta-text { font-size: 0.95rem; color: var(--txt); line-height: 1.4; }
+    .menu-cta-text strong { color: var(--ink); }
+    .fallback-sub {
+      font-size: 0.78rem;
+      color: var(--sub);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* iOS steps */
+    #iosSteps { display: none; flex-direction: column; gap: 14px; width: 100%; }
+    .step { display: flex; align-items: flex-start; gap: 14px; }
+    .step-num {
+      flex-shrink: 0;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #000;
+      font-size: 0.85rem;
+      font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-text { font-size: 0.9rem; color: var(--txt); line-height: 1.45; padding-top: 4px; }
+    .step-text strong { color: var(--ink); }
+    .step-hint { font-size: 0.75rem; color: var(--sub); margin-top: 4px; line-height: 1.4; }
+
+    @keyframes bounce-up {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-4px); }
+    }
+    .bounce { animation: bounce-up 1.6s ease-in-out infinite; display: inline-block; }
+
+    .share-btn {
+      width: 100%;
+      padding: 18px;
+      background: var(--ink);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      cursor: pointer;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .share-btn:active { opacity: 0.8; }
+    .ios-then {
+      font-size: 0.72rem;
+      color: var(--sub);
+      text-align: center;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* Desktop */
+    #desktopMsg { display: none; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+    .url-box {
+      background: #1e180e;
+      border: 1px solid var(--dim);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      width: 100%;
+      letter-spacing: 0.03em;
+    }
+    .desktop-note { font-size: 0.82rem; color: var(--sub); text-align: center; line-height: 1.5; }
+
+    /* success */
+    #successMsg { display: none; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    .success-icon { font-size: 2.6rem; }
+    .success-text { font-size: 1rem; color: #6fcf6f; font-weight: 700; }
+    .success-sub  { font-size: 0.8rem; color: var(--sub); }
+
+    /* already installed */
+    #alreadyMsg { display: none; font-size: 1rem; color: #6fcf6f; font-weight: 600; text-align: center; }
+
+    .footer {
+      margin-top: 28px;
+      font-size: 0.7rem;
+      color: var(--sub);
+      letter-spacing: 0.06em;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-wrap">
+    <img class="logo" src="/assets/icons/jnj-logo-512.png" alt="JnJ Arcade">
+  </div>
+  <h1>JnJ Arcade</h1>
+  <p class="tagline">FULL SCREEN &middot; NO BARS &middot; FREE</p>
+
+  <div class="card">
+    <span class="card-title" id="cardTitle">Install</span>
+
+    <!-- Already installed -->
+    <p id="alreadyMsg">✅ Already installed on this device!</p>
+
+    <!-- Android: 1-tap native prompt button -->
+    <button id="androidInstallBtn">📲 Install App</button>
+
+    <!-- Android: fallback when prompt doesn't fire -->
+    <div id="androidFallback">
+      <div class="menu-cta">
+        <div class="menu-icon"><span></span><span></span><span></span></div>
+        <div class="menu-cta-text">
+          Tap <strong>⋮</strong> (top-right)<br>
+          then tap <strong>Install app</strong>
+        </div>
+      </div>
+      <p class="fallback-sub">Chrome will add JnJ Arcade to your home screen.<br>Opens full screen — no browser bars.</p>
+    </div>
+
+    <!-- iOS steps -->
+    <div id="iosSteps">
+      <!-- Step 1: tap this button to auto-open the share sheet -->
+      <button id="iosShareBtn" class="share-btn">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="4" y="7" width="10" height="9" rx="1.5" stroke="#000" stroke-width="1.7"/>
+          <path d="M9 1v8M6 4l3-3 3 3" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Step 1 — Open Share Sheet
+      </button>
+      <p class="ios-then">then in the share sheet:</p>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">Tap <strong>Add to Home Screen</strong></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">Tap <strong>Add</strong> — opens full screen from home</div>
+      </div>
+      <!-- Fallback: if button doesn't open sheet -->
+      <div class="step" style="margin-top:4px">
+        <div class="step-num" style="background:var(--dim);color:var(--txt);font-size:0.72rem">?</div>
+        <div class="step-text">
+          Button not working? Tap the <strong>Share</strong>
+          <svg width="13" height="13" viewBox="0 0 18 18" fill="none" style="vertical-align:middle;margin:0 2px">
+            <rect x="4" y="7" width="10" height="9" rx="1.5" stroke="#f5c518" stroke-width="1.5"/>
+            <path d="M9 1v8M6 4l3-3 3 3" stroke="#f5c518" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          icon at the <strong>bottom centre</strong> of Safari
+          <div class="step-hint">It's the box-with-arrow icon — NOT the ≡ menu on the left</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop -->
+    <div id="desktopMsg">
+      <p class="desktop-note">Open on your phone:</p>
+      <div class="url-box">jnjarcade.win/install</div>
+      <p class="desktop-note">iPhone (Safari) or Android (Chrome)<br>No App Store needed</p>
+    </div>
+
+    <!-- Success -->
+    <div id="successMsg">
+      <div class="success-icon">🎮</div>
+      <p class="success-text">JnJ Arcade installed!</p>
+      <p class="success-sub">Open it from your home screen for full-screen play</p>
+    </div>
+  </div>
+
+  <p class="footer">FREE &middot; NO APP STORE &middot; IOS &amp; ANDROID</p>
+
+  <script>
+    var isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    var isAndroid    = /Android/.test(navigator.userAgent);
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true;
+
+    function showSuccess() {
+      document.getElementById('androidInstallBtn').style.display = 'none';
+      document.getElementById('androidFallback').style.display   = 'none';
+      document.getElementById('successMsg').style.display        = 'flex';
+      document.getElementById('cardTitle').textContent           = "You're all set!";
+    }
+
+    document.getElementById('androidInstallBtn').addEventListener('click', async function() {
+      if (!window._installPrompt) return;
+      window._installPrompt.prompt();
+      var choice = await window._installPrompt.userChoice;
+      if (choice.outcome === 'accepted') showSuccess();
+      window._installPrompt = null;
+    });
+
+    document.getElementById('iosShareBtn').addEventListener('click', async function() {
+      if (navigator.share) {
+        try { await navigator.share({ title: 'JnJ Arcade', url: 'https://jnjarcade.win' }); }
+        catch(e) { /* cancelled or dismissed — do nothing */ }
+      }
+    });
+
+    if (isStandalone) {
+      document.getElementById('alreadyMsg').style.display = 'block';
+      document.getElementById('cardTitle').textContent    = 'Already Installed';
+    } else if (isIOS) {
+      document.getElementById('iosSteps').style.display = 'flex';
+      document.getElementById('cardTitle').textContent  = 'Add to Home Screen';
+    } else if (isAndroid) {
+      /* Show fallback now — head script swaps in button if prompt fires */
+      document.getElementById('androidFallback').style.display = 'flex';
+      document.getElementById('cardTitle').textContent         = 'Install JnJ Arcade';
+      /* If prompt already captured before DOM was ready, show button */
+      if (window._installPrompt) {
+        document.getElementById('androidInstallBtn').style.display = 'block';
+        document.getElementById('androidFallback').style.display   = 'none';
+      }
+    } else {
+      document.getElementById('desktopMsg').style.display = 'flex';
+      document.getElementById('cardTitle').textContent    = 'Open on Your Phone';
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }
+  </script>
+</body>
+</html>

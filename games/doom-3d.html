@@ -115,6 +115,16 @@
       -webkit-tap-highlight-color: transparent;
     }
     #fireBtn:active { background: rgba(255,51,85,0.5); }
+    #muteBtn {
+      position: fixed; left: 10px;
+      top: calc(env(safe-area-inset-top,0px) + 86px);
+      width: 40px; height: 40px; border-radius: 50%; z-index: 35;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.07); border: 2px solid rgba(255,255,255,0.18);
+      font-size: 17px; backdrop-filter: blur(4px); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #muteBtn:active { background: rgba(255,255,255,0.22); }
     @media (pointer: coarse) and (orientation: landscape) {
       #mc { display: flex; }
       #fireBtn { display: flex; }
@@ -246,6 +256,7 @@
     </div>
   </div>
   <button id="fireBtn">🔥</button>
+  <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 
   <div id="portrait">
     <div class="ri">📱</div>
@@ -542,6 +553,64 @@ function showMsg(text, dur) {
   msgTimer = setTimeout(() => hudMsg.classList.add('hidden'), dur || 1700);
 }
 
+/* ── sound: pure WebAudio procedural synth, no files ──
+   context created lazily + resumed on first gesture (iOS unlock) */
+let sfxMuted = localStorage.getItem('sfxMuted_doom3d') === '1';
+let audioCtx = null, noiseBuf = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    noiseBuf = audioCtx.createBuffer(1, (audioCtx.sampleRate * 0.5) | 0, audioCtx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function tone(freq, dur, type, vol, sweepTo, delay) {
+  if (sfxMuted || !audioCtx) return;
+  try {
+    const t0 = audioCtx.currentTime + (delay || 0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (sweepTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), t0 + dur);
+    g.gain.setValueAtTime(vol || 0.15, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur);
+  } catch (e) {}
+}
+
+function noise(dur, vol, fromHz, toHz, delay) {
+  if (sfxMuted || !audioCtx || !noiseBuf) return;
+  try {
+    const t0 = audioCtx.currentTime + (delay || 0);
+    const src = audioCtx.createBufferSource(); src.buffer = noiseBuf;
+    const f = audioCtx.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(fromHz || 4000, t0);
+    if (toHz) f.frequency.exponentialRampToValueAtTime(Math.max(40, toHz), t0 + dur);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol || 0.15, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start(t0); src.stop(t0 + dur);
+  } catch (e) {}
+}
+
+const sfx = {
+  shoot:   () => { noise(0.14, 0.16, 5000, 400); tone(150, 0.12, 'square', 0.12, 60); },        // punchy burst + low thump
+  hit:     () => { noise(0.08, 0.13, 1800, 500); tone(260, 0.09, 'square', 0.10, 140); },       // mid crunch
+  kill:    () => { tone(220, 0.35, 'sawtooth', 0.16, 45); noise(0.28, 0.10, 1200, 100); },      // descending growl
+  hurt:    () => { tone(110, 0.4, 'sawtooth', 0.20, 40); noise(0.2, 0.14, 900, 120); },         // low distorted hit
+  coin:    () => { tone(988, 0.07, 'square', 0.12); tone(1319, 0.22, 'square', 0.12, 0, 0.07); },   // bright coin blip
+  block:   () => { tone(880, 0.06, 'square', 0.12, 1760); tone(1175, 0.18, 'square', 0.10, 0, 0.06); }, // ? block payout
+  powerup: () => { tone(392, 0.09, 'triangle', 0.14, 784); tone(523, 0.09, 'triangle', 0.14, 1047, 0.09); tone(659, 0.16, 'triangle', 0.14, 1319, 0.18); }, // rising pickup
+  clear:   () => { tone(523, 0.16, 'triangle', 0.15); tone(659, 0.16, 'triangle', 0.15, 0, 0.15); tone(784, 0.16, 'triangle', 0.15, 0, 0.30); tone(1047, 0.4, 'triangle', 0.15, 0, 0.45); }, // level clear fanfare
+  over:    () => { tone(392, 0.3, 'sawtooth', 0.14, 200); tone(150, 0.7, 'sawtooth', 0.15, 45, 0.28); }, // game over slump
+};
+
 /* ── movement + combat ── */
 function tryMove(nx, ny) {
   const R = 0.28;
@@ -558,6 +627,7 @@ function fire() {
   const triple = now < tripleUntil;
   const angles = triple ? [pa - 0.12, pa, pa + 0.12] : [pa];
   angles.forEach(a => fireballs.push({ x: px, y: py, dx: Math.cos(a)*9, dy: Math.sin(a)*9 }));
+  sfx.shoot();
   hitFlash = Math.max(hitFlash, 2); // muzzle flash
 }
 
@@ -571,6 +641,7 @@ function updateFireballs(dt) {
         map[f.y|0][f.x|0] = 4;
         score += 50; coins++;
         showMsg('💰 +50');
+        sfx.block();
         updateHUD();
       }
       fireballs.splice(i, 1); continue;
@@ -584,6 +655,9 @@ function updateFireballs(dt) {
           e.dead = true; kills++;
           score += e.type === 'k' ? 200 : 100;
           showMsg(e.type === 'k' ? '🐢 +200' : '👹 +100');
+          sfx.kill();
+        } else {
+          sfx.hit();
         }
         hit = true; break;
       }
@@ -612,10 +686,12 @@ function updateEnts(dt) {
       if (dist < 0.55) {
         if (starred) {
           e.dead = true; kills++; score += 150; showMsg('⭐ SPLAT +150');
+          sfx.kill();
           updateHUD();
         } else if (now > hurtUntil) {
           lives--; hurtUntil = now + 1300; hitFlash = 14;
           showMsg('💥 -1 LIFE', 1300);
+          sfx.hurt();
           // knockback
           const kx = px + dx/dist * -1.6, ky = py + dy/dist * -1.6;
           if (!solid(kx, py)) px = kx;
@@ -626,10 +702,10 @@ function updateEnts(dt) {
       }
     } else if (dist < 0.55) {
       e.dead = true;
-      if (e.type === 'c') { coins++; score += 10; showMsg('🪙 +10'); }
-      if (e.type === 'm') { lives = Math.min(lives+1, MAX_LIVES); score += 25; showMsg('🍄 +1 LIFE'); }
-      if (e.type === 'f') { tripleUntil = now + 20000; showMsg('🌸 TRIPLE FIRE 20s'); }
-      if (e.type === 'p') { starUntil = now + 8000; showMsg('⭐ INVINCIBLE 8s'); }
+      if (e.type === 'c') { coins++; score += 10; showMsg('🪙 +10'); sfx.coin(); }
+      if (e.type === 'm') { lives = Math.min(lives+1, MAX_LIVES); score += 25; showMsg('🍄 +1 LIFE'); sfx.powerup(); }
+      if (e.type === 'f') { tripleUntil = now + 20000; showMsg('🌸 TRIPLE FIRE 20s'); sfx.powerup(); }
+      if (e.type === 'p') { starUntil = now + 8000; showMsg('⭐ INVINCIBLE 8s'); sfx.powerup(); }
       updateHUD();
     }
   }
@@ -640,6 +716,7 @@ function levelClear() {
   running = false;
   cancelAnimationFrame(animId);
   score += 500;
+  sfx.clear();
   document.getElementById('loTitle').textContent = 'World 1-' + level + ' Clear!';
   document.getElementById('loBadge').textContent = '+500';
   document.getElementById('loSub').textContent =
@@ -1024,6 +1101,7 @@ window.addEventListener('resize', () => { resize(); if (!running) render(); });
 window.addEventListener('orientationchange', () => setTimeout(() => { resize(); if (!running) render(); }, 250));
 
 function startGame() {
+  ensureAudio();
   startOverlay.classList.add('hidden');
   gameOverOverlay.classList.add('hidden');
   levelOverlay.classList.add('hidden');
@@ -1040,6 +1118,7 @@ function startGame() {
 function endGame() {
   running = false;
   cancelAnimationFrame(animId);
+  sfx.over();
   const isHS = score > hi;
   if (isHS) { hi = score; localStorage.setItem('jnj_doom3d_hs', score); }
   document.getElementById('goScore').textContent = score;
@@ -1080,6 +1159,20 @@ function tryFullscreen() {
 document.getElementById('startBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
 document.getElementById('retryBtn').addEventListener('click', () => { tryFullscreen(); startGame(); });
 document.addEventListener('touchend', function fsOnce() { tryFullscreen(); document.removeEventListener('touchend', fsOnce); });
+
+/* ── mute toggle + iOS audio unlock on first gesture ── */
+const muteBtn = document.getElementById('muteBtn');
+function paintMute() { muteBtn.textContent = sfxMuted ? '🔇' : '🔊'; }
+muteBtn.addEventListener('click', () => {
+  sfxMuted = !sfxMuted;
+  localStorage.setItem('sfxMuted_doom3d', sfxMuted ? '1' : '0');
+  if (!sfxMuted) { ensureAudio(); sfx.coin(); } // audible confirmation on unmute
+  paintMute();
+  muteBtn.blur(); // keep Space/Enter on the game, not the button
+});
+paintMute();
+document.addEventListener('touchstart', ensureAudio, { once: true, passive: true });
+document.addEventListener('pointerdown', ensureAudio, { once: true });
 
 hi = parseInt(localStorage.getItem('jnj_doom3d_hs') || '0', 10);
 if (hi > 0) document.getElementById('startBest').textContent = 'Best: ' + hi;

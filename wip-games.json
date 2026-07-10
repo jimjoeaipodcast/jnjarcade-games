@@ -1,156 +1,166 @@
 {
- "social": [
-  {
-   "name": "Shop",
-   "emoji": "🛍️",
-   "url": "https://jimmy-joe-shop.fourthwall.com/",
-   "gradient": [
-    "#FF9F0A",
-    "#FF6B00"
-   ],
-   "label": "Shop"
-  },
-  {
-   "name": "YouTube",
-   "emoji": "▶",
-   "url": "https://www.youtube.com/@JnJAiStudio",
-   "gradient": [
-    "#FF453A",
-    "#FF2D55"
-   ],
-   "label": "YouTube"
-  },
-  {
-   "name": "Patreon",
-   "emoji": "☕",
-   "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
-   "gradient": [
-    "#FF6E4A",
-    "#E0420B"
-   ],
-   "label": "Patreon"
-  },
-  {
-   "name": "Ko-fi",
-   "emoji": "☕",
-   "url": "https://ko-fi.com/jimmynjoe",
-   "gradient": [
-    "#FF5E5B",
-    "#E03030"
-   ],
-   "label": "KoFi"
-  }
- ],
- "games": [
-  {
-   "id": "pin-vaders",
-   "name": "PIN-VADERS",
-   "emoji": "🛸",
-   "genre": "PINBALL × SPACE INVADERS",
-   "url": "games/pin-vaders.html",
-   "status": "wip",
-   "special": "Game Lab #13 — first PINBALL cabinet",
-   "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT)."
-  },
-  {
-   "id": "jnj-on-air",
-   "name": "JNJ: ON AIR IN 10 MINUTES",
-   "emoji": "🎙️",
-   "genre": "MONKEY ISLAND × TALK SHOW",
-   "url": "games/jnj-on-air.html",
-   "status": "wip",
-   "special": "Game Lab #12 — first ADVENTURE cabinet",
-   "note": "v2 2026-07-04: FULL VOICE (145 lines, real Jimmy+Joe Chatterbox VO) + pixel-art rooms from Osimo's studio photo (corridor+prop generated to match) + Osimo's sprite sheets (8-frame walk). 3-room point-and-click, parallel tea+lollipop chains, every hotspot answers, 6 collectible COMEBACKS → BANTER DUEL finale vs Joe. No deaths, auto-save/resume, timer = score."
-  },
-  {
-   "id": "jungle-hop",
-   "name": "JUNGLE-HOP",
-   "emoji": "🌴",
-   "genre": "PITFALL × DK JR",
-   "url": "games/jungle-hop.html",
-   "status": "wip",
-   "special": "Game Lab #11",
-   "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards — rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn — bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
-  },
-  {
-   "id": "tomb-hunt",
-   "name": "TOMB HUNT",
-   "emoji": "🏺",
-   "genre": "JUNGLE HUNT × TOMB RAIDER",
-   "url": "games/tomb-hunt.html",
-   "status": "wip",
-   "special": "Game Lab #3",
-   "note": "Multi-platform levels, stomp-to-kill guards, arc-gravity arrows, enemy darts."
-  },
-  {
-   "id": "bomb-garden",
-   "name": "BOMB GARDEN",
-   "emoji": "💣",
-   "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
-   "url": "games/bomb-garden.html",
-   "status": "wip",
-   "special": "Game Lab #4",
-   "note": "Plant bombs to stop zombie waves. Bomberman blast radius + PvZ lane defence."
-  },
-  {
-   "id": "pac-lemming",
-   "name": "PAC-LEMMING",
-   "emoji": "🟡",
-   "genre": "LEMMINGS × PAC-MAN",
-   "url": "games/pac-lemming.html",
-   "status": "wip",
-   "special": "Game Lab #6",
-   "note": "Pac-Man eats pellets while lemmings cross the maze. 10/15 lems to win."
-  },
-  {
-   "id": "bomb-lemmings",
-   "name": "BOMB-LEMMINGS",
-   "emoji": "💣",
-   "genre": "LEMMINGS × BOMBERMAN",
-   "url": "games/bomb-lemmings.html",
-   "status": "wip",
-   "special": "Game Lab #7",
-   "note": "Save lemmings by bombing dirt walls open. 10/15 lems to win."
-  },
-  {
-   "id": "lemming-invaders",
-   "name": "LEMMING-INVADERS",
-   "emoji": "👾",
-   "genre": "LEMMINGS × SPACE INVADERS",
-   "url": "games/lemming-invaders.html",
-   "status": "wip",
-   "special": "Game Lab #8",
-   "note": "Shoot Space Invaders before bombs kill lemmings below. 12/20 lems to win."
-  },
-  {
-   "id": "astro-hop",
-   "name": "ASTRO-HOP",
-   "emoji": "🚀",
-   "genre": "PLATFORM MECHANICS SHOWCASE",
-   "url": "games/astro-hop.html",
-   "status": "wip",
-   "special": "Game Lab #9",
-   "note": "Double jump + coyote time + moving platforms + semi-platforms."
-  },
-  {
-   "id": "cave-plunge",
-   "name": "CAVE-PLUNGE",
-   "emoji": "🪨",
-   "genre": "CAVE EXPLORER",
-   "url": "games/cave-plunge.html",
-   "status": "wip",
-   "special": "Game Lab #10",
-   "note": "Wall slide + wall jump. Bats + crystal platforms + gem collectibles."
-  },
-  {
-   "id": "lupo-alberto",
-   "name": "LUPO ALBERTO",
-   "emoji": "🐺",
-   "genre": "PLATFORM TRAINING CABINET",
-   "url": "games/lupo-alberto.html",
-   "status": "wip",
-   "special": "Game Lab #12",
-   "note": "Platform mechanics template. Reskin = change sprites/palette only."
-  }
- ]
+  "social": [
+    {
+      "name": "Shop",
+      "emoji": "🛍️",
+      "url": "https://jimmy-joe-shop.fourthwall.com/",
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
+      "label": "Shop"
+    },
+    {
+      "name": "YouTube",
+      "emoji": "▶",
+      "url": "https://www.youtube.com/@JnJAiStudio",
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
+      "label": "YouTube"
+    },
+    {
+      "name": "Patreon",
+      "emoji": "☕",
+      "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
+      "gradient": [
+        "#FF6E4A",
+        "#E0420B"
+      ],
+      "label": "Patreon"
+    },
+    {
+      "name": "Ko-fi",
+      "emoji": "☕",
+      "url": "https://ko-fi.com/jimmynjoe",
+      "gradient": [
+        "#FF5E5B",
+        "#E03030"
+      ],
+      "label": "KoFi"
+    }
+  ],
+  "games": [
+    {
+      "id": "pin-vaders",
+      "name": "PIN-VADERS",
+      "emoji": "🛸",
+      "genre": "PINBALL × SPACE INVADERS",
+      "url": "games/pin-vaders.html",
+      "status": "wip",
+      "special": "Game Lab #13 — first PINBALL cabinet",
+      "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT)."
+    },
+    {
+      "id": "chrome-flipper",
+      "name": "CHROME FLIPPER",
+      "emoji": "⚡",
+      "genre": "PINBALL × CYBERPUNK",
+      "url": "games/chrome-flipper.html",
+      "status": "wip",
+      "special": "Game Lab #14 — pixel art pinball, 3 cyberpunk tables, CHROME multiplier lanes, multiball, moving bumper",
+      "note": "Built by grok-4.5 (Ricky). Tables: Neon Street → Corp Tower → Skyline Hack. CHROME rollover lanes = ×2 score. Table 2: all 5 drops → multiball ×2. Table 3: moving bumper, endless. Full pixel art via half-res offscreen canvas."
+    },
+    {
+      "id": "jnj-on-air",
+      "name": "JNJ: ON AIR IN 10 MINUTES",
+      "emoji": "🎙️",
+      "genre": "MONKEY ISLAND × TALK SHOW",
+      "url": "games/jnj-on-air.html",
+      "status": "wip",
+      "special": "Game Lab #12 — first ADVENTURE cabinet",
+      "note": "v2 2026-07-04: FULL VOICE (145 lines, real Jimmy+Joe Chatterbox VO) + pixel-art rooms from Osimo's studio photo (corridor+prop generated to match) + Osimo's sprite sheets (8-frame walk). 3-room point-and-click, parallel tea+lollipop chains, every hotspot answers, 6 collectible COMEBACKS → BANTER DUEL finale vs Joe. No deaths, auto-save/resume, timer = score."
+    },
+    {
+      "id": "jungle-hop",
+      "name": "JUNGLE-HOP",
+      "emoji": "🌴",
+      "genre": "PITFALL × DK JR",
+      "url": "games/jungle-hop.html",
+      "status": "wip",
+      "special": "Game Lab #11",
+      "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards — rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn — bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
+    },
+    {
+      "id": "tomb-hunt",
+      "name": "TOMB HUNT",
+      "emoji": "🏺",
+      "genre": "JUNGLE HUNT × TOMB RAIDER",
+      "url": "games/tomb-hunt.html",
+      "status": "wip",
+      "special": "Game Lab #3",
+      "note": "Multi-platform levels, stomp-to-kill guards, arc-gravity arrows, enemy darts."
+    },
+    {
+      "id": "bomb-garden",
+      "name": "BOMB GARDEN",
+      "emoji": "💣",
+      "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
+      "url": "games/bomb-garden.html",
+      "status": "wip",
+      "special": "Game Lab #4",
+      "note": "Plant bombs to stop zombie waves. Bomberman blast radius + PvZ lane defence."
+    },
+    {
+      "id": "pac-lemming",
+      "name": "PAC-LEMMING",
+      "emoji": "🟡",
+      "genre": "LEMMINGS × PAC-MAN",
+      "url": "games/pac-lemming.html",
+      "status": "wip",
+      "special": "Game Lab #6",
+      "note": "Pac-Man eats pellets while lemmings cross the maze. 10/15 lems to win."
+    },
+    {
+      "id": "bomb-lemmings",
+      "name": "BOMB-LEMMINGS",
+      "emoji": "💣",
+      "genre": "LEMMINGS × BOMBERMAN",
+      "url": "games/bomb-lemmings.html",
+      "status": "wip",
+      "special": "Game Lab #7",
+      "note": "Save lemmings by bombing dirt walls open. 10/15 lems to win."
+    },
+    {
+      "id": "lemming-invaders",
+      "name": "LEMMING-INVADERS",
+      "emoji": "👾",
+      "genre": "LEMMINGS × SPACE INVADERS",
+      "url": "games/lemming-invaders.html",
+      "status": "wip",
+      "special": "Game Lab #8",
+      "note": "Shoot Space Invaders before bombs kill lemmings below. 12/20 lems to win."
+    },
+    {
+      "id": "astro-hop",
+      "name": "ASTRO-HOP",
+      "emoji": "🚀",
+      "genre": "PLATFORM MECHANICS SHOWCASE",
+      "url": "games/astro-hop.html",
+      "status": "wip",
+      "special": "Game Lab #9",
+      "note": "Double jump + coyote time + moving platforms + semi-platforms."
+    },
+    {
+      "id": "cave-plunge",
+      "name": "CAVE-PLUNGE",
+      "emoji": "🪨",
+      "genre": "CAVE EXPLORER",
+      "url": "games/cave-plunge.html",
+      "status": "wip",
+      "special": "Game Lab #10",
+      "note": "Wall slide + wall jump. Bats + crystal platforms + gem collectibles."
+    },
+    {
+      "id": "lupo-alberto",
+      "name": "LUPO ALBERTO",
+      "emoji": "🐺",
+      "genre": "PLATFORM TRAINING CABINET",
+      "url": "games/lupo-alberto.html",
+      "status": "wip",
+      "special": "Game Lab #12",
+      "note": "Platform mechanics template. Reskin = change sprites/palette only."
+    }
+  ]
 }

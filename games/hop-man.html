@@ -94,6 +94,16 @@
     transition:transform .06s, box-shadow .06s;
   }
   .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+  /* SFX mute toggle — bottom-left corner, above overlays (house convention, see snake.html) */
+  .sfx-btn {
+    position:absolute; bottom:12px; left:12px; z-index:20;
+    width:38px; height:38px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.55); border:1px solid var(--dim);
+    font-size:16px; line-height:1; cursor:pointer; padding:0;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .sfx-btn:active { transform:scale(0.92); }
 </style>
 </head>
 <body>
@@ -110,6 +120,7 @@
   </div>
   <div class="canvas-wrap" id="wrap">
     <canvas id="c"></canvas>
+    <button class="sfx-btn" id="sfxBtn" aria-label="Toggle sound">🔊</button>
     <div class="overlay" id="ov">
       <div class="overlay-emoji" id="ovEmoji">🐸🚗</div>
       <div class="overlay-title" id="ovTitle">HOP-MAN</div>
@@ -193,6 +204,95 @@ let allCleared=false;  // all coins collected this level (+500 awarded once)
 let timeLeft=300;      // seconds left this level (5 min, −30s every 10 levels)
 let timeAcc=0;         // tick accumulator for the 1-second countdown
 const STEP_TICKS=5;    // auto-glide one cell every 5 ticks (~6 cells/sec) — LEFT/RIGHT only
+
+// ── SFX — pure WebAudio procedural synth, house convention (see snake.html / doom-3d.html) ──
+// Lazy AudioContext: created + resumed on first user gesture (iOS unlock). NO external files.
+// EVERY sound routes through tone()/noise(), both of which no-op when muted OR in attract
+// mode — the landing-page cassette demo (?attract=1 auto-pilot) must stay silent.
+let audioCtx=null, noiseBuf=null;
+let sfxMuted=false;
+try{ sfxMuted = localStorage.getItem('sfxMuted_hopman')==='1'; }catch(e){}
+
+function unlockAudio(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+    noiseBuf = audioCtx.createBuffer(1, (audioCtx.sampleRate*0.5)|0, audioCtx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  }
+  if(audioCtx.state==='suspended') audioCtx.resume();
+}
+
+// one oscillator + gain envelope; optional pitch glide f0→f1, optional start delay
+function tone(type, f0, f1, dur, vol, delay){
+  if(sfxMuted || attract || !audioCtx) return;
+  try{
+    const t0 = audioCtx.currentTime + (delay||0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if(f1 && f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(1,f1), t0+dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0+dur+0.03);
+  }catch(e){}
+}
+
+// filtered white-noise burst (crunches / splashes); lowpass sweeps fromHz→toHz
+function noise(dur, vol, fromHz, toHz, delay){
+  if(sfxMuted || attract || !audioCtx || !noiseBuf) return;
+  try{
+    const t0 = audioCtx.currentTime + (delay||0);
+    const src = audioCtx.createBufferSource(); src.buffer=noiseBuf;
+    const f = audioCtx.createBiquadFilter(); f.type='lowpass';
+    f.frequency.setValueAtTime(fromHz||4000, t0);
+    if(toHz) f.frequency.exponentialRampToValueAtTime(Math.max(40,toHz), t0+dur);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+    src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start(t0); src.stop(t0+dur);
+  }catch(e){}
+}
+
+const sfx = {
+  hop()    { tone('triangle', 300+Math.random()*90, 560, 0.08, 0.14); },   // soft rising blip, jittered pitch
+  logHop() { tone('sine', 200+Math.random()*40, 120, 0.09, 0.17); },       // softer wooden thock (landing on a log)
+  pod()    { tone('triangle', 740, 740, 0.07, 0.13);                       // freeze pod: icy two-note chirp up
+             tone('triangle', 1180, 1480, 0.12, 0.13, 0.06); },
+  cherry() { tone('square', 660, 660, 0.08, 0.14);                         // cherry pickup: happy two-note
+             tone('square', 880, 880, 0.10, 0.14, 0.07); },
+  ghost()  { tone('square', 300, 150, 0.08, 0.15);                         // scared-ghost gulp: down then up
+             tone('square', 500, 900, 0.12, 0.14, 0.08); },
+  splat()  { noise(0.20, 0.25, 2200, 120);                                 // car/ghost hit: crunch burst + low thud
+             tone('sawtooth', 130, 50, 0.18, 0.16); },
+  splash() { tone('sine', 520, 300, 0.10, 0.16);                           // drown: bubbly descending plops
+             tone('sine', 370, 190, 0.12, 0.15, 0.07);
+             tone('sine', 250, 100, 0.16, 0.14, 0.15);
+             noise(0.25, 0.10, 900, 300); },
+  goal()   { [523,659,784].forEach((f,i)=>                                 // all coins cleared: happy arpeggio
+             tone('square', f, f, 0.10, 0.14, i*0.07)); },
+  levelUp(){ [392,523,659,784].forEach((f,i)=>                             // fly reached / level clear: fanfare
+             tone('square', f, f, i===3?0.28:0.10, 0.15, i*0.09)); },
+  death()  { tone('sawtooth', 440, 60, 0.6, 0.18);                         // game over: long descending sweep
+             tone('square', 220, 55, 0.6, 0.09); },
+};
+
+// Mute toggle — 🔊/🔇, persists via localStorage 'sfxMuted_hopman'
+const sfxBtn = document.getElementById('sfxBtn');
+function renderSfxBtn(){ sfxBtn.textContent = sfxMuted ? '🔇' : '🔊'; }
+sfxBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  sfxMuted = !sfxMuted;
+  try{ localStorage.setItem('sfxMuted_hopman', sfxMuted?'1':'0'); }catch(err){}
+  renderSfxBtn();
+  if(!sfxMuted){ unlockAudio(); tone('triangle', 660, 660, 0.07, 0.14); }  // audible confirmation
+});
+renderSfxBtn();
+
+// First-gesture audio unlock (iOS requires a user gesture before audio can play)
+document.addEventListener('pointerdown', function auOnce(){ unlockAudio(); document.removeEventListener('pointerdown', auOnce); });
 
 // ── Level plan (Osimo 2026-06-16) ───────────────────────────────────────────
 // L1-4: logs only, tapering (easy→hard). L5-9: cars (varied colours, +20%, more each level).
@@ -417,24 +517,26 @@ function collectAt(nc, nr){
   // Reach the FLY → advance the level. If coins are STILL uncollected, forfeit 100 (Osimo 2026-06-16).
   if(fly && nc===fly.c && nr===fly.r){
     if(dotsLeft>0) score = Math.max(0, score-100);
+    sfx.levelUp();
     nextLevel();
     return;
   }
 
   const v = grid[nr][nc];
   if(v===1){      grid[nr][nc]=0; score+=10; dotsLeft--; }
-  else if(v===2){ grid[nr][nc]=0; score+=50; dotsLeft--; freeze=freezeDur; }   // tick toggles the indicator
+  else if(v===2){ grid[nr][nc]=0; score+=50; dotsLeft--; freeze=freezeDur; sfx.pod(); }   // tick toggles the indicator
 
   const ci = cherries.findIndex(ch=>ch.c===nc && ch.r===nr);
-  if(ci>=0){ cherries.splice(ci,1); score+=100; scare=360; }   // scares ghosts; never harms the frog
+  if(ci>=0){ cherries.splice(ci,1); score+=100; scare=360; sfx.cherry(); }   // scares ghosts; never harms the frog
 
   for(const g of ghosts){
-    if(!g.dead && Math.round(g.c)===nc && g.r===nr && scare>0){ g.dead=120; score+=200; }
+    if(!g.dead && Math.round(g.c)===nc && g.r===nr && scare>0){ g.dead=120; score+=200; sfx.ghost(); }
   }
 
   // All coins collected → +500 ONCE. If ALL logs ridden were leaf-bearing → TRIPLE the level score.
   if(dotsLeft<=0 && !allCleared){
     allCleared = true;
+    sfx.goal();
     if(rodeAnyLog && leafOnly){
       // triple the points earned this level (score - levelStartScore), plus the 500 coin bonus
       const levelEarned = score - levelStartScore;
@@ -457,6 +559,8 @@ function step(dc, dr){
   player.c = nc; player.r = nr;
   hopAnim = 1;
   faceDir = dc!==0 ? dc : faceDir;
+  const sLn = laneAt(nr);                                  // landing on a log = softer thock
+  if(sLn && sLn.type==='river') sfx.logHop(); else sfx.hop();
   collectAt(nc, nr);
   return true;
 }
@@ -465,6 +569,7 @@ function step(dc, dr){
 function gameOver(emoji, title){
   running = false;
   if(attract) return;
+  sfx.death();
   ovEmoji.textContent = emoji;
   ovTitle.textContent = title;
   ovsub.innerHTML = 'You scored <b style="color:var(--ink)">'+score+'</b>.';
@@ -480,7 +585,8 @@ function gameOver(emoji, title){
 
 function die(drowned){
   if(deathCooldown>0) return;   // invincibility window
-  if(drowned) splashes.push({x: player.c*CELL+CELL/2, y: player.r*CELL+CELL/2, t:18}); // plop!
+  if(drowned){ splashes.push({x: player.c*CELL+CELL/2, y: player.r*CELL+CELL/2, t:18}); sfx.splash(); } // plop!
+  else sfx.splat();
   lives--;
   updHud();
   if(lives<=0){ gameOver('💀','GAME OVER'); return; }
@@ -621,7 +727,7 @@ function tick(){
       }
     }
     if(Math.round(g.c)===Math.round(player.c) && g.r===player.r){
-      if(scare>0){ g.dead=120; score+=200; } else die(false);
+      if(scare>0){ g.dead=120; score+=200; sfx.ghost(); } else die(false);
     }
   }
 
@@ -1153,6 +1259,29 @@ function draw(){
   ctx.lineWidth=2; ctx.globalAlpha=gAlpha;
   ctx.strokeRect(1,1,W-2,VH-2);
   ctx.restore();
+
+  drawMsg();   // transient banner (bonus life / leaf-log triple score)
+}
+
+// Transient banner — showMsg() was called for bonus-life + leaf-log rewards but
+// never defined (pre-existing ReferenceError, found during the 2026-07-03 sfx pass)
+let _msg = null;
+function showMsg(text){ _msg = { text: text, t: 100 }; }
+function drawMsg(){
+  if(!_msg) return;
+  _msg.t--;
+  if(_msg.t <= 0){ _msg = null; return; }
+  const a = Math.min(1, _msg.t / 25);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = 'bold 18px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  const w = ctx.measureText(_msg.text).width + 28;
+  ctx.fillStyle = 'rgba(10,10,10,0.85)';
+  ctx.fillRect((W - w)/2, 52, w, 32);
+  ctx.fillStyle = '#ffe94d';
+  ctx.fillText(_msg.text, W/2, 74);
+  ctx.restore();
 }
 
 // ── Main loop (~30 fps cap) ──────────────────────────────────────────────────
@@ -1184,6 +1313,7 @@ function start(at){
 
 // Play button — reset overlay state for PLAY AGAIN
 playBtn.addEventListener('click',()=>{
+  unlockAudio();
   tryFullscreen();
   ovEmoji.textContent = '🐸🚗';
   ovTitle.textContent = 'HOP-MAN';
@@ -1213,7 +1343,7 @@ function control(dc, dr){
 
 // ── Swipe (18px threshold, no on-screen d-pad) ──────────────────────────────
 let sx=0,sy=0,sw=false;
-wrap.addEventListener('touchstart',e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; sw=true; },{passive:true});
+wrap.addEventListener('touchstart',e=>{ unlockAudio(); const t=e.touches[0]; sx=t.clientX; sy=t.clientY; sw=true; },{passive:true});
 wrap.addEventListener('touchmove', e=>{ if(running) e.preventDefault(); },{passive:false});
 wrap.addEventListener('touchend',  e=>{
   if(!sw) return; sw=false;
@@ -1227,8 +1357,8 @@ wrap.addEventListener('touchend',  e=>{
 document.addEventListener('keydown',e=>{
   const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],
            a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]}[e.key];
-  if(m){ e.preventDefault(); control(m[0], m[1]); }
-  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(!running) start(false); }
+  if(m){ e.preventDefault(); unlockAudio(); control(m[0], m[1]); }
+  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); unlockAudio(); if(!running) start(false); }
 });
 
 // ── Live resize: clamp entities, do NOT rebuild the whole level ──────────────

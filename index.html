@@ -13,12 +13,18 @@
   <meta property="og:description" content="Free plays. Two cabinets live: Snake Blaster and Doom Mari-OH 3D. New game every episode.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jnjarcade.win/">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
   <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet">
   <title>JnJ Arcade — Games from the Jimmy &amp; Joe AI Podcast</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -40,21 +46,61 @@
     </p>
     <div class="fs-zone">
       <button id="fsBtn" class="fs-pill" hidden>&#x26F6;&nbsp; GO FULLSCREEN</button>
-      <button id="a2hsBtn" class="fs-pill" hidden aria-expanded="false" aria-controls="a2hsSheet">&#128241;&nbsp; FULLSCREEN ON iPHONE</button>
+      <button id="installBtn" class="fs-pill fs-pill--install" hidden>&#128242;&nbsp; INSTALL APP</button>
+      <button id="a2hsBtn" class="fs-pill fs-pill--install" hidden aria-expanded="false" aria-controls="a2hsSheet">&#128242;&nbsp; INSTALL APP</button>
     </div>
     <div id="a2hsSheet" class="a2hs-sheet" hidden>
-      <p>Safari keeps its bars on. The cabinet deserves better.</p>
+      <p>Add JnJ Arcade to your home screen for full-screen, no-bar play.</p>
+      <button id="a2hsShareBtn" class="a2hs-share-btn">
+        <svg width="15" height="15" viewBox="0 0 18 18" fill="none" style="vertical-align:middle;margin-right:6px" aria-hidden="true">
+          <rect x="4" y="7" width="10" height="9" rx="1.5" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M9 1v8M6 4l3-3 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        OPEN SHARE SHEET
+      </button>
       <ol>
-        <li>Tap <strong>Share</strong> <span class="share-glyph" aria-hidden="true">&#x2B06;&#xFE0E;</span></li>
         <li>Tap <strong>Add to Home Screen</strong></li>
-        <li>Open <strong>JnJ Arcade</strong> from your home screen</li>
+        <li>Tap <strong>Add</strong></li>
       </ol>
+      <p class="a2hs-note">Can't see the button? Tap the <strong>Share</strong>
+        <svg width="12" height="12" viewBox="0 0 18 18" fill="none" style="vertical-align:middle;margin:0 1px" aria-hidden="true">
+          <rect x="4" y="7" width="10" height="9" rx="1.5" stroke="#4aa8ff" stroke-width="1.5"/>
+          <path d="M9 1v8M6 4l3-3 3 3" stroke="#4aa8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        icon at the <strong>bottom centre</strong> of Safari — not the ≡ menu</p>
       <p class="a2hs-payoff">Full screen. No bars. Like nature intended.</p>
     </div>
   </header>
 
   <!-- ── Cabinets on the arcade carpet (built by app.js) ── -->
   <div class="floor">
+
+    <!-- ── PINNED: Submit Your Own cassette (→ /submit hub: Amazon Finds / Bright Side / Seriously) ── -->
+    <section class="cab cab-featured" style="--ink:#f5c518;--dim:#5c4800;--pit:#130e00;--glowsoft:rgba(245,197,24,0.22)">
+      <div class="cab-marquee">SUBMIT YOUR OWN</div>
+      <div class="cab-attract">
+        <div class="screen-glass screen-glass--static">
+          <img class="bs-family-img" src="/assets/icons/jnj-studio-pixel.jpg" alt="JnJ in the studio">
+          <span class="attract-tag">🛒 FINDS · 🌞 GOOD NEWS · 🤯 FACTS</span>
+        </div>
+      </div>
+      <div class="cab-info">
+        <p class="cab-genre">GET ON THE SHOW</p>
+        <h2 class="cab-title">SUBMIT YOUR OWN</h2>
+        <blockquote class="cab-quote">
+          "Your find. Your story. Your fact. Our verdict."<cite>— JIMMY &amp; JOE</cite>
+        </blockquote>
+        <a class="cab-play" href="/submit" style="background:var(--ink);color:#000">
+          PICK A CASSETTE
+        </a>
+        <div class="cab-meta">
+          <span>FEATURED EVERY EPISODE</span>
+          <span class="plays">YOUR NAME ON THE SHOW</span>
+        </div>
+      </div>
+    </section>
+    <!-- ── end pinned cassette ──────────────────────────────── -->
+
     <main id="cabinets" aria-label="Playable games"></main>
   </div>
 
@@ -79,7 +125,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=34"></script>
   <script>
   /* ── Pac-Man eats the bulb-row dots after 1:11 idle ── */
   (function(){
@@ -199,6 +245,11 @@
 
     scheduleNext();
   })();
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }
   </script>
 </body>
 </html>

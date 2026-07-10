@@ -113,6 +113,21 @@
    "note": "Design an LED expression for Jimmy or Joe. Tap dots on/off from their resting face. Best ones air on the show; legendary ones become part of their face forever.",
    "ready": true,
    "ready_date": "2026-07-03"
+  },
+  {
+   "id": "angry-worms",
+   "name": "ANGRY WORMS",
+   "emoji": "\ud83d\udc1b",
+   "genre": "ANGRY BIRDS \u00d7 WORMS",
+   "url": "games/angry-worms.html",
+   "status": "ready",
+   "special": "Game Lab #13",
+   "note": "v4 FINAL 2026-07-03: our-turn-only (Angry Birds flow), easy open-ground L1-2, distance+bunkers scale, TROOPER worm (deploys where it lands, 3 aimed shots), flash-detonating deaths (no friendly cluster), ammo budget 2/worm+1, auto next level, straight-to-scoreboard, full sfx. Drag to aim, tap mid-flight for ability.",
+   "ai_improved": true,
+   "ai_improved_date": "2026-06-24",
+   "ai_file": "games/angry-worms.html",
+   "ready": true,
+   "ready_date": "2026-07-03"
   }
  ]
 }

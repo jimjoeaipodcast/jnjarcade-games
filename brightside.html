@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Bright Side — Send Us Your Good News</title>
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #16120c;
+    --surface:  #1e1810;
+    --ink:      #ffcf3d;
+    --ink2:     #ffd23d;
+    --text:     #f0e6cc;
+    --muted:    rgba(240,230,204,.55);
+    --border:   rgba(255,207,61,.18);
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --radius:   10px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 500;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 16px 60px;
+  }
+
+  /* ── Header ─────────────────────────── */
+  .bs-header {
+    text-align: center;
+    padding: 40px 0 28px;
+    max-width: 540px;
+    width: 100%;
+  }
+  .bs-kicker {
+    font-size: 11px;
+    letter-spacing: .45em;
+    color: var(--ink);
+    opacity: .8;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .bs-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(32px, 8vw, 52px);
+    color: var(--ink);
+    line-height: 1;
+    text-shadow: 0 0 40px rgba(255,207,61,.25);
+    margin-bottom: 14px;
+  }
+  .bs-sub {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--muted);
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  /* ── Card ────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 540px;
+    margin-top: 8px;
+  }
+
+  /* ── States (JS toggles .hidden) ─────── */
+  .hidden { display: none !important; }
+
+  /* ── Sign-in panel ───────────────────── */
+  #stateSignin { text-align: center; }
+  .signin-icon { font-size: 48px; margin-bottom: 18px; }
+  .signin-msg {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  /* Google's GIS renders its own button — we just style the wrapper */
+  #googleBtnWrap { display: flex; justify-content: center; }
+
+  /* ── Not-subscribed panel ─────────────── */
+  #stateNotSub { text-align: center; }
+  .notsub-icon { font-size: 48px; margin-bottom: 14px; }
+  .notsub-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: 22px;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .notsub-msg { font-size: 14px; color: var(--muted); line-height: 1.55; margin-bottom: 22px; }
+  .btn-sub {
+    display: inline-block;
+    background: var(--red);
+    color: #fff;
+    font-family: 'Bungee', sans-serif;
+    font-size: 15px;
+    padding: 13px 28px;
+    border-radius: 6px;
+    text-decoration: none;
+    letter-spacing: .04em;
+    transition: opacity .15s;
+  }
+  .btn-sub:hover { opacity: .88; }
+  .notsub-hint { font-size: 12px; color: var(--muted); margin-top: 16px; opacity: .7; }
+  .btn-recheck {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    transition: border-color .15s;
+  }
+  .btn-recheck:hover { border-color: var(--ink); }
+
+  /* ── Form ────────────────────────────── */
+  #stateForm {}
+  .form-greeting {
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .form-greeting strong { color: var(--text); }
+
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 18px;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input[type=text],
+  input[type=email],
+  textarea {
+    width: 100%;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 11px 13px;
+    outline: none;
+    transition: border-color .15s;
+    resize: vertical;
+  }
+  input:focus, textarea:focus { border-color: rgba(255,207,61,.5); }
+
+  textarea { min-height: 110px; }
+
+  /* ── Drop zone ───────────────────────── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    position: relative;
+  }
+  .drop-zone.drag-over {
+    border-color: var(--ink);
+    background: rgba(255,207,61,.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .drop-icon { font-size: 32px; margin-bottom: 8px; pointer-events: none; }
+  .drop-label {
+    font-size: 14px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .drop-label span { color: var(--ink); font-weight: 700; }
+  .drop-hint { font-size: 11px; color: var(--muted); opacity: .6; margin-top: 6px; pointer-events: none; }
+  .file-chosen {
+    font-size: 13px;
+    color: var(--green);
+    margin-top: 8px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+
+  /* ── Submit ──────────────────────────── */
+  .btn-submit {
+    width: 100%;
+    margin-top: 24px;
+    background: var(--ink);
+    color: var(--bg);
+    font-family: 'Bungee', sans-serif;
+    font-size: 17px;
+    letter-spacing: .05em;
+    border: none;
+    border-radius: 7px;
+    padding: 15px;
+    cursor: pointer;
+    transition: opacity .15s;
+    position: relative;
+  }
+  .btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-submit:not(:disabled):hover { opacity: .9; }
+
+  /* ── Progress bar ────────────────────── */
+  .progress-wrap {
+    width: 100%;
+    height: 5px;
+    background: rgba(255,207,61,.12);
+    border-radius: 3px;
+    margin-top: 14px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--ink);
+    border-radius: 3px;
+    transition: width .25s;
+  }
+
+  /* ── Success panel ───────────────────── */
+  #stateSuccess { text-align: center; padding: 10px 0; }
+  .success-icon { font-size: 56px; margin-bottom: 16px; }
+  .success-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: 26px;
+    color: var(--green);
+    margin-bottom: 10px;
+  }
+  .success-msg { font-size: 15px; color: var(--muted); line-height: 1.55; }
+
+  /* ── Error banner (replaces alert) ──── */
+  .error-banner {
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.35);
+    border-radius: 6px;
+    color: #f87171;
+    font-size: 14px;
+    padding: 12px 14px;
+    margin-top: 14px;
+    display: none;
+  }
+  .error-banner.visible { display: block; }
+
+  /* ── Two-tap confirm overlay ─────────── */
+  .tap-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(22,18,12,.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 24px;
+  }
+  .tap-overlay.hidden { display: none; }
+  .tap-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+  }
+  .tap-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: 20px;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .tap-msg { font-size: 14px; color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
+  .tap-row { display: flex; gap: 12px; justify-content: center; }
+  .tap-btn {
+    font-family: 'Bungee', sans-serif;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .tap-btn.confirm { background: var(--ink); color: var(--bg); }
+  .tap-btn.cancel  { background: rgba(255,255,255,.06); color: var(--text); }
+  .tap-btn:hover { opacity: .88; }
+
+  /* ── Spinner ─────────────────────────── */
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(22,18,12,.3);
+    border-top-color: var(--bg);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Back link ───────────────────────── */
+  .back-link {
+    margin-top: 28px;
+    font-size: 12px;
+    letter-spacing: .1em;
+    color: var(--ink);
+    text-decoration: none;
+    opacity: .75;
+  }
+  .back-link:hover { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header class="bs-header">
+  <div class="bs-kicker">JnJ Ai Studio</div>
+  <h1 class="bs-title">THE BRIGHT SIDE</h1>
+  <p class="bs-sub">Got good news? We want to hear it. Send us your story and you might feature on the show.</p>
+</header>
+
+<main class="card">
+
+  <!-- STATE: sign in (Google OAuth — active when GOOGLE_CLIENT_ID configured) -->
+  <div id="stateSignin" class="hidden">
+    <div class="signin-icon">☀️</div>
+    <p class="signin-msg">Sign in with your Google account so we can verify you're a JnJ subscriber — then send us your good news.</p>
+    <div id="googleBtnWrap"></div>
+    <div class="error-banner" id="signinError"></div>
+  </div>
+
+  <!-- STATE: subscribe-first gate (fallback when OAuth not configured) -->
+  <div id="stateGate" class="hidden">
+    <div class="signin-icon">☀️</div>
+    <p class="signin-msg">The Bright Side is for JnJ subscribers. Two taps and you're in:</p>
+    <a href="https://www.youtube.com/@JnJAiStudio?sub_confirmation=1" target="_blank" rel="noopener" class="btn-sub" id="gateSubBtn">1 · Subscribe on YouTube</a>
+    <p class="notsub-hint" style="margin-top:18px">Already subscribed? Straight through:</p>
+    <button class="btn-recheck" id="gateContinue" style="margin-top:8px">2 · I'm subscribed — let me in</button>
+  </div>
+
+  <!-- STATE: not subscribed -->
+  <div id="stateNotSub" class="hidden">
+    <div class="notsub-icon">📺</div>
+    <div class="notsub-title">Subscribe First!</div>
+    <p class="notsub-msg">The Bright Side is for JnJ subscribers only. Hit subscribe, come back, and send us your story — we read every single one.</p>
+    <a id="subLink" href="https://www.youtube.com/@JnJAiStudio?sub_confirmation=1" target="_blank" rel="noopener" class="btn-sub">Subscribe on YouTube</a>
+    <p class="notsub-hint">Already subscribed? It can take a moment to sync.</p><br>
+    <button class="btn-recheck" id="btnRecheck">Check Again</button>
+  </div>
+
+  <!-- STATE: form -->
+  <div id="stateForm" class="hidden">
+    <p class="form-greeting">You're in! <strong>Tell us your good news.</strong> One of us reads every submission.</p>
+
+    <label for="fldName">Your name *</label>
+    <input type="text" id="fldName" maxlength="100" placeholder="First name is fine">
+
+    <label for="fldLocation">Where are you from? (optional)</label>
+    <input type="text" id="fldLocation" maxlength="100" placeholder="City, country — or just the country">
+
+    <label for="fldHandle">Your YouTube handle *</label>
+    <input type="text" id="fldHandle" maxlength="60" placeholder="@yourhandle — so we know you're one of us">
+
+    <label for="fldEmail">Email (optional)</label>
+    <input type="email" id="fldEmail" maxlength="200" placeholder="Only if you want a reply">
+
+    <!-- honeypot — humans never see or fill this -->
+    <input type="text" id="fldWebsite" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;height:0;opacity:0" aria-hidden="true">
+
+    <label for="fldMsg">Your story *</label>
+    <textarea id="fldMsg" maxlength="2000" placeholder="What happened? Give us the good stuff..."></textarea>
+
+    <label>Photo or video (optional)</label>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fldFile" accept="image/*,video/*,audio/*">
+      <div class="drop-icon">📎</div>
+      <div class="drop-label">Drag &amp; drop or <span>tap to choose</span></div>
+      <div class="drop-hint">Photo, video, or audio · Max 10 MB</div>
+    </div>
+    <div class="file-chosen hidden" id="fileChosen"></div>
+
+    <div class="error-banner" id="formError"></div>
+
+    <button class="btn-submit" id="btnSubmit">SEND MY GOOD NEWS</button>
+    <div class="progress-wrap hidden" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+  </div>
+
+  <!-- STATE: success -->
+  <div id="stateSuccess" class="hidden">
+    <div class="success-icon">🎉</div>
+    <div class="success-title">Got it!</div>
+    <p class="success-msg">Your good news is on its way to Jimmy and Joe. Thanks for sharing — the world needs more of this stuff.</p>
+  </div>
+
+</main>
+
+<a href="/" class="back-link">‹ back to the arcade</a>
+
+<!-- Two-tap confirm overlay (replaces browser confirm/alert on mobile) -->
+<div class="tap-overlay hidden" id="tapOverlay">
+  <div class="tap-card">
+    <div class="tap-title" id="tapTitle">Are you sure?</div>
+    <p class="tap-msg" id="tapMsg"></p>
+    <div class="tap-row">
+      <button class="tap-btn cancel" id="tapCancel">Cancel</button>
+      <button class="tap-btn confirm" id="tapConfirmBtn">Yes, send it</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(async function () {
+
+  /* ── Config ─────────────────────────────────────────────── */
+  let CLIENT_ID  = '';
+  let CHANNEL_ID = 'UC61SJtnVHwbSCJ7YbNo87fw';
+  let accessToken = null;
+
+  try {
+    const cfg = await fetch('/api/brightside-config').then(r => r.json());
+    CLIENT_ID  = cfg.clientId  || CLIENT_ID;
+    CHANNEL_ID = cfg.channelId || CHANNEL_ID;
+  } catch (_) {}
+
+  /* ── DOM refs ────────────────────────────────────────────── */
+  const stateSignin  = document.getElementById('stateSignin');
+  const stateNotSub  = document.getElementById('stateNotSub');
+  const stateForm    = document.getElementById('stateForm');
+  const stateSuccess = document.getElementById('stateSuccess');
+  const googleBtnWrap = document.getElementById('googleBtnWrap');
+  const signinError  = document.getElementById('signinError');
+  const formError    = document.getElementById('formError');
+  const btnRecheck   = document.getElementById('btnRecheck');
+  const btnSubmit    = document.getElementById('btnSubmit');
+  const fldName      = document.getElementById('fldName');
+  const fldLocation  = document.getElementById('fldLocation');
+  const fldHandle    = document.getElementById('fldHandle');
+  const fldEmail     = document.getElementById('fldEmail');
+  const fldWebsite   = document.getElementById('fldWebsite');
+  const fldMsg       = document.getElementById('fldMsg');
+  const stateGate    = document.getElementById('stateGate');
+  const fldFile      = document.getElementById('fldFile');
+  const dropZone     = document.getElementById('dropZone');
+  const fileChosen   = document.getElementById('fileChosen');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar  = document.getElementById('progressBar');
+
+  /* ── State switcher ─────────────────────────────────────── */
+  function show(id) {
+    [stateSignin, stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
+      el.classList.toggle('hidden', el.id !== id);
+    });
+  }
+
+  /* ── Two-tap confirm (no browser dialogs) ────────────────── */
+  function tapConfirm(title, msg) {
+    return new Promise(resolve => {
+      document.getElementById('tapTitle').textContent  = title;
+      document.getElementById('tapMsg').textContent    = msg;
+      const overlay = document.getElementById('tapOverlay');
+      overlay.classList.remove('hidden');
+      const cleanup = (val) => {
+        overlay.classList.add('hidden');
+        resolve(val);
+      };
+      document.getElementById('tapConfirmBtn').onclick = () => cleanup(true);
+      document.getElementById('tapCancel').onclick     = () => cleanup(false);
+    });
+  }
+
+  /* ── Error display ──────────────────────────────────────── */
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+  function clearError(el) { el.classList.remove('visible'); }
+
+  /* ── Progress animation (fake for UX) ───────────────────── */
+  let progressTimer = null;
+  function startProgress() {
+    progressWrap.classList.remove('hidden');
+    progressBar.style.width = '0%';
+    let pct = 0;
+    progressTimer = setInterval(() => {
+      pct += Math.random() * 8;
+      if (pct > 85) pct = 85;
+      progressBar.style.width = pct + '%';
+    }, 300);
+  }
+  function finishProgress() {
+    clearInterval(progressTimer);
+    progressBar.style.width = '100%';
+    setTimeout(() => progressWrap.classList.add('hidden'), 600);
+  }
+
+  /* ── Drop zone ──────────────────────────────────────────── */
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+  });
+  fldFile.addEventListener('change', () => {
+    if (fldFile.files[0]) setFile(fldFile.files[0]);
+  });
+  function setFile(file) {
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    if (file.size > 10 * 1024 * 1024) {
+      showError(formError, `File is ${mb} MB — max is 10 MB. Try a shorter clip or a photo instead.`);
+      return;
+    }
+    fileChosen.textContent = `✓ ${file.name} (${mb} MB)`;
+    fileChosen.classList.remove('hidden');
+  }
+
+  /* ── Subscription check ─────────────────────────────────── */
+  async function checkSubscription(token) {
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&forChannelId=${CHANNEL_ID}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return (data.pageInfo && data.pageInfo.totalResults > 0);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /* ── GIS token client ───────────────────────────────────── */
+  function initGIS() {
+    if (!CLIENT_ID) {
+      showError(signinError, 'Sign-in is not configured yet. Try again soon.');
+      return;
+    }
+
+    // Wait for GIS script to load
+    const ready = () => typeof google !== 'undefined' && google.accounts;
+    if (!ready()) {
+      setTimeout(initGIS, 200);
+      return;
+    }
+
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/youtube.readonly',
+      callback: async (resp) => {
+        if (resp.error || !resp.access_token) {
+          showError(signinError, 'Sign-in failed. Please try again.');
+          return;
+        }
+        accessToken = resp.access_token;
+        clearError(signinError);
+        const subscribed = await checkSubscription(accessToken);
+        if (subscribed) {
+          show('stateForm');
+        } else {
+          show('stateNotSub');
+        }
+      },
+    });
+
+    // Render a custom button (GIS also offers google.accounts.id for One Tap,
+    // but token client needs an explicit user gesture for the popup)
+    const btn = document.createElement('button');
+    btn.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:10px',
+      'background:#fff', 'border:none', 'border-radius:6px',
+      'padding:11px 20px', 'font-size:15px', 'font-weight:600',
+      'cursor:pointer', 'color:#1f1f1f', 'transition:opacity .15s',
+    ].join(';');
+    btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign in with Google`;
+    btn.onclick = () => tokenClient.requestAccessToken({ prompt: '' });
+    btn.onmouseenter = () => btn.style.opacity = '.88';
+    btn.onmouseleave = () => btn.style.opacity = '1';
+    googleBtnWrap.appendChild(btn);
+  }
+
+  /* ── Re-check after subscribe ───────────────────────────── */
+  btnRecheck.addEventListener('click', async () => {
+    if (!accessToken) { show('stateSignin'); return; }
+    btnRecheck.textContent = 'Checking…';
+    btnRecheck.disabled = true;
+    const subscribed = await checkSubscription(accessToken);
+    if (subscribed) {
+      show('stateForm');
+    } else {
+      btnRecheck.textContent = 'Check Again';
+      btnRecheck.disabled = false;
+    }
+  });
+
+  /* ── Form submit ─────────────────────────────────────────── */
+  btnSubmit.addEventListener('click', async () => {
+    clearError(formError);
+    const name   = fldName.value.trim();
+    const handle = fldHandle.value.trim();
+    const msg    = fldMsg.value.trim();
+    if (!name)   { showError(formError, 'Please enter your name.'); fldName.focus(); return; }
+    if (!handle) { showError(formError, 'Please enter your YouTube handle — subscribers only!'); fldHandle.focus(); return; }
+    if (msg.length < 30) { showError(formError, 'Give us a little more of the story — at least a sentence or two.'); fldMsg.focus(); return; }
+
+    const ok = await tapConfirm(
+      'Send your good news?',
+      `"${name}" — we'll read every word. Ready to send?`
+    );
+    if (!ok) return;
+
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<span class="spinner"></span>Sending…';
+    startProgress();
+
+    const fd = new FormData();
+    fd.append('name',     name);
+    fd.append('location', fldLocation.value.trim());
+    fd.append('handle',   handle);
+    fd.append('email',    fldEmail.value.trim());
+    fd.append('website',  fldWebsite.value); // honeypot — must stay empty
+    fd.append('message',  msg);
+    const file = fldFile.files[0];
+    if (file) fd.append('file', file);
+
+    try {
+      const res  = await fetch('/api/brightside-submit', { method: 'POST', body: fd });
+      const data = await res.json();
+      finishProgress();
+      if (data.ok) {
+        show('stateSuccess');
+      } else {
+        throw new Error(data.error || 'Upload failed');
+      }
+    } catch (err) {
+      finishProgress();
+      showError(formError, err.message || 'Something went wrong. Please try again.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'SEND MY GOOD NEWS';
+    }
+  });
+
+  /* ── Subscribe-first gate (no-OAuth fallback) ───────────── */
+  document.getElementById('gateContinue').addEventListener('click', () => show('stateForm'));
+
+  /* ── Boot ────────────────────────────────────────────────── */
+  // ?preview=1 bypasses the gate entirely (testing only)
+  if (new URLSearchParams(location.search).get('preview') === '1') {
+    show('stateForm');
+  } else if (CLIENT_ID) {
+    // Real subscription verification via Google + YouTube API
+    show('stateSignin');
+    window.addEventListener('load', initGIS);
+    if (document.readyState === 'complete') initGIS();
+  } else {
+    // OAuth not configured yet — subscribe-first flow + handle + human review
+    show('stateGate');
+  }
+
+})();
+</script>
+</body>
+</html>

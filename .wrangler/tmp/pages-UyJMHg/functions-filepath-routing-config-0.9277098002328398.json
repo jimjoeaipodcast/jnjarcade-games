@@ -1,0 +1,85 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/faces/moderate",
+      "mountPath": "/api/faces",
+      "method": "POST",
+      "module": [
+        "api/faces/moderate.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/brightside-config",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/brightside-config.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/brightside-submissions",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/brightside-submissions.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/brightside-submit",
+      "mountPath": "/api",
+      "method": "OPTIONS",
+      "module": [
+        "api/brightside-submit.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/brightside-submit",
+      "mountPath": "/api",
+      "method": "POST",
+      "module": [
+        "api/brightside-submit.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/plays",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/plays.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/plays",
+      "mountPath": "/api",
+      "method": "POST",
+      "module": [
+        "api/plays.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/scores",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/scores.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/scores",
+      "mountPath": "/api",
+      "method": "POST",
+      "module": [
+        "api/scores.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/faces",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/faces.js:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}

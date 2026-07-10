@@ -46,6 +46,12 @@
     border-bottom:2px solid var(--dim);
   }
   .back-btn { color:var(--ink); text-decoration:none; font-weight:700; font-size:13px; letter-spacing:.05em; opacity:.85; }
+  .hdr-left { display:flex; align-items:center; gap:10px; }
+  .mute-btn {
+    background:transparent; border:none; color:var(--ink); font-size:16px;
+    cursor:pointer; opacity:.8; padding:2px 6px; line-height:1;
+    text-shadow:0 0 8px var(--glow);
+  }
   .game-name {
     font-family:'Bungee',cursive; letter-spacing:.14em;
     color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px;
@@ -98,7 +104,10 @@
 <body>
 <div class="game-shell">
   <header class="game-header">
-    <a class="back-btn" href="../index.html">‹ ARCADE</a>
+    <div class="hdr-left">
+      <a class="back-btn" href="../index.html">‹ ARCADE</a>
+      <button class="mute-btn" id="muteBtn" aria-label="Toggle sound">🔊</button>
+    </div>
     <div class="game-name">FLAP FIGHT</div>
     <div class="hdr-right"><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
   </header>
@@ -160,6 +169,78 @@ const playBtn = document.getElementById('playBtn');
 const scoreEl = document.getElementById('score');
 const comboEl = document.getElementById('combo');
 const lvlEl   = document.getElementById('lvl');
+const muteBtn = document.getElementById('muteBtn');
+
+// ─── sound (pure WebAudio procedural sfx — no files) ─────────────────────────
+let audioCtx = null;
+let muted = false;
+try { muted = localStorage.getItem('sfxMuted_flapfight') === '1'; } catch (e) {}
+
+function initAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { audioCtx.resume(); } catch (e) {}
+  }
+}
+
+function playTone(freq, dur, type = 'sine', vol = 0.15, sweepTo = null, delay = 0) {
+  if (muted || !audioCtx) return;
+  try {
+    const t0 = audioCtx.currentTime + delay;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (sweepTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+
+const sfx = {
+  // soft wing blip — fires at tap rate, kept quiet + short
+  flap:  () => playTone(340, 0.06, 'triangle', 0.10, 520),
+  // pass pipe (+10) — bright rising tick
+  score: () => playTone(1046, 0.07, 'square', 0.12, 1319),
+  // enemy stomp — pop thump + descending squeak (squeak pitch rises with combo)
+  stomp: (combo = 1) => {
+    playTone(160, 0.09, 'square', 0.20, 55);
+    playTone(1000 + Math.min(combo, 9) * 90, 0.16, 'sawtooth', 0.12, 320, 0.03);
+  },
+  // special parachute (+50 bonus / deflate) — higher double tick
+  bonus: () => { playTone(1319, 0.08, 'square', 0.14); playTone(1760, 0.10, 'square', 0.12, null, 0.07); },
+  // pipe/floor hit → inflate — thud + short descending sweep
+  hit:   () => { playTone(120, 0.22, 'sine', 0.22, 45); playTone(600, 0.18, 'sawtooth', 0.10, 150, 0.02); },
+  // balloon pop death — crack + deep thud + long descending sweep
+  death: () => {
+    playTone(300, 0.10, 'square', 0.22, 40);
+    playTone(70, 0.55, 'sine', 0.25, 22);
+    playTone(880, 0.60, 'sawtooth', 0.14, 60, 0.05);
+  },
+  // level up — small two-note rise
+  levelup: () => { playTone(659, 0.09, 'triangle', 0.12); playTone(988, 0.12, 'triangle', 0.12, null, 0.09); },
+  // new best score — little ascending fanfare
+  best:  () => [523, 659, 784, 1047].forEach((f, i) => playTone(f, 0.14, 'triangle', 0.14, null, 0.15 + i * 0.09)),
+};
+
+function updateMuteUI() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
+updateMuteUI();
+
+muteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  initAudio();
+  muted = !muted;
+  try { localStorage.setItem('sfxMuted_flapfight', muted ? '1' : '0'); } catch (e) {}
+  updateMuteUI();
+});
+
+// iOS/mobile unlock — create + resume on first real gesture (idempotent, re-resumes if suspended)
+document.addEventListener('touchstart', initAudio, { passive: true });
+document.addEventListener('pointerdown', initAudio);
+document.addEventListener('keydown', initAudio);
 
 // ─── game state ──────────────────────────────────────────────────────────────
 let cw, ch;
@@ -298,6 +379,7 @@ function initGame() {
 function flap() {
   if (!running || popping) return;
   bird.vy = FLAP_VY;
+  sfx.flap();
 }
 
 function startPlaying() {
@@ -386,8 +468,9 @@ function update() {
       p.counted = true;
       score += 10;
       scoreEl.textContent = score;
+      sfx.score();
       pipesUntilLevel--;
-      if (pipesUntilLevel <= 0) setLevel(level + 1);
+      if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2, text: '+10', alpha: 1, vy: -1.4, color: '#4dd9f5' });
     }
 
@@ -423,6 +506,7 @@ function update() {
       bird.vy = -7;
       if (e.special) {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
+        sfx.bonus();
         spawnParticles(e.x, cy, '#00ffcc', 14);
         spawnParticles(e.x, cy, '#7fff00', 7);
         const sc = '#ffcf3d';
@@ -447,6 +531,7 @@ function update() {
         const pts = 25 * comboCount;
         score += pts;
         scoreEl.textContent = score;
+        sfx.stomp(comboCount);
         spawnParticles(e.x, cy, '#ff6b4a', 12);
         spawnParticles(e.x, cy, '#ffcf3d', 6);
         const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
@@ -846,6 +931,7 @@ function inflate() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
   bird.vy = -5;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
+  sfx.hit();
   spawnParticles(bird.x, bird.y, '#ffffff', 8);
   spawnParticles(bird.x, bird.y, '#ffaa44', 6);
   const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!'];
@@ -858,6 +944,7 @@ function balloonPop() {
   popRingR = 0;
   popRingX = bird.x;
   popRingY = bird.y;
+  sfx.death();
   // big radial burst — mixed colours, faster particles so they spread wide
   const cols = ['#ff4400', '#ffcc00', '#ffffff', '#ff8800'];
   for (let i = 0; i < 40; i++) {
@@ -882,6 +969,7 @@ function die() {
   if (score > bestScore) {
     bestScore = score;
     localStorage.setItem('hs_flap-fight', bestScore);
+    if (score > 0) sfx.best();
   }
 
   if (score > 0) {

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JnJ — Submit Your Own</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #16120c;
+    color: #f0e6cc;
+    font-family: 'Barlow Condensed', sans-serif;
+    min-height: 100svh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px 60px;
+  }
+  .hd { text-align: center; padding: 40px 0 10px; max-width: 560px; width: 100%; }
+  .hd-kicker { font-size: 11px; letter-spacing: .45em; color: #ffcf3d; opacity: .8; text-transform: uppercase; margin-bottom: 10px; }
+  .hd-title { font-family: 'Bungee', sans-serif; font-size: clamp(30px, 8vw, 48px); color: #ffcf3d; line-height: 1; text-shadow: 0 0 40px rgba(255,207,61,.25); margin-bottom: 12px; }
+  .hd-sub { font-size: 15px; line-height: 1.55; color: rgba(240,230,204,.55); max-width: 430px; margin: 0 auto; }
+
+  .cass-row { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 560px; margin-top: 26px; }
+
+  .cass {
+    border-radius: 14px;
+    border: 1px solid var(--ink-dim);
+    background: linear-gradient(160deg, #1e1810 0%, #171209 100%);
+    overflow: hidden;
+    box-shadow: 0 0 30px var(--glow);
+    transition: box-shadow .2s;
+  }
+  .cass:hover { box-shadow: 0 0 50px var(--glow); }
+
+  .cass-head {
+    padding: 22px 22px 22px;
+    text-decoration: none;
+    display: block;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cass-tag { font-size: 10px; letter-spacing: .35em; text-transform: uppercase; color: var(--ink); opacity: .75; margin-bottom: 6px; }
+  .cass-title { font-family: 'Bungee', sans-serif; font-size: 26px; color: var(--ink); line-height: 1.05; }
+  .cass-desc { font-size: 14px; color: rgba(240,230,204,.6); margin-top: 8px; line-height: 1.5; }
+  .cass-quote { font-size: 12.5px; color: rgba(240,230,204,.45); font-style: italic; margin-top: 8px; }
+  .cass-cta {
+    display: inline-block; margin-top: 16px;
+    background: var(--ink); color: #16120c;
+    font-family: 'Bungee', sans-serif; font-size: 14px;
+    padding: 12px 24px; border-radius: 7px; text-decoration: none;
+    letter-spacing: .04em;
+  }
+
+  .back { margin-top: 32px; font-size: 12px; letter-spacing: .1em; color: #ffcf3d; text-decoration: none; opacity: .75; }
+  .back:hover { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-kicker">JnJ Ai Studio</div>
+  <h1 class="hd-title">SUBMIT YOUR OWN</h1>
+  <p class="hd-sub">Three ways onto the show. Pick a cassette — your find, your story, your fact could be in the next episode.</p>
+</header>
+
+<div class="cass-row">
+
+  <!-- 🛒 AMAZON FINDS -->
+  <section class="cass" style="--ink:#ff9900;--ink-dim:rgba(255,153,0,.25);--glow:rgba(255,153,0,.10)">
+    <a class="cass-head" href="/amazon">
+      <div class="cass-tag">Buy or ByeBye</div>
+      <div class="cass-title">🛒 AMAZON FINDS</div>
+      <div class="cass-desc">Found something weird, brilliant, or completely unnecessary on Amazon? Send the link — Jimmy &amp; Joe give it the live verdict.</div>
+      <div class="cass-quote">"If it's stupid AND it works, we want it." — JIMMY</div>
+      <span class="cass-cta">SUBMIT A FIND</span>
+    </a>
+  </section>
+
+  <!-- 🌞 BRIGHT SIDE -->
+  <section class="cass" style="--ink:#f5c518;--ink-dim:rgba(245,197,24,.25);--glow:rgba(245,197,24,.10)">
+    <a class="cass-head" href="/brightside">
+      <div class="cass-tag">Good News Segment</div>
+      <div class="cass-title">🌞 THE BRIGHT SIDE</div>
+      <div class="cass-desc">Something good happened? Send the story — photo or video welcome. We read every submission, the best ones go on air.</div>
+      <div class="cass-quote">"The world isn't all bad. I know. Shocking. Send us the proof." — JOE</div>
+      <span class="cass-cta">SUBMIT GOOD NEWS</span>
+    </a>
+  </section>
+
+  <!-- 🤯 SERIOUSLY -->
+  <section class="cass" style="--ink:#c084fc;--ink-dim:rgba(192,132,252,.25);--glow:rgba(192,132,252,.10)">
+    <a class="cass-head" href="/seriously">
+      <div class="cass-tag">Wild Facts Segment</div>
+      <div class="cass-title">🤯 SERIOUSLY?!</div>
+      <div class="cass-desc">Know a fact so wild it sounds fake (but isn't)? Drop it here — Joe verifies it, Jimmy refuses to believe it.</div>
+      <div class="cass-quote">"No WAY that's true. …It's true?!" — JIMMY</div>
+      <span class="cass-cta">SUBMIT A FACT</span>
+    </a>
+  </section>
+
+</div>
+
+<a href="/" class="back">‹ back to the arcade</a>
+
+</body>
+</html>

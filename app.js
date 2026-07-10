@@ -113,6 +113,13 @@ const WORLDS = {
     by: 'JOE',
     attract: pinVadersAttract,
   },
+  'chrome-flipper': {
+    ink: '#00e5ff', dim: '#004a52', pit: '#000a0c', glowsoft: 'rgba(0,229,255,0.22)',
+    genre: 'PINBALL × CYBERPUNK',
+    quote: '"Neon pinball. For people who thought regular pinball wasn\'t complicated enough."',
+    by: 'JOE',
+    attract: chromeFlipperAttract,
+  },
 };
 
 const DEFAULT_WORLD = {
@@ -144,11 +151,26 @@ function tryFullscreen() {
   if (p && p.catch) p.catch(() => {});
 }
 
+/* ── PWA install prompt (Chrome/Edge/Android) ─────────────── */
+let _deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // Show install button as soon as the prompt is capturable
+  const btn = document.getElementById('installBtn');
+  if (btn && !isStandalone) btn.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.hidden = true;
+  _deferredInstallPrompt = null;
+});
+
 function setupFullscreenUI() {
   if (isStandalone) return; // already chrome-free
 
   if (isIOS) {
-    // iOS Safari has no fullscreen API for pages. A2HS is the only path.
+    // iOS Safari has no fullscreen API and no beforeinstallprompt. A2HS sheet is the only path.
     const btn = document.getElementById('a2hsBtn');
     const sheet = document.getElementById('a2hsSheet');
     if (btn && sheet) {
@@ -159,24 +181,48 @@ function setupFullscreenUI() {
         btn.setAttribute('aria-expanded', String(open));
       });
     }
-  } else if (canFullscreen()) {
-    // go fullscreen on the very first gesture, no button required
-    const claim = () => {
-      if (!document.fullscreenElement) tryFullscreen();
-      document.removeEventListener('touchend', claim);
-      document.removeEventListener('click', claim);
-    };
-    document.addEventListener('touchend', claim);
-    document.addEventListener('click', claim);
-
-    // pill stays as a manual fallback (e.g. after pressing Esc)
-    const btn = document.getElementById('fsBtn');
-    if (btn) {
-      btn.hidden = false;
-      btn.addEventListener('click', () => {
-        tryFullscreen();
-        btn.blur();
+    // Share button inside sheet — fires navigator.share() to open iOS share sheet
+    const shareBtn = document.getElementById('a2hsShareBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        if (navigator.share) {
+          try { await navigator.share({ title: 'JnJ Arcade', url: 'https://jnjarcade.win' }); }
+          catch(e) { /* cancelled */ }
+        }
       });
+    }
+  } else {
+    // Chrome/Android: wire up the captured install prompt
+    const installBtn = document.getElementById('installBtn');
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!_deferredInstallPrompt) return;
+        _deferredInstallPrompt.prompt();
+        const { outcome } = await _deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') installBtn.hidden = true;
+        _deferredInstallPrompt = null;
+      });
+    }
+
+    if (canFullscreen()) {
+      // go fullscreen on the very first gesture, no button required
+      const claim = () => {
+        if (!document.fullscreenElement) tryFullscreen();
+        document.removeEventListener('touchend', claim);
+        document.removeEventListener('click', claim);
+      };
+      document.addEventListener('touchend', claim);
+      document.addEventListener('click', claim);
+
+      // pill stays as a manual fallback (e.g. after pressing Esc)
+      const btn = document.getElementById('fsBtn');
+      if (btn) {
+        btn.hidden = false;
+        btn.addEventListener('click', () => {
+          tryFullscreen();
+          btn.blur();
+        });
+      }
     }
   }
 }
@@ -2069,3 +2115,40 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* ── Chrome Flipper attract — neon ball + mini pinball table ── */
+function chromeFlipperAttract(ctx, w, h, t, world, s) {
+  if (!s.bx) { s.bx = w*0.5; s.by = h*0.35; s.vx = 1.4; s.vy = 0.8; }
+  ctx.fillStyle = '#000a0c'; ctx.fillRect(0, 0, w, h);
+  // table outline
+  ctx.save();
+  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 8;
+  const mx = w*0.12, mw = w*0.76, my = h*0.05, mh = h*0.88;
+  ctx.strokeRect(mx, my, mw, mh);
+  ctx.shadowBlur = 0;
+  // bumpers
+  [[w*0.35,h*0.28],[w*0.5,h*0.22],[w*0.65,h*0.28]].forEach(([bx,by]) => {
+    ctx.fillStyle = '#00e5ff'; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(bx, by, w*0.045, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+  // physics
+  s.bx += s.vx; s.by += s.vy; s.vy += 0.09;
+  s.vx = Math.max(-3, Math.min(3, s.vx));
+  s.vy = Math.max(-4, Math.min(4, s.vy));
+  if (s.bx < mx+6 || s.bx > mx+mw-6) { s.vx *= -0.9; s.bx = Math.max(mx+6, Math.min(mx+mw-6, s.bx)); }
+  if (s.by < my+6) { s.vy *= -0.9; s.by = my+6; }
+  // flipper catch
+  if (s.by > h*0.82 && s.bx > w*0.2 && s.bx < w*0.8) { s.vy = -3.5-Math.random()*1.5; s.vx += (Math.random()-0.5)*1.5; }
+  if (s.by > h*0.92) { s.by = h*0.35; s.bx = w*0.4+Math.random()*w*0.2; s.vy = 1; s.vx = (Math.random()-0.5)*3; }
+  // ball with glow
+  ctx.fillStyle = '#00e5ff'; ctx.shadowBlur = 10; ctx.shadowColor = '#00e5ff';
+  ctx.beginPath(); ctx.arc(s.bx, s.by, 5, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+  // flippers
+  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2.5; ctx.shadowBlur = 5;
+  ctx.beginPath(); ctx.moveTo(w*0.18, h*0.86); ctx.lineTo(w*0.44, h*0.83); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w*0.82, h*0.86); ctx.lineTo(w*0.56, h*0.83); ctx.stroke();
+  ctx.restore();
+}
