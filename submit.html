@@ -36,6 +36,10 @@
   }
   .cass:hover { box-shadow: 0 0 50px var(--glow); }
 
+  .cass-img {
+    width: 100%; height: 160px; object-fit: cover; display: block;
+    border-bottom: 1px solid var(--ink-dim);
+  }
   .cass-head {
     padding: 22px 22px 22px;
     text-decoration: none;
@@ -70,6 +74,7 @@
 
   <!-- 🛒 AMAZON FINDS -->
   <section class="cass" style="--ink:#ff9900;--ink-dim:rgba(255,153,0,.25);--glow:rgba(255,153,0,.10)">
+    <img class="cass-img" src="/assets/icons/amazon-cassette.png" alt="Crazy Amazon finds">
     <a class="cass-head" href="/amazon">
       <div class="cass-tag">Buy or ByeBye</div>
       <div class="cass-title">🛒 AMAZON FINDS</div>
@@ -81,6 +86,7 @@
 
   <!-- 🌞 BRIGHT SIDE -->
   <section class="cass" style="--ink:#f5c518;--ink-dim:rgba(245,197,24,.25);--glow:rgba(245,197,24,.10)">
+    <img class="cass-img" src="/assets/icons/bs-family-mirrored.jpg" alt="Happy cartoon family">
     <a class="cass-head" href="/brightside">
       <div class="cass-tag">Good News Segment</div>
       <div class="cass-title">🌞 THE BRIGHT SIDE</div>
@@ -92,6 +98,7 @@
 
   <!-- 🤯 SERIOUSLY -->
   <section class="cass" style="--ink:#c084fc;--ink-dim:rgba(192,132,252,.25);--glow:rgba(192,132,252,.10)">
+    <img class="cass-img" src="/assets/icons/seriously-cassette.png" alt="Mind-blowing facts">
     <a class="cass-head" href="/seriously">
       <div class="cass-tag">Wild Facts Segment</div>
       <div class="cass-title">🤯 SERIOUSLY?!</div>
