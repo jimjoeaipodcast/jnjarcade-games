@@ -356,12 +356,24 @@
 <header class="bs-header">
   <div class="bs-kicker">JnJ AI Studio</div>
   <h1 class="bs-title">BUY OR BYEBYE</h1>
-  <p class="bs-sub">Found something weird on Amazon? Send us the link — we'll give it our live verdict on the show.</p>
+  <p class="bs-sub">Found something weird on Amazon? Send us the link — we'll give it our live verdict on the show. <br><span style="opacity:.8">Or if you simply want Jimmy &amp; Joe to review <em>your</em> product — see below.</span></p>
 </header>
 
 <main class="card">
 
-  <!-- STATE: sign in (Google OAuth — active when GOOGLE_CLIENT_ID configured) -->
+  <!-- STATE: paywall (Ko-fi) — everyone pays; price scales with subscriber count -->
+  <div id="statePay" class="hidden" style="text-align:center">
+    <div class="signin-icon">🛒</div>
+    <p class="signin-msg">Get your Amazon find — or your own product — a live <strong>Buy or ByeBye</strong> verdict from Jimmy &amp; Joe on the show.</p>
+    <div style="font-family:'Bungee',sans-serif;font-size:40px;color:var(--ink);margin:6px 0 2px" id="payPrice">£15</div>
+    <p class="notsub-hint" style="opacity:.8;margin-bottom:22px">One-off, via Ko-fi. Secure card / Apple Pay.</p>
+    <a id="payBtn" href="https://ko-fi.com/jimmynjoe" target="_blank" rel="noopener" class="btn-sub" style="background:#13C3FF">Pay on Ko-fi →</a>
+    <p class="notsub-hint" style="margin-top:20px">Tip: put your <strong>@handle</strong> in the Ko-fi message so we can match your payment to your submission.</p>
+    <p class="notsub-hint" style="margin-top:16px">Paid already? Continue:</p>
+    <button class="btn-recheck" id="payContinue" style="margin-top:8px">I've paid — send my find</button>
+  </div>
+
+  <!-- STATE: sign in (Google OAuth — REMOVED from boot 2026-07-13, kept dormant) -->
   <div id="stateSignin" class="hidden">
     <div class="signin-icon">🛒</div>
     <p class="signin-msg">Sign in with your Google account so we can verify you're a JnJ subscriber — then send us your Amazon find.</p>
@@ -390,7 +402,7 @@
 
   <!-- STATE: form -->
   <div id="stateForm" class="hidden">
-    <p class="form-greeting">You're in! <strong>Send us your weird Amazon find.</strong> One of us reviews every submission.</p>
+    <p class="form-greeting">Thanks! <strong>Now send us the details.</strong> Your find — or your product — gets a live Buy or ByeBye verdict on the show.</p>
 
     <label for="fldName">Your name *</label>
     <input type="text" id="fldName" maxlength="100" placeholder="First name is fine">
@@ -454,7 +466,6 @@
   </div>
 </div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 (async function () {
 
@@ -463,13 +474,18 @@
   let CHANNEL_ID = 'UC61SJtnVHwbSCJ7YbNo87fw';
   let accessToken = null;
 
+  let REVIEW_PRICE = 15;
+  let KOFI_URL = 'https://ko-fi.com/jimmynjoe';
   try {
     const cfg = await fetch('/api/brightside-config').then(r => r.json());
     CLIENT_ID  = cfg.clientId  || CLIENT_ID;
     CHANNEL_ID = cfg.channelId || CHANNEL_ID;
+    if (cfg.reviewPriceGbp) REVIEW_PRICE = cfg.reviewPriceGbp;
+    if (cfg.kofiUrl)        KOFI_URL     = cfg.kofiUrl;
   } catch (_) {}
 
   /* ── DOM refs ────────────────────────────────────────────── */
+  const statePay     = document.getElementById('statePay');
   const stateSignin  = document.getElementById('stateSignin');
   const stateGate    = document.getElementById('stateGate');
   const stateNotSub  = document.getElementById('stateNotSub');
@@ -495,7 +511,7 @@
 
   /* ── State switcher ─────────────────────────────────────── */
   function show(id) {
-    [stateSignin, stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
+    [statePay, stateSignin, stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
       el.classList.toggle('hidden', el.id !== id);
     });
   }
@@ -699,16 +715,18 @@
   /* ── Subscribe-first gate (no-OAuth fallback) ───────────── */
   document.getElementById('gateContinue').addEventListener('click', () => show('stateForm'));
 
+  /* ── Paywall wiring (Ko-fi) ──────────────────────────────── */
+  document.getElementById('payPrice').textContent = '£' + REVIEW_PRICE;
+  document.getElementById('payBtn').href = KOFI_URL;
+  document.getElementById('payContinue').addEventListener('click', () => show('stateForm'));
+
   /* ── Boot ────────────────────────────────────────────────── */
-  // ?preview=1 bypasses the gate entirely (testing only)
+  // Google sign-in / subscribe gate REMOVED (Osimo 2026-07-13). Everyone pays via Ko-fi;
+  // price scales with the live subscriber count (config). ?preview=1 skips the paywall.
   if (new URLSearchParams(location.search).get('preview') === '1') {
     show('stateForm');
-  } else if (CLIENT_ID) {
-    show('stateSignin');
-    window.addEventListener('load', initGIS);
-    if (document.readyState === 'complete') initGIS();
   } else {
-    show('stateGate');
+    show('statePay');
   }
 
 })();
