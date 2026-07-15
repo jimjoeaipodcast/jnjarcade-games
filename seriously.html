@@ -84,8 +84,7 @@
   /* ── States (JS toggles .hidden) ─────── */
   .hidden { display: none !important; }
 
-  /* ── Sign-in panel ───────────────────── */
-  #stateSignin { text-align: center; }
+  /* ── Subscribe gate ──────────────────── */
   .signin-icon { font-size: 48px; margin-bottom: 18px; }
   .signin-msg {
     font-size: 15px;
@@ -177,44 +176,6 @@
   input:focus, textarea:focus { border-color: rgba(192,132,252,.5); }
 
   textarea { min-height: 110px; }
-
-  /* ── Drop zone ───────────────────────── */
-  .drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    padding: 28px 16px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color .15s, background .15s;
-    position: relative;
-  }
-  .drop-zone.drag-over {
-    border-color: var(--ink);
-    background: rgba(192,132,252,.04);
-  }
-  .drop-zone input[type=file] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-  }
-  .drop-icon { font-size: 32px; margin-bottom: 8px; pointer-events: none; }
-  .drop-label {
-    font-size: 14px;
-    color: var(--muted);
-    pointer-events: none;
-  }
-  .drop-label span { color: var(--ink); font-weight: 700; }
-  .drop-hint { font-size: 11px; color: var(--muted); opacity: .6; margin-top: 6px; pointer-events: none; }
-  .file-chosen {
-    font-size: 13px;
-    color: var(--green);
-    margin-top: 8px;
-    font-weight: 700;
-    letter-spacing: .04em;
-  }
 
   /* ── Submit ──────────────────────────── */
   .btn-submit {
@@ -353,15 +314,7 @@
 
 <main class="card">
 
-  <!-- STATE: sign in (Google OAuth — active when GOOGLE_CLIENT_ID configured) -->
-  <div id="stateSignin" class="hidden">
-    <div class="signin-icon">🤯</div>
-    <p class="signin-msg">Sign in with your Google account so we can verify you're a JnJ subscriber — then send us your wild fact.</p>
-    <div id="googleBtnWrap"></div>
-    <div class="error-banner" id="signinError"></div>
-  </div>
-
-  <!-- STATE: subscribe-first gate (fallback when OAuth not configured) -->
+  <!-- STATE: subscribe gate -->
   <div id="stateGate" class="hidden">
     <div class="signin-icon">🤯</div>
     <p class="signin-msg">Seriously?! is for JnJ subscribers. Two taps and you're in:</p>
@@ -399,20 +352,11 @@
     <label for="fldContext">Why is it wild? (optional)</label>
     <textarea id="fldContext" maxlength="1000" placeholder="Extra context, backstory, or why this one broke your brain"></textarea>
 
-    <label for="fldEmail">Email (optional)</label>
-    <input type="email" id="fldEmail" maxlength="200" placeholder="Only if you want a reply">
+    <label for="fldEmail">Email (optional — we'll notify you if your fact airs!)</label>
+    <input type="email" id="fldEmail" maxlength="200" placeholder="Leave your email to get notified if we use your fact">
 
     <!-- honeypot — humans never see or fill this -->
     <input type="text" id="fldWebsite" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;height:0;opacity:0" aria-hidden="true">
-
-    <label>Photo or video (optional)</label>
-    <div class="drop-zone" id="dropZone">
-      <input type="file" id="fldFile" accept="image/*,video/*">
-      <div class="drop-icon">📎</div>
-      <div class="drop-label">Drag &amp; drop or <span>tap to choose</span></div>
-      <div class="drop-hint">Photo or video · Max 10 MB</div>
-    </div>
-    <div class="file-chosen hidden" id="fileChosen"></div>
 
     <div class="error-banner" id="formError"></div>
 
@@ -445,29 +389,17 @@
   </div>
 </div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-(async function () {
+(function () {
 
   /* ── Config ─────────────────────────────────────────────── */
-  let CLIENT_ID  = '';
-  let CHANNEL_ID = 'UC61SJtnVHwbSCJ7YbNo87fw';
-  let accessToken = null;
-
-  try {
-    const cfg = await fetch('/api/brightside-config').then(r => r.json());
-    CLIENT_ID  = cfg.clientId  || CLIENT_ID;
-    CHANNEL_ID = cfg.channelId || CHANNEL_ID;
-  } catch (_) {}
+  const CHANNEL_ID = 'UC61SJtnVHwbSCJ7YbNo87fw';
 
   /* ── DOM refs ────────────────────────────────────────────── */
-  const stateSignin  = document.getElementById('stateSignin');
   const stateGate    = document.getElementById('stateGate');
   const stateNotSub  = document.getElementById('stateNotSub');
   const stateForm    = document.getElementById('stateForm');
   const stateSuccess = document.getElementById('stateSuccess');
-  const googleBtnWrap = document.getElementById('googleBtnWrap');
-  const signinError  = document.getElementById('signinError');
   const formError    = document.getElementById('formError');
   const btnRecheck   = document.getElementById('btnRecheck');
   const btnSubmit    = document.getElementById('btnSubmit');
@@ -478,15 +410,12 @@
   const fldContext   = document.getElementById('fldContext');
   const fldEmail     = document.getElementById('fldEmail');
   const fldWebsite   = document.getElementById('fldWebsite');
-  const fldFile      = document.getElementById('fldFile');
-  const dropZone     = document.getElementById('dropZone');
-  const fileChosen   = document.getElementById('fileChosen');
   const progressWrap = document.getElementById('progressWrap');
   const progressBar  = document.getElementById('progressBar');
 
   /* ── State switcher ─────────────────────────────────────── */
   function show(id) {
-    [stateSignin, stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
+    [stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
       el.classList.toggle('hidden', el.id !== id);
     });
   }
@@ -532,92 +461,8 @@
     setTimeout(() => progressWrap.classList.add('hidden'), 600);
   }
 
-  /* ── Drop zone ──────────────────────────────────────────── */
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) setFile(file);
-  });
-  fldFile.addEventListener('change', () => {
-    if (fldFile.files[0]) setFile(fldFile.files[0]);
-  });
-  function setFile(file) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    if (file.size > 10 * 1024 * 1024) {
-      showError(formError, `File is ${mb} MB — max is 10 MB. Try a shorter clip or a smaller photo.`);
-      return;
-    }
-    fileChosen.textContent = `✓ ${file.name} (${mb} MB)`;
-    fileChosen.classList.remove('hidden');
-  }
-
-  /* ── Subscription check ─────────────────────────────────── */
-  async function checkSubscription(token) {
-    try {
-      const url = `https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&forChannelId=${CHANNEL_ID}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return false;
-      const data = await res.json();
-      return (data.pageInfo && data.pageInfo.totalResults > 0);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /* ── GIS token client ───────────────────────────────────── */
-  function initGIS() {
-    if (!CLIENT_ID) {
-      showError(signinError, 'Sign-in is not configured yet. Try again soon.');
-      return;
-    }
-    const ready = () => typeof google !== 'undefined' && google.accounts;
-    if (!ready()) { setTimeout(initGIS, 200); return; }
-
-    const tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/youtube.readonly',
-      callback: async (resp) => {
-        if (resp.error || !resp.access_token) {
-          showError(signinError, 'Sign-in failed. Please try again.');
-          return;
-        }
-        accessToken = resp.access_token;
-        clearError(signinError);
-        const subscribed = await checkSubscription(accessToken);
-        if (subscribed) { show('stateForm'); } else { show('stateNotSub'); }
-      },
-    });
-
-    const btn = document.createElement('button');
-    btn.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:10px',
-      'background:#fff', 'border:none', 'border-radius:6px',
-      'padding:11px 20px', 'font-size:15px', 'font-weight:600',
-      'cursor:pointer', 'color:#1f1f1f', 'transition:opacity .15s',
-    ].join(';');
-    btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign in with Google`;
-    btn.onclick = () => tokenClient.requestAccessToken({ prompt: '' });
-    btn.onmouseenter = () => btn.style.opacity = '.88';
-    btn.onmouseleave = () => btn.style.opacity = '1';
-    googleBtnWrap.appendChild(btn);
-  }
-
-  /* ── Re-check after subscribe ───────────────────────────── */
-  btnRecheck.addEventListener('click', async () => {
-    if (!accessToken) { show('stateSignin'); return; }
-    btnRecheck.textContent = 'Checking…';
-    btnRecheck.disabled = true;
-    const subscribed = await checkSubscription(accessToken);
-    if (subscribed) {
-      show('stateForm');
-    } else {
-      btnRecheck.textContent = 'Check Again';
-      btnRecheck.disabled = false;
-    }
-  });
+  /* ── Re-check (trust-based — no OAuth) ───────────────────── */
+  btnRecheck.addEventListener('click', () => show('stateGate'));
 
   /* ── Form submit ─────────────────────────────────────────── */
   btnSubmit.addEventListener('click', async () => {
@@ -657,8 +502,6 @@
     fd.append('website', fldWebsite.value); // honeypot — must stay empty
     fd.append('link',    fldSource.value.trim());
     fd.append('message', message);
-    const file = fldFile.files[0];
-    if (file) fd.append('file', file);
 
     try {
       const res  = await fetch('/api/brightside-submit', { method: 'POST', body: fd });
@@ -681,13 +524,8 @@
   document.getElementById('gateContinue').addEventListener('click', () => show('stateForm'));
 
   /* ── Boot ────────────────────────────────────────────────── */
-  // ?preview=1 bypasses the gate entirely (testing only)
   if (new URLSearchParams(location.search).get('preview') === '1') {
     show('stateForm');
-  } else if (CLIENT_ID) {
-    show('stateSignin');
-    window.addEventListener('load', initGIS);
-    if (document.readyState === 'complete') initGIS();
   } else {
     show('stateGate');
   }
