@@ -366,7 +366,7 @@
     <div class="signin-icon">🛒</div>
     <p class="signin-msg">Get your Amazon find — or your own product — a live <strong>Buy or ByeBye</strong> verdict from Jimmy &amp; Joe on the show.</p>
     <div style="font-family:'Bungee',sans-serif;font-size:40px;color:var(--ink);margin:6px 0 2px" id="payPrice">£15</div>
-    <p class="notsub-hint" style="opacity:.8;margin-bottom:22px">One-off, via Ko-fi. Secure card / Apple Pay.</p>
+    <p class="notsub-hint" style="opacity:.8;margin-bottom:22px">£15 per link submission · via Ko-fi. Secure card / Apple Pay.</p>
     <a id="payBtn" href="https://ko-fi.com/jimmynjoe" target="_blank" rel="noopener" class="btn-sub" style="background:#13C3FF">Pay on Ko-fi →</a>
     <p class="notsub-hint" style="margin-top:20px">Tip: put your <strong>@handle</strong> in the Ko-fi message so we can match your payment to your submission.</p>
     <p class="notsub-hint" style="margin-top:16px">Paid already? Continue:</p>
@@ -403,6 +403,7 @@
   <!-- STATE: form -->
   <div id="stateForm" class="hidden">
     <p class="form-greeting">Thanks! <strong>Now send us the details.</strong> Your find — or your product — gets a live Buy or ByeBye verdict on the show.</p>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;opacity:.75">We don't review: weapons, adult products, supplements/medications, drug accessories, or political merchandise. Weird, funny, and absurd stuff is what we're here for.</p>
 
     <label for="fldName">Your name *</label>
     <input type="text" id="fldName" maxlength="100" placeholder="First name is fine">
@@ -476,6 +477,10 @@
 
   let REVIEW_PRICE = 15;
   let KOFI_URL = 'https://ko-fi.com/jimmynjoe';
+  try {
+    const price = await fetch('/assets/config/review-price.json').then(r => r.json());
+    if (price.reviewPriceGbp) REVIEW_PRICE = price.reviewPriceGbp;
+  } catch (_) {}
   try {
     const cfg = await fetch('/api/brightside-config').then(r => r.json());
     CLIENT_ID  = cfg.clientId  || CLIENT_ID;
