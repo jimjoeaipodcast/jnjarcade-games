@@ -43,6 +43,19 @@
   ],
   "games": [
     {
+      "id": "dead-air",
+      "name": "DEAD AIR",
+      "emoji": "🎙️",
+      "genre": "TAPPER × ZOMBIE HORDE",
+      "url": "games/dead-air.html",
+      "status": "wip",
+      "special": "Game Lab #16 — built by Jay (first GM-track cabinet)",
+      "note": "2026-07-19: graveyard-shift radio console. 4 phone lines = 4 Tapper lanes. Living callers want coffee (swipe DOWN to slide a mug), static zombies must be dumped (swipe UP) before they reach the console and drain the ON AIR meter. Survive 60s nights, +15% spawn rate and +8% zombie ratio per night. WebAudio synth sfx, ON AIR sign flicker, mute persist. Tap a lane to move the intern.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-07-19",
+      "ai_file": "games/dead-air.html"
+    },
+    {
       "id": "brick-invaders",
       "name": "BRICK-INVADERS",
       "emoji": "🧱",
@@ -171,19 +184,6 @@
       "status": "wip",
       "special": "Game Lab #12",
       "note": "Platform mechanics template. Reskin = change sprites/palette only."
-    },
-    {
-      "id": "dead-air",
-      "name": "DEAD AIR",
-      "emoji": "🎙️",
-      "genre": "TAPPER × ZOMBIE HORDE",
-      "url": "games/dead-air.html",
-      "status": "wip",
-      "special": "Game Lab #16 — built by Jay (first GM-track cabinet)",
-      "note": "2026-07-19: graveyard-shift radio console. 4 phone lines = 4 Tapper lanes. Living callers want coffee (swipe DOWN to slide a mug), static zombies must be dumped (swipe UP) before they reach the console and drain the ON AIR meter. Survive 60s nights, +15% spawn rate and +8% zombie ratio per night. WebAudio synth sfx, ON AIR sign flicker, mute persist. Tap a lane to move the intern.",
-      "ai_improved": true,
-      "ai_improved_date": "2026-07-19",
-      "ai_file": "games/dead-air.html"
     }
   ]
 }
