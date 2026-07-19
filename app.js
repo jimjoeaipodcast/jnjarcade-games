@@ -29,6 +29,13 @@ function bumpPlays(id) {
 /* ── Per-game worlds ──────────────────────────────────────── */
 
 const WORLDS = {
+  'brick-invaders': {
+    ink: '#7dff5a', dim: '#1e4a14', pit: '#081204', glowsoft: 'rgba(125,255,90,0.22)',
+    genre: 'BREAKOUT × SPACE INVADERS',
+    quote: '“The wall marches AT you. Breakout with a deadline. My paddle hand has never known this kind of pressure.”',
+    by: 'JIMMY',
+    attract: brickInvadersAttract,
+  },
   'snake': {
     ink: '#5af23a', dim: '#1d4a12', pit: '#0a1405', glowsoft: 'rgba(90,242,58,0.22)',
     genre: 'SNAKE × ARKANOID',
@@ -119,6 +126,13 @@ const WORLDS = {
     quote: '"Neon pinball. For people who thought regular pinball wasn\'t complicated enough."',
     by: 'JOE',
     attract: chromeFlipperAttract,
+  },
+  'dead-air': {
+    ink: '#ff8c1a', dim: '#5c3204', pit: '#0a0602', glowsoft: 'rgba(255,140,26,0.22)',
+    genre: 'TAPPER × ZOMBIE HORDE',
+    quote: '"I served coffee to a ghost once. He didn\'t tip. They never tip. Dump the static ones, kid."',
+    by: 'JOE',
+    attract: deadAirAttract,
   },
 };
 
@@ -560,6 +574,32 @@ function flapAttract(ctx, w, h, t, world, s) {
 /* HOP-MAN attract — frog rows of pellets, rides logs, dodges cars.
    Layout (screen top→bottom): road·road·safe·river·river·safe·safe(spawn)
    Frog clears pellets in a row then hops up. River: rides log. Road: waits for gap. */
+function brickInvadersAttract(ctx, w, h, t, world, s) {
+  // marching brick wall + auto-paddle carving it — small, looping, competent
+  const cols = 6, rows = 3, bw = Math.floor(w / 8), bh = Math.max(6, Math.floor(h / 14));
+  const phase = Math.floor(t / 900), sub = (t % 900) / 900;
+  const dir = (Math.floor(phase / 6) % 2 === 0) ? 1 : -1;
+  const offX = (phase % 6) * dir * 4 + (dir > 0 ? 0 : 24);
+  const drop = Math.floor(phase / 6) * 3 % Math.max(1, Math.floor(h / 4));
+  const cx = w / 2 + Math.sin(t / 700) * w * 0.3;
+  const by = h - bh * 1.6 - 4;
+  const ballY = h * 0.45 + Math.sin(t / 260) * h * 0.28;
+  const ballX = cx + Math.cos(t / 410) * w * 0.18;
+  ctx.fillStyle = world.pit; ctx.fillRect(0, 0, w, h);
+  const rowCols = ['#7dff5a', '#4de6a0', '#35c8e8'];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if ((r * cols + c + phase) % 7 === 0) continue;   // carved gaps
+      ctx.fillStyle = rowCols[r];
+      ctx.fillRect(6 + c * (bw + 3) + offX, 5 + r * (bh + 3) + drop, bw, bh);
+    }
+  ctx.fillStyle = '#ff4d4d'; ctx.fillRect(0, h - bh * 3.4, w, 2);
+  ctx.fillStyle = world.ink;
+  ctx.fillRect(cx - bw * 0.9, by, bw * 1.8, bh * 0.8);
+  ctx.beginPath(); ctx.fillStyle = '#fff';
+  ctx.arc(ballX, ballY, Math.max(2.5, bh * 0.3), 0, Math.PI * 2); ctx.fill();
+}
+
 function hopAttract(ctx, w, h, t, world, s) {
   const COLS = 14;
   const cell = Math.max(8, Math.floor(w / COLS));
@@ -2152,3 +2192,113 @@ function chromeFlipperAttract(ctx, w, h, t, world, s) {
   ctx.beginPath(); ctx.moveTo(w*0.82, h*0.86); ctx.lineTo(w*0.56, h*0.83); ctx.stroke();
   ctx.restore();
 }
+
+/* ── DEAD AIR attract ──────────────────────────────────────
+   Four console lanes. Living callers (amber) and static zombies (violet)
+   shamble right-to-left. A mug slides down one lane, a zombie gets dumped
+   (blink out) on another. Loops every ~4s. */
+function deadAirAttract(ctx, w, h, t, world, s) {
+  const LANES = 4;
+  if (!s.init) {
+    s.init = true; s.last = t; s.phase = 0; s.phaseT = 0;
+    s.callers = [];
+    for (let i = 0; i < LANES; i++) {
+      s.callers.push({
+        lane: i,
+        x: 0.55 + Math.random() * 0.4,
+        zombie: i % 2 === 1,
+        speed: 0.03 + Math.random() * 0.02,
+        wob: Math.random() * Math.PI * 2,
+      });
+    }
+    s.mug = { lane: 0, x: -0.1, active: false };
+  }
+  const dt = Math.min(t - s.last, 32) / 1000; s.last = t;
+  s.phaseT += dt;
+
+  // backdrop
+  ctx.fillStyle = world.pit;
+  ctx.fillRect(0, 0, w, h);
+  const laneH = h / LANES;
+  const laneY = i => laneH * i + laneH / 2;
+
+  // console lanes
+  for (let i = 0; i < LANES; i++) {
+    const y = laneY(i);
+    const g = ctx.createLinearGradient(0, y - laneH * 0.3, 0, y + laneH * 0.3);
+    g.addColorStop(0, world.dim);
+    g.addColorStop(0.5, world.pit);
+    g.addColorStop(1, world.dim);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y - laneH * 0.3, w, laneH * 0.6);
+    // line LED
+    ctx.fillStyle = world.ink;
+    ctx.globalAlpha = 0.35 + 0.3 * Math.sin(t / 240 + i * 1.7);
+    ctx.beginPath(); ctx.arc(10, y - laneH * 0.2, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  const cSize = Math.min(laneH * 0.46, 34);
+
+  // advance callers
+  for (const c of s.callers) {
+    c.x -= c.speed * dt; c.wob += dt * 3;
+    if (c.x < 0.12) c.x = 1.1; // wrap for the demo loop
+    const px = c.x * w, py = laneY(c.lane) + Math.sin(c.wob) * 1.5;
+    ctx.save(); ctx.translate(px, py);
+    if (c.zombie) {
+      for (let k = 0; k < 4; k++) {
+        ctx.fillStyle = 'rgba(183,107,255,' + (0.25 + Math.random() * 0.35) + ')';
+        ctx.fillRect((Math.random() - .5) * cSize, (Math.random() - .5) * cSize * 1.2, 2, 2);
+      }
+      ctx.fillStyle = '#5a6a52';
+      ctx.fillRect(-cSize * .3, -cSize * .05, cSize * .6, cSize * .45);
+      ctx.fillStyle = '#8a9a7a';
+      ctx.fillRect(-cSize * .25, -cSize * .42, cSize * .5, cSize * .4);
+      ctx.fillStyle = '#0c0514';
+      ctx.fillRect(-cSize * .14, -cSize * .3, cSize * .1, cSize * .1);
+      ctx.fillRect(cSize * .04, -cSize * .3, cSize * .1, cSize * .1);
+      ctx.fillStyle = '#b76bff';
+      ctx.fillRect(-cSize * .1, -cSize * .12, cSize * .2, cSize * .04);
+    } else {
+      ctx.fillStyle = world.ink;
+      ctx.fillRect(-cSize * .3, -cSize * .05, cSize * .6, cSize * .45);
+      ctx.fillStyle = '#f2c99a';
+      ctx.fillRect(-cSize * .25, -cSize * .42, cSize * .5, cSize * .4);
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(-cSize * .14, -cSize * .3, cSize * .08, cSize * .08);
+      ctx.fillRect(cSize * .06, -cSize * .3, cSize * .08, cSize * .08);
+    }
+    ctx.restore();
+  }
+
+  // mug slide cycle
+  if (!s.mug.active && s.phaseT > 0.6) {
+    s.mug.active = true; s.mug.x = 0.06;
+    s.mug.lane = Math.floor(Math.random() * LANES);
+  }
+  if (s.mug.active) {
+    s.mug.x += 0.55 * dt;
+    const mx = s.mug.x * w, my = laneY(s.mug.lane);
+    ctx.save(); ctx.translate(mx, my);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-cSize * .22, -cSize * .22, cSize * .4, cSize * .44);
+    ctx.fillStyle = world.dim;
+    ctx.fillRect(-cSize * .2, -cSize * .22, cSize * .36, cSize * .1);
+    ctx.restore();
+    if (s.mug.x > 1.05) { s.mug.active = false; s.phaseT = 0; }
+  }
+
+  // ON AIR blink
+  ctx.font = '700 ' + Math.max(9, h * 0.04) + 'px Bungee, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,51,85,' + (0.5 + Math.sin(t / 300) * 0.3) + ')';
+  ctx.fillText('● ON AIR', w - 8, 16);
+
+  // genre label
+  ctx.font = '600 ' + Math.max(9, h * 0.035) + 'px Barlow Condensed, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(242,233,216,0.35)';
+  ctx.fillText(world.genre, w / 2, h - 8);
+}
+
