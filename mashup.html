@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BUILD US A CABINET — JnJ Arcade</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Styling shared with stl.html, which itself lifted submit.html — the layout Osimo
+     approved. Same warm #16120c paper, Bungee headings, cassette cards.
+     Only --ink changes, to the arcade's neon red. */
+  :root { --ink: #ff4d6d; --ink-dim: rgba(255,77,109,.25); --glow: rgba(255,77,109,.10); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #16120c; color: #f0e6cc;
+    font-family: 'Barlow Condensed', sans-serif;
+    min-height: 100svh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px 60px;
+  }
+  .hd { text-align: center; padding: 40px 0 10px; max-width: 560px; width: 100%; }
+  .hd-kicker { font-size: 11px; letter-spacing: .45em; color: var(--ink); opacity: .8; text-transform: uppercase; margin-bottom: 10px; }
+  .hd-title { font-family: 'Bungee', sans-serif; font-size: clamp(28px, 7.5vw, 44px); color: var(--ink); line-height: 1; text-shadow: 0 0 40px var(--glow); margin-bottom: 12px; }
+  .hd-sub { font-size: 15px; line-height: 1.55; color: rgba(240,230,204,.55); max-width: 430px; margin: 0 auto; }
+
+  .wrap { width: 100%; max-width: 560px; }
+  .cass {
+    border-radius: 14px; border: 1px solid var(--ink-dim);
+    background: linear-gradient(160deg, #1e1810 0%, #171209 100%);
+    overflow: hidden; box-shadow: 0 0 30px var(--glow); margin-top: 22px;
+  }
+  .cass-img { width: 100%; height: 160px; object-fit: cover; display: block; border-bottom: 1px solid var(--ink-dim); }
+  .body { padding: 22px; }
+  .body h2 { font-family: 'Bungee', sans-serif; font-size: 17px; color: var(--ink); margin-bottom: 12px; letter-spacing: .01em; }
+  .body p, .body li { font-size: 14.5px; line-height: 1.55; color: rgba(240,230,204,.62); margin-bottom: 9px; }
+  .body ul { padding-left: 18px; }
+  .body strong { color: rgba(240,230,204,.9); }
+  .rule { border-left: 3px solid var(--ink); padding-left: 12px; margin: 12px 0; }
+  .hint { font-size: 12.5px; color: rgba(240,230,204,.4); }
+
+  label { display: block; font-size: 10px; letter-spacing: .35em; text-transform: uppercase; color: var(--ink); opacity: .75; margin: 18px 0 6px; }
+  input, textarea, select {
+    width: 100%; background: #100c06; color: #f0e6cc; font: inherit; font-size: 16px;
+    border: 1px solid var(--ink-dim); border-radius: 9px; padding: 12px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  button {
+    width: 100%; margin-top: 22px; border: 0; border-radius: 7px;
+    background: var(--ink); color: #16120c;
+    font-family: 'Bungee', sans-serif; font-size: 15px; padding: 15px;
+    letter-spacing: .04em; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { margin-top: 15px; font-size: 14.5px; line-height: 1.5; display: none; padding: 13px; border-radius: 9px; }
+  .ok { background: rgba(184,255,92,.12); color: var(--ink); display: block; }
+  .err { background: rgba(255,90,90,.12); color: #ff9d9d; display: block; }
+  .quote { font-size: 12.5px; color: rgba(240,230,204,.45); font-style: italic; border-top: 1px solid var(--ink-dim); margin-top: 18px; padding-top: 14px; }
+  .back { display: inline-block; margin-top: 30px; font-size: 12px; letter-spacing: .1em; color: var(--ink); text-decoration: none; opacity: .75; }
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-kicker">Patreon Workshop</div>
+  <h1 class="hd-title">🕹️ BUILD US A CABINET</h1>
+  <p class="hd-sub">Every cabinet in the arcade is two old games smashed together. Pitch us
+     yours — if it makes the cut, we build it and it goes in the arcade with your name on it.</p>
+</header>
+
+<div class="wrap">
+
+  <section class="cass">
+    <img class="cass-img" src="/assets/icons/arcade-cassette.jpg" alt="Jimmy and Joe in a neon arcade">
+    <div class="body">
+      <h2>How it works</h2>
+      <ul>
+        <li>You pick two games nobody has ever put together.</li>
+        <li>You tell us the ONE twist that makes the combination sing.</li>
+        <li>We build it, playtest it, and it goes into the arcade.</li>
+        <li>Your name goes on the cabinet and gets a shout on the show.</li>
+      </ul>
+      <div class="quote">"He wants to combine two games that already didn't work. I've seen
+        this before, Jimmy. It was called the nineties." — JOE</div>
+    </div>
+  </section>
+
+  <section class="cass">
+    <div class="body">
+      <h2>What actually gets built</h2>
+      <div class="rule"><strong>Two parents, one loop.</strong> Take the core loop from the
+        parent that plays better on a phone, and the tools or theme from the other. Two loops
+        fight each other — that's how you get a cabinet that feels like neither game.</div>
+      <div class="rule"><strong>One signature twist.</strong> Every cabinet here has exactly
+        one: Hop-Man is Pac-Man pellets on a Frogger road. Pin-Vaders is a pinball table the
+        invaders are marching down. One twist sings; three is mud.</div>
+      <p class="hint">Best pitches are specific. "Tetris × Bomberman" is a title. "Tetris where
+        the lines you clear drop as bombs on the player below" is a cabinet.</p>
+    </div>
+  </section>
+
+  <form id="f" class="cass">
+    <div class="body">
+      <h2>Pitch it</h2>
+
+      <label for="name">Your name / handle *</label>
+      <input id="name" name="name" required maxlength="80" placeholder="what goes on the cabinet">
+
+      <label for="patreon">Patreon email or handle *</label>
+      <input id="patreon" name="patreon" required maxlength="120" placeholder="so we can match you to your tier">
+
+      <label for="gamea">Game one *</label>
+      <input id="gamea" name="gamea" required maxlength="60" placeholder="e.g. Frogger">
+
+      <label for="gameb">Game two *</label>
+      <input id="gameb" name="gameb" required maxlength="60" placeholder="e.g. Pac-Man">
+
+      <label for="twist">The one twist *</label>
+      <textarea id="twist" name="twist" required maxlength="600"
+        placeholder="What happens when these two collide? This is the part we actually read — one sharp idea beats a long design doc."></textarea>
+      <p class="hint">Tell us the moment a player would screenshot. That's what decides it.</p>
+
+      <label for="why">Why would it be fun on a phone? <span style="opacity:.5">(optional)</span></label>
+      <textarea id="why" name="why" maxlength="400"
+        placeholder="Swipe, tap, one thumb. Anything needing a keyboard can't be built."></textarea>
+
+      <button id="go" type="submit">SEND THE PITCH</button>
+      <div id="msg" class="msg"></div>
+    </div>
+  </form>
+
+  <a href="/submit" class="back">‹ back to all submissions</a>
+</div>
+
+<script>
+(function(){
+  var f=document.getElementById('f'), go=document.getElementById('go'), msg=document.getElementById('msg');
+  function show(t,ok){ msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); }
+  f.addEventListener('submit',function(e){
+    e.preventDefault();
+    go.disabled=true; go.textContent='SENDING…';
+    fetch('/api/mashup-submit',{method:'POST',body:new FormData(f)})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.ok){
+          f.reset();
+          show("Pitch received. We build the ones that make the cut — if yours does, your name goes on the cabinet.",true);
+        } else { show(d.error||'Something went wrong. Try again in a minute.',false); }
+        go.disabled=false; go.textContent='SEND THE PITCH';
+      })
+      .catch(function(){
+        show('Could not reach the arcade. Check your connection and try again.',false);
+        go.disabled=false; go.textContent='SEND THE PITCH';
+      });
+  });
+})();
+</script>
+</body>
+</html>

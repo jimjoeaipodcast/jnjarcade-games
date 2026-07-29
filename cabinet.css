@@ -1,0 +1,56 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JnJ CABINET — shared INSERT-COIN overlay look (Osimo 2026-07-16: "insert coin
+   pages look nothing like our traditional cassettes… address so future games are
+   presented correctly"). Canonical look = the patreon-approved cassettes
+   (candy-tris/flap-fight): Bungee title glowing in the game's ink colour, Bungee
+   genre line, condensed controls, blinking INSERT COIN. Loaded AFTER each game's
+   inline <style> so it wins the cascade. Ink colour comes from the game's
+   `--ink` CSS var (already set by every cabinet).
+   Fonts self-hosted (same woff2 set as arcade-scores.js — no CDN, no per-game links).
+═══════════════════════════════════════════════════════════════════════════ */
+@font-face { font-family: 'Bungee'; font-style: normal; font-weight: 400; font-display: swap;
+             src: url('/vendor/fonts/bungee-400.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap;
+             src: url('/vendor/fonts/barlow-condensed-600.woff2') format('woff2'); }
+
+#overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 110%, rgba(60,40,20,0.35), transparent 60%),
+    rgba(2,2,4,0.92);
+  text-align: center; cursor: pointer;
+}
+#overlay.hidden { display: none; }
+
+#overlay h1 {
+  font-family: 'Bungee', 'Arial Black', sans-serif;
+  font-size: clamp(26px, 7.5vw, 56px); font-weight: 400;
+  letter-spacing: .09em; line-height: 1.15;
+  color: var(--ink, #ffcf3d);
+  text-shadow: 0 0 24px var(--ink, #ffcf3d), 0 0 60px var(--ink, #ffcf3d);
+  margin: 0 4vw 6px;
+}
+
+#overlay .genre {
+  font-family: 'Bungee', 'Arial Black', sans-serif;
+  font-size: clamp(11px, 3.2vw, 15px); letter-spacing: .14em;
+  color: #cc44ff; opacity: .85; margin-bottom: 18px;
+}
+
+#overlay p {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-weight: 600; font-size: clamp(14px, 3.8vw, 17px); line-height: 1.55;
+  letter-spacing: .04em; color: #9aa; max-width: 84vw; margin: 0 0 30px;
+}
+
+#overlay #coinBtn {
+  font-family: 'Bungee', 'Arial Black', sans-serif;
+  font-size: clamp(15px, 4.4vw, 19px); letter-spacing: .12em;
+  background: transparent; border: none; cursor: pointer; padding: 14px 20px;
+  color: var(--ink, #ffcf3d);
+  text-shadow: 0 0 18px var(--ink, #ffcf3d);
+  animation: cab-blink 1s step-end infinite;
+  box-shadow: none; border-radius: 0;
+}
+@keyframes cab-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }

@@ -14,30 +14,54 @@
   html, body { width: 100%; height: 100%; background: #0b0618; overflow: hidden;
                touch-action: none; -webkit-user-select: none; user-select: none; }
   #gameCanvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
-  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+  /* HOUSE CHROME — Osimo 2026-07-29: "all the games from patreon page have a distinct
+     look and font... I need pin Vader's to have the same look and feel like hop man".
+     Typography + layout copied from hop-man; the INK stays Pin-Vaders' purple, because
+     each cabinet keeps its own accent (that is what the cassette glow is keyed to).
+     Fonts self-hosted — arcade-scores.js shipped literal `cursive` scoreboards when a
+     game relied on a CDN link, so `cursive` is banned as a fallback here. */
+  @font-face { font-family:'Bungee'; font-style:normal; font-weight:400; font-display:swap;
+               src:url('/vendor/fonts/bungee-400.woff2') format('woff2'); }
+  @font-face { font-family:'Barlow Condensed'; font-style:normal; font-weight:600; font-display:swap;
+               src:url('/vendor/fonts/barlow-condensed-600.woff2') format('woff2'); }
+
+  #overlay { position: fixed; inset: 0; z-index: 10;
              display: flex; flex-direction: column; align-items: center; justify-content: center;
-             font-family: 'Courier New', monospace; color: #fff; text-align: center; }
+             gap: 12px; padding: 24px; text-align: center;
+             background: rgba(7,8,13,.88); backdrop-filter: blur(4px); }
   #overlay.hidden { display: none; }
-  #overlay h1 { font-size: clamp(28px, 8vw, 64px); letter-spacing: .06em;
-                color: var(--ink, #b76bff); text-shadow: 0 0 24px var(--ink, #b76bff); }
-  #overlay p { margin: 14px 0 26px; font-size: 13px; color: #9aa; max-width: 82vw; line-height: 1.7; }
-  #coinBtn { font: bold 18px 'Courier New', monospace; letter-spacing: .1em;
-             padding: 16px 38px; background: var(--ink, #b76bff); color: #000;
-             border: none; border-radius: 10px; cursor: pointer;
-             box-shadow: 0 0 30px var(--ink, #b76bff); }
+  #overlay h1 { font-family:'Bungee','Arial Black',sans-serif; font-weight:400;
+                font-size: clamp(26px, 7.5vw, 44px); letter-spacing:.1em; line-height:1.15;
+                color: var(--ink, #b76bff); text-shadow: 0 0 18px var(--ink, #b76bff);
+                margin: 0; }
+  #overlay .genre { font-family:'Bungee','Arial Black',sans-serif;
+                    font-size: clamp(10px, 3vw, 13px); letter-spacing:.14em;
+                    color: var(--ink, #b76bff); opacity:.7; }
+  #overlay p { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600;
+               font-size: clamp(13px, 3.6vw, 15px); line-height:1.6; letter-spacing:.02em;
+               color:#cfd4dd; opacity:.85; max-width: 340px; margin: 0; }
+  #overlay p b { color: var(--ink, #b76bff); }
+  #coinBtn { margin-top:4px; background: var(--ink, #b76bff); color:#150720; border:none;
+             border-radius:28px; padding:13px 28px; font-size:15px; font-weight:800;
+             letter-spacing:.08em; cursor:pointer;
+             box-shadow: 0 0 24px var(--ink, #b76bff);
+             font-family:'Bungee','Arial Black',sans-serif;
+             transition: transform .06s, box-shadow .06s; }
+  #coinBtn:active { transform: translateY(3px); box-shadow: 0 0 10px var(--ink, #b76bff); }
 </style>
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
 <div id="overlay">
   <h1>PIN-VADERS</h1>
-  <p>Hold LEFT / RIGHT half = flippers · drag DOWN in lane = plunger<br>
-  Swipe UP = nudge (3 = TILT!) · S-O-S lanes = bonus ×<br>
-  Left bunkers = SHIELD · right bunkers = UFO · saucer ×2 = MULTIBALL<br>
+  <div class="genre">PINBALL × SPACE INVADERS</div>
+  <p>Hold <b>LEFT</b> / <b>RIGHT</b> half = flippers · drag <b>DOWN</b> in lane = plunger<br>
+  Swipe <b>UP</b> = nudge (3 = <b>TILT!</b>) · S-O-S lanes = bonus ×<br>
+  Left bunkers = <b>SHIELD</b> · right bunkers = <b>UFO</b> · saucer ×2 = <b>MULTIBALL</b><br>
   Don't let them reach the line.</p>
   <button id="coinBtn">🪙 INSERT COIN</button>
 </div>
-<script src="arcade-scores.js?v=10"></script>
+<script src="arcade-scores.js?v=11"></script>
 <script>
 (function () {
 'use strict';
@@ -45,6 +69,13 @@
 const SLUG  = 'pin-vaders';
 const TITLE = 'PIN-VADERS';
 const INK   = '#b76bff';
+// Global best for the marquee. Populated async; the HUD redraws with it once it lands,
+// so a slow network shows the local best rather than blocking or lying.
+let GLOBAL_HI = 0;
+fetch('/api/scores?game=pin-vaders')
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { if (d && d.scores && d.scores.length) GLOBAL_HI = d.scores[0].s || 0; })
+  .catch(() => {});
 document.documentElement.style.setProperty('--ink', INK);
 
 // ── CANVAS + VIEW ────────────────────────────────────────────────────────────
@@ -1261,7 +1292,7 @@ function drawCabinet(t) {
     ctx.globalAlpha = 1;
     // title + hiscore + flanking aliens
     const fs = Math.min(topH * 0.4, W * 0.07);
-    ctx.font = 'bold ' + fs + 'px "Courier New", monospace';
+    ctx.font = '' + fs + 'px Bungee, "Arial Black", sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#2a1745';
     ctx.fillText('PIN-VADERS', W / 2 + 2 * DPR, topH * 0.42 + 2 * DPR);
@@ -1270,14 +1301,20 @@ function drawCabinet(t) {
     ctx.fillText('PIN-VADERS', W / 2, topH * 0.42);
     ctx.shadowBlur = 0;
     if (topH > 40 * DPR) {
-      let hi = 0;
+      // REAL hi-score. This read only localStorage and fell back to a hardcoded 999,999 —
+      // a fresh device advertised a fake record while the actual global best sat at
+      // 372,270 (Osimo 2026-07-29: "should reflect the actual highest score from
+      // cassette"). Global first, local second; if neither exists, say so.
+      let local = 0;
       try {
         const board = JSON.parse(localStorage.getItem('jnj_board_' + SLUG) || '[]');
-        if (board.length) hi = Math.max(...board.map(e => e.s || 0));
+        if (board.length) local = Math.max(...board.map(e => e.s || 0));
       } catch (e) {}
-      ctx.font = 'bold ' + (fs * 0.38) + 'px "Courier New", monospace';
+      const hi = Math.max(GLOBAL_HI, local);
+      ctx.font = '' + (fs * 0.38) + 'px Bungee, "Arial Black", sans-serif';
       ctx.fillStyle = '#ffd05a';
-      ctx.fillText('HI-SCORE  ' + (hi || 999999).toLocaleString('en-GB'), W / 2, topH * 0.75);
+      ctx.fillText('HI-SCORE  ' + (hi ? hi.toLocaleString('en-GB') : '—'),
+                   W / 2, topH * 0.75);
       // aliens flank the title
       const as = Math.max(2, topH * 0.028);
       const frame = (t / 500 | 0) % 2;
@@ -1303,7 +1340,7 @@ function drawCabinet(t) {
       ctx.fillStyle = '#ff5470';
       ctx.beginPath(); ctx.arc(W / 2, dy + dh * 0.78, 4 * DPR, 0, Math.PI * 2); ctx.fill();
       // flipper button hints
-      ctx.font = 'bold ' + (botH * 0.22) + 'px "Courier New", monospace';
+      ctx.font = '' + (botH * 0.22) + 'px Bungee, "Arial Black", sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = 'rgba(226,204,255,0.65)';
       ctx.fillText('◀ HOLD', W * 0.18, botY + botH * 0.55);
@@ -1340,7 +1377,7 @@ function render(t) {
   // DMD text
   ctx.save();
   ctx.beginPath(); ctx.rect(153, 36, 174, 22); ctx.clip();
-  ctx.font = 'bold 16px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = '16px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#48ff7a'; ctx.shadowColor = '#48ff7a'; ctx.shadowBlur = 6;
   ctx.fillText(dmd.text, 153 + dmd.x, 48);
   ctx.restore(); ctx.shadowBlur = 0;
@@ -1349,20 +1386,20 @@ function render(t) {
   const SOS = ['S', 'O', 'S'];
   for (let i = 0; i < 3; i++) {
     ctx.fillStyle = ROLLS[i].lit ? '#04140a' : '#9fff8a';
-    ctx.font = 'bold 12px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '12px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(SOS[i], ROLLS[i].x, SOS_Y + 1);
   }
   // feature tags
-  ctx.font = 'bold 10px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.font = '10px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillStyle = shieldArmed ? '#9fff8a' : 'rgba(159,255,138,0.4)';
   ctx.fillText('SHIELD', 105, 490);
   ctx.fillStyle = UFO.active ? '#ff5470' : 'rgba(255,84,112,0.4)';
   ctx.fillText('UFO', 375, 490);
-  ctx.fillStyle = '#ff8ab5'; ctx.font = 'bold 9px "Courier New", monospace';
+  ctx.fillStyle = '#ff8ab5'; ctx.font = '9px "Barlow Condensed", "Arial Narrow", sans-serif';
   ctx.fillText(multiball ? '2X' : 'LOCK ' + lockedCount + '/2', SAUCER.x, SAUCER.y + SAUCER.r + 4);
 
   // floating labels
-  ctx.font = 'bold 15px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '15px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const l of labels) {
     ctx.globalAlpha = Math.min(1, l.life / 20);
     ctx.fillStyle = l.col;
@@ -1371,10 +1408,10 @@ function render(t) {
   ctx.globalAlpha = 1;
 
   // HUD
-  ctx.font = 'bold 20px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '20px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillStyle = '#fff';
   ctx.fillText('SCORE ' + score, 14, 8);
-  ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.font = '13px "Barlow Condensed", "Arial Narrow", sans-serif';
   ctx.fillStyle = INK;
   ctx.fillText((BOSS.active ? 'BOSS ' : 'WAVE ') + wave, 14, 32);
   ctx.fillStyle = bonusX > 1 ? '#ffd05a' : 'rgba(255,208,90,0.4)';
@@ -1387,21 +1424,21 @@ function render(t) {
     ctx.beginPath(); ctx.arc(bx, 70, 6, 0, Math.PI * 2); ctx.fill();
   }
   if (tilted) {
-    ctx.fillStyle = '#ff5470'; ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.fillStyle = '#ff5470'; ctx.font = '16px "Barlow Condensed", "Arial Narrow", sans-serif';
     ctx.fillText('TILT', 14, 84);
   }
-  ctx.font = 'bold 22px "Courier New", monospace'; ctx.textAlign = 'right';
+  ctx.font = '22px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'right';
   ctx.fillStyle = '#fff';
   ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 12, 12);
 
   if (laneBall() && state === 'playing') {
-    ctx.font = 'bold 13px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.font = '13px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.4 * Math.sin(t / 300)) + ')';
     ctx.fillText('⇣ DRAG DOWN ⇣', 390, 620);
   }
 
   if (msg) {
-    ctx.font = 'bold 28px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '28px Bungee, "Arial Black", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = INK; ctx.shadowColor = INK; ctx.shadowBlur = 18;
     ctx.fillText(msg.txt, WORLD_W / 2, 540);
     ctx.shadowBlur = 0;

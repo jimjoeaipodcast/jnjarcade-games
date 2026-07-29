@@ -43,19 +43,6 @@
   ],
   "games": [
     {
-      "id": "dead-air",
-      "name": "DEAD AIR",
-      "emoji": "🎙️",
-      "genre": "TAPPER × ZOMBIE HORDE",
-      "url": "games/dead-air.html",
-      "status": "wip",
-      "special": "Game Lab #16 — built by Jay (first GM-track cabinet)",
-      "note": "2026-07-19: graveyard-shift radio console. 4 phone lines = 4 Tapper lanes. Living callers want coffee (swipe DOWN to slide a mug), static zombies must be dumped (swipe UP) before they reach the console and drain the ON AIR meter. Survive 60s nights, +15% spawn rate and +8% zombie ratio per night. WebAudio synth sfx, ON AIR sign flicker, mute persist. Tap a lane to move the intern.",
-      "ai_improved": true,
-      "ai_improved_date": "2026-07-19",
-      "ai_file": "games/dead-air.html"
-    },
-    {
       "id": "brick-invaders",
       "name": "BRICK-INVADERS",
       "emoji": "🧱",
@@ -64,16 +51,6 @@
       "status": "wip",
       "special": "Game Lab #15 — first PHASER-track cabinet (engine PoC)",
       "note": "2026-07-16: signature = the brick wall IS the invader formation — marches sideways, drops at edges, breaching the red deadline costs a life. Waves ramp march speed only. Phaser 3 arcade physics + particles + camera shake/flash; house WebAudio sfx; drag paddle, tap launch."
-    },
-    {
-      "id": "pin-vaders",
-      "name": "PIN-VADERS",
-      "emoji": "🛸",
-      "genre": "PINBALL × SPACE INVADERS",
-      "url": "games/pin-vaders.html",
-      "status": "wip",
-      "special": "Game Lab #13 — first PINBALL cabinet",
-      "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT)."
     },
     {
       "id": "chrome-flipper",

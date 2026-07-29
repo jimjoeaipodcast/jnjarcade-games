@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PATREON ARCADE — JnJ Arcade</title>
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=16">
+<style>
+  .pat-head{ text-align:center; padding:30px 18px 6px; }
+  .pat-kicker{ font-size:11px; letter-spacing:.4em; color:#22c55e; opacity:.9; }
+  .pat-head h1{ font-size:30px; font-weight:900; letter-spacing:.05em; margin:6px 0 4px; }
+  .pat-sub{ font-size:13px; opacity:.6; max-width:520px; margin:0 auto; line-height:1.5; }
+  .pat-nav{ display:flex; gap:16px; justify-content:center; margin-top:10px; flex-wrap:wrap; }
+  .pat-nav a{ color:var(--ink,#ffcf3d); text-decoration:none; font-size:12px;
+              letter-spacing:.1em; opacity:.85; }
+  .pat-nav a:hover{ opacity:1; }
+</style>
+</head>
+<body data-parcade="1">
+  <header class="pat-head">
+    <div class="pat-kicker">JNJ ARCADE — MEMBERS</div>
+    <h1>🕹️ PATREON ARCADE</h1>
+    <p class="pat-sub">Every cabinet, unlocked. Most played first. Thanks for keeping the lights on.</p>
+    <nav class="pat-nav">
+      <a href="/patreon">‹ members</a>
+    </nav>
+  </header>
+
+  <main id="cabinets" aria-label="Arcade games"></main>
+
+  <button id="fsBtn" hidden></button>
+  <button id="a2hsBtn" hidden></button>
+  <div id="a2hsSheet" hidden></div>
+  <div id="toast"></div>
+
+  <footer class="lobby-end">
+    <div class="coin-row" id="socialRow" aria-label="Links"></div>
+    <p class="footer-line">A fan arcade for the <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">Jimmy &amp; Joe AI Podcast</a>. Two AI hosts. Real arguments.</p>
+  </footer>
+
+  <script src="arcade-scores.js?v=10"></script>
+  <script src="app.js?v=parcade17"></script>
+</body>
+</html>

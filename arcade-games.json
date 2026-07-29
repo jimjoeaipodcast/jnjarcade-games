@@ -1,0 +1,138 @@
+{
+  "social": [
+    {
+      "name": "Shop",
+      "emoji": "🛍️",
+      "url": "https://jimmy-joe-shop.fourthwall.com/",
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
+      "label": "Shop"
+    },
+    {
+      "name": "YouTube",
+      "emoji": "▶",
+      "url": "https://www.youtube.com/@JnJAiStudio",
+      "gradient": [
+        "#FF453A",
+        "#FF2D55"
+      ],
+      "label": "YouTube"
+    },
+    {
+      "name": "Patreon",
+      "emoji": "☕",
+      "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
+      "gradient": [
+        "#FF6E4A",
+        "#E0420B"
+      ],
+      "label": "Patreon"
+    },
+    {
+      "name": "Ko-fi",
+      "emoji": "☕",
+      "url": "https://ko-fi.com/jimmynjoe",
+      "gradient": [
+        "#FF5E5B",
+        "#E03030"
+      ],
+      "label": "KoFi"
+    }
+  ],
+  "games": [
+    {
+      "id": "flap-fight",
+      "name": "FLAP FIGHT",
+      "emoji": "🎈",
+      "genre": "BALLOON FIGHT × FLAPPY BIRD",
+      "url": "games/flap-fight.html",
+      "status": "wip",
+      "special": "Game Lab #2",
+      "note": "Stomp parachute guys mid-gap. Bounce into pipes. Still a high score.",
+      "ready": true,
+      "ready_date": "2026-06-24"
+    },
+    {
+      "id": "pin-vaders",
+      "name": "PIN-VADERS",
+      "emoji": "🛸",
+      "genre": "PINBALL × SPACE INVADERS",
+      "url": "games/pin-vaders.html",
+      "status": "wip",
+      "special": "Game Lab #13 — first PINBALL cabinet",
+      "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT).",
+      "ready": true,
+      "ready_date": "2026-07-29"
+    },
+    {
+      "id": "hop-man",
+      "name": "HOP-MAN",
+      "emoji": "🐸",
+      "genre": "PAC-MAN × FROGGER",
+      "url": "games/hop-man.html",
+      "status": "wip",
+      "special": "Game Lab #2",
+      "note": "Frog hops four lanes of traffic to collect snacks. Pac-Man maze logic.",
+      "ready": true,
+      "ready_date": "2026-06-24",
+      "locked": true
+    },
+    {
+      "id": "candy-tris",
+      "name": "CRUSHTRIS",
+      "emoji": "🍬",
+      "genre": "CANDY CRUSH × TETRIS",
+      "url": "games/candy-tris.html",
+      "status": "wip",
+      "special": "Game Lab #5",
+      "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2×2 = fish. Tap a special candy then a neighbour to smash combos.",
+      "ready": true,
+      "ready_date": "2026-07-02",
+      "locked": true
+    },
+    {
+      "id": "snake",
+      "name": "SNAKE BLASTER",
+      "emoji": "🐍",
+      "genre": "SNAKE × ARKANOID",
+      "url": "games/snake.html",
+      "status": "wip",
+      "special": "Game Lab #1",
+      "note": "Snake with a gun. Arkanoid-style brick targets. Classic meets shooter.",
+      "ready": true,
+      "ready_date": "2026-06-24",
+      "locked": true
+    },
+    {
+      "id": "angry-worms",
+      "name": "ANGRY WORMS",
+      "emoji": "🐛",
+      "genre": "ANGRY BIRDS × WORMS",
+      "url": "games/angry-worms.html",
+      "status": "ready",
+      "special": "Game Lab #13",
+      "note": "v4 FINAL 2026-07-03: our-turn-only (Angry Birds flow), easy open-ground L1-2, distance+bunkers scale, TROOPER worm (deploys where it lands, 3 aimed shots), flash-detonating deaths (no friendly cluster), ammo budget 2/worm+1, auto next level, straight-to-scoreboard, full sfx. Drag to aim, tap mid-flight for ability.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-06-24",
+      "ai_file": "games/angry-worms.html",
+      "ready": true,
+      "ready_date": "2026-07-03",
+      "locked": true
+    },
+    {
+      "id": "doom-3d",
+      "name": "DOOM MARI-OH 3D",
+      "emoji": "👹",
+      "genre": "DOOM × MARIO",
+      "url": "games/doom-3d.html",
+      "status": "wip",
+      "special": "Game Lab #1",
+      "note": "Full 3D raycaster. Doom engine, Mario universe.",
+      "ready": true,
+      "ready_date": "2026-06-24",
+      "locked": true
+    }
+  ]
+}

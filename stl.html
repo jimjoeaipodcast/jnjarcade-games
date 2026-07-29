@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MAKE OUR STUDIO YOURS — JnJ Arcade</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Styling lifted verbatim from submit.html — Osimo 2026-07-29: "the landing page really
+     crappy, and not in line with the others... there's a perfect submission page in the
+     submit your own page". Same warm #16120c paper, Bungee headings, cassette cards.
+     Only --ink changes, to the STL Lab filament green. */
+  :root { --ink: #b8ff5c; --ink-dim: rgba(184,255,92,.25); --glow: rgba(184,255,92,.10); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #16120c; color: #f0e6cc;
+    font-family: 'Barlow Condensed', sans-serif;
+    min-height: 100svh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px 60px;
+  }
+  .hd { text-align: center; padding: 40px 0 10px; max-width: 560px; width: 100%; }
+  .hd-kicker { font-size: 11px; letter-spacing: .45em; color: var(--ink); opacity: .8; text-transform: uppercase; margin-bottom: 10px; }
+  .hd-title { font-family: 'Bungee', sans-serif; font-size: clamp(28px, 7.5vw, 44px); color: var(--ink); line-height: 1; text-shadow: 0 0 40px var(--glow); margin-bottom: 12px; }
+  .hd-sub { font-size: 15px; line-height: 1.55; color: rgba(240,230,204,.55); max-width: 430px; margin: 0 auto; }
+
+  .wrap { width: 100%; max-width: 560px; }
+  .cass {
+    border-radius: 14px; border: 1px solid var(--ink-dim);
+    background: linear-gradient(160deg, #1e1810 0%, #171209 100%);
+    overflow: hidden; box-shadow: 0 0 30px var(--glow); margin-top: 22px;
+  }
+  .cass-img { width: 100%; height: 160px; object-fit: cover; display: block; border-bottom: 1px solid var(--ink-dim); }
+  .body { padding: 22px; }
+  .body h2 { font-family: 'Bungee', sans-serif; font-size: 17px; color: var(--ink); margin-bottom: 12px; letter-spacing: .01em; }
+  .body p, .body li { font-size: 14.5px; line-height: 1.55; color: rgba(240,230,204,.62); margin-bottom: 9px; }
+  .body ul { padding-left: 18px; }
+  .body strong { color: rgba(240,230,204,.9); }
+  .rule { border-left: 3px solid var(--ink); padding-left: 12px; margin: 12px 0; }
+  .hint { font-size: 12.5px; color: rgba(240,230,204,.4); }
+
+  label { display: block; font-size: 10px; letter-spacing: .35em; text-transform: uppercase; color: var(--ink); opacity: .75; margin: 18px 0 6px; }
+  input, textarea, select {
+    width: 100%; background: #100c06; color: #f0e6cc; font: inherit; font-size: 16px;
+    border: 1px solid var(--ink-dim); border-radius: 9px; padding: 12px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  button {
+    width: 100%; margin-top: 22px; border: 0; border-radius: 7px;
+    background: var(--ink); color: #16120c;
+    font-family: 'Bungee', sans-serif; font-size: 15px; padding: 15px;
+    letter-spacing: .04em; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { margin-top: 15px; font-size: 14.5px; line-height: 1.5; display: none; padding: 13px; border-radius: 9px; }
+  .ok { background: rgba(184,255,92,.12); color: var(--ink); display: block; }
+  .err { background: rgba(255,90,90,.12); color: #ff9d9d; display: block; }
+  .quote { font-size: 12.5px; color: rgba(240,230,204,.45); font-style: italic; border-top: 1px solid var(--ink-dim); margin-top: 18px; padding-top: 14px; }
+  .back { display: inline-block; margin-top: 30px; font-size: 12px; letter-spacing: .1em; color: var(--ink); text-decoration: none; opacity: .75; }
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-kicker">Patreon Workshop</div>
+  <h1 class="hd-title">🖨️ MAKE OUR STUDIO YOURS</h1>
+  <p class="hd-sub">The set is a real, physical diorama. Model something for it, send us the
+     STL, and we print it. If it makes the cut, it lives on the show.</p>
+</header>
+
+<div class="wrap">
+
+  <section class="cass">
+    <img class="cass-img" src="/assets/icons/stl-cassette.jpg" alt="Jimmy and Joe in the studio, a wireframe cat model on Joe's lap">
+    <div class="body">
+      <h2>How it works</h2>
+      <ul>
+        <li>You model something you think belongs in Jimmy &amp; Joe's studio.</li>
+        <li>You send us the STL through this page.</li>
+        <li>We print it and, if it earns its place, it goes into the diorama.</li>
+        <li>Your name gets a thank-you on air when it first appears.</li>
+      </ul>
+      <div class="quote">"Someone is going to send us a tiny chair, Jimmy. We do not have a
+        tiny room. …We have a tiny room." — JOE</div>
+    </div>
+  </section>
+
+  <section class="cass">
+    <div class="body">
+      <h2>Two rules, and we do check</h2>
+      <div class="rule"><strong>It has to be yours.</strong> Your own design, modelled by you.
+        Not a repurposed file from Thingiverse, Printables, or another designer. We're giving
+        credit on air — it has to be credit you actually earned.</div>
+      <div class="rule"><strong>Scale to 1:9.</strong> The diorama is being built at
+        <strong>1:9</strong>, so model to that scale. A real 10&nbsp;cm mug should arrive about
+        1.1&nbsp;cm tall. Get this wrong and it either vanishes on camera or dwarfs both hosts.</div>
+      <p class="hint">1:9 is a placeholder while the set is under construction. If it changes
+        we'll say so here — and we'll re-scale anything already sent rather than bin it.</p>
+    </div>
+  </section>
+
+  <form id="f" class="cass" enctype="multipart/form-data">
+    <div class="body">
+      <h2>Send it over</h2>
+
+      <label for="name">Your name / handle *</label>
+      <input id="name" name="name" required maxlength="80" placeholder="what we thank on air">
+
+      <label for="patreon">Patreon email or handle *</label>
+      <input id="patreon" name="patreon" required maxlength="120" placeholder="so we can match you to your tier">
+
+      <label for="title">What is it? *</label>
+      <input id="title" name="title" required maxlength="100" placeholder="e.g. chipped enamel mug, tiny fire extinguisher">
+
+      <label for="why">Why does it suit the studio? *</label>
+      <textarea id="why" name="why" required maxlength="600"
+        placeholder="Where would it sit, and why does it belong on this set? This is the part we actually read — a good reason beats a good render."></textarea>
+      <p class="hint">Tell us the joke, the detail, or the story behind it. That's what decides it.</p>
+
+      <label for="original">Confirm it's your own work *</label>
+      <select id="original" name="original" required>
+        <option value="">— choose —</option>
+        <option value="yes">Yes — I modelled this myself</option>
+        <option value="no">No — it's someone else's design</option>
+      </select>
+
+      <label for="file">STL file * <span style="opacity:.5">(max 10 MB)</span></label>
+      <input id="file" name="file" type="file" accept=".stl,model/stl,application/sla" required>
+      <p class="hint">Binary STL keeps the file small. Over 10 MB? Decimate the mesh — at 1:9
+        nobody will ever see the extra triangles.</p>
+
+      <button id="go" type="submit">SEND TO THE STUDIO</button>
+      <div id="msg" class="msg"></div>
+    </div>
+  </form>
+
+  <a href="/submit" class="back">‹ back to all submissions</a>
+</div>
+
+<script>
+(function(){
+  var f=document.getElementById('f'), go=document.getElementById('go'), msg=document.getElementById('msg');
+  function show(t,ok){ msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); }
+  f.addEventListener('submit',function(e){
+    e.preventDefault();
+    var file=document.getElementById('file').files[0];
+    if(!file){ show('Pick an STL file first.',false); return; }
+    if(!/\.stl$/i.test(file.name)){ show('That needs to be a .stl file.',false); return; }
+    if(file.size>10*1024*1024){
+      show('That file is '+(file.size/1048576).toFixed(1)+' MB — the limit is 10 MB. Decimate the mesh and try again.',false);
+      return;
+    }
+    if(document.getElementById('original').value==='no'){
+      show("We can only take your own designs — we're crediting you on air for it.",false);
+      return;
+    }
+    go.disabled=true; go.textContent='SENDING…';
+    fetch('/api/stl-submit',{method:'POST',body:new FormData(f)})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.ok){
+          f.reset();
+          show("Got it. We print the ones that make the cut — if yours does, you'll hear your name on the show.",true);
+        } else { show(d.error||'Something went wrong. Try again in a minute.',false); }
+        go.disabled=false; go.textContent='SEND TO THE STUDIO';
+      })
+      .catch(function(){
+        show('Could not reach the studio. Check your connection and try again.',false);
+        go.disabled=false; go.textContent='SEND TO THE STUDIO';
+      });
+  });
+})();
+</script>
+</body>
+</html>

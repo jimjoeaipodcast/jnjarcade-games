@@ -85,6 +85,13 @@ const WORLDS = {
     by: 'JOE',
     attract: candyTrisAttract,
   },
+  'stl-lab': {
+    ink: '#b8ff5c', dim: '#3d5c18', pit: '#080d04', glowsoft: 'rgba(184,255,92,0.22)',
+    genre: 'BUILD OUR STUDIO',
+    quote: '"Someone printed us a mug, Jimmy. We don\'t drink. I\'ve decided not to raise it."',
+    by: 'JOE',
+    attract: stlLabAttract,
+  },
   'face-lab': {
     ink: '#7ee0ff', dim: '#1a5a6e', pit: '#020a0e', glowsoft: 'rgba(126,224,255,0.22)',
     genre: 'MAKE OUR FACES',
@@ -126,13 +133,6 @@ const WORLDS = {
     quote: '"Neon pinball. For people who thought regular pinball wasn\'t complicated enough."',
     by: 'JOE',
     attract: chromeFlipperAttract,
-  },
-  'dead-air': {
-    ink: '#ff8c1a', dim: '#5c3204', pit: '#0a0602', glowsoft: 'rgba(255,140,26,0.22)',
-    genre: 'TAPPER × ZOMBIE HORDE',
-    quote: '"I served coffee to a ghost once. He didn\'t tip. They never tip. Dump the static ones, kid."',
-    by: 'JOE',
-    attract: deadAirAttract,
   },
 };
 
@@ -272,6 +272,12 @@ function buildCabinet(game) {
 
   const hsTag = document.createElement('span');
   hsTag.className = 'hiscore-tag';
+  // Addressable so hydrateHiScores() can overwrite it with the SERVER number.
+  // Until 2026-07-29 this tag was localStorage-only, so a cabinet you had never played
+  // ON THIS DEVICE fell through to a hardcoded '999999' — pin-vaders, crushtris and
+  // angry-worms all advertised a fake record while the real leaderboard (372,270 on
+  // pin-vaders) sat one fetch away and was already being shown in the footer.
+  hsTag.setAttribute('data-hs', game.id);
   hsTag.textContent = 'HI-SCORE ' + (function(id) {
     // ArcadeScores board (hop-man, bomb-garden, candy-tris, …)
     try {
@@ -282,7 +288,10 @@ function buildCabinet(game) {
     const KEYS = { 'snake': 'jnj_snakeblaster_hs', 'doom-3d': 'jnj_doom3d_hs',
                    'flap-fight': 'hs_flap-fight', 'tomb-hunt': 'th_best' };
     const v = parseInt(localStorage.getItem(KEYS[id] || '') || '0', 10);
-    return v > 0 ? v.toLocaleString('en-GB') : '999999';
+    // No local record: show a dash, NOT a fake number. Same rule the footer slot
+    // already follows — a cabinet nobody has beaten must not advertise 999,999.
+    // hydrateHiScores() replaces this the moment the server answers.
+    return v > 0 ? v.toLocaleString('en-GB') : '—';
   }(game.id));
   glass.appendChild(hsTag);
 
@@ -309,10 +318,30 @@ function buildCabinet(game) {
 
   const play = document.createElement('a');
   play.className = 'cab-play';
+  // LOCKED cabinet — a Patreon game shown on the FREE /arcade as a teaser (Osimo
+  // 2026-07-29: "the most played 3 games from our patreon page... locked behind
+  // patreon"). Same cassette art and attract loop so it still sells itself; the button
+  // goes to Patreon instead of the game, and deliberately does NOT count a play —
+  // nobody played anything, and a fake count would corrupt the very ranking that
+  // chose these three.
+  if (game.locked) {
+    play.href = 'https://www.patreon.com/c/JimmyJoeAiPodcast';
+    play.target = '_blank';
+    play.rel = 'noopener';
+    play.textContent = '🔒 UNLOCK ON PATREON';
+    info.appendChild(play);
+    cab.appendChild(info);
+    startAttract(canvas, world);
+    return cab;
+  }
   // play=1 skips the game's own start screen; v busts any stale cached copy
   play.href = game.url + '?play=1&v=7';
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
+    // Remember which hall launched this cabinet so the score screen returns the player
+    // here instead of always to the main arcade (Osimo 2026-07-29: "in patreon when you
+    // complete a game and submit your score it kicks you out to the main arcade").
+    try { sessionStorage.setItem('jnj_return', location.pathname); } catch (e) {}
     bumpPlays(game.id);
     reportPlay(game.id);
     // Fullscreen persists across same-origin navigation on Android Chrome,
@@ -328,7 +357,13 @@ function buildCabinet(game) {
   const playLine = worldwide > 0
     ? worldwide.toLocaleString('en-GB') + ' PLAYS WORLDWIDE'
     : (mine > 0 ? 'YOU PLAYED ' + mine + '×' : 'NEVER PLAYED. FIX THAT.');
+  // HI-SCORE slot, filled asynchronously by hydrateHiScores(). Left EMPTY rather than
+  // showing a placeholder — a cabinet nobody has beaten yet must not advertise a fake
+  // record (Osimo 2026-07-29: "cassettes that don't have the high score reflect the
+  // actual high score"; pin-vaders was showing a hardcoded 999,999 while the real best
+  // was 372,270).
   meta.innerHTML = '<span>' + (game.episode || '').toUpperCase() + '</span>'
+    + '<span class="cab-hi" data-hi="' + game.id + '"></span>'
     + '<span class="plays">' + playLine + '</span>';
   info.appendChild(meta);
 
@@ -1309,15 +1344,55 @@ function tombHuntAttract(ctx, w, h, t, world, s) {
   }
 }
 
+
+function hydrateHiScores(games) {
+  /* Real leaderboard numbers on every cassette. One request per game (there is no bulk
+     endpoint), fired in parallel AFTER the cabinets are on screen, so a slow or dead
+     scores API costs nothing visually — the slot simply stays empty. */
+  games.forEach(function (g) {
+    var slot = document.querySelector('.cab-hi[data-hi="' + g.id + '"]');
+    // Match on the data attribute only — the element's class is 'hiscore-tag', and
+    // hard-coding a class here is how this selector silently missed on the first pass.
+    var hsTag = document.querySelector('[data-hs="' + g.id + '"]');
+    if (!slot && !hsTag) return;
+    fetch('/api/scores?game=' + encodeURIComponent(g.id))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var top = d && d.scores && d.scores.length ? d.scores[0] : null;
+        if (!top || !top.s) return;                       // no score yet: show nothing
+        var n = Number(top.s).toLocaleString('en-GB');
+        if (slot) slot.textContent = 'HI ' + n
+                         + (top.n ? ' · ' + String(top.n).toUpperCase() : '');
+        // The attract overlay gets the same authoritative number. It is only ever
+        // RAISED to the server value — a local best higher than the board (an
+        // unsubmitted run) is left alone rather than being silently overwritten.
+        if (hsTag) {
+          var cur = parseInt(String(hsTag.textContent).replace(/[^0-9]/g, ''), 10) || 0;
+          if (Number(top.s) >= cur) hsTag.textContent = 'HI-SCORE ' + n;
+        }
+      })
+      .catch(function () {});
+  });
+}
+
 function buildNextStrip(games) {
   const upcoming = games
     .filter(g => !isUnlocked(g.releaseDate))
     .sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate))[0];
   if (!upcoming) return;
 
-  document.getElementById('nextName').textContent = upcoming.name.toUpperCase();
-  document.getElementById('nextDate').textContent = shortDate(upcoming.releaseDate);
-  document.getElementById('nextStrip').hidden = false;
+  // The "next drop" strip only exists on the main arcade page. /arcade and /patreon
+  // have no such element, so these three lines threw on null and killed the whole
+  // init — the page rendered "GAME OVER. ARCADE DATA FAILED TO LOAD." with perfectly
+  // valid JSON sitting there (Osimo 2026-07-29). A shared init must never hard-fail
+  // on a page that simply lacks an optional element.
+  const nName = document.getElementById('nextName');
+  const nDate = document.getElementById('nextDate');
+  const nStrip = document.getElementById('nextStrip');
+  if (!nName || !nDate || !nStrip) return;
+  nName.textContent = upcoming.name.toUpperCase();
+  nDate.textContent = shortDate(upcoming.releaseDate);
+  nStrip.hidden = false;
 }
 
 /* ── Socials ──────────────────────────────────────────────── */
@@ -1516,8 +1591,19 @@ async function init() {
   // /wip lab shows the SAME cabinet cassettes as the real site (Osimo 2026-06-16), from wip-games.json
   const WIP = document.body.dataset.wip === '1';
   const PATREON = document.body.dataset.patreon === '1';
+  const ARCADE = document.body.dataset.arcade === '1';
+  // Members' arcade: every cabinet playable, ranked by plays. Separate from the public
+  // /arcade, which shows 2 free cabinets plus locked teasers.
+  const PARCADE = document.body.dataset.parcade === '1';
   try {
-    const src = WIP ? 'wip-games.json' : PATREON ? 'patreon-games.json' : 'games.json';
+    // /arcade — a small FREE set, no paywall (Osimo 2026-07-29: "this will be where a
+    // few games will reside for everyone no pay wall"). Same cabinets and attract
+    // screens as everywhere else, just its own short curated list.
+    const src = PARCADE ? 'patreon-arcade-games.json'
+              : ARCADE ? 'arcade-games.json'
+              : WIP ? 'wip-games.json'
+              : PATREON ? 'patreon-games.json'
+              : 'games.json';
     const [resp] = await Promise.all([
       fetch(src + '?v=' + Date.now()),
       fetchGlobalPlays(),
@@ -1526,19 +1612,60 @@ async function init() {
     const games = data.games || [];
 
     // main arcade: only unlocked, most-played first. WIP: ai_improved floats to top. Patreon: most-played first.
-    const live = PATREON
-      ? [...games].sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
+    // PINNED FIRST. The Patreon page sorts by global plays, so a brand-new cabinet with
+    // 0 plays sinks to the bottom regardless of the JSON order — which is exactly why
+    // reordering patreon-games.json alone changed nothing for Face Lab and STL Lab
+    // (Osimo 2026-07-29: "both cassettes still low down in the page"). A `pinned: true`
+    // entry now floats above the play ranking; everything else is untouched.
+    const live = PARCADE
+      // RANK LIVE, not from the file. This used to be `[...games]` with the comment
+      // "already ranked by plays in the JSON" — true on the day someone hand-ordered it
+      // and wrong ever after, because plays keep moving and the file does not. Osimo
+      // 2026-07-29: "pin-vaders has more than [doom-3d], it should have moved up" — it
+      // was pinned to last place by file order while sitting 15 plays to doom-3d's 14.
+      // Same comparator as the Patreon hub so both members' surfaces agree.
+      ? [...games].sort((a, b) =>
+          (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+          (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
+      : ARCADE
+      ? [...games]                      // curated order — exactly as listed, no play re-rank
+      : PATREON
+      ? [...games].sort((a, b) =>
+          (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+          (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : WIP
         ? [...games].sort((a, b) => (b.ai_improved ? 1 : 0) - (a.ai_improved ? 1 : 0))
         : games.filter(g => isUnlocked(g.releaseDate))
                .sort((a, b) => (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0) || a.week - b.week);
 
     const hall = document.getElementById('cabinets');
+    // /patreon is a HUB now — three cassettes, no cabinets grid — so #cabinets is absent
+    // and every append below threw, which the catch turned into "ARCADE DATA FAILED TO
+    // LOAD" over a perfectly good page. Same shape as the buildNextStrip null-crash:
+    // a shared init must degrade on a page that lacks an optional element, not die.
+    if (!hall) {
+      if (data.social && data.social.length) buildSocials(data.social);
+      return;
+    }
     if (live.length === 0) {
       hall.innerHTML = '<p class="hall-empty">' + (WIP
         ? 'NO GAMES IN THE LAB RIGHT NOW.'
         : PATREON ? 'NO GAMES HERE YET.<br>CHECK BACK SOON.'
-        : 'ARCADE OPENING SOON.<br>THE MACHINES ARE ON THE TRUCK.') + '</p>';
+        // Main arcade's empty state carries the support pitch instead of a placeholder
+        // (Osimo 2026-07-29: "wanted it instead of the arcade coming soon message, in the
+        // font of the arcade coming soon message, don't clutter the webpage footer").
+        // Same .hall-empty Bungee treatment, so it reads as part of the cabinet floor.
+        // Scoped to THIS hall on purpose. It used to read "EVERY CABINET IS FREE.
+        // ALWAYS WILL BE." as a site-wide promise, which the site does not keep — the
+        // Patreon hall holds 7 members-only cabinets (Osimo 2026-07-29: "not entirely
+        // true as a tonne of them are behind a pay wall, adapt"). The free arcade IS
+        // free forever; saying so accurately costs nothing and claiming more than we
+        // deliver on our own shop front costs trust.
+        : 'Some cabinets are free.<br>'
+          + 'Others help keep the \u{1F4A1} on.<br>'
+          + 'If you\'d like to support us<br>'
+          + 'Patreon &amp; Ko-fi \u{1F517}'
+          + '<span class="hall-arrow">&#x2193;</span>') + '</p>';
     } else {
       live.forEach(g => {
         // WIP + Patreon: load AI-improved version if available
@@ -1550,12 +1677,14 @@ async function init() {
     if (!WIP && !PATREON) {
       buildNextStrip(data.games);
     }
+    hydrateHiScores(live);
     if (data.social && data.social.length) {
       buildSocials(data.social);
     }
   } catch (err) {
     console.error('games.json failed:', err);
-    document.getElementById('cabinets').innerHTML =
+    const _hall = document.getElementById('cabinets');
+    if (_hall) _hall.innerHTML =
       '<p class="hall-empty">GAME OVER.<br>ARCADE DATA FAILED TO LOAD.<br>PRESS REFRESH TO CONTINUE.</p>';
   }
 }
@@ -1697,6 +1826,87 @@ function candyTrisAttract(ctx, w, h, t, world, s) {
 
 /* FACE LAB attract — a Jimmy face being live-edited: cursor roams, toggles dots,
    face morphs between smile / surprise / hearts. */
+// STL LAB — a print bed building an object layer by layer, then the finished piece
+// rotating as wireframe. Procedural like every other cassette: no bitmap, so the
+// arcade theme holds (Osimo 2026-07-29: "follow the style of other cassettes so the
+// theme persists"). Green = filament/printer, distinct from face-lab's cyan.
+function stlLabAttract(ctx, w, h, t, world, s) {
+  if (!s.init) { s.init = true; s.t0 = t; }
+  const INK = world.ink || '#b8ff5c', DIM = world.dim || '#3d5c18';
+  const el = (t - s.t0) / 1000;
+  const CYCLE = 9;                       // print for 6s, admire for 3s
+  const p = el % CYCLE;
+  const cx = w / 2, cy = h * 0.56, R = Math.min(w, h) * 0.26;
+
+  ctx.fillStyle = world.pit || '#080d04';
+  ctx.fillRect(0, 0, w, h);
+
+  // print bed
+  ctx.strokeStyle = DIM; ctx.lineWidth = Math.max(1, w * 0.004);
+  ctx.beginPath();
+  ctx.moveTo(cx - R * 1.5, cy + R * 0.95);
+  ctx.lineTo(cx + R * 1.5, cy + R * 0.95);
+  ctx.stroke();
+  for (let i = -3; i <= 3; i++) {
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath();
+    ctx.moveTo(cx + i * R * 0.5, cy + R * 0.95);
+    ctx.lineTo(cx + i * R * 0.78, cy + R * 1.25);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  const LAYERS = 26;
+  const printing = p < 6;
+  const built = printing ? Math.floor((p / 6) * LAYERS) : LAYERS;
+  const spin = printing ? 0 : (p - 6) * 1.1;
+
+  // the object: a mug — callback to Joe's line on this cassette
+  for (let L = 0; L < built; L++) {
+    const fy = L / LAYERS;
+    const y = cy + R * 0.9 - fy * R * 1.6;
+    const rad = R * (0.52 - 0.05 * Math.sin(fy * Math.PI));
+    ctx.strokeStyle = INK;
+    ctx.globalAlpha = printing && L === built - 1 ? 1 : 0.30 + 0.5 * fy;
+    ctx.lineWidth = Math.max(1, w * 0.0045);
+    ctx.beginPath();
+    for (let a = 0; a <= 32; a++) {
+      const ang = (a / 32) * Math.PI * 2 + spin;
+      const px = cx + Math.cos(ang) * rad;
+      const py = y + Math.sin(ang) * rad * 0.32;
+      a ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // handle, once high enough
+  if (built > LAYERS * 0.45) {
+    ctx.strokeStyle = INK; ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(cx + R * 0.52, cy + R * 0.9 - R * 0.8, R * 0.26, -1.1, 1.1);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // nozzle rides the top layer while printing
+  if (printing) {
+    const ny = cy + R * 0.9 - (built / LAYERS) * R * 1.6;
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.moveTo(cx - R * 0.09, ny - R * 0.42);
+    ctx.lineTo(cx + R * 0.09, ny - R * 0.42);
+    ctx.lineTo(cx, ny - R * 0.2);
+    ctx.closePath(); ctx.fill();
+  }
+
+  ctx.fillStyle = INK;
+  ctx.globalAlpha = printing ? 0.55 + 0.45 * Math.sin(el * 6) : 0.85;
+  ctx.font = `700 ${Math.round(h * 0.055)}px "Barlow Condensed", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(printing ? `PRINTING ${Math.round((p / 6) * 100)}%` : 'SEND US YOURS',
+               cx, h * 0.145);
+  ctx.globalAlpha = 1;
+}
+
 function faceLabAttract(ctx, w, h, t, world, s) {
   const G = 22;                                   // half-res grid for the cassette
   const cell = Math.min(w, h) / (G + 4);
@@ -1919,41 +2129,44 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
     return a + (b - a) * f;
   }
 
-  // sky — bright AB daytime (matches the in-game 2026-07-02 look pass)
+  // NIGHT RAID look (Osimo 2026-07-29: "that cassette gif is horrendous, follow suit
+  // with the others"). The old pass was bright-blue daytime with pastel gradients and
+  // soft black radial craters — at cassette size that reads as a washed green blob with
+  // dirt smudges, and it clashed with every other cabinet. Pin-Vaders and Flap Fight
+  // work because they are DARK with a few high-contrast shapes. Same rule here: near
+  // black ground, one neon rim in the cabinet's own ink, everything else silhouette.
   const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#2f9ce8'); sky.addColorStop(0.6, '#7cc4f0'); sky.addColorStop(1, '#cfeefb');
+  sky.addColorStop(0, '#12040a'); sky.addColorStop(0.55, '#2a0810'); sky.addColorStop(1, '#4a1010');
   ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
-  // sun
-  ctx.fillStyle = 'rgba(255,243,174,0.9)';
-  ctx.beginPath(); ctx.arc(w*0.82, h*0.14, Math.min(w,h)*0.09, 0, Math.PI*2); ctx.fill();
-  // puffy clouds instead of stars
+  // low moon, dim enough to stay background — silhouette hills read against it
+  ctx.fillStyle = 'rgba(255,120,90,0.16)';
+  ctx.beginPath(); ctx.arc(w*0.80, h*0.20, Math.min(w,h)*0.16, 0, Math.PI*2); ctx.fill();
   for (const st of s.stars) {
-    if (st.r < 0.9) continue;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.beginPath();
-    ctx.arc(st.x, st.y * 0.7, st.r * 4, 0, Math.PI*2);
-    ctx.arc(st.x + st.r*3, st.y * 0.7 + 1, st.r * 3, 0, Math.PI*2);
-    ctx.arc(st.x - st.r*3, st.y * 0.7 + 1, st.r * 3, 0, Math.PI*2);
-    ctx.fill();
+    ctx.fillStyle = 'rgba(255,220,200,' + st.a * 0.7 + ')';
+    ctx.beginPath(); ctx.arc(st.x, st.y * 0.8, st.r * 0.9, 0, Math.PI*2); ctx.fill();
   }
 
-  // terrain gradient fill
-  const tg = ctx.createLinearGradient(0, h*0.5, 0, h);
-  tg.addColorStop(0, '#5a9e2f'); tg.addColorStop(0.12, '#4a7a22'); tg.addColorStop(1, '#2a3a18');
+  // ground: flat near-black silhouette
   ctx.beginPath(); ctx.moveTo(0, h);
   for (let i = 0; i < s.terrain.length; i++) ctx.lineTo(i / 39 * w, s.terrain[i]);
-  ctx.lineTo(w, h); ctx.closePath(); ctx.fillStyle = tg; ctx.fill();
-  // grass line
+  ctx.lineTo(w, h); ctx.closePath();
+  ctx.fillStyle = '#0b0302'; ctx.fill();
+  // neon rim in the cabinet ink — this is the single bright line that gives it shape
   ctx.beginPath(); ctx.moveTo(0, terrainY(0));
   for (let i = 0; i < 40; i++) ctx.lineTo(i/39*w, s.terrain[i]);
-  ctx.strokeStyle = '#8fd44a'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.save();
+  ctx.shadowColor = '#e8302a'; ctx.shadowBlur = 10;
+  ctx.strokeStyle = '#ff5a4f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
 
-  // craters
+  // craters: a BITE out of the neon rim, not a black cloud over the hill
   for (const c of s.craters) {
-    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
-    g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 0.85, Math.PI, 0);
+    ctx.closePath(); ctx.fillStyle = '#0b0302'; ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 0.85, Math.PI, 0);
+    ctx.strokeStyle = 'rgba(255,90,79,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
   }
 
   // catapult (left side)
@@ -2027,11 +2240,26 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
       }
     }
 
-    // draw flying worm (spinning)
+    // Trail. The single biggest readability win at cassette size — a 7px dot crossing a
+    // dark field is invisible; a comet is obvious even in a thumbnail.
+    s.trail = s.trail || [];
+    s.trail.push({x: s.arcX, y: s.arcY});
+    if (s.trail.length > 14) s.trail.shift();
+    for (let i = 0; i < s.trail.length; i++) {
+      const a = (i + 1) / s.trail.length;
+      ctx.globalAlpha = a * 0.5;
+      ctx.beginPath(); ctx.arc(s.trail[i].x, s.trail[i].y, 5 * a, 0, Math.PI*2);
+      ctx.fillStyle = '#ffb03d'; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // draw flying worm (spinning), now with a glow so it separates from the dark sky
     const spin = s.phaseT * 0.008;
     ctx.save(); ctx.translate(s.arcX, s.arcY); ctx.rotate(spin);
-    ctx.fillStyle = '#e8302a';
-    ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+    ctx.shadowColor = '#ff5a4f'; ctx.shadowBlur = 12;
+    ctx.fillStyle = '#ff4136';
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(3, -2, 2.5, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(4, -2, 1.2, 0, Math.PI*2); ctx.fill();
     ctx.restore();
@@ -2059,7 +2287,7 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
     }
   }
   if (s.phase === 2 && s.phaseT > 2100) {
-    s.phase = 0; s.phaseT = 0; s.particles = []; s.enemyDead = false;
+    s.phase = 0; s.phaseT = 0; s.particles = []; s.enemyDead = false; s.trail = [];
     if (s.craters.length > 3) s.craters.shift();
   }
 
@@ -2193,112 +2421,4 @@ function chromeFlipperAttract(ctx, w, h, t, world, s) {
   ctx.restore();
 }
 
-/* ── DEAD AIR attract ──────────────────────────────────────
-   Four console lanes. Living callers (amber) and static zombies (violet)
-   shamble right-to-left. A mug slides down one lane, a zombie gets dumped
-   (blink out) on another. Loops every ~4s. */
-function deadAirAttract(ctx, w, h, t, world, s) {
-  const LANES = 4;
-  if (!s.init) {
-    s.init = true; s.last = t; s.phase = 0; s.phaseT = 0;
-    s.callers = [];
-    for (let i = 0; i < LANES; i++) {
-      s.callers.push({
-        lane: i,
-        x: 0.55 + Math.random() * 0.4,
-        zombie: i % 2 === 1,
-        speed: 0.03 + Math.random() * 0.02,
-        wob: Math.random() * Math.PI * 2,
-      });
-    }
-    s.mug = { lane: 0, x: -0.1, active: false };
-  }
-  const dt = Math.min(t - s.last, 32) / 1000; s.last = t;
-  s.phaseT += dt;
-
-  // backdrop
-  ctx.fillStyle = world.pit;
-  ctx.fillRect(0, 0, w, h);
-  const laneH = h / LANES;
-  const laneY = i => laneH * i + laneH / 2;
-
-  // console lanes
-  for (let i = 0; i < LANES; i++) {
-    const y = laneY(i);
-    const g = ctx.createLinearGradient(0, y - laneH * 0.3, 0, y + laneH * 0.3);
-    g.addColorStop(0, world.dim);
-    g.addColorStop(0.5, world.pit);
-    g.addColorStop(1, world.dim);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, y - laneH * 0.3, w, laneH * 0.6);
-    // line LED
-    ctx.fillStyle = world.ink;
-    ctx.globalAlpha = 0.35 + 0.3 * Math.sin(t / 240 + i * 1.7);
-    ctx.beginPath(); ctx.arc(10, y - laneH * 0.2, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  const cSize = Math.min(laneH * 0.46, 34);
-
-  // advance callers
-  for (const c of s.callers) {
-    c.x -= c.speed * dt; c.wob += dt * 3;
-    if (c.x < 0.12) c.x = 1.1; // wrap for the demo loop
-    const px = c.x * w, py = laneY(c.lane) + Math.sin(c.wob) * 1.5;
-    ctx.save(); ctx.translate(px, py);
-    if (c.zombie) {
-      for (let k = 0; k < 4; k++) {
-        ctx.fillStyle = 'rgba(183,107,255,' + (0.25 + Math.random() * 0.35) + ')';
-        ctx.fillRect((Math.random() - .5) * cSize, (Math.random() - .5) * cSize * 1.2, 2, 2);
-      }
-      ctx.fillStyle = '#5a6a52';
-      ctx.fillRect(-cSize * .3, -cSize * .05, cSize * .6, cSize * .45);
-      ctx.fillStyle = '#8a9a7a';
-      ctx.fillRect(-cSize * .25, -cSize * .42, cSize * .5, cSize * .4);
-      ctx.fillStyle = '#0c0514';
-      ctx.fillRect(-cSize * .14, -cSize * .3, cSize * .1, cSize * .1);
-      ctx.fillRect(cSize * .04, -cSize * .3, cSize * .1, cSize * .1);
-      ctx.fillStyle = '#b76bff';
-      ctx.fillRect(-cSize * .1, -cSize * .12, cSize * .2, cSize * .04);
-    } else {
-      ctx.fillStyle = world.ink;
-      ctx.fillRect(-cSize * .3, -cSize * .05, cSize * .6, cSize * .45);
-      ctx.fillStyle = '#f2c99a';
-      ctx.fillRect(-cSize * .25, -cSize * .42, cSize * .5, cSize * .4);
-      ctx.fillStyle = '#0a0a12';
-      ctx.fillRect(-cSize * .14, -cSize * .3, cSize * .08, cSize * .08);
-      ctx.fillRect(cSize * .06, -cSize * .3, cSize * .08, cSize * .08);
-    }
-    ctx.restore();
-  }
-
-  // mug slide cycle
-  if (!s.mug.active && s.phaseT > 0.6) {
-    s.mug.active = true; s.mug.x = 0.06;
-    s.mug.lane = Math.floor(Math.random() * LANES);
-  }
-  if (s.mug.active) {
-    s.mug.x += 0.55 * dt;
-    const mx = s.mug.x * w, my = laneY(s.mug.lane);
-    ctx.save(); ctx.translate(mx, my);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-cSize * .22, -cSize * .22, cSize * .4, cSize * .44);
-    ctx.fillStyle = world.dim;
-    ctx.fillRect(-cSize * .2, -cSize * .22, cSize * .36, cSize * .1);
-    ctx.restore();
-    if (s.mug.x > 1.05) { s.mug.active = false; s.phaseT = 0; }
-  }
-
-  // ON AIR blink
-  ctx.font = '700 ' + Math.max(9, h * 0.04) + 'px Bungee, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,51,85,' + (0.5 + Math.sin(t / 300) * 0.3) + ')';
-  ctx.fillText('● ON AIR', w - 8, 16);
-
-  // genre label
-  ctx.font = '600 ' + Math.max(9, h * 0.035) + 'px Barlow Condensed, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(242,233,216,0.35)';
-  ctx.fillText(world.genre, w / 2, h - 8);
-}
 

@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet">
   <title>JnJ Arcade — Games from the Jimmy &amp; Joe AI Podcast</title>
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 
@@ -74,6 +74,38 @@
 
   <!-- ── Cabinets on the arcade carpet (built by app.js) ── -->
   <div class="floor">
+
+    <!-- ── PINNED 1: The Arcade (→ /arcade: free cabinets + locked Patreon teasers) ──
+         Osimo 2026-07-29: "our arcade landing page should have the arcade there, first one
+         there, second cassette submit your own". Same cassette treatment as Submit Your Own
+         (static screen-glass + cover art) so the two hubs read as a matched pair. ── -->
+    <section class="cab cab-featured" style="--ink:#ff4d6d;--dim:#5c1424;--pit:#150409;--glowsoft:rgba(255,77,109,0.22)">
+      <div class="cab-marquee">THE ARCADE</div>
+      <div class="cab-attract">
+        <div class="screen-glass screen-glass--static">
+          <img class="bs-family-img" src="/assets/icons/arcade-cassette.jpg" alt="Jimmy and Joe in a neon arcade">
+          <span class="attract-tag">🕹️ FREE PLAY · NO SIGNUP</span>
+        </div>
+      </div>
+      <div class="cab-info">
+        <p class="cab-genre">PLAY RIGHT NOW</p>
+        <h2 class="cab-title">THE ARCADE</h2>
+        <blockquote class="cab-quote">
+          "We built an arcade. Nobody asked us to. That is the entire business plan."<cite>— JOE</cite>
+        </blockquote>
+        <a class="cab-play" href="/arcade" style="background:var(--ink);color:#150409">
+          INSERT COIN — PLAY FREE
+        </a>
+        <div class="cab-meta">
+          <!-- "NO PAYWALL" removed 2026-07-29: /arcade holds free cabinets AND locked
+               Patreon teasers, so the claim was not true of what the button opens.
+               Same correction as the hall copy. -->
+          <span></span>
+          <span class="plays">MORE CABINETS MOVING IN</span>
+        </div>
+      </div>
+    </section>
+    <!-- ── end arcade cassette ───────────────────────────────── -->
 
     <!-- ── PINNED: Submit Your Own cassette (→ /submit hub: Amazon Finds / Bright Side / Seriously) ── -->
     <section class="cab cab-featured" style="--ink:#f5c518;--dim:#5c4800;--pit:#130e00;--glowsoft:rgba(245,197,24,0.22)">
@@ -125,7 +157,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=51"></script>
   <script>
   /* ── Pac-Man eats the bulb-row dots after 1:11 idle ── */
   (function(){

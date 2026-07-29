@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>THE ARCADE — JnJ Arcade</title>
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:wght@500;600;700;800&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=25">
+<style>
+  .pat-head{ text-align:center; padding:30px 18px 6px; }
+  .pat-kicker{ font-size:11px; letter-spacing:.4em; color:#22c55e; opacity:.9; }
+  .pat-head h1{ font-size:30px; font-weight:900; letter-spacing:.05em; margin:6px 0 4px; }
+  .pat-sub{ font-size:13px; opacity:.6; max-width:520px; margin:0 auto; line-height:1.5; }
+  .pat-nav{ display:flex; gap:16px; justify-content:center; margin-top:10px; flex-wrap:wrap; }
+  .pat-nav a{ color:var(--ink,#ffcf3d); text-decoration:none; font-size:12px;
+              letter-spacing:.1em; opacity:.85; }
+  .pat-nav a:hover{ opacity:1; }
+  /* Home button — a real target, not a text link. 44px min height is the iOS tap-target
+     floor; this page is opened on a phone far more than a desktop. */
+  .home-btn{ display:inline-flex; align-items:center; justify-content:center;
+    min-height:44px; padding:0 22px; margin-top:14px; border-radius:999px;
+    background:#ffcf3d; color:#16120c !important; opacity:1 !important;
+    font-family:'Bungee','Arial Black',sans-serif; font-size:13px; letter-spacing:.06em;
+    text-decoration:none; box-shadow:0 0 22px rgba(255,207,61,.35); }
+  .home-btn:active{ transform:translateY(1px); }
+</style>
+</head>
+<body data-arcade="1">
+  <!-- Same neon marquee as the landing page (Osimo 2026-07-29: "once in the arcade can
+       the header be more like the JNJ arcade"). Markup mirrors index.html so the shared
+       .marquee/.sign/.bulb-row rules in style.css do all the work — no second copy of the
+       sign to drift. Two deliberate omissions: no id="sign" and no class="dying" on the C
+       (both belong to index's Pac-Man idle animation, whose script is not on this page),
+       and no .fs-zone block (this page already owns a #fsBtn further down, and a duplicate
+       id would break whichever one the browser reached second). -->
+  <header class="marquee">
+    <div class="motes" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="bulb-row" aria-hidden="true"></div>
+    <h1 class="sign" aria-label="JnJ Arcade">
+      <span class="sign-jnj" aria-hidden="true"><span>J</span><span>n</span><span>J</span></span>
+      <span class="sign-arcade" aria-hidden="true">
+        <span>A</span><span>R</span><span>C</span><span>A</span><span>D</span><span>E</span>
+      </span>
+    </h1>
+    <div class="bulb-row" aria-hidden="true"></div>
+    <nav class="pat-nav">
+      <a class="home-btn" href="/">&#x1F3E0;&nbsp; HOME</a>
+    </nav>
+  </header>
+
+  <main id="cabinets" aria-label="Arcade games"></main>
+
+  <button id="fsBtn" hidden></button>
+  <button id="a2hsBtn" hidden></button>
+  <div id="a2hsSheet" hidden></div>
+  <div id="toast"></div>
+
+  <footer class="lobby-end">
+    <div class="coin-row" id="socialRow" aria-label="Links"></div>
+    <p class="footer-line">A fan arcade for the <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">Jimmy &amp; Joe AI Podcast</a>. Two AI hosts. Real arguments.</p>
+  </footer>
+
+  <script src="arcade-scores.js?v=10"></script>
+  <script src="app.js?v=arcade19"></script>
+</body>
+</html>

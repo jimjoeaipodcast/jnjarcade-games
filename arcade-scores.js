@@ -19,6 +19,24 @@ var BLOCK = ['NIGGER','NIGGA','NEGER','COON','SPIC','KIKE','CHINK','GOOK','WETBA
   'DICK','PUSSY','WHORE','SLUT','BASTARD','PISS','TITS','BOLLOCK',
   'HITLER','NAZI','KKK','RAPIST','RAPE','PEDO','PAEDO'];
 
+function returnUrl() {
+  /* Where the player came FROM. Both exits were hardcoded to '/', so finishing a game
+     launched from /patreon or /arcade dumped you on the main arcade (Osimo 2026-07-29:
+     "it should kick you back out to the main patreon arcade"). app.js stamps the
+     launching page on click; referrer is the fallback for a direct hit. */
+  try {
+    var v = sessionStorage.getItem('jnj_return');
+    if (v && v.charAt(0) === '/') return v;
+  } catch (e) {}
+  try {
+    if (document.referrer) {
+      var u = new URL(document.referrer);
+      if (u.origin === location.origin && u.pathname.indexOf('/games/') !== 0) return u.pathname;
+    }
+  } catch (e) {}
+  return '/';
+}
+
 function nameAllowed(name) {
   var up = String(name).toUpperCase(), flat = '';
   for (var i = 0; i < up.length; i++) flat += LEET[up[i]] || up[i];
@@ -172,7 +190,7 @@ function show(opts) {
 
   var deck = el('div', 'as-deck');
   var backBtn = el('button', 'as-back', 'BACK TO ARCADE');
-  backBtn.addEventListener('click', function () { window.location.href = '/'; });
+  backBtn.addEventListener('click', function () { window.location.href = returnUrl(); });
   deck.appendChild(backBtn);
   cab.appendChild(deck);
 
@@ -264,7 +282,7 @@ function show(opts) {
     var left = 3, timer = null;
     function tick() {
       ticker.textContent = 'BACK TO THE ARCADE IN ' + left + '…';
-      if (left <= 0) { window.location.href = '/'; return; }
+      if (left <= 0) { window.location.href = returnUrl(); return; }
       left--;
       timer = setTimeout(tick, 1000);
     }

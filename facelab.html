@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FACE LAB — JnJ Arcade</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Styling lifted verbatim from submit.html — Osimo 2026-07-29: "the landing page really
+     crappy, and not in line with the others... there's a perfect submission page in the
+     submit your own page". Same warm #16120c paper, Bungee headings, cassette cards.
+     Only --ink changes, to Face Lab cyan. */
+  :root { --ink: #7ee0ff; --ink-dim: rgba(126,224,255,.25); --glow: rgba(126,224,255,.10); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #16120c; color: #f0e6cc;
+    font-family: 'Barlow Condensed', sans-serif;
+    min-height: 100svh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px 60px;
+  }
+  .hd { text-align: center; padding: 40px 0 10px; max-width: 560px; width: 100%; }
+  .hd-kicker { font-size: 11px; letter-spacing: .45em; color: var(--ink); opacity: .8; text-transform: uppercase; margin-bottom: 10px; }
+  .hd-title { font-family: 'Bungee', sans-serif; font-size: clamp(28px, 7.5vw, 44px); color: var(--ink); line-height: 1; text-shadow: 0 0 40px var(--glow); margin-bottom: 12px; }
+  .hd-sub { font-size: 15px; line-height: 1.55; color: rgba(240,230,204,.55); max-width: 430px; margin: 0 auto; }
+
+  .wrap { width: 100%; max-width: 560px; }
+  .cass {
+    border-radius: 14px; border: 1px solid var(--ink-dim);
+    background: linear-gradient(160deg, #1e1810 0%, #171209 100%);
+    overflow: hidden; box-shadow: 0 0 30px var(--glow); margin-top: 22px;
+  }
+  .cass-img { width: 100%; height: 160px; object-fit: cover; display: block; border-bottom: 1px solid var(--ink-dim); }
+  .body { padding: 22px; }
+  .body h2 { font-family: 'Bungee', sans-serif; font-size: 17px; color: var(--ink); margin-bottom: 12px; letter-spacing: .01em; }
+  .body p, .body li { font-size: 14.5px; line-height: 1.55; color: rgba(240,230,204,.62); margin-bottom: 9px; }
+  .body ul { padding-left: 18px; }
+  .body strong { color: rgba(240,230,204,.9); }
+  .rule { border-left: 3px solid var(--ink); padding-left: 12px; margin: 12px 0; }
+  .hint { font-size: 12.5px; color: rgba(240,230,204,.4); }
+
+  label { display: block; font-size: 10px; letter-spacing: .35em; text-transform: uppercase; color: var(--ink); opacity: .75; margin: 18px 0 6px; }
+  input, textarea, select {
+    width: 100%; background: #100c06; color: #f0e6cc; font: inherit; font-size: 16px;
+    border: 1px solid var(--ink-dim); border-radius: 9px; padding: 12px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  button {
+    width: 100%; margin-top: 22px; border: 0; border-radius: 7px;
+    background: var(--ink); color: #16120c;
+    font-family: 'Bungee', sans-serif; font-size: 15px; padding: 15px;
+    letter-spacing: .04em; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { margin-top: 15px; font-size: 14.5px; line-height: 1.5; display: none; padding: 13px; border-radius: 9px; }
+  .ok { background: rgba(184,255,92,.12); color: var(--ink); display: block; }
+  .err { background: rgba(255,90,90,.12); color: #ff9d9d; display: block; }
+  .quote { font-size: 12.5px; color: rgba(240,230,204,.45); font-style: italic; border-top: 1px solid var(--ink-dim); margin-top: 18px; padding-top: 14px; }
+  .back { display: inline-block; margin-top: 30px; font-size: 12px; letter-spacing: .1em; color: var(--ink); text-decoration: none; opacity: .75; }
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-kicker">Community Lab</div>
+  <h1 class="hd-title">🎨 FACE LAB</h1>
+  <p class="hd-sub">Jimmy and Joe's faces are LED dot grids. Draw them an expression —
+     the best ones air on the show, and the legendary ones become part of their face
+     forever.</p>
+</header>
+
+<div class="wrap">
+
+  <section class="cass">
+    <img class="cass-img" src="/assets/icons/facelab-cassette.jpg" alt="Jimmy and Joe holding up LED face panels">
+    <div class="body">
+      <h2>How it works</h2>
+      <ul>
+        <li>Pick Jimmy or Joe, then tap dots on and off to build an expression.</li>
+        <li>Send it. Every submission lands on the studio board for review.</li>
+        <li>The best ones air on the show, credited to you.</li>
+        <li>A legendary one gets adopted permanently — it becomes part of that host's
+            face, used in every episode after.</li>
+      </ul>
+      <div class="quote">"They're letting the internet design my face. My actual face.
+        I've seen what the internet does with power, Jimmy." — JOE</div>
+    </div>
+  </section>
+
+  <section class="cass">
+    <div class="body">
+      <h2>What makes one land</h2>
+      <div class="rule"><strong>Read it at a glance.</strong> These are low-resolution LED
+        panels on a diorama set, seen small and often in motion. An expression that needs
+        studying doesn't survive the cut to camera.</div>
+      <div class="rule"><strong>Give it one clear feeling.</strong> Smug, appalled,
+        delighted, dead inside. The face has to do a job in a scene — a shape with no
+        emotion behind it has nowhere to be used.</div>
+      <p class="hint">Jimmy and Joe have different resting faces, so the same dots read
+        differently on each. Try yours on both.</p>
+    </div>
+  </section>
+
+  <section class="cass">
+    <div class="body" style="text-align:center">
+      <h2>Ready?</h2>
+      <p>The editor opens full screen — tap a lit dot to turn it off, tap the dark to
+         light it up.</p>
+      <a href="/games/face-lab" style="display:inline-block;margin-top:14px;border-radius:7px;
+         background:var(--ink);color:#04141a;font-family:'Bungee',sans-serif;font-size:15px;
+         padding:15px 30px;letter-spacing:.04em;text-decoration:none">OPEN THE FACE LAB</a>
+    </div>
+  </section>
+
+  <a href="/submit" class="back">‹ back to all submissions</a>
+</div>
+
+</body>
+</html>
