@@ -1672,6 +1672,21 @@ async function init() {
         if ((WIP || PATREON) && g.ai_improved && g.ai_file) g.url = g.ai_file;
         hall.appendChild(buildCabinet(g));
       });
+      // Osimo 2026-08-01: the CSS .cab entrance (cabrise) only ever staggered the
+      // first 2 cards (:nth-child(1)/(2)) — every cabinet after that popped in on
+      // the same frame, no cascade. Cabinet count is only known here at render
+      // time, so JS is the right place to extend the SAME rise (translateY 28px,
+      // 0.7s, same 0.45s start + the existing 0.17s gap between cards 1 and 2)
+      // across however many cabinets this hall actually has. Reduced-motion and a
+      // missing GSAP CDN both leave the original CSS keyframe alone untouched.
+      if (typeof gsap !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const cabs = hall.querySelectorAll('.cab');
+        cabs.forEach(c => { c.style.animation = 'none'; });
+        gsap.fromTo(cabs, {y: 28, opacity: 0}, {
+          y: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
+          delay: 0.45, stagger: 0.17,
+        });
+      }
     }
 
     if (!WIP && !PATREON) {
