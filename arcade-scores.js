@@ -1,11 +1,18 @@
-/* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet. v9 */
+/* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet. v10 */
 /* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet.
    Usage (from a game's end screen):
      ArcadeScores.show({ game: 'snake', title: 'SNAKE BLASTER', score: 1234,
                          accent: '#5af23a', onClose: () => {...} });
    Flow: enter name (filtered) → submit → "YOU RANKED #N" with your row
    highlighted in a scrollable board. Falls back to a local-only board
-   until the global API has storage. */
+   until the global API has storage.
+
+   Usage (from a cassette's HI-SCORE tap on the arcade listing page — no
+   score to submit, just browsing):
+     ArcadeScores.showBoard({ game: 'snake', title: 'SNAKE BLASTER',
+                              accent: '#5af23a', onClose: () => {...} });
+   No name entry, no rank line, no auto-redirect-away ticker — CLOSE just
+   removes the overlay and returns to whatever page you were already on. */
 
 (function () {
 'use strict';
@@ -313,5 +320,77 @@ function show(opts) {
   renderEntry();
 }
 
-window.ArcadeScores = { show: show, nameAllowed: nameAllowed, returnUrl: returnUrl };
+/* ── view-only board (from a cassette's HI-SCORE tap — no name entry,
+   no score to submit, closes back to the SAME page instead of navigating away) ── */
+function showBoard(opts) {
+  var game = opts.game;
+  var accent = opts.accent || '#5af23a';
+  var glow = accent + '55';
+
+  if (!document.getElementById('as-style')) {
+    var st = el('style'); st.id = 'as-style'; st.textContent = CSS;
+    document.head.appendChild(st);
+  }
+  var old = document.getElementById('as-root');
+  if (old) old.remove();
+
+  var root = el('div'); root.id = 'as-root';
+  root.style.setProperty('--as-accent', accent);
+  root.style.setProperty('--as-glow', glow);
+
+  var cab = el('div', 'as-cab');
+  cab.appendChild(el('div', 'as-marquee', (opts.title || game).toUpperCase() + ' · HI-SCORES'));
+
+  var bezel = el('div', 'as-bezel');
+  var crt = el('div', 'as-crt');
+  var screen = el('div', 'as-screen');
+  crt.appendChild(screen); bezel.appendChild(crt); cab.appendChild(bezel);
+
+  var deck = el('div', 'as-deck');
+  var closeBtn = el('button', 'as-back', 'CLOSE');
+  closeBtn.addEventListener('click', function () { close(); });
+  deck.appendChild(closeBtn);
+  cab.appendChild(deck);
+
+  root.appendChild(cab);
+  document.body.appendChild(root);
+
+  var motionOK = typeof gsap !== 'undefined' &&
+    !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (motionOK) gsap.fromTo(cab, {opacity: 0, y: 24}, {opacity: 1, y: 0, duration: .4, ease: 'power2.out'});
+
+  function close() { root.remove(); if (opts.onClose) opts.onClose(); }
+
+  screen.appendChild(el('div', 'as-h1', 'HI-SCORES'));
+  var list = el('div', 'as-list');
+  list.appendChild(el('div', 'as-empty', 'LOADING…'));
+  screen.appendChild(list);
+
+  function renderList(scores, localOnly) {
+    list.innerHTML = '';
+    if (!scores.length) {
+      list.appendChild(el('div', 'as-empty', 'NO SCORES YET.\nBE THE FIRST.'));
+    } else {
+      scores.forEach(function (e, i) {
+        var row = el('div', 'as-row');
+        row.appendChild(el('span', 'r', String(i + 1).padStart(3, ' ') + '.'));
+        row.appendChild(el('span', 'n', e.n));
+        row.appendChild(el('span', 's', Number(e.s).toLocaleString('en-GB')));
+        list.appendChild(row);
+      });
+    }
+    screen.appendChild(el('div', 'as-note',
+      localOnly ? 'LOCAL BOARD — GLOBAL SCORES UNAVAILABLE' : 'GLOBAL BOARD — ALL PLAYERS'));
+  }
+
+  fetch('/api/scores?game=' + encodeURIComponent(game))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (d && d.scores) { renderList(d.scores, false); return; }
+      renderList(localScores(game), true);
+    })
+    .catch(function () { renderList(localScores(game), true); });
+}
+
+window.ArcadeScores = { show: show, showBoard: showBoard, nameAllowed: nameAllowed, returnUrl: returnUrl };
 })();

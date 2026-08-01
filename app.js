@@ -293,6 +293,16 @@ function buildCabinet(game) {
     // hydrateHiScores() replaces this the moment the server answers.
     return v > 0 ? v.toLocaleString('en-GB') : '—';
   }(game.id));
+  // Tap the HI-SCORE tag to browse the full leaderboard without leaving the
+  // arcade or having a score to submit (Osimo 2026-08-02: "click on the high
+  // scorer it should open the score board"). Own listener, not the play link.
+  hsTag.style.cursor = 'pointer';
+  hsTag.addEventListener('click', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    if (window.ArcadeScores) {
+      window.ArcadeScores.showBoard({ game: game.id, title: game.name, accent: world.ink });
+    }
+  });
   glass.appendChild(hsTag);
 
   attract.appendChild(glass);
@@ -365,6 +375,14 @@ function buildCabinet(game) {
   meta.innerHTML = '<span>' + (game.episode || '').toUpperCase() + '</span>'
     + '<span class="cab-hi" data-hi="' + game.id + '"></span>'
     + '<span class="plays">' + playLine + '</span>';
+  const cabHi = meta.querySelector('.cab-hi');
+  cabHi.style.cursor = 'pointer';
+  cabHi.addEventListener('click', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    if (window.ArcadeScores) {
+      window.ArcadeScores.showBoard({ game: game.id, title: game.name, accent: world.ink });
+    }
+  });
   info.appendChild(meta);
 
   cab.appendChild(info);

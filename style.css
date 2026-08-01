@@ -383,6 +383,7 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink);
   opacity: 0.9;
 }
+.hiscore-tag:hover, .cab-hi:hover { opacity: 1; text-decoration: underline; }
 
 @keyframes attractblink {
   0%, 70%  { opacity: 0.85; }
