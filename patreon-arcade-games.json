@@ -43,6 +43,32 @@
   ],
   "games": [
     {
+      "id": "face-lab",
+      "name": "FACE LAB",
+      "emoji": "🎨",
+      "genre": "MAKE OUR FACES",
+      "url": "games/face-lab.html",
+      "status": "wip",
+      "special": "Community Lab",
+      "note": "Design an LED expression for Jimmy or Joe. Tap dots on/off from their resting face. Best ones air on the show; legendary ones become part of their face forever.",
+      "ready": true,
+      "ready_date": "2026-07-03",
+      "pinned": true
+    },
+    {
+      "id": "stl-lab",
+      "name": "STL LAB",
+      "emoji": "🖨️",
+      "genre": "BUILD OUR STUDIO",
+      "url": "stl.html",
+      "status": "wip",
+      "special": "Patreon Workshop",
+      "note": "Design something for the studio, send us the STL, we print it. Your own work only — if it makes the cut it goes in the diorama and gets a thank-you on air.",
+      "ready": true,
+      "ready_date": "2026-07-29",
+      "pinned": true
+    },
+    {
       "id": "hop-man",
       "name": "HOP-MAN",
       "emoji": "🐸",
