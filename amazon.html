@@ -464,6 +464,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script>
 (async function () {
 
@@ -516,6 +517,12 @@
     [statePay, stateSignin, stateGate, stateNotSub, stateForm, stateSuccess].forEach(el => {
       el.classList.toggle('hidden', el.id !== id);
     });
+    // Osimo 2026-08-01: panel entrance instead of an instant class-toggle snap.
+    // gsap may be absent (CDN blocked/offline) — degrades to the plain toggle above.
+    if (typeof gsap !== 'undefined') {
+      const el = document.getElementById(id);
+      if (el) gsap.fromTo(el, {opacity: 0, y: 10}, {opacity: 1, y: 0, duration: .35, ease: 'power2.out'});
+    }
   }
 
   /* ── Two-tap confirm (no browser dialogs) ────────────────── */
@@ -538,6 +545,9 @@
   function showError(el, msg) {
     el.textContent = msg;
     el.classList.add('visible');
+    if (typeof gsap !== 'undefined') {
+      gsap.fromTo(el, {x: -6}, {x: 0, duration: .4, ease: 'elastic.out(1, 0.4)'});
+    }
   }
   function clearError(el) { el.classList.remove('visible'); }
 
@@ -729,6 +739,22 @@
     show('stateForm');
   } else {
     show('statePay');
+  }
+
+  /* ── Micro-interactions (Osimo 2026-08-01) ──────────────────
+     Field focus glow + submit-press feedback. Respects reduced-motion;
+     no-ops cleanly if the GSAP CDN failed to load. */
+  if (typeof gsap !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('input, textarea').forEach(f => {
+      f.addEventListener('focus', () => gsap.to(f, {scale: 1.01, duration: .15, ease: 'power1.out'}));
+      f.addEventListener('blur',  () => gsap.to(f, {scale: 1,    duration: .15, ease: 'power1.out'}));
+    });
+    const submitBtn = document.querySelector('.btn-submit');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', () => {
+        if (!submitBtn.disabled) gsap.fromTo(submitBtn, {scale: .97}, {scale: 1, duration: .25, ease: 'back.out(2)'});
+      });
+    }
   }
 
 })();
