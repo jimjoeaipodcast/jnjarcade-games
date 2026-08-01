@@ -17,6 +17,17 @@
   --bulb-deep:  #c79100;
   --red:        #e8442e;
   --red-deep:   #8a1f10;
+
+  /* shared base for sub-pages (submission forms etc.) — Osimo 2026-08-01:
+     amazon/submit/brightside/seriously each redeclared these same values under
+     different names (--bg/--text vs --shell/--cream) with tiny value drift
+     between copies. Sub-pages link this file and use these directly, keeping
+     only their own distinct --ink/--ink2/--border accent locally. */
+  --surface:    #1e1810;
+  --muted:      rgba(242, 233, 216, 0.55);
+  --green:      #22c55e;
+  --red-status: #ef4444;
+  --radius:     10px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

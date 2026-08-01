@@ -11,25 +11,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* shared --shell/--surface/--cream/--muted/--green/--red-status/--radius come
+     from style.css (Osimo 2026-08-01: unify tokens) — only this page's own
+     accent stays local. */
   :root {
-    --bg:       #16120c;
-    --surface:  #1e1810;
     --ink:      #ffcf3d;
     --ink2:     #ffd23d;
-    --text:     #f0e6cc;
-    --muted:    rgba(240,230,204,.55);
     --border:   rgba(255,207,61,.18);
-    --green:    #22c55e;
-    --red:      #ef4444;
-    --radius:   10px;
   }
 
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--shell);
+    color: var(--cream);
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 500;
     min-height: 100svh;
@@ -107,7 +104,7 @@
   .notsub-msg { font-size: 14px; color: var(--muted); line-height: 1.55; margin-bottom: 22px; }
   .btn-sub {
     display: inline-block;
-    background: var(--red);
+    background: var(--red-status);
     color: #fff;
     font-family: 'Bungee', sans-serif;
     font-size: 15px;
@@ -145,7 +142,7 @@
     margin-bottom: 20px;
     line-height: 1.5;
   }
-  .form-greeting strong { color: var(--text); }
+  .form-greeting strong { color: var(--cream); }
 
   label {
     display: block;
@@ -165,7 +162,7 @@
     background: rgba(255,255,255,.04);
     border: 1px solid var(--border);
     border-radius: 6px;
-    color: var(--text);
+    color: var(--cream);
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 16px;
     font-weight: 500;
@@ -221,7 +218,7 @@
     width: 100%;
     margin-top: 24px;
     background: var(--ink);
-    color: var(--bg);
+    color: var(--shell);
     font-family: 'Bungee', sans-serif;
     font-size: 17px;
     letter-spacing: .05em;
@@ -314,8 +311,8 @@
     cursor: pointer;
     transition: opacity .15s;
   }
-  .tap-btn.confirm { background: var(--ink); color: var(--bg); }
-  .tap-btn.cancel  { background: rgba(255,255,255,.06); color: var(--text); }
+  .tap-btn.confirm { background: var(--ink); color: var(--shell); }
+  .tap-btn.cancel  { background: rgba(255,255,255,.06); color: var(--cream); }
   .tap-btn:hover { opacity: .88; }
 
   /* ── Spinner ─────────────────────────── */
@@ -323,7 +320,7 @@
     display: inline-block;
     width: 18px; height: 18px;
     border: 2px solid rgba(22,18,12,.3);
-    border-top-color: var(--bg);
+    border-top-color: var(--shell);
     border-radius: 50%;
     animation: spin .6s linear infinite;
     vertical-align: middle;
