@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#060d14">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../cabinet.css">
 <title>FLAP FIGHT — JnJ Arcade</title>
 <!--
   FLAP FIGHT — the Monday Mashup: BALLOON FIGHT × FLAPPY BIRD (Jimmy & Joe).
@@ -164,6 +162,9 @@ const CHUTE_R      = 22;            // parachute dome radius
 const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
 const GAP_START    = 220;           // initial pipe gap (wide)
 const GAP_MIN      = 105;           // narrowest pipe gap
+const MEGA_BOUNCE_MULT = 3;         // purple bomb: bounce this many × a normal stomp
+const SPECIAL_EXPIRY_MS = 5000;     // flashing bomb: unstomped this long → lose a life
+const SPECIAL_WARN_MS   = 1500;     // last stretch of its life — flash speeds up as a telegraph
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -257,7 +258,7 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
-let birdInflate, inflateInvincible, nextSpecialSpawn;
+let birdInflate, inflateInvincible, nextSpecialSpawn, nextMegaSpawn;
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -359,6 +360,7 @@ function initGame() {
   birdInflate       = 0;
   inflateInvincible = 0;
   nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
+  nextMegaSpawn     = Date.now() + Math.round(rnd(50000, 80000));
   popping           = false;
   popRingR          = 0;
   pipes     = [];
@@ -468,7 +470,8 @@ function update() {
         p.fallTimer--;
         if (p.fallTimer <= 0) { p.falling = true; p.wobbleXOff = 0; }
       } else {
-        p.fallOffset += 2.8;
+        // 2026-08-02 (Osimo): "can't close fully" — closes 25% further than before (2.8→3.5)
+        p.fallOffset += 3.5;
       }
     }
 
@@ -513,7 +516,16 @@ function update() {
     if (chuteDist < bird.r + CHUTE_R && bird.vy > -2) {
       e.alive = false;
       bird.vy = -7;
-      if (e.special) {
+      if (e.mega) {
+        // MEGA BOUNCE — 3× a normal stomp's launch, purple/yellow bomb
+        bird.vy = -7 * MEGA_BOUNCE_MULT;
+        sfx.bonus();
+        spawnParticles(e.x, cy, '#a855f7', 16);
+        spawnParticles(e.x, cy, '#ffcf3d', 8);
+        score += 30;
+        scoreEl.textContent = score;
+        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🚀 MEGA BOUNCE! +30', alpha: 1, vy: -1.8, color: '#a855f7' });
+      } else if (e.special) {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
         sfx.bonus();
         spawnParticles(e.x, cy, '#00ffcc', 14);
@@ -555,14 +567,43 @@ function update() {
     }
   }
 
-  // rare deflate parachute: once per ~1 min at a random moment, only when inflated
+  // rare deflate parachute (the "flashing" one): once per ~1 min, only when inflated.
+  // 2026-08-02 (Osimo): was tucked in the extreme top/bottom 18% band — a little easier
+  // to reach now (28%/72%), and it's on a clock: ignore it 5s and it costs a life, same
+  // as flying into a pipe. spawnedAt drives both the expiry and the accelerating flash.
   if (birdInflate > 0 && Date.now() >= nextSpecialSpawn) {
     nextSpecialSpawn = Date.now() + Math.round(rnd(45000, 75000));
+    const easyY = Math.random() < 0.5
+      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.28)
+      : rnd(ch * 0.72, ch - GROUND_H - CHUTE_OFFSET - 4);
+    enemies.push({ x: cw + ENEMY_R + 8, y: easyY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, special: true,
+                   spawnedAt: Date.now() });
+  }
+
+  // rare MEGA bomb (purple/yellow) — pure bonus, not gated on inflate state. Positioned
+  // in the same hard-to-reach edge band the flashing one used to live in — Osimo wanted
+  // it to stay the harder pickup of the two now that the flashing one's been eased.
+  if (Date.now() >= nextMegaSpawn) {
+    nextMegaSpawn = Date.now() + Math.round(rnd(50000, 80000));
     const hardY = Math.random() < 0.5
       ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
       : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
-    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1),
-                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, special: true });
+    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, mega: true });
+  }
+
+  // flashing-bomb expiry: unstomped SPECIAL_EXPIRY_MS after spawn → treat like a pipe
+  // hit (inflate/lose a life) and remove it. Never punishes anything that just appeared —
+  // the accelerating flash in drawEnemy() is the telegraph this rule needs to be fair.
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.special && e.alive && Date.now() - e.spawnedAt >= SPECIAL_EXPIRY_MS) {
+      enemies.splice(i, 1);
+      spawnParticles(e.x, e.y - CHUTE_OFFSET, '#ff4400', 10);
+      floaters.push({ x: e.x, y: e.y - CHUTE_OFFSET - CHUTE_R - 4, text: '💨 MISSED!', alpha: 1, vy: -1.8, color: '#ff6b4a' });
+      if (Date.now() >= inflateInvincible) inflate();
+    }
   }
 
   // particles
@@ -627,7 +668,7 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
-    drawEnemy(e.x, e.y, e.special);
+    drawEnemy(e);
   }
 
   // particles
@@ -756,7 +797,8 @@ function drawPipe(x, y, w, h, isBottom) {
   ctx.fillRect(x + 3, y, 6, h);
 }
 
-function drawEnemy(x, y, special = false) {
+function drawEnemy(e) {
+  const x = e.x, y = e.y, special = e.special, mega = e.mega;
   ctx.save();
   ctx.translate(x, y);
 
@@ -764,8 +806,16 @@ function drawEnemy(x, y, special = false) {
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
   const BR = ENEMY_R - 4;    // 10 — body radius
 
-  // special: flash panels red↔yellow every 280ms
-  const flash = special && Math.floor(Date.now() / 280) % 2 === 0;
+  // special: flash panels red↔yellow every 280ms, speeding up as its 5s clock runs out
+  // (telegraphs the expiry-loses-a-life rule — DESIGN DOCTRINE: nothing punishes the
+  // player without warning). mega: no flash, steady purple — it's a pure bonus, not a clock.
+  let flashPeriod = 280;
+  if (special) {
+    const age = Date.now() - e.spawnedAt;
+    const left = SPECIAL_EXPIRY_MS - age;
+    if (left < SPECIAL_WARN_MS) flashPeriod = Math.max(70, 280 * (left / SPECIAL_WARN_MS));
+  }
+  const flash = special && Math.floor(Date.now() / flashPeriod) % 2 === 0;
 
   // STRINGS (dome rim → body top)
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -780,10 +830,12 @@ function drawEnemy(x, y, special = false) {
     ctx.stroke();
   }
 
-  // PARACHUTE DOME — special flips red/yellow each frame pair
+  // PARACHUTE DOME — special flips red/yellow each frame pair; mega is steady purple/yellow
   ctx.save();
   ctx.translate(0, -CO);
-  const panels = flash
+  const panels = mega
+    ? ['#a855f7', '#ffcf3d', '#a855f7', '#ffcf3d']
+    : flash
     ? ['#ffcf3d', '#ff6b4a', '#ffcf3d', '#ff6b4a']   // swapped
     : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];   // normal
   for (let i = 0; i < 4; i++) {
@@ -803,19 +855,27 @@ function drawEnemy(x, y, special = false) {
     const a = Math.PI + (i / 4) * Math.PI;
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
-  // dome outline
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
+  // dome outline — mega gets a glow ring so it reads as the special pickup it is
+  if (mega) {
+    ctx.save();
+    ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = 'rgba(168,85,247,0.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
+  }
   ctx.restore();
 
-  // BODY — flashes yellow when dome is red, red when dome is yellow
-  ctx.fillStyle = flash ? '#ffcf3d' : '#e84040';
+  // BODY — mega is purple; special flashes yellow/red; normal is plain red
+  ctx.fillStyle = mega ? '#7e22ce' : flash ? '#ffcf3d' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = flash ? '#cc9900' : '#cc2020';
+  ctx.strokeStyle = mega ? '#581c87' : flash ? '#cc9900' : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
