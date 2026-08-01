@@ -197,14 +197,29 @@ function show(opts) {
   root.appendChild(cab);
   document.body.appendChild(root);
 
+  // Osimo 2026-08-01: the cabinet used to just snap onto the screen. gsap may be
+  // absent (CDN blocked/offline) or the player may have reduced-motion set —
+  // both degrade cleanly to the original instant-appear behavior.
+  var motionOK = typeof gsap !== 'undefined' &&
+    !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (motionOK) gsap.fromTo(cab, {opacity: 0, y: 24}, {opacity: 1, y: 0, duration: .4, ease: 'power2.out'});
+
   function close() { root.remove(); if (opts.onClose) opts.onClose(); }
 
   /* ── phase 1: name entry ── */
   function renderEntry() {
     screen.innerHTML = '';
     screen.appendChild(el('div', 'as-h1', 'ENTER YOUR NAME'));
-    screen.appendChild(el('div', 'as-score-big', score.toLocaleString('en-GB')));
+    var scoreEl = el('div', 'as-score-big', motionOK ? '0' : score.toLocaleString('en-GB'));
+    screen.appendChild(scoreEl);
     screen.appendChild(el('div', 'as-sub', 'YOUR SCORE'));
+    // Classic arcade score count-up instead of the number just appearing whole.
+    if (motionOK) {
+      gsap.to({v: 0}, {
+        v: score, duration: Math.min(1.4, .3 + score / 2000), ease: 'power1.out',
+        onUpdate: function () { scoreEl.textContent = Math.round(this.targets()[0].v).toLocaleString('en-GB'); },
+      });
+    }
 
     var entry = el('div', 'as-entry');
     var input = el('input', 'as-input');
