@@ -152,7 +152,7 @@
 <div class="game-shell">
 
   <header class="game-header">
-    <a class="back-btn" href="../index.html"><span class="back-chevron">‹</span>ARCADE</a>
+    <a class="back-btn" id="backBtn" href="../index.html"><span class="back-chevron">‹</span>ARCADE</a>
     <div class="hdr-center">
       <div class="game-name">SNAKE BLASTER</div>
       <div class="game-level" id="levelLabel">Level 1</div>
@@ -214,6 +214,14 @@
 </div>
 <script src="../vendor/gsap.min.js"></script>
 <script src="../arcade-scores.js?v=12"></script>
+<script>
+  // Header "‹ ARCADE" was hardcoded to the main arcade regardless of where the
+  // player launched from — the SAME bug the 2026-07-29 returnUrl() fix solved
+  // for the score-screen exit, just missed here (Osimo 2026-08-01).
+  document.getElementById('backBtn')?.addEventListener('click', function (e) {
+    if (window.ArcadeScores) { e.preventDefault(); location.href = ArcadeScores.returnUrl(); }
+  });
+</script>
 <script>
 (function () {
 'use strict';

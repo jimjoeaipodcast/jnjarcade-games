@@ -313,5 +313,5 @@ function show(opts) {
   renderEntry();
 }
 
-window.ArcadeScores = { show: show, nameAllowed: nameAllowed };
+window.ArcadeScores = { show: show, nameAllowed: nameAllowed, returnUrl: returnUrl };
 })();

@@ -105,7 +105,7 @@
 <div class="game-shell">
   <header class="game-header">
     <div class="hdr-left">
-      <a class="back-btn" href="../index.html">‹ ARCADE</a>
+      <a class="back-btn" id="backBtn" href="../index.html">‹ ARCADE</a>
       <button class="mute-btn" id="muteBtn" aria-label="Toggle sound">🔊</button>
     </div>
     <div class="game-name">FLAP FIGHT</div>
@@ -133,6 +133,14 @@
 </div>
 <script src="../vendor/gsap.min.js"></script>
 <script src="../arcade-scores.js?v=12"></script>
+<script>
+  // Header "‹ ARCADE" was hardcoded to the main arcade regardless of where the
+  // player launched from — the SAME bug the 2026-07-29 returnUrl() fix solved
+  // for the score-screen exit, just missed here (Osimo 2026-08-01).
+  document.getElementById('backBtn')?.addEventListener('click', function (e) {
+    if (window.ArcadeScores) { e.preventDefault(); location.href = ArcadeScores.returnUrl(); }
+  });
+</script>
 <script>
 // ─── constants ───────────────────────────────────────────────────────────────
 const GAME_ID      = 'flap-fight';
