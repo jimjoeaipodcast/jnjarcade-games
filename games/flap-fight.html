@@ -163,8 +163,9 @@ const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
 const GAP_START    = 220;           // initial pipe gap (wide)
 const GAP_MIN      = 105;           // narrowest pipe gap
 const MEGA_BOUNCE_MULT = 3;         // purple bomb: bounce this many × a normal stomp
-const SPECIAL_EXPIRY_MS = 5000;     // flashing bomb: unstomped this long → lose a life
-const SPECIAL_WARN_MS   = 1500;     // last stretch of its life — flash speeds up as a telegraph
+const MEGA_BOUNCE_GRACE_MS = 500;   // brief post-mega-bounce grace — the strong -21 vy
+                                     // can overshoot the ceiling within a couple frames
+                                     // when the bomb spawns near the top of the screen
 const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once level 5+
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
 const STAR_POWER_MS     = 5000;     // star power duration: every pipe is safe to fly through
@@ -269,7 +270,7 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
-let birdInflate, inflateInvincible, nextSpecialSpawn, nextMegaSpawn;
+let birdInflate, inflateInvincible, nextMegaSpawn;
 let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
 let starChain, starPower, starPowerUntil;
 let pipeSpawnCount;
@@ -354,7 +355,13 @@ function spawnEnemy() {
   const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
-  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast });
+  // flashing extra-life parachute rides in with the normal wave now — same front entry
+  // point, same band, no separate timer and no unstomped-penalty. Only worth offering
+  // when it'd actually help (Osimo 2026-08-02: "place it always from the front as part
+  // of the normal ones, and if he doesn't get it he shouldn't blow up" — reverses the
+  // earlier separate-timer + 5s-expiry-punish mechanic entirely).
+  const special = birdInflate > 0 && Math.random() < 0.12;
+  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, special });
 }
 
 function spawnParticles(x, y, color, count) {
@@ -386,7 +393,6 @@ function initGame() {
   bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
   birdInflate       = 0;
   inflateInvincible = 0;
-  nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
   nextMegaSpawn     = Date.now() + Math.round(rnd(50000, 80000));
   nextGhostSpawn    = Date.now() + GHOST_SPAWN_MS;
   nextShrinkSpawn   = Date.now() + SHRINK_SPAWN_MS;
@@ -596,8 +602,13 @@ function update() {
       const pitchMult = 1 + birdShrink * 0.5;
 
       if (e.mega) {
-        // MEGA BOUNCE — 3× a normal stomp's launch, purple/yellow bomb
+        // MEGA BOUNCE — 3× a normal stomp's launch, purple/yellow bomb. That -21 vy can
+        // punch the bird into the ceiling within 2-3 frames when the bomb spawns near
+        // the top of its edge band — real bug, reported as "purple made me explode
+        // instead of 3x jump" (Osimo 2026-08-02). A brief grace absorbs the overshoot
+        // without touching the bounce height itself.
         bird.vy = -7 * MEGA_BOUNCE_MULT;
+        inflateInvincible = Math.max(inflateInvincible, Date.now() + MEGA_BOUNCE_GRACE_MS);
         sfx.bonus(pitchMult);
         spawnParticles(e.x, cy, '#a855f7', 16);
         spawnParticles(e.x, cy, '#ffcf3d', 8);
@@ -668,20 +679,6 @@ function update() {
     }
   }
 
-  // rare deflate parachute (the "flashing" one): once per ~1 min, only when inflated.
-  // 2026-08-02 (Osimo): was tucked in the extreme top/bottom 18% band — a little easier
-  // to reach now (28%/72%), and it's on a clock: ignore it 5s and it costs a life, same
-  // as flying into a pipe. spawnedAt drives both the expiry and the accelerating flash.
-  if (birdInflate > 0 && Date.now() >= nextSpecialSpawn) {
-    nextSpecialSpawn = Date.now() + Math.round(rnd(45000, 75000));
-    const easyY = Math.random() < 0.5
-      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.28)
-      : rnd(ch * 0.72, ch - GROUND_H - CHUTE_OFFSET - 4);
-    enemies.push({ x: cw + ENEMY_R + 8, y: easyY, vy: rnd(0.5, 1.1) * (Math.random() < 0.5 ? 1 : -1),
-                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, special: true,
-                   spawnedAt: Date.now() });
-  }
-
   // rare MEGA bomb (purple/yellow) — pure bonus, not gated on inflate state. Positioned
   // in the same hard-to-reach edge band the flashing one used to live in — Osimo wanted
   // it to stay the harder pickup of the two now that the flashing one's been eased.
@@ -721,19 +718,6 @@ function update() {
 
   // star power expiry — the 5s window from the star chain above runs out
   if (starPower && Date.now() >= starPowerUntil) starPower = false;
-
-  // flashing-bomb expiry: unstomped SPECIAL_EXPIRY_MS after spawn → treat like a pipe
-  // hit (inflate/lose a life) and remove it. Never punishes anything that just appeared —
-  // the accelerating flash in drawEnemy() is the telegraph this rule needs to be fair.
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (e.special && e.alive && Date.now() - e.spawnedAt >= SPECIAL_EXPIRY_MS) {
-      enemies.splice(i, 1);
-      spawnParticles(e.x, e.y - CHUTE_OFFSET, '#ff4400', 10);
-      floaters.push({ x: e.x, y: e.y - CHUTE_OFFSET - CHUTE_R - 4, text: '💨 MISSED!', alpha: 1, vy: -1.8, color: '#ff6b4a' });
-      if (Date.now() >= inflateInvincible) inflate();
-    }
-  }
 
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -964,17 +948,10 @@ function drawEnemy(e) {
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
   const BR = ENEMY_R - 4;    // 10 — body radius
 
-  // special: flash panels red↔yellow every 280ms, speeding up as its 5s clock runs out
-  // (telegraphs the expiry-loses-a-life rule — DESIGN DOCTRINE: nothing punishes the
-  // player without warning). shrink: same flash rate, no clock/expiry, purple↔fuchsia.
-  // mega: no flash, steady purple — it's a pure bonus, not a clock.
-  let flashPeriod = 280;
-  if (special) {
-    const age = Date.now() - e.spawnedAt;
-    const left = SPECIAL_EXPIRY_MS - age;
-    if (left < SPECIAL_WARN_MS) flashPeriod = Math.max(70, 280 * (left / SPECIAL_WARN_MS));
-  }
-  const flash = (special || shrink) && Math.floor(Date.now() / flashPeriod) % 2 === 0;
+  // special: flash panels red↔yellow every 280ms — a pure bonus now, no clock, no
+  // punishment for missing it. shrink: same flash rate, purple↔fuchsia. mega: no
+  // flash, steady purple — the strongest bonus of the three (Osimo 2026-08-02).
+  const flash = (special || shrink) && Math.floor(Date.now() / 280) % 2 === 0;
 
   // STRINGS (dome rim → body top)
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
