@@ -165,6 +165,14 @@ const GAP_MIN      = 105;           // narrowest pipe gap
 const MEGA_BOUNCE_MULT = 3;         // purple bomb: bounce this many × a normal stomp
 const SPECIAL_EXPIRY_MS = 5000;     // flashing bomb: unstomped this long → lose a life
 const SPECIAL_WARN_MS   = 1500;     // last stretch of its life — flash speeds up as a telegraph
+const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once level 5+
+const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
+const STAR_POWER_MS     = 5000;     // star power duration: every pipe is safe to fly through
+const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
+const FLASH_PIPE_PERIOD_MS = 1000;  // flash-through pipe: 1s translucent / 1s solid
+const SHRINK_SPAWN_MS   = 11000;    // shrink bomb: spawns this often once level 10+
+const SHRINK_MAX        = 3;        // max stacking shrink levels
+const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -215,13 +223,16 @@ const sfx = {
   flap:  () => playTone(340, 0.06, 'triangle', 0.10, 520),
   // pass pipe (+10) — bright rising tick
   score: () => playTone(1046, 0.07, 'square', 0.12, 1319),
-  // enemy stomp — pop thump + descending squeak (squeak pitch rises with combo)
-  stomp: (combo = 1) => {
-    playTone(160, 0.09, 'square', 0.20, 55);
-    playTone(1000 + Math.min(combo, 9) * 90, 0.16, 'sawtooth', 0.12, 320, 0.03);
+  // enemy stomp — pop thump + descending squeak (squeak pitch rises with combo).
+  // pitchMult scales up with shrink stacks — a tiny bird bounces squeaky ("phew phew").
+  stomp: (combo = 1, pitchMult = 1) => {
+    playTone(160 * pitchMult, 0.09, 'square', 0.20, 55 * pitchMult);
+    playTone((1000 + Math.min(combo, 9) * 90) * pitchMult, 0.16, 'sawtooth', 0.12, 320 * pitchMult, 0.03);
   },
-  // special parachute (+50 bonus / deflate) — higher double tick
-  bonus: () => { playTone(1319, 0.08, 'square', 0.14); playTone(1760, 0.10, 'square', 0.12, null, 0.07); },
+  // special/mega/shrink/ghost parachute pickup — higher double tick, same shrink-pitch scaling
+  bonus: (pitchMult = 1) => { playTone(1319 * pitchMult, 0.08, 'square', 0.14); playTone(1760 * pitchMult, 0.10, 'square', 0.12, null, 0.07); },
+  // star power activation — quick ascending arpeggio
+  star: () => [784, 988, 1174, 1568].forEach((f, i) => playTone(f, 0.12, 'square', 0.16, null, 0.06 * i)),
   // pipe/floor hit → inflate — thud + short descending sweep
   hit:   () => { playTone(120, 0.22, 'sine', 0.22, 45); playTone(600, 0.18, 'sawtooth', 0.10, 150, 0.02); },
   // balloon pop death — crack + deep thud + long descending sweep
@@ -259,6 +270,9 @@ let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let birdInflate, inflateInvincible, nextSpecialSpawn, nextMegaSpawn;
+let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
+let starChain, starPower, starPowerUntil;
+let pipeSpawnCount;
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -320,12 +334,18 @@ function spawnPipe() {
   const gap    = currentGapSize();
   const margin = 60;
   const gapY   = rnd(margin, ch - GROUND_H - margin - gap);
-  const wobble = level >= 6 && Math.random() < 0.35;
+  pipeSpawnCount++;
+  // flash-through pipe (level 10+, 1-in-5): mutually exclusive with wobble — stacking
+  // both effects on one pipe would compound two learn-the-pattern mechanics at once,
+  // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02).
+  const flashPipe = level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
+  const wobble = !flashPipe && level >= 6 && Math.random() < 0.35;
   pipes.push({
     x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
     wobble, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false,
     fallTimer: wobble ? Math.round(rnd(55, 100)) : 0,
+    flashPipe, translucentNow: false,
   });
 }
 
@@ -353,6 +373,13 @@ function setLevel(n) {
   lvlEl.textContent = `LEVEL ${n}`;
 }
 
+// bird.r depends on BOTH how inflated (hurt) and how shrunk (buffed) the bird is —
+// centralised so a fix in one place can't drift from the other two call sites
+// (Osimo 2026-08-02: shrink bomb stacks on top of the existing inflate system).
+function recomputeBirdRadius() {
+  bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
+}
+
 // ─── init ─────────────────────────────────────────────────────────────────────
 function initGame() {
   resize();
@@ -361,6 +388,14 @@ function initGame() {
   inflateInvincible = 0;
   nextSpecialSpawn  = Date.now() + Math.round(rnd(40000, 70000));
   nextMegaSpawn     = Date.now() + Math.round(rnd(50000, 80000));
+  nextGhostSpawn    = Date.now() + GHOST_SPAWN_MS;
+  nextShrinkSpawn   = Date.now() + SHRINK_SPAWN_MS;
+  birdGhost         = false;
+  birdShrink        = 0;
+  starChain         = 0;
+  starPower         = false;
+  starPowerUntil    = 0;
+  pipeSpawnCount    = 0;
   popping           = false;
   popRingR          = 0;
   pipes     = [];
@@ -462,6 +497,13 @@ function update() {
     p.x -= pipeSpeed;
     if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
 
+    // snapshot ghost state for THIS pipe's whole frame — the scoring block below can
+    // clear birdGhost (pipe now fully passed) in the same frame the collision check
+    // below it also needs to read "was ghost active" for; without freezing it here,
+    // the clear-then-check ordering would immediately punish the very pipe the ghost
+    // was meant to protect (found live-testing, Osimo 2026-08-02 build).
+    const ghostCoveredThisPipe = birdGhost;
+
     // wobble / falling top pipe update
     if (p.wobble) {
       p.wobblePhase += 0.10;
@@ -475,6 +517,12 @@ function update() {
       }
     }
 
+    // flash-through pipe (level 10+, 1-in-5): alternates translucent/solid every 1s.
+    // Translucent = safe to fly through, no penalty; solid = a normal deadly pipe.
+    if (p.flashPipe) {
+      p.translucentNow = Math.floor((Date.now() - gameStartTime) / FLASH_PIPE_PERIOD_MS) % 2 === 0;
+    }
+
     // score pipe
     if (!p.counted && p.x + PIPE_W < bird.x) {
       p.counted = true;
@@ -484,6 +532,12 @@ function update() {
       pipesUntilLevel--;
       if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2, text: '+10', alpha: 1, vy: -1.4, color: '#4dd9f5' });
+      // ghost phase ends the instant the pipe it covered is fully behind the bird —
+      // "hit or intentionally go through", either way this is that one pipe passing.
+      if (ghostCoveredThisPipe && birdGhost) {
+        birdGhost = false;
+        floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
+      }
     }
 
     // collision: rect vs circle (dynamic bird.r)
@@ -491,7 +545,14 @@ function update() {
     const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
     if (inX) {
       const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= p.gapY + p.gapSize;
-      if (!inGap) { if (Date.now() >= inflateInvincible) inflate(); return; }
+      if (!inGap) {
+        // 3 independent ways to pass a pipe unharmed: one-pipe ghost phase (frozen at
+        // the top of this pipe's frame, so the scoring block's clear above can't
+        // double-cross this same-frame check), timed star power, or this pipe flashing.
+        const safePass = ghostCoveredThisPipe || (starPower && Date.now() < starPowerUntil) || (p.flashPipe && p.translucentNow);
+        if (!safePass && Date.now() >= inflateInvincible) inflate();
+        return;
+      }
     }
   }
 
@@ -516,24 +577,64 @@ function update() {
     if (chuteDist < bird.r + CHUTE_R && bird.vy > -2) {
       e.alive = false;
       bird.vy = -7;
+
+      // star-power chain: 5 consecutive stomps (any type, no miss) → 5s pass-through-
+      // everything, Mario-star style (level 5+, Osimo 2026-08-02)
+      if (level >= 5) {
+        starChain++;
+        if (starChain >= STAR_CHAIN_NEED) {
+          starChain = 0;
+          starPower = true;
+          starPowerUntil = Date.now() + STAR_POWER_MS;
+          sfx.star();
+          floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
+        }
+      }
+
+      // the smaller the bird, the squeakier every bounce sounds — grows with each
+      // shrink stack, most noticeable at max shrink ("phew phew", Osimo 2026-08-02)
+      const pitchMult = 1 + birdShrink * 0.5;
+
       if (e.mega) {
         // MEGA BOUNCE — 3× a normal stomp's launch, purple/yellow bomb
         bird.vy = -7 * MEGA_BOUNCE_MULT;
-        sfx.bonus();
+        sfx.bonus(pitchMult);
         spawnParticles(e.x, cy, '#a855f7', 16);
         spawnParticles(e.x, cy, '#ffcf3d', 8);
         score += 30;
         scoreEl.textContent = score;
         floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🚀 MEGA BOUNCE! +30', alpha: 1, vy: -1.8, color: '#a855f7' });
+      } else if (e.shrink) {
+        // SHRINK BOMB — extra life (deflates one level, or a bonus if already at 0)
+        // plus a stacking shrink — smaller bird threads the late-game gaps easier.
+        sfx.bonus(pitchMult);
+        spawnParticles(e.x, cy, '#e879f9', 14);
+        spawnParticles(e.x, cy, '#7e22ce', 7);
+        birdShrink = Math.min(birdShrink + 1, SHRINK_MAX);
+        if (birdInflate > 0) {
+          birdInflate--;
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '💜 EXTRA LIFE!', alpha: 1, vy: -1.8, color: '#e879f9' });
+        } else {
+          score += 40;
+          scoreEl.textContent = score;
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+40 TINY BONUS!', alpha: 1, vy: -1.8, color: '#e879f9' });
+        }
+        recomputeBirdRadius();
+      } else if (e.ghost) {
+        // GHOST PARACHUTE — bird goes translucent, passes through the very next pipe free
+        sfx.bonus(pitchMult);
+        spawnParticles(e.x, cy, '#9fe8ff', 14);
+        birdGhost = true;
+        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
       } else if (e.special) {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
-        sfx.bonus();
+        sfx.bonus(pitchMult);
         spawnParticles(e.x, cy, '#00ffcc', 14);
         spawnParticles(e.x, cy, '#7fff00', 7);
         const sc = '#ffcf3d';
         if (birdInflate > 0) {
           birdInflate--;
-          bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
+          recomputeBirdRadius();
           floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: sc });
         } else {
           score += 50;
@@ -552,7 +653,7 @@ function update() {
         const pts = 25 * comboCount;
         score += pts;
         scoreEl.textContent = score;
-        sfx.stomp(comboCount);
+        sfx.stomp(comboCount, pitchMult);
         spawnParticles(e.x, cy, '#ff6b4a', 12);
         spawnParticles(e.x, cy, '#ffcf3d', 6);
         const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
@@ -592,6 +693,34 @@ function update() {
     enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, mega: true });
   }
+
+  // ghost parachute (level 5+): every 5s, looks normal but 50% translucent. Stomp it
+  // and the BIRD goes translucent too — passes through the very next pipe it meets for
+  // free, then reverts the instant that pipe is behind it (Osimo 2026-08-02). No cap
+  // check — same precedent as special/mega above, a timed pickup should never silently
+  // skip its promised cadence just because the enemy pool is momentarily full.
+  if (level >= 5 && Date.now() >= nextGhostSpawn) {
+    nextGhostSpawn = Date.now() + GHOST_SPAWN_MS;
+    const y = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
+    enemies.push({ x: cw + ENEMY_R + 8, y, vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: level >= 10, ghost: true });
+  }
+
+  // shrink bomb (level 10+): every 11s, purple + flashing, hard-to-reach like the mega
+  // bomb's edge band. Stomp it for an extra life (deflates one level, or a bonus if
+  // already at 0) plus a stacking shrink — smaller bird threads the narrow late-game
+  // gaps easier (Osimo 2026-08-02).
+  if (level >= 10 && Date.now() >= nextShrinkSpawn) {
+    nextShrinkSpawn = Date.now() + SHRINK_SPAWN_MS;
+    const hardY = Math.random() < 0.5
+      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
+      : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
+    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: false, shrink: true });
+  }
+
+  // star power expiry — the 5s window from the star chain above runs out
+  if (starPower && Date.now() >= starPowerUntil) starPower = false;
 
   // flashing-bomb expiry: unstomped SPECIAL_EXPIRY_MS after spawn → treat like a pipe
   // hit (inflate/lose a life) and remove it. Never punishes anything that just appeared —
@@ -652,8 +781,24 @@ function draw() {
   for (const p of pipes) {
     const xOff   = p.wobble ? p.wobbleXOff : 0;
     const topH   = p.gapY + (p.wobble ? p.fallOffset : 0);
-    drawPipe(p.x + xOff, 0,              PIPE_W, topH,                                   false);
-    drawPipe(p.x,         p.gapY + p.gapSize, PIPE_W, ch - GROUND_H - p.gapY - p.gapSize, true);
+    const botY   = p.gapY + p.gapSize, botH = ch - GROUND_H - p.gapY - p.gapSize;
+    const showGhostly = p.flashPipe && p.translucentNow;
+    if (showGhostly) ctx.globalAlpha = 0.35;
+    drawPipe(p.x + xOff, 0,    PIPE_W, topH, false);
+    drawPipe(p.x,         botY, PIPE_W, botH, true);
+    if (showGhostly) ctx.globalAlpha = 1;
+    // flash-through pipe outline — cyan glow while translucent (safe to fly through),
+    // dim red pulse while solid (armed, telegraphs it's about to switch back)
+    if (p.flashPipe) {
+      ctx.save();
+      ctx.shadowColor = showGhostly ? '#9fe8ff' : '#ff4400';
+      ctx.shadowBlur  = showGhostly ? 16 : 10;
+      ctx.strokeStyle = showGhostly ? 'rgba(159,232,255,0.85)' : 'rgba(255,68,0,0.5)';
+      ctx.lineWidth   = showGhostly ? 3 : 2;
+      ctx.strokeRect(p.x + xOff - PIPE_CAP_OVR, 0,    PIPE_W + PIPE_CAP_OVR * 2, topH);
+      ctx.strokeRect(p.x - PIPE_CAP_OVR,        botY, PIPE_W + PIPE_CAP_OVR * 2, botH);
+      ctx.restore();
+    }
     // danger glow on wobble pipe
     if (p.wobble && !p.falling) {
       const pulse = 0.3 + 0.3 * Math.abs(Math.sin(p.wobblePhase * 1.4));
@@ -711,8 +856,20 @@ function draw() {
   } else {
     const _inv = Date.now() < inflateInvincible;
     const _waitFlash = waiting && Math.floor(Date.now() / 300) % 3 === 0;
+    const _star = starPower && Date.now() < starPowerUntil;
     if ((!_inv || Math.floor(Date.now() / 75) % 2 === 0) && !_waitFlash) {
       if (_inv) ctx.globalAlpha = 0.35;
+      else if (birdGhost) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
+      if (_star) {
+        // Mario-star flash: a glow ring cycling through a bright palette every 90ms
+        const palette = ['#ff4d4d', '#ffd700', '#4dff88', '#4dd9f5', '#c96bff'];
+        const hue = palette[Math.floor(Date.now() / 90) % palette.length];
+        ctx.save();
+        ctx.shadowColor = hue; ctx.shadowBlur = 22;
+        ctx.strokeStyle = hue; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       drawBird(bird.x, bird.y, bird.rot);
       ctx.globalAlpha = 1;
     }
@@ -798,9 +955,10 @@ function drawPipe(x, y, w, h, isBottom) {
 }
 
 function drawEnemy(e) {
-  const x = e.x, y = e.y, special = e.special, mega = e.mega;
+  const x = e.x, y = e.y, special = e.special, mega = e.mega, shrink = e.shrink, ghost = e.ghost;
   ctx.save();
   ctx.translate(x, y);
+  if (ghost) ctx.globalAlpha = 0.5;  // ghost parachute: usual colours, just translucent
 
   const CR = CHUTE_R;        // 22 — dome radius
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
@@ -808,14 +966,15 @@ function drawEnemy(e) {
 
   // special: flash panels red↔yellow every 280ms, speeding up as its 5s clock runs out
   // (telegraphs the expiry-loses-a-life rule — DESIGN DOCTRINE: nothing punishes the
-  // player without warning). mega: no flash, steady purple — it's a pure bonus, not a clock.
+  // player without warning). shrink: same flash rate, no clock/expiry, purple↔fuchsia.
+  // mega: no flash, steady purple — it's a pure bonus, not a clock.
   let flashPeriod = 280;
   if (special) {
     const age = Date.now() - e.spawnedAt;
     const left = SPECIAL_EXPIRY_MS - age;
     if (left < SPECIAL_WARN_MS) flashPeriod = Math.max(70, 280 * (left / SPECIAL_WARN_MS));
   }
-  const flash = special && Math.floor(Date.now() / flashPeriod) % 2 === 0;
+  const flash = (special || shrink) && Math.floor(Date.now() / flashPeriod) % 2 === 0;
 
   // STRINGS (dome rim → body top)
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -835,6 +994,8 @@ function drawEnemy(e) {
   ctx.translate(0, -CO);
   const panels = mega
     ? ['#a855f7', '#ffcf3d', '#a855f7', '#ffcf3d']
+    : shrink
+    ? (flash ? ['#e879f9', '#7e22ce', '#e879f9', '#7e22ce'] : ['#7e22ce', '#e879f9', '#7e22ce', '#e879f9'])
     : flash
     ? ['#ffcf3d', '#ff6b4a', '#ffcf3d', '#ff6b4a']   // swapped
     : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];   // normal
@@ -855,11 +1016,11 @@ function drawEnemy(e) {
     const a = Math.PI + (i / 4) * Math.PI;
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
-  // dome outline — mega gets a glow ring so it reads as the special pickup it is
-  if (mega) {
+  // dome outline — mega/shrink get a glow ring so they read as the special pickups they are
+  if (mega || shrink) {
     ctx.save();
-    ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = 'rgba(168,85,247,0.8)'; ctx.lineWidth = 2;
+    ctx.shadowColor = mega ? '#a855f7' : '#e879f9'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = mega ? 'rgba(168,85,247,0.8)' : 'rgba(232,121,249,0.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
     ctx.restore();
   } else {
@@ -869,13 +1030,13 @@ function drawEnemy(e) {
   }
   ctx.restore();
 
-  // BODY — mega is purple; special flashes yellow/red; normal is plain red
-  ctx.fillStyle = mega ? '#7e22ce' : flash ? '#ffcf3d' : '#e84040';
+  // BODY — mega purple, shrink fuchsia/purple flash, special flashes yellow/red, normal plain red
+  ctx.fillStyle = mega ? '#7e22ce' : shrink ? (flash ? '#e879f9' : '#a21caf') : flash ? '#ffcf3d' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = mega ? '#581c87' : flash ? '#cc9900' : '#cc2020';
+  ctx.strokeStyle = mega ? '#581c87' : shrink ? '#701a75' : flash ? '#cc9900' : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
@@ -997,7 +1158,8 @@ function drawBird(x, y, rotDeg) {
 function inflate() {
   if (birdInflate >= 2) { balloonPop(); return; }  // 3rd hit = pop death
   birdInflate++;
-  bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate));
+  starChain = 0;  // any hit breaks the star-power chain
+  recomputeBirdRadius();
   bird.vy = -5;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
   sfx.hit();
@@ -1061,7 +1223,9 @@ function showOverlay(finalScore) {
     : `Tap to flap — gaps shrink every level.<br>
        Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).<br>
        Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.<br>
-       Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!`;
+       Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!<br>
+       <b>Lv5+:</b> 👻 ghosts let you phase one pipe free; 5-in-a-row = ⭐ STAR POWER.<br>
+       <b>Lv10+:</b> some pipes flash translucent — fly through when they do; 💜 bombs shrink you tiny.`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
