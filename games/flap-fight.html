@@ -172,7 +172,8 @@ const MEGA_BOUNCE_GRACE_MS = 500;   // brief post-mega-bounce grace — the stro
                                      // when the bomb spawns near the top of the screen
 const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once level 5+
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
-const STAR_POWER_MS     = 5000;     // star power duration: every pipe is safe to fly through
+const STAR_POWER_MS     = 7500;     // star power duration (Osimo 2026-08-02: +50%): every pipe safe
+const STAR_WARN_MS      = 2000;     // final stretch — the ring BLINKS as the expiry telegraph
 const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
 const FLASH_PIPE_PERIOD_MS = 1000;  // flash-through pipe: 1s translucent / 1s solid
 const SHRINK_SPAWN_MS   = 11000;    // shrink bomb: spawns this often once level 10+
@@ -851,14 +852,20 @@ function draw() {
       if (_inv) ctx.globalAlpha = 0.35;
       else if (birdGhost) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
       if (_star) {
-        // Mario-star flash: a glow ring cycling through a bright palette every 90ms
-        const palette = ['#ff4d4d', '#ffd700', '#4dff88', '#4dd9f5', '#c96bff'];
-        const hue = palette[Math.floor(Date.now() / 90) % palette.length];
-        ctx.save();
-        ctx.shadowColor = hue; ctx.shadowBlur = 22;
-        ctx.strokeStyle = hue; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
+        // Mario-star flash: a glow ring cycling through a bright palette every 90ms.
+        // Final STAR_WARN_MS: the ring BLINKS on/off (Osimo 2026-08-02) so the expiry
+        // never surprises you mid-pipe — DESIGN DOCTRINE: telegraph everything.
+        const left = starPowerUntil - Date.now();
+        const blinkOff = left < STAR_WARN_MS && Math.floor(Date.now() / 120) % 2 === 0;
+        if (!blinkOff) {
+          const palette = ['#ff4d4d', '#ffd700', '#4dff88', '#4dd9f5', '#c96bff'];
+          const hue = palette[Math.floor(Date.now() / 90) % palette.length];
+          ctx.save();
+          ctx.shadowColor = hue; ctx.shadowBlur = 22;
+          ctx.strokeStyle = hue; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
       }
       drawBird(bird.x, bird.y, bird.rot);
       ctx.globalAlpha = 1;
