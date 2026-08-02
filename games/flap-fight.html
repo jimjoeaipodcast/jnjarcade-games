@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#060d14">
 <link rel="stylesheet" href="../cabinet.css">
 <title>FLAP FIGHT — JnJ Arcade</title>
@@ -66,7 +68,7 @@
   .combo-display.on { opacity:1; }
   .lvl { opacity:.65; letter-spacing:.1em; font-size:11px; }
   .canvas-wrap {
-    flex:1; position:relative; padding:14px 6px; overflow:hidden;
+    flex:1; position:relative; padding:4px 6px; overflow:hidden;
     display:flex; align-items:center; justify-content:center;
   }
   canvas {
@@ -97,6 +99,13 @@
     transition:transform .06s, box-shadow .06s;
   }
   .play-btn:active { transform:translateY(3px); box-shadow:0 0 10px var(--glow); }
+  .ios-hint {
+    margin-top:10px; max-width:300px; font-size:11.5px; line-height:1.5;
+    color:#9fe8ff; background:rgba(77,217,245,.08);
+    border:1px solid rgba(77,217,245,.28); border-radius:10px; padding:8px 11px;
+  }
+  .ios-hint b { color:var(--ink); }
+  .ios-share { width:13px; height:13px; vertical-align:-2px; fill:var(--ink); }
 </style>
 </head>
 <body>
@@ -126,6 +135,19 @@
       </div>
       <div class="board" id="board"></div>
       <button class="play-btn" id="playBtn">INSERT COIN</button>
+      <!-- iPhone Safari has NO Fullscreen API (Android does) — Add to Home Screen is the
+           only real fullscreen path on iOS. Shown only on iOS-and-not-already-standalone
+           (Osimo 2026-08-02: Android screenshot fullscreen, iPhone Safari not). -->
+      <div class="ios-hint" id="iosHint" hidden>
+        <b>iPhone fullscreen:</b> tap
+        <!-- inline SVG, not the SF-Symbols glyph — private-use codepoints don't render
+             in web content, they'd show as a tofu box -->
+        <svg class="ios-share" viewBox="0 0 24 24" aria-label="Share" role="img">
+          <path d="M12 3l4 4h-3v9h-2V7H8l4-4z"/>
+          <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7h-2v7H7v-7H5z"/>
+        </svg>
+        Share → <b>Add to Home Screen</b>, then open it from your home screen — no browser bars.
+      </div>
     </div>
   </div>
 </div>
@@ -327,8 +349,13 @@ function currentGapSize() {
 
 // ─── resize (convention: subtract CELL buffer top+bottom) ─────────────────────
 function resize() {
+  // clientHeight INCLUDES the wrap's own padding, so subtract it back (8 = 4px top+bottom)
+  // plus a 2px allowance for the canvas border. The old formula also subtracted CELL*2
+  // (36px) of pure dead space on top of that — invisible on a tall Android viewport, but
+  // brutal on iPhone Safari where ~140px is already lost to browser chrome
+  // (Osimo 2026-08-02, iPhone-vs-Android screenshots).
   cw = wrap.clientWidth  - 12;
-  ch = wrap.clientHeight - 28 - CELL * 2;
+  ch = wrap.clientHeight - 10;
   canvas.width  = cw;
   canvas.height = ch;
 }
@@ -1272,12 +1299,29 @@ window.addEventListener('resize', () => {
   }, 120);
 });
 
+// iOS detection incl. iPadOS 13+, which reports itself as MacIntel with touch points.
+const IS_IOS = /iphone|ipod|ipad/i.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = window.navigator.standalone === true ||
+                      window.matchMedia('(display-mode: standalone)').matches ||
+                      window.matchMedia('(display-mode: fullscreen)').matches;
+
 function tryFullscreen() {
   try {
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch (_) {}
+}
+
+// iPhone Safari exposes NO fullscreen API at all (requestFullscreen and
+// webkitRequestFullscreen are both undefined), so tryFullscreen() above is a silent
+// no-op there and the browser bars stay — exactly the Android-vs-iPhone difference
+// Osimo screenshotted 2026-08-02. Add to Home Screen (standalone) is the only real
+// fullscreen on iPhone; surface that instead of failing quietly.
+if (IS_IOS && !IS_STANDALONE) {
+  const _h = document.getElementById('iosHint');
+  if (_h) _h.hidden = false;
 }
 
 // one-time touchend fullscreen fallback (iOS Safari)
