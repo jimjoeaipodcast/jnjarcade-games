@@ -503,13 +503,6 @@ function update() {
     p.x -= pipeSpeed;
     if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
 
-    // snapshot ghost state for THIS pipe's whole frame — the scoring block below can
-    // clear birdGhost (pipe now fully passed) in the same frame the collision check
-    // below it also needs to read "was ghost active" for; without freezing it here,
-    // the clear-then-check ordering would immediately punish the very pipe the ghost
-    // was meant to protect (found live-testing, Osimo 2026-08-02 build).
-    const ghostCoveredThisPipe = birdGhost;
-
     // wobble / falling top pipe update
     if (p.wobble) {
       p.wobblePhase += 0.10;
@@ -518,8 +511,10 @@ function update() {
         p.fallTimer--;
         if (p.fallTimer <= 0) { p.falling = true; p.wobbleXOff = 0; }
       } else {
-        // 2026-08-02 (Osimo): "can't close fully" — closes 25% further than before (2.8→3.5)
-        p.fallOffset += 3.5;
+        // 2026-08-02 (Osimo v2): "not slam them closed completely — simply close by 25%
+        // and still leave enough space to travel through." Closure CAPPED at 25% of the
+        // gap; the remaining 75% stays flyable forever.
+        p.fallOffset = Math.min(p.fallOffset + 3.5, p.gapSize * 0.25);
       }
     }
 
@@ -538,24 +533,31 @@ function update() {
       pipesUntilLevel--;
       if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2, text: '+10', alpha: 1, vy: -1.4, color: '#4dd9f5' });
-      // ghost phase ends the instant the pipe it covered is fully behind the bird —
-      // "hit or intentionally go through", either way this is that one pipe passing.
-      if (ghostCoveredThisPipe && birdGhost) {
-        birdGhost = false;
-        floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
-      }
     }
 
     // collision: rect vs circle (dynamic bird.r)
     const effGapY = p.gapY + (p.wobble ? p.fallOffset : 0);
     const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
+
+    // GHOST LIFECYCLE (Osimo 2026-08-02 v2: "he dies when he touched the second half of
+    // the pipe"). v1 cleared the ghost in the scoring block — which fires when the pipe
+    // passes the bird's CENTER, while the bird's trailing half is still INSIDE the pipe
+    // for several more frames → unprotected → death mid-pipe. Now: mark the pipe the
+    // moment the ghosted bird overlaps it, and only clear the ghost once that pipe is
+    // FULLY clear of the bird's trailing edge. The whole body passes through, guaranteed.
+    if (birdGhost && inX) p.ghostPipe = true;
+    if (birdGhost && p.ghostPipe && p.x + PIPE_W < bird.x - bird.r) {
+      birdGhost = false;
+      floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
+    }
+
     if (inX) {
       const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= p.gapY + p.gapSize;
       if (!inGap) {
-        // 3 independent ways to pass a pipe unharmed: one-pipe ghost phase (frozen at
-        // the top of this pipe's frame, so the scoring block's clear above can't
-        // double-cross this same-frame check), timed star power, or this pipe flashing.
-        const safePass = ghostCoveredThisPipe || (starPower && Date.now() < starPowerUntil) || (p.flashPipe && p.translucentNow);
+        // 3 independent ways to pass a pipe unharmed: ghost phase (stays true for the
+        // ENTIRE traversal now — cleared only after full exit above), timed star power,
+        // or this pipe currently flashing translucent.
+        const safePass = birdGhost || (starPower && Date.now() < starPowerUntil) || (p.flashPipe && p.translucentNow);
         if (!safePass && Date.now() >= inflateInvincible) inflate();
         return;
       }
