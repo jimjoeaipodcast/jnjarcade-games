@@ -7,6 +7,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#060d14">
+<!-- Installable as its OWN app (Osimo 2026-08-02): the site manifest is only linked from
+     index.html and its start_url is "/", so adding a GAME to the home screen previously
+     had no manifest and no icon — and would have opened the arcade home, not the game.
+     This per-game manifest launches straight into Flap Fight, fullscreen. -->
+<link rel="manifest" href="flap-fight.webmanifest">
+<link rel="apple-touch-icon" href="/assets/icons/jnj-logo-192.png">
 <link rel="stylesheet" href="../cabinet.css">
 <title>FLAP FIGHT — JnJ Arcade</title>
 <!--
@@ -120,6 +126,11 @@
     border:1px solid rgba(77,217,245,.28); border-radius:10px; padding:8px 11px;
   }
   .ios-hint b { color:var(--ink); }
+  .ios-hint-warn {
+    color:#fcd34d; background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.35);
+  }
+  .ios-hint-warn b { color:#fbbf24; }
+  .ios-hint-warn .ios-share { fill:#fbbf24; }
   .ios-share { width:13px; height:13px; vertical-align:-2px; fill:var(--ink); }
 </style>
 </head>
@@ -162,6 +173,20 @@
           <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7h-2v7H7v-7H5z"/>
         </svg>
         Share → <b>Add to Home Screen</b>, then open it from your home screen — no browser bars.
+      </div>
+      <!-- In-app browsers (Telegram, Messenger, Instagram…) CANNOT create a real
+           standalone app — Add to Home Screen from there just makes a bookmark that
+           reopens with all the browser controls. Osimo hit exactly this: he tapped a
+           jnjarcade link from Telegram, installed from that in-app browser, and got a
+           windowed app with an X and a toolbar. Must open in Safari FIRST. -->
+      <div class="ios-hint ios-hint-warn" id="inAppHint" hidden>
+        <b>⚠️ You're in an in-app browser</b> (opened from another app). Installing from
+        here can't go fullscreen. Tap the <b>compass</b>
+        <svg class="ios-share" viewBox="0 0 24 24" aria-label="Safari" role="img">
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
+          <path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2z"/>
+        </svg>
+        (or ••• → <b>Open in Safari</b>), then Share → <b>Add to Home Screen</b>.
       </div>
     </div>
   </div>
@@ -1339,8 +1364,20 @@ function tryFullscreen() {
 // no-op there and the browser bars stay — exactly the Android-vs-iPhone difference
 // Osimo screenshotted 2026-08-02. Add to Home Screen (standalone) is the only real
 // fullscreen on iPhone; surface that instead of failing quietly.
+// In-app browsers (Telegram / Messenger / Instagram / FB / LinkedIn …) run in a WKWebView
+// that is NOT Safari. Add to Home Screen from one of those produces a plain bookmark that
+// reopens WITH browser controls — never a standalone app. Detection: those WKWebViews
+// omit the "Safari/" token that real Safari always sends (plus explicit app tokens for
+// the ones that identify themselves). Osimo 2026-08-02: installed from a Telegram link,
+// got a windowed app with an X and a toolbar.
+const _UA = navigator.userAgent || '';
+const IS_INAPP_BROWSER = IS_IOS && (
+  /FBAN|FBAV|Instagram|Line\/|Twitter|LinkedInApp|Snapchat|Telegram/i.test(_UA) ||
+  (/AppleWebKit/i.test(_UA) && !/Safari\//i.test(_UA))
+);
+
 if (IS_IOS && !IS_STANDALONE) {
-  const _h = document.getElementById('iosHint');
+  const _h = document.getElementById(IS_INAPP_BROWSER ? 'inAppHint' : 'iosHint');
   if (_h) _h.hidden = false;
 }
 

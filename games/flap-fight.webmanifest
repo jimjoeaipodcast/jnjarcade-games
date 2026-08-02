@@ -1,0 +1,16 @@
+{
+  "name": "Flap Fight — JnJ Arcade",
+  "short_name": "Flap Fight",
+  "description": "Balloon Fight × Flappy Bird. Stomp parachutes, thread the pipes.",
+  "start_url": "/games/flap-fight?play=1",
+  "scope": "/games/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#060d14",
+  "theme_color": "#060d14",
+  "icons": [
+    { "src": "/assets/icons/jnj-logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/icons/jnj-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
