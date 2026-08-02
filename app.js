@@ -351,7 +351,14 @@ function buildCabinet(game) {
     // Remember which hall launched this cabinet so the score screen returns the player
     // here instead of always to the main arcade (Osimo 2026-07-29: "in patreon when you
     // complete a game and submit your score it kicks you out to the main arcade").
-    try { sessionStorage.setItem('jnj_return', location.pathname); } catch (e) {}
+    // localStorage, NOT sessionStorage (Osimo 2026-08-02: "kicked me out to the regular
+    // arcade" from patreon-arcade — couldn't reproduce with a clean click-through, so the
+    // live suspect is iOS Safari: this same handler calls tryFullscreen() a few lines
+    // down, and a fullscreen-triggering navigation can land in a WebKit context that
+    // doesn't carry sessionStorage over (also tab-scoped — Add to Home Screen icons get
+    // a fresh tab with none of it). localStorage is disk-backed and origin-wide, immune
+    // to both.
+    try { localStorage.setItem('jnj_return', location.pathname); } catch (e) {}
     bumpPlays(game.id);
     reportPlay(game.id);
     // Fullscreen persists across same-origin navigation on Android Chrome,

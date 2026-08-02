@@ -30,9 +30,11 @@ function returnUrl() {
   /* Where the player came FROM. Both exits were hardcoded to '/', so finishing a game
      launched from /patreon or /arcade dumped you on the main arcade (Osimo 2026-07-29:
      "it should kick you back out to the main patreon arcade"). app.js stamps the
-     launching page on click; referrer is the fallback for a direct hit. */
+     launching page on click; referrer is the fallback for a direct hit.
+     localStorage, NOT sessionStorage (Osimo 2026-08-02) — see the matching comment in
+     app.js's play-click handler for why sessionStorage was the live suspect. */
   try {
-    var v = sessionStorage.getItem('jnj_return');
+    var v = localStorage.getItem('jnj_return');
     if (v && v.charAt(0) === '/') return v;
   } catch (e) {}
   try {
