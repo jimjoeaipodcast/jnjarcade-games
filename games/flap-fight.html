@@ -591,16 +591,16 @@ function update() {
       bird.vy = -7;
 
       // star-power chain: 5 consecutive stomps (any type, no miss) → 5s pass-through-
-      // everything, Mario-star style (level 5+, Osimo 2026-08-02)
-      if (level >= 5) {
-        starChain++;
-        if (starChain >= STAR_CHAIN_NEED) {
-          starChain = 0;
-          starPower = true;
-          starPowerUntil = Date.now() + STAR_POWER_MS;
-          sfx.star();
-          floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
-        }
+      // everything, Mario-star style. Available from LEVEL 1 (Osimo 2026-08-02 v2: "if
+      // at any time from level 1 you hit five bombs in a row" — the earlier level-5 gate
+      // was a misread).
+      starChain++;
+      if (starChain >= STAR_CHAIN_NEED) {
+        starChain = 0;
+        starPower = true;
+        starPowerUntil = Date.now() + STAR_POWER_MS;
+        sfx.star();
+        floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
       }
 
       // the smaller the bird, the squeakier every bounce sounds — grows with each
