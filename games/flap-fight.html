@@ -162,7 +162,11 @@ const CHUTE_R      = 22;            // parachute dome radius
 const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
 const GAP_START    = 220;           // initial pipe gap (wide)
 const GAP_MIN      = 105;           // narrowest pipe gap
-const MEGA_BOUNCE_MULT = 3;         // purple bomb: bounce this many × a normal stomp
+// Purple bomb bounce: DOUBLE the HEIGHT of a normal stomp (Osimo 2026-08-02: "merely
+// meant to be double the height" — v1 used 3× VELOCITY, but bounce height scales with
+// velocity SQUARED, so that was a 9× height full-screen launch). h ∝ v² → double height
+// = √2 × velocity.
+const MEGA_BOUNCE_MULT = Math.SQRT2;
 const MEGA_BOUNCE_GRACE_MS = 500;   // brief post-mega-bounce grace — the strong -21 vy
                                      // can overshoot the ceiling within a couple frames
                                      // when the bomb spawns near the top of the screen
