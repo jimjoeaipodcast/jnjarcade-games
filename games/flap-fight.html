@@ -7,11 +7,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#060d14">
-<!-- Installable as its OWN app (Osimo 2026-08-02): the site manifest is only linked from
-     index.html and its start_url is "/", so adding a GAME to the home screen previously
-     had no manifest and no icon — and would have opened the arcade home, not the game.
-     This per-game manifest launches straight into Flap Fight, fullscreen. -->
-<link rel="manifest" href="flap-fight.webmanifest">
+<!-- NO per-game manifest (reverted 2026-08-02): a second manifest made iOS associate
+     this page with a DIFFERENT web app than the installed one, which triggers the
+     eject-to-in-app-browser view (X + toolbar) on navigation. One site, one manifest.
+     The apple-touch-icon stays so a direct A2HS of the game gets a proper icon. -->
 <link rel="apple-touch-icon" href="/assets/icons/jnj-logo-192.png">
 <link rel="stylesheet" href="../cabinet.css">
 <title>FLAP FIGHT — JnJ Arcade</title>
