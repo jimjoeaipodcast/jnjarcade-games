@@ -191,7 +191,7 @@
   </div>
 </div>
 <script src="../vendor/gsap.min.js"></script>
-<script src="../arcade-scores.js?v=14"></script>
+<script src="../arcade-scores.js?v=15"></script>
 <script>
   // Header "‹ ARCADE" was hardcoded to the main arcade regardless of where the
   // player launched from — the SAME bug the 2026-07-29 returnUrl() fix solved
@@ -236,7 +236,9 @@ const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) �
 const STAR_POWER_MS     = 7500;     // star power duration (Osimo 2026-08-02: +50%): every pipe safe
 const STAR_WARN_MS      = 2000;     // final stretch — the ring BLINKS as the expiry telegraph
 const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
-const FLASH_PIPE_PERIOD_MS = 1000;  // flash-through pipe: 1s translucent / 1s solid
+const FLASH_PIPE_OPEN_MS  = 3000;  // flash-through pipe: translucent (safe) window
+const FLASH_PIPE_SOLID_MS = 1000;  // ...then solid (deadly) for this long
+const FLASH_PIPE_CYCLE_MS = FLASH_PIPE_OPEN_MS + FLASH_PIPE_SOLID_MS;
 const SHRINK_SPAWN_MS   = 11000;    // shrink bomb: spawns this often once level 10+
 const SHRINK_MAX        = 3;        // max stacking shrink levels
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
@@ -594,10 +596,13 @@ function update() {
       }
     }
 
-    // flash-through pipe (level 10+, 1-in-5): alternates translucent/solid every 1s.
+    // flash-through pipe (level 10+, 1-in-5): 3s translucent, then 1s solid (Osimo
+    // 2026-08-03). Was a 50/50 second-on-second flip, which gave a one-second window to
+    // spot the gap AND fly it — the safe phase is now three times longer than the deadly
+    // one, so the pipe reads as "mostly passable, occasionally not" rather than a coin toss.
     // Translucent = safe to fly through, no penalty; solid = a normal deadly pipe.
     if (p.flashPipe) {
-      p.translucentNow = Math.floor((Date.now() - gameStartTime) / FLASH_PIPE_PERIOD_MS) % 2 === 0;
+      p.translucentNow = ((Date.now() - gameStartTime) % FLASH_PIPE_CYCLE_MS) < FLASH_PIPE_OPEN_MS;
     }
 
     // score pipe
