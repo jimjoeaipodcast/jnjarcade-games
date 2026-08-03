@@ -133,6 +133,12 @@ let duel = null;                  // {round, serveShown, choices, winner, resolv
 const toasts = [];
 const particles = [];
 const player = { x: 300, y: 470, targetX: null, facing: 1, walkPhase: 0, action: null, talkT: 0 };
+// walkPhase counts SPRITE FRAMES and is driven by distance travelled, not by time.
+// WALK_PX_PER_FRAME is measured from the art: the walk sprites open to a ~72 world-px
+// foot span, two steps per 8-frame cycle, so ~18px of travel per frame keeps the feet
+// planted. 22 leaves a little deliberate slip so the cycle doesn't run frantically.
+const WALK_SPEED = 0.32;          // world px per ms (~320 px/s — crosses the room in 3s)
+const WALK_PX_PER_FRAME = 22;
 const joe = { blinkT: 0, talkT: 0, sipT: 0 };
 let attractPan = 0, attractQuipT = 0, attractQuipI = 0;
 
@@ -315,7 +321,11 @@ function mkImg(uri, cb) { const im = new Image(); im.onload = () => cb(im); im.s
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('jnj-on-air-pack.json').then(r => r.json()).then(p => {
+  // ?v must be bumped whenever the pack changes. Without it Cloudflare + the browser
+  // keep serving the old pack forever, so a sprite or VO fix ships to the CDN and the
+  // player still sees and hears the previous build — the game HTML updates, its assets
+  // silently do not. v2 = 2026-08-03 walk-cycle frames + caps-fixed voice takes.
+  fetch('jnj-on-air-pack.json?v=2').then(r => r.json()).then(p => {
     for (const k of ['studio', 'corridor', 'prop'])
       if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
     if (p.sprites) {
@@ -859,13 +869,17 @@ function update(dt) {
     // walking
     if (player.targetX != null && state === 'playing') {
       const dxp = player.targetX - player.x;
-      const step = 0.45 * dt;
+      const step = WALK_SPEED * dt;
       if (Math.abs(dxp) <= step) {
         player.x = player.targetX; player.targetX = null; player.walkPhase = 0;
         if (player.action) { const a = player.action; player.action = null; a(); }
       } else {
         player.x += Math.sign(dxp) * step;
-        player.walkPhase += dt * 0.02;
+        // phase advances with DISTANCE, not time — one frame per WALK_PX_PER_FRAME of
+        // travel, so the feet always keep pace with the ground no matter what the
+        // speed is. Time-based phase is what made him look like he was sliding: he
+        // covered 327px per cycle while the sprite's stride only carries ~145px.
+        player.walkPhase += step / WALK_PX_PER_FRAME;
       }
     }
   }
@@ -914,7 +928,7 @@ function drawJimmySprite(x, feetY) {
   const walking = player.targetX != null;
   const talkBob = player.talkT > 0 ? Math.sin(worldT * 0.02) * 2 : 0;
   if (walking && SPR.jimmyWalk && SPR.jimmyWalk.length === 8 && SPR.jimmyWalk.every(Boolean)) {
-    const f = Math.floor(player.walkPhase * 0.55) % 8;
+    const f = Math.floor(player.walkPhase) % 8;
     drawSprite(SPR.jimmyWalk[f], x, feetY, 171, player.facing > 0, 0);
     return true;
   }
@@ -970,7 +984,9 @@ function drawLEDFace(x, y, w, mood, talking) {
 }
 function drawJimmy(x, y) {
   // white/cream armour, gold trim — walks. y = feet line.
-  const f = player.facing, ph = player.targetX != null ? Math.sin(player.walkPhase * 6) : 0;
+  // walkPhase is in sprite frames now (8 = one full stride cycle), so the canvas
+  // fallback's leg swing has to use PI/4 per frame — the old *6 would strobe.
+  const f = player.facing, ph = player.targetX != null ? Math.sin(player.walkPhase * Math.PI / 4) : 0;
   ctx.save(); ctx.translate(x, y); if (f < 0) ctx.scale(-1, 1);
   ctx.fillStyle = C.shadow; ctx.beginPath(); ctx.ellipse(0, 2, 34, 8, 0, 0, Math.PI * 2); ctx.fill();
   // legs
