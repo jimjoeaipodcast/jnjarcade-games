@@ -46,6 +46,20 @@ function returnUrl() {
   return '/';
 }
 
+/* Remember the player's initials across games (Osimo 2026-08-05: "once they have written
+   their name once allow the next game/scoreboard to be prefilled with the same name so
+   they don't have to type it again").
+   localStorage, NOT sessionStorage — same reason as jnj_return above: iOS fullscreen nav
+   and Add-to-Home-Screen silently drop sessionStorage, and this has to survive moving
+   between cabinets, which is the entire point. */
+var NAME_KEY = 'jnj_arcade_name';
+function savedName() {
+  try { return (localStorage.getItem(NAME_KEY) || '').toUpperCase(); } catch (e) { return ''; }
+}
+function rememberName(n) {
+  try { localStorage.setItem(NAME_KEY, String(n).toUpperCase()); } catch (e) {}
+}
+
 function nameAllowed(name) {
   var up = String(name).toUpperCase(), flat = '';
   for (var i = 0; i < up.length; i++) flat += LEET[up[i]] || up[i];
@@ -236,6 +250,16 @@ function show(opts) {
     input.autocapitalize = 'characters'; input.autocomplete = 'off'; input.spellcheck = false;
     input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('autocorrect', 'off');
+    // Tell every autofill engine this is not a saveable field (Osimo 2026-08-02, Android
+    // installed-app: Chrome docked its autofill strip — key/card/location icons — directly
+    // over the input, so he couldn't see what he was typing). autocomplete="off" alone is
+    // routinely ignored; the name/id and vendor opt-outs kill the heuristics that trigger it.
+    input.setAttribute('name', 'jnj-arcade-initials');
+    input.id = 'jnj-arcade-initials';
+    input.setAttribute('data-form-type', 'other');
+    input.setAttribute('data-lpignore', 'true');    // LastPass
+    input.setAttribute('data-1p-ignore', 'true');   // 1Password
+    input.setAttribute('data-bwignore', 'true');    // Bitwarden
     var err = el('div', 'as-err', '');
     var submit = el('button', 'as-btn', 'SUBMIT SCORE');
     var skip = el('button', 'as-skip', 'SKIP');
@@ -243,13 +267,53 @@ function show(opts) {
     entry.appendChild(input); entry.appendChild(err);
     entry.appendChild(submit); entry.appendChild(skip);
     screen.appendChild(entry);
-    setTimeout(function () { input.focus(); }, 150);
+    // Prefill from the last cabinet. SELECT rather than just place the caret: the whole
+    // value is highlighted, so typing overwrites it instantly for anyone who wants a
+    // different name, while the common case is now zero typing.
+    var prior = savedName();
+    if (prior) {
+      input.value = prior;
+      screen.querySelector('.as-h1').textContent = 'READY, ' + prior + '?';
+    }
+    setTimeout(function () {
+      input.focus();
+      if (prior) { try { input.select(); } catch (e) {} }
+    }, 150);
+
+    /* KEYBOARD-AWARE LIFT — the guaranteed half of the fix.
+       Suppressing autofill is best-effort (browsers ignore hints at will), so don't rely
+       on it: measure the ACTUAL visible area with visualViewport once the keyboard is up
+       and lift the whole screen so the input clears both the keyboard and anything docked
+       above it. Degrades to a no-op where visualViewport is absent (older WebKit). */
+    var AUTOFILL_STRIP = 64;   // Chrome's docked autofill bar, measured on the report
+    var vv = window.visualViewport;
+    function liftForKeyboard() {
+      if (!vv || !document.body.contains(input)) return;
+      var safeH = vv.height - AUTOFILL_STRIP;
+      if (safeH <= 0) return;
+      var r = input.getBoundingClientRect();
+      // put the input at ~40% of the usable height — comfortably above the strip, and
+      // still low enough that the title/score stay on screen.
+      var target = Math.max(12, Math.min(safeH * 0.40, safeH - r.height - 12));
+      var shift = (r.top - target);
+      screen.style.transition = 'transform .18s ease-out';
+      screen.style.transform = shift > 4 ? 'translateY(' + (-shift) + 'px)' : '';
+    }
+    function dropLift() { screen.style.transform = ''; }
+    input.addEventListener('focus', function () { setTimeout(liftForKeyboard, 260); });
+    input.addEventListener('blur', dropLift);
+    if (vv) {
+      vv.addEventListener('resize', function () {
+        if (document.activeElement === input) liftForKeyboard();
+      });
+    }
 
     function doSubmit() {
       var name = input.value.toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
       if (name.length < 1) { err.textContent = 'ENTER YOUR INITIALS'; return; }
       if (!nameAllowed(name)) { err.textContent = 'NOT ON THIS CABINET. PICK ANOTHER.'; return; }
       submit.disabled = true; err.textContent = '';
+      rememberName(name);      // next cabinet prefills it
 
       fetch('/api/scores', {
         method: 'POST',
@@ -275,6 +339,7 @@ function show(opts) {
   /* ── phase 2: the board ── */
   function renderBoard(rank, scores, myName, localOnly) {
     screen.innerHTML = '';
+    screen.style.transform = '';   // drop any keyboard lift from the name-entry phase
     screen.appendChild(el('div', 'as-h1', 'HI-SCORES'));
     screen.appendChild(el('div', 'as-rank', 'YOU RANKED #' + rank));
 
@@ -297,22 +362,48 @@ function show(opts) {
     screen.appendChild(el('div', 'as-note',
       localOnly ? 'LOCAL BOARD — GLOBAL SCORES COMING ONLINE' : 'GLOBAL BOARD — ALL PLAYERS'));
 
-    // back to the arcade after 3s; touching the board buys 3 more
+    /* Two ways out (Osimo 2026-08-05: "allow them to go back to the arcade or straight
+       back into the game"). PLAY AGAIN uses the existing close() — it drops the overlay
+       and calls opts.onClose, which every cabinet wires to its own reset, so the player
+       is back in the game with no page load at all.
+       The 3s auto-return stays as the cabinet default for someone who walks away, but any
+       deliberate touch now CANCELS it outright rather than buying 3 more seconds: the old
+       behaviour could still yank you to the arcade mid-decision, which is exactly the
+       friction this change is meant to remove. */
+    var choices = el('div', 'as-entry');
+    var againBtn = el('button', 'as-btn', 'PLAY AGAIN');
+    var arcadeBtn = el('button', 'as-skip', 'BACK TO ARCADE');
+    choices.appendChild(againBtn); choices.appendChild(arcadeBtn);
+    screen.appendChild(choices);
+
     var ticker = el('div', 'as-note', '');
     ticker.style.color = '#ffd23d';
     ticker.style.fontSize = '13px';
     screen.appendChild(ticker);
 
-    var left = 3, timer = null;
+    var left = 3, timer = null, stopped = false;
+    function stopTicker() {
+      stopped = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+      ticker.textContent = '';
+    }
     function tick() {
+      if (stopped) return;
       ticker.textContent = 'BACK TO THE ARCADE IN ' + left + '…';
       if (left <= 0) { window.location.href = returnUrl(); return; }
       left--;
       timer = setTimeout(tick, 1000);
     }
     tick();
-    list.addEventListener('touchstart', function () { left = 3; }, { passive: true });
-    list.addEventListener('scroll', function () { left = Math.max(left, 2); }, { passive: true });
+    againBtn.addEventListener('click', function () { stopTicker(); close(); });
+    arcadeBtn.addEventListener('click', function () {
+      stopTicker(); window.location.href = returnUrl();
+    });
+    // Reading the board, or reaching for a button, means they are still here.
+    ['touchstart', 'pointerdown'].forEach(function (ev) {
+      screen.addEventListener(ev, stopTicker, { passive: true });
+    });
+    list.addEventListener('scroll', stopTicker, { passive: true });
 
     if (meRow) setTimeout(function () {
       meRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
