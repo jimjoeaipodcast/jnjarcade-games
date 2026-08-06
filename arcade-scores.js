@@ -227,7 +227,14 @@ function show(opts) {
     !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   if (motionOK) gsap.fromTo(cab, {opacity: 0, y: 24}, {opacity: 1, y: 0, duration: .4, ease: 'power2.out'});
 
-  function close() { root.remove(); if (opts.onClose) opts.onClose(); }
+  // Set by renderEntry()'s keyboard-lift listener; close() tears it down so it doesn't
+  // outlive the modal (iOS Safari fires visualViewport resize far more often than Android
+  // Chrome — a leaked listener per game-over compounds into iPhone-only jank over a session).
+  var vvResizeHandler = null;
+  function close() {
+    if (vvResizeHandler) { window.visualViewport.removeEventListener('resize', vvResizeHandler); vvResizeHandler = null; }
+    root.remove(); if (opts.onClose) opts.onClose();
+  }
 
   /* ── phase 1: name entry ── */
   function renderEntry() {
@@ -303,9 +310,10 @@ function show(opts) {
     input.addEventListener('focus', function () { setTimeout(liftForKeyboard, 260); });
     input.addEventListener('blur', dropLift);
     if (vv) {
-      vv.addEventListener('resize', function () {
+      vvResizeHandler = function () {
         if (document.activeElement === input) liftForKeyboard();
-      });
+      };
+      vv.addEventListener('resize', vvResizeHandler);
     }
 
     function doSubmit() {
