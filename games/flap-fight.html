@@ -342,6 +342,7 @@ let birdInflate, inflateInvincible, nextMegaSpawn;
 let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
 let starChain, starPower, starPowerUntil;
 let pipeSpawnCount;
+let pipeSpawnAcc, enemySpawnAcc, enemySpawnCount;
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -480,6 +481,9 @@ function initGame() {
   starPower         = false;
   starPowerUntil    = 0;
   pipeSpawnCount    = 0;
+  pipeSpawnAcc      = 0;
+  enemySpawnAcc     = 0;
+  enemySpawnCount   = 0;
   popping           = false;
   popRingR          = 0;
   pipes     = [];
@@ -521,26 +525,26 @@ function startPlaying() {
 }
 
 // ─── update ──────────────────────────────────────────────────────────────────
-function update() {
-  frame++;
+function update(dt) {
+  frame += dt;
 
   // pop animation — keep particles/floaters/ring alive, skip everything else
   if (popping) {
     for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.alpha -= 0.022;
+      const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.18 * dt; p.alpha -= 0.022 * dt;
       if (p.alpha <= 0) particles.splice(i, 1);
     }
     for (let i = floaters.length - 1; i >= 0; i--) {
-      const f = floaters[i]; f.y += f.vy; f.vy *= 0.96; f.alpha -= 0.018;
+      const f = floaters[i]; f.y += f.vy * dt; f.vy *= Math.pow(0.96, dt); f.alpha -= 0.018 * dt;
       if (f.alpha <= 0) floaters.splice(i, 1);
     }
-    popRingR += 4.5;
+    popRingR += 4.5 * dt;
     return;
   }
 
   // bird physics
-  bird.vy += GRAVITY;
-  bird.y  += bird.vy;
+  bird.vy += GRAVITY * dt;
+  bird.y  += bird.vy * dt;
   // clamp rotation: nose-down on fall, nose-up on rise
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
 
@@ -551,48 +555,55 @@ function update() {
   }
 
   // scroll ground
-  groundX = (groundX - pipeSpeed * 0.9) % (GROUND_H * 2);
+  groundX = (groundX - pipeSpeed * 0.9 * dt) % (GROUND_H * 2);
 
   // stars parallax
   for (const s of stars) {
-    s.x -= s.speed;
+    s.x -= s.speed * dt;
     if (s.x < 0) s.x = cw;
   }
 
   // clouds parallax
   for (const c of clouds) {
-    c.x -= c.speed;
+    c.x -= c.speed * dt;
     if (c.x + c.w < -30) { c.x = cw + 30; c.y = rnd(18, ch * 0.60); }
   }
 
-  // spawn pipes
-  if (frame % PIPE_FRAMES === 0) spawnPipe();
+  // spawn pipes/enemies — leaky-bucket accumulators, not frame%N, so cadence holds at
+  // any frame rate (a stalled tick can't skip clean past an exact modulo boundary)
+  pipeSpawnAcc += dt;
+  if (pipeSpawnAcc >= PIPE_FRAMES) { pipeSpawnAcc -= PIPE_FRAMES; spawnPipe(); }
 
   // spawn enemies: interval shrinks each level, min 45 frames
   const eInt = Math.max(45, 88 - (level - 1) * 5);
-  if (frame > PIPE_FRAMES * 0.6 && frame % eInt === 0) {
-    spawnEnemy();
-    if (level >= 10 && frame % (eInt * 2) === 0) spawnEnemy(); // dual wave at L10+
+  if (frame > PIPE_FRAMES * 0.6) {
+    enemySpawnAcc += dt;
+    if (enemySpawnAcc >= eInt) {
+      enemySpawnAcc -= eInt;
+      spawnEnemy();
+      enemySpawnCount++;
+      if (level >= 10 && enemySpawnCount % 2 === 0) spawnEnemy(); // dual wave at L10+
+    }
   }
 
   // pipes
   for (let i = pipes.length - 1; i >= 0; i--) {
     const p = pipes[i];
-    p.x -= pipeSpeed;
+    p.x -= pipeSpeed * dt;
     if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
 
     // wobble / falling top pipe update
     if (p.wobble) {
-      p.wobblePhase += 0.10;
+      p.wobblePhase += 0.10 * dt;
       if (!p.falling) {
         p.wobbleXOff = Math.sin(p.wobblePhase) * 5;
-        p.fallTimer--;
+        p.fallTimer -= dt;
         if (p.fallTimer <= 0) { p.falling = true; p.wobbleXOff = 0; }
       } else {
         // 2026-08-02 (Osimo v2): "not slam them closed completely — simply close by 25%
         // and still leave enough space to travel through." Closure CAPPED at 25% of the
         // gap; the remaining 75% stays flyable forever.
-        p.fallOffset = Math.min(p.fallOffset + 3.5, p.gapSize * 0.25);
+        p.fallOffset = Math.min(p.fallOffset + 3.5 * dt, p.gapSize * 0.25);
       }
     }
 
@@ -651,8 +662,8 @@ function update() {
     if (!e.alive) { enemies.splice(i, 1); continue; }
 
     const spd = pipeSpeed * (e.fast ? 0.8 : 0.62);
-    e.x -= spd;
-    e.y += e.vy;
+    e.x -= spd * dt;
+    e.y += e.vy * dt;
     // bounce off top/bottom
     const minY = CHUTE_OFFSET + CHUTE_R + 4;
     if (e.y < minY)  { e.y = minY;  e.vy = Math.abs(e.vy); }
@@ -805,17 +816,17 @@ function update() {
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
-    p.x += p.vx; p.y += p.vy;
-    p.vy += 0.18;
-    p.alpha -= 0.038;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy += 0.18 * dt;
+    p.alpha -= 0.038 * dt;
     if (p.alpha <= 0) particles.splice(i, 1);
   }
 
   // floaters (rising score labels)
   for (let i = floaters.length - 1; i >= 0; i--) {
     const f = floaters[i];
-    f.y    += f.vy;
-    f.alpha -= 0.028;
+    f.y    += f.vy * dt;
+    f.alpha -= 0.028 * dt;
     if (f.alpha <= 0) floaters.splice(i, 1);
   }
 }
@@ -1300,8 +1311,26 @@ function showOverlay(finalScore) {
 }
 
 // ─── main loop ─────────────────────────────────────────────────────────────────
+// FRAME-RATE INDEPENDENCE (Osimo 2026-08-06): every physics constant below was tuned
+// as a fixed per-callback delta since the original build (2026-06-18) — fine at a
+// steady 60fps, but on any device/moment that can't sustain it (WebKit's canvas cost,
+// Low Power Mode, thermal throttling, a backgrounded tab resuming) the WHOLE game
+// plays in genuine slow motion: half the fps = every system moves at exactly half
+// speed, together, so it reads as smooth slow-mo rather than jank. `dt` is how many
+// 60fps-equivalent ticks actually elapsed this callback (1.0 at 60fps, ~2.0 at 30fps);
+// every per-frame delta in update() is scaled by it so real-world speed stays correct
+// regardless of achieved frame rate. Clamped so a backgrounded-tab resume (multi-second
+// gap) can't catapult the bird through a wall on the first tick back.
+let lastFrameMs = null;
 function loop() {
-  if (running) update();
+  const now = performance.now();
+  let dt = 1;
+  if (lastFrameMs !== null) {
+    dt = (now - lastFrameMs) / (1000 / 60);
+    dt = Math.min(Math.max(dt, 0.1), 3);
+  }
+  lastFrameMs = running ? now : null;   // reset baseline across a pause/game-over gap
+  if (running) update(dt);
   if (running || waiting) draw();
   animId = requestAnimationFrame(loop);
 }
