@@ -1423,7 +1423,11 @@ function buildNextStrip(games) {
 /* ── Socials ──────────────────────────────────────────────── */
 
 // real arcade-button photos (cut from Osimo's reference, recoloured)
-const COIN_IMGS = { Shop: 'yellow', YouTube: 'red', Patreon: 'orange', KoFi: 'blue' };
+// Coin art per link. X took YouTube's red dome (2026-08-09): YouTube is PER-CHANNEL and
+// now lives inside the channel page, while this row is NETWORK-level — Osimo: "should be
+// something outside of channel one, something that covers all channels, like Kofi and merch
+// can be used by any channel followers". One X account fronts the whole network.
+const COIN_IMGS = { Shop: 'yellow', X: 'red', Patreon: 'orange', KoFi: 'blue' };
 
 function buildSocials(social) {
   const row = document.getElementById('socialRow');

@@ -2,30 +2,42 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "🛍️",
+      "emoji": "\ud83d\udecd\ufe0f",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
-      "gradient": ["#FF9F0A", "#FF6B00"],
+      "gradient": [
+        "#FF9F0A",
+        "#FF6B00"
+      ],
       "label": "Shop"
     },
     {
-      "name": "YouTube",
-      "emoji": "▶",
-      "url": "https://www.youtube.com/@JnJAiStudio",
-      "gradient": ["#FF453A", "#FF2D55"],
-      "label": "YouTube"
+      "name": "X",
+      "emoji": "\u2715",
+      "url": "https://x.com/JimJoeAiPodcast",
+      "gradient": [
+        "#2b2b2b",
+        "#000000"
+      ],
+      "label": "X"
     },
     {
       "name": "Patreon",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
-      "gradient": ["#FF6E4A", "#E0420B"],
+      "gradient": [
+        "#FF6E4A",
+        "#E0420B"
+      ],
       "label": "Patreon"
     },
     {
       "name": "Ko-fi",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://ko-fi.com/jimmynjoe",
-      "gradient": ["#FF5E5B", "#E03030"],
+      "gradient": [
+        "#FF5E5B",
+        "#E03030"
+      ],
       "label": "KoFi"
     }
   ],

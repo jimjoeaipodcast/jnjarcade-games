@@ -2,7 +2,7 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "🛍️",
+      "emoji": "\ud83d\udecd\ufe0f",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
       "gradient": [
         "#FF9F0A",
@@ -11,18 +11,18 @@
       "label": "Shop"
     },
     {
-      "name": "YouTube",
-      "emoji": "▶",
-      "url": "https://www.youtube.com/@JnJAiStudio",
+      "name": "X",
+      "emoji": "\u2715",
+      "url": "https://x.com/JimJoeAiPodcast",
       "gradient": [
-        "#FF453A",
-        "#FF2D55"
+        "#2b2b2b",
+        "#000000"
       ],
-      "label": "YouTube"
+      "label": "X"
     },
     {
       "name": "Patreon",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
       "gradient": [
         "#FF6E4A",
@@ -32,7 +32,7 @@
     },
     {
       "name": "Ko-fi",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://ko-fi.com/jimmynjoe",
       "gradient": [
         "#FF5E5B",
@@ -45,48 +45,48 @@
     {
       "id": "brick-invaders",
       "name": "BRICK-INVADERS",
-      "emoji": "🧱",
-      "genre": "BREAKOUT × SPACE INVADERS",
+      "emoji": "\ud83e\uddf1",
+      "genre": "BREAKOUT \u00d7 SPACE INVADERS",
       "url": "games/brick-invaders.html",
       "status": "wip",
-      "special": "Game Lab #15 — first PHASER-track cabinet (engine PoC)",
-      "note": "2026-07-16: signature = the brick wall IS the invader formation — marches sideways, drops at edges, breaching the red deadline costs a life. Waves ramp march speed only. Phaser 3 arcade physics + particles + camera shake/flash; house WebAudio sfx; drag paddle, tap launch."
+      "special": "Game Lab #15 \u2014 first PHASER-track cabinet (engine PoC)",
+      "note": "2026-07-16: signature = the brick wall IS the invader formation \u2014 marches sideways, drops at edges, breaching the red deadline costs a life. Waves ramp march speed only. Phaser 3 arcade physics + particles + camera shake/flash; house WebAudio sfx; drag paddle, tap launch."
     },
     {
       "id": "chrome-flipper",
       "name": "CHROME FLIPPER",
-      "emoji": "⚡",
-      "genre": "PINBALL × CYBERPUNK",
+      "emoji": "\u26a1",
+      "genre": "PINBALL \u00d7 CYBERPUNK",
       "url": "games/chrome-flipper.html",
       "status": "wip",
-      "special": "Game Lab #14 — pixel art pinball, 3 cyberpunk tables, CHROME multiplier lanes, multiball, moving bumper",
-      "note": "Built by grok-4.5 (Ricky). Tables: Neon Street → Corp Tower → Skyline Hack. CHROME rollover lanes = ×2 score. Table 2: all 5 drops → multiball ×2. Table 3: moving bumper, endless. Full pixel art via half-res offscreen canvas."
+      "special": "Game Lab #14 \u2014 pixel art pinball, 3 cyberpunk tables, CHROME multiplier lanes, multiball, moving bumper",
+      "note": "Built by grok-4.5 (Ricky). Tables: Neon Street \u2192 Corp Tower \u2192 Skyline Hack. CHROME rollover lanes = \u00d72 score. Table 2: all 5 drops \u2192 multiball \u00d72. Table 3: moving bumper, endless. Full pixel art via half-res offscreen canvas."
     },
     {
       "id": "jnj-on-air",
       "name": "JNJ: ON AIR IN 10 MINUTES",
-      "emoji": "🎙️",
-      "genre": "MONKEY ISLAND × TALK SHOW",
+      "emoji": "\ud83c\udf99\ufe0f",
+      "genre": "MONKEY ISLAND \u00d7 TALK SHOW",
       "url": "games/jnj-on-air.html",
       "status": "wip",
-      "special": "Game Lab #12 — first ADVENTURE cabinet",
-      "note": "v2 2026-07-04: FULL VOICE (145 lines, real Jimmy+Joe Chatterbox VO) + pixel-art rooms from Osimo's studio photo (corridor+prop generated to match) + Osimo's sprite sheets. v3 2026-08-03: his 8 'walk' frames were 8 regenerations of ONE pose (foot-span constant, feet never separate) so he slid; real 8-frame cycle now built by tools/games/onair_walk_frames.py, phase locked to distance travelled. VO caps re-rendered (pack predated _normalize_caps, so Jimmy spelled ALL-CAPS words out). 3-room point-and-click, parallel tea+lollipop chains, every hotspot answers, 6 collectible COMEBACKS → BANTER DUEL finale vs Joe. No deaths, auto-save/resume, timer = score."
+      "special": "Game Lab #12 \u2014 first ADVENTURE cabinet",
+      "note": "v2 2026-07-04: FULL VOICE (145 lines, real Jimmy+Joe Chatterbox VO) + pixel-art rooms from Osimo's studio photo (corridor+prop generated to match) + Osimo's sprite sheets. v3 2026-08-03: his 8 'walk' frames were 8 regenerations of ONE pose (foot-span constant, feet never separate) so he slid; real 8-frame cycle now built by tools/games/onair_walk_frames.py, phase locked to distance travelled. VO caps re-rendered (pack predated _normalize_caps, so Jimmy spelled ALL-CAPS words out). 3-room point-and-click, parallel tea+lollipop chains, every hotspot answers, 6 collectible COMEBACKS \u2192 BANTER DUEL finale vs Joe. No deaths, auto-save/resume, timer = score."
     },
     {
       "id": "jungle-hop",
       "name": "JUNGLE-HOP",
-      "emoji": "🌴",
-      "genre": "PITFALL × DK JR",
+      "emoji": "\ud83c\udf34",
+      "genre": "PITFALL \u00d7 DK JR",
       "url": "games/jungle-hop.html",
       "status": "wip",
       "special": "Game Lab #11",
-      "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards — rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn — bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
+      "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards \u2014 rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn \u2014 bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
     },
     {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
-      "emoji": "🏺",
-      "genre": "JUNGLE HUNT × TOMB RAIDER",
+      "emoji": "\ud83c\udffa",
+      "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
       "url": "games/tomb-hunt.html",
       "status": "wip",
       "special": "Game Lab #3",
@@ -95,8 +95,8 @@
     {
       "id": "bomb-garden",
       "name": "BOMB GARDEN",
-      "emoji": "💣",
-      "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
+      "emoji": "\ud83d\udca3",
+      "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
       "url": "games/bomb-garden.html",
       "status": "wip",
       "special": "Game Lab #4",
@@ -105,8 +105,8 @@
     {
       "id": "pac-lemming",
       "name": "PAC-LEMMING",
-      "emoji": "🟡",
-      "genre": "LEMMINGS × PAC-MAN",
+      "emoji": "\ud83d\udfe1",
+      "genre": "LEMMINGS \u00d7 PAC-MAN",
       "url": "games/pac-lemming.html",
       "status": "wip",
       "special": "Game Lab #6",
@@ -115,8 +115,8 @@
     {
       "id": "bomb-lemmings",
       "name": "BOMB-LEMMINGS",
-      "emoji": "💣",
-      "genre": "LEMMINGS × BOMBERMAN",
+      "emoji": "\ud83d\udca3",
+      "genre": "LEMMINGS \u00d7 BOMBERMAN",
       "url": "games/bomb-lemmings.html",
       "status": "wip",
       "special": "Game Lab #7",
@@ -125,8 +125,8 @@
     {
       "id": "lemming-invaders",
       "name": "LEMMING-INVADERS",
-      "emoji": "👾",
-      "genre": "LEMMINGS × SPACE INVADERS",
+      "emoji": "\ud83d\udc7e",
+      "genre": "LEMMINGS \u00d7 SPACE INVADERS",
       "url": "games/lemming-invaders.html",
       "status": "wip",
       "special": "Game Lab #8",
@@ -135,7 +135,7 @@
     {
       "id": "astro-hop",
       "name": "ASTRO-HOP",
-      "emoji": "🚀",
+      "emoji": "\ud83d\ude80",
       "genre": "PLATFORM MECHANICS SHOWCASE",
       "url": "games/astro-hop.html",
       "status": "wip",
@@ -145,7 +145,7 @@
     {
       "id": "cave-plunge",
       "name": "CAVE-PLUNGE",
-      "emoji": "🪨",
+      "emoji": "\ud83e\udea8",
       "genre": "CAVE EXPLORER",
       "url": "games/cave-plunge.html",
       "status": "wip",
@@ -155,7 +155,7 @@
     {
       "id": "lupo-alberto",
       "name": "LUPO ALBERTO",
-      "emoji": "🐺",
+      "emoji": "\ud83d\udc3a",
       "genre": "PLATFORM TRAINING CABINET",
       "url": "games/lupo-alberto.html",
       "status": "wip",
