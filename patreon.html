@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:wght@500;600;700;800&family=Archivo+Black&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 <style>
   .pat-head{ text-align:center; padding:30px 18px 6px; }
   .pat-kicker{ font-size:11px; letter-spacing:.4em; color:#22c55e; opacity:.9; }
@@ -84,7 +84,10 @@
     </div>
   </header>
 
-  <nav class="pat-nav"><a href="index.html">‹ main arcade</a></nav>
+  <!-- "‹ main arcade" nav REMOVED 2026-08-09 — Osimo: "no links should take patreons to
+       the 'free' landing page, patreons stay in patreon, no links no connection between
+       the two." It was a RELATIVE href (index.html, no leading slash), which is why a
+       /-prefixed audit missed it. -->
 
 
   <div class="floor">
