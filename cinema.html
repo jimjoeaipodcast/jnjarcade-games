@@ -14,8 +14,8 @@
 <!-- Fonts are SELF-HOSTED via cabinet.css @font-face (vendor/fonts/*.woff2). The older
      hub pages still pull Bungee/Barlow from the Google Fonts CDN, which violates the
      no-CDN rule; these new pages deliberately do not add to that debt. -->
-<link rel="stylesheet" href="/cabinet.css?v=6">
-<link rel="stylesheet" href="/style.css?v=30">
+<link rel="stylesheet" href="/cabinet.css?v=7">
+<link rel="stylesheet" href="/style.css?v=31">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   /* shared --shell/--surface/--cream/--muted/--bulb come from style.css
@@ -75,6 +75,20 @@
 
   .back { margin-top: 32px; font-size: 12px; letter-spacing: .1em; color: var(--bulb); text-decoration: none; opacity: .75; }
   .back:hover { opacity: 1; }
+
+  /* Upcoming channels: same cassette, visibly not-yet-open. Rendered as a DIV, never an
+     <a> — a cassette that looks tappable but goes nowhere is worse than one that plainly
+     says SOON, and there are no channel pages for these yet (2026-08-09). */
+  .cass--soon { opacity: .82; }
+  .cass--soon .cass-img { filter: saturate(.75) brightness(.8); }
+  .cass--soon .cass-head { cursor: default; }
+  .cass-soon-cta {
+    display: inline-block; margin-top: 16px;
+    background: transparent; color: var(--ink);
+    border: 1px dashed var(--ink);
+    font-family: 'Bungee', sans-serif; font-size: 13px;
+    padding: 11px 22px; border-radius: 7px; letter-spacing: .04em;
+  }
 </style>
 </head>
 <body>
@@ -82,7 +96,7 @@
 <header class="hd">
   <div class="hd-kicker">JnJ Ai Studio</div>
   <h1 class="hd-title">JIMMY &amp; JOE CINEMA</h1>
-  <p class="hd-sub">Every channel we make, on one shelf. One cassette each — more moving in as we build them.</p>
+  <p class="hd-sub">Every channel we make, on one shelf. One cassette each. One is live; the rest are in the works.</p>
 </header>
 
 <div class="cass-row">
@@ -95,6 +109,51 @@
       <div class="cass-quote">"We started with one show. We are not stopping at one show." — JIMMY</div>
       <span class="cass-cta">OPEN CHANNEL</span>
     </a>
+  </section>
+  <section class="cass cass--soon" style="--ink:#c084fc;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-movies.jpg" alt="Jimmy and Joe on a film set">
+    <div class="cass-head">
+      <div class="cass-tag">Channel 02 · in the works</div>
+      <div class="cass-title">🎬 MOVIE REVIEWS</div>
+      <div class="cass-desc">Two AI hosts who have never been outside arguing about films. Verdicts, not synopses.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+    </div>
+  </section>
+  <section class="cass cass--soon" style="--ink:#ff6b35;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-muskverse.jpg" alt="Jimmy and Joe on Mars">
+    <div class="cass-head">
+      <div class="cass-tag">Channel 03 · in the works</div>
+      <div class="cass-title">🚀 MUSKVERSE</div>
+      <div class="cass-desc">Rockets, robots and whatever he posted at 3am. We read it so you do not have to.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+    </div>
+  </section>
+  <section class="cass cass--soon" style="--ink:#22c55e;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-sports.jpg" alt="Jimmy and Joe at a sports desk">
+    <div class="cass-head">
+      <div class="cass-tag">Channel 04 · in the works</div>
+      <div class="cass-title">🏟️ SPORTS TONIGHT</div>
+      <div class="cass-desc">The desk, the graphics, the confident predictions. Accuracy not guaranteed.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+    </div>
+  </section>
+  <section class="cass cass--soon" style="--ink:#38bdf8;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-horoscopes.jpg" alt="Jimmy and Joe reading the stars">
+    <div class="cass-head">
+      <div class="cass-tag">Channel 05 · in the works</div>
+      <div class="cass-title">🔮 HOROSCOPES</div>
+      <div class="cass-desc">Daily readings and long-form for all twelve signs. Joe does not believe in it. Joe still listens.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+    </div>
+  </section>
+  <section class="cass cass--soon" style="--ink:#fbbf24;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-macdell.jpg" alt="A Mac and a Dell facing each other">
+    <div class="cass-head">
+      <div class="cass-tag">Channel 06 · in the works</div>
+      <div class="cass-title">💻 MAC &amp; DELL</div>
+      <div class="cass-desc">Markets, crypto and money talk between two machines that should not have opinions.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+    </div>
   </section>
 </div>
 
