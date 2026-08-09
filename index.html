@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet">
   <title>JnJ Arcade — Games from the Jimmy &amp; Joe AI Podcast</title>
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -107,6 +107,37 @@
     </section>
     <!-- ── end arcade cassette ───────────────────────────────── -->
 
+    <!-- ── PINNED: Jimmy & Joe Cinema (→ /cinema: the channel rack) ──────────
+         Osimo 2026-08-09: "in the arcade.win landing page we will have Arcade games
+         and under it Jimmy & Joe Cinema... once you click on it it takes you to the
+         list of all our channels." Sits directly under THE ARCADE so the page reads
+         GAMES then CHANNELS. ⚠️ ART IS A PLACEHOLDER — replace
+         /assets/icons/cinema-cassette.png with the real cassette image. ── -->
+    <section class="cab cab-featured" style="--ink:#ff4d6d;--dim:#5c1424;--pit:#150409;--glowsoft:rgba(255,77,109,0.22)">
+      <div class="cab-marquee">THE CINEMA</div>
+      <div class="cab-attract">
+        <div class="screen-glass screen-glass--static">
+          <img class="bs-family-img" src="/assets/icons/cinema-cassette.png" alt="Jimmy and Joe cinema">
+          <span class="attract-tag">🎬 EVERY CHANNEL WE MAKE</span>
+        </div>
+      </div>
+      <div class="cab-info">
+        <p class="cab-genre">WATCH THE SHOWS</p>
+        <h2 class="cab-title">JIMMY &amp; JOE CINEMA</h2>
+        <blockquote class="cab-quote">
+          "We started with one show. We are not stopping at one show."<cite>— JIMMY</cite>
+        </blockquote>
+        <a class="cab-play" href="/cinema" style="background:var(--ink);color:#150409">
+          PICK A CHANNEL
+        </a>
+        <div class="cab-meta">
+          <span>1 CHANNEL LIVE</span>
+          <span class="plays">MORE MOVING IN</span>
+        </div>
+      </div>
+    </section>
+    <!-- ── end cinema cassette ──────────────────────────────── -->
+
     <!-- ── PINNED: Submit Your Own cassette (→ /submit hub: Amazon Finds / Bright Side / Seriously) ── -->
     <section class="cab cab-featured" style="--ink:#f5c518;--dim:#5c4800;--pit:#130e00;--glowsoft:rgba(245,197,24,0.22)">
       <div class="cab-marquee">SUBMIT YOUR OWN</div>
@@ -158,7 +189,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="vendor/gsap.min.js"></script>
-  <script src="app.js?v=56"></script>
+  <script src="app.js?v=57"></script>
   <script>
   /* ── Pac-Man eats the bulb-row dots after 1:11 idle ── */
   (function(){
