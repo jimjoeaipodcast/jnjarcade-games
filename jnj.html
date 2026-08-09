@@ -14,8 +14,8 @@
 <!-- Fonts are SELF-HOSTED via cabinet.css @font-face (vendor/fonts/*.woff2). The older
      hub pages still pull Bungee/Barlow from the Google Fonts CDN, which violates the
      no-CDN rule; these new pages deliberately do not add to that debt. -->
-<link rel="stylesheet" href="/cabinet.css?v=4">
-<link rel="stylesheet" href="/style.css?v=28">
+<link rel="stylesheet" href="/cabinet.css?v=6">
+<link rel="stylesheet" href="/style.css?v=30">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   /* shared --shell/--surface/--cream/--muted/--bulb come from style.css
@@ -47,7 +47,12 @@
   .cass:hover { box-shadow: 0 0 50px var(--glow); }
 
   .cass-img {
-    width: 100%; height: 160px; object-fit: cover; display: block;
+    /* 160px + centre-crop sliced the top off every one of Osimo's cassette shots — the
+       YouTube play button, the Patreon logo and the JIM & JOE screen all sit in the UPPER
+       middle of a 3:2 frame, so a centred crop throws away the subject. Taller band plus
+       an upward bias keeps the screen in shot on both the 390px phone and desktop. */
+    width: 100%; height: 200px; object-fit: cover; object-position: center 30%;
+    display: block;
     border-bottom: 1px solid var(--ink-dim);
   }
   .cass-head {
@@ -82,7 +87,7 @@
 
 <div class="cass-row">
   <section class="cass" style="--ink:#ff0000;--ink-dim:rgba(255,0,0,.25);--glow:rgba(255,0,0,.10)">
-    <img class="cass-img" src="/assets/icons/jnj-podcast-cassette.jpg" alt="Watch on YouTube">
+    <img class="cass-img" src="/assets/icons/jnj-youtube-cassette.jpg" alt="Watch on YouTube">
     <a class="cass-head" href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">
       <div class="cass-tag">Watch</div>
       <div class="cass-title">▶️ YOUTUBE</div>
@@ -92,7 +97,7 @@
     </a>
   </section>
   <section class="cass" style="--ink:#f96854;--ink-dim:rgba(249,104,84,.25);--glow:rgba(249,104,84,.10)">
-    <img class="cass-img" src="/assets/icons/arcade-cassette.jpg" alt="Back us on Patreon">
+    <img class="cass-img" src="/assets/icons/jnj-patreon-cassette.jpg" alt="Back us on Patreon">
     <a class="cass-head" href="https://www.patreon.com/c/JimmyJoeAiPodcast" target="_blank" rel="noopener">
       <div class="cass-tag">Support</div>
       <div class="cass-title">☕ PATREON</div>
