@@ -10,6 +10,15 @@
 ═══════════════════════════════════════════════════════════════════════════ */
 @font-face { font-family: 'Bungee'; font-style: normal; font-weight: 400; font-display: swap;
              src: url('/vendor/fonts/bungee-400.woff2') format('woff2'); }
+/* Bungee SHADE is the 3D-block sign face on the JnJ marquee (style.css .sign-jnj) and is a
+   SEPARATE family from Bungee — not a weight or a style of it. The 2026-08-09 self-hosting
+   pass (c4e2c10) vendored Bungee and Barlow, dropped the Google Fonts <link>, and verified
+   with document.fonts.check('16px Bungee') — which passed, because Bungee was fine. Nothing
+   checked Shade, so the marquee silently fell through to its 'Arial Black' fallback and the
+   3D logo went flat on arcade.win, /patreon and /arcade for six days. Verify the font the
+   HEADLINE uses, not the font you just vendored. */
+@font-face { font-family: 'Bungee Shade'; font-style: normal; font-weight: 400; font-display: swap;
+             src: url('/vendor/fonts/bungee-shade-400.woff2') format('woff2'); }
 @font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap;
              src: url('/vendor/fonts/barlow-condensed-600.woff2') format('woff2'); }
 

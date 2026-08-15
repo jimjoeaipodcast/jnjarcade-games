@@ -14,8 +14,8 @@
 <!-- Fonts are SELF-HOSTED via cabinet.css @font-face (vendor/fonts/*.woff2). The older
      hub pages still pull Bungee/Barlow from the Google Fonts CDN, which violates the
      no-CDN rule; these new pages deliberately do not add to that debt. -->
-<link rel="stylesheet" href="/cabinet.css?v=9">
-<link rel="stylesheet" href="/style.css?v=33">
+<link rel="stylesheet" href="/cabinet.css?v=11">
+<link rel="stylesheet" href="/style.css?v=35">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   /* shared --shell/--surface/--cream/--muted/--bulb come from style.css
@@ -75,6 +75,21 @@
 
   .back { margin-top: 32px; font-size: 12px; letter-spacing: .1em; color: var(--bulb); text-decoration: none; opacity: .75; }
   .back:hover { opacity: 1; }
+
+  /* Patreon-only series shown on the PUBLIC side: full art, plainly locked. Matches the
+     existing arcade convention (app.js `game.locked` -> "🔒 UNLOCK ON PATREON") rather than
+     inventing a second lock language. Osimo 2026-08-10: "we still show the cassette, but it
+     is locked and says 'Join Patreon' to watch". */
+  .cass--locked .cass-img { filter: saturate(.85) brightness(.72); }
+  .cass-lock-cta {
+    display: inline-block; margin-top: 16px;
+    background: var(--ink); color: #150409;
+    font-family: 'Bungee', sans-serif; font-size: 13.5px;
+    padding: 12px 22px; border-radius: 7px; text-decoration: none;
+    letter-spacing: .04em;
+  }
+  .cass-rounds { font-size: 12.5px; color: rgba(240,230,204,.55); margin-top: 10px; line-height: 1.6; }
+  .cass-rounds b { color: rgba(240,230,204,.8); font-weight: 700; }
 </style>
 </head>
 <body>
