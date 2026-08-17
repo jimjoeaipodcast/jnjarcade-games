@@ -242,6 +242,16 @@ const FLASH_PIPE_CYCLE_MS = FLASH_PIPE_OPEN_MS + FLASH_PIPE_SOLID_MS;
 const SHRINK_SPAWN_MS   = 11000;    // shrink bomb: spawns this often once level 10+
 const SHRINK_MAX        = 3;        // max stacking shrink levels
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
+// WARP PIPE easter egg (Osimo 2026-08-17): every 5th level, exactly ONE pipe half (top or
+// bottom, random) renders in a darker green. Touch it and instead of taking damage the bird
+// gets sucked in Mario-style → 6-second bonus room (no pipes, parachutes everywhere, same
+// scroll motion) → spat out of the TOP pipe of a fresh pair (regardless of which half was
+// entered — bottom entry pops out of the one above it, top entry out of the one it entered).
+const WARP_LEVEL_EVERY = 5;         // arm one warp pipe on every Nth level
+const WARP_BONUS_MS    = 6000;      // bonus room duration
+const WARP_SUCK_FRAMES = 42;        // suck-in animation length (60fps-equivalent ticks)
+const WARP_SPIT_FRAMES = 26;        // spit-out animation length
+const BONUS_CHUTES     = 12;        // parachutes seeded into the bonus room at entry
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -314,6 +324,10 @@ const sfx = {
   levelup: () => { playTone(659, 0.09, 'triangle', 0.12); playTone(988, 0.12, 'triangle', 0.12, null, 0.09); },
   // new best score — little ascending fanfare
   best:  () => [523, 659, 784, 1047].forEach((f, i) => playTone(f, 0.14, 'triangle', 0.14, null, 0.15 + i * 0.09)),
+  // warp pipe suck-in — the classic descending pipe slide
+  warp:  () => { playTone(520, 0.45, 'square', 0.16, 90); playTone(260, 0.45, 'triangle', 0.12, 45, 0.02); },
+  // bonus-room exit — ascending pop back out
+  warpOut: () => { playTone(180, 0.30, 'square', 0.15, 640); playTone(90, 0.30, 'triangle', 0.11, 320, 0.02); },
 };
 
 function updateMuteUI() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
@@ -343,6 +357,12 @@ let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
 let starChain, starPower, starPowerUntil;
 let pipeSpawnCount;
 let pipeSpawnAcc, enemySpawnAcc, enemySpawnCount;
+// warp pipe: which pipe ordinal of the current level carries the warp (0 = none), how many
+// pipes this level has spawned, and the warp state machine (null | suck | bonus | spit)
+let warpAtPipe, levelPipeCount, warp, bonusUntil;
+// callouts: server #1 score (fetched once at load), once-per-run announce flags, active banner
+let topScore = 0;
+let pbAnnounced, topAnnounced, callout;
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -415,17 +435,24 @@ function spawnPipe() {
   const margin = 60;
   const gapY   = rnd(margin, ch - GROUND_H - margin - gap);
   pipeSpawnCount++;
+  levelPipeCount++;
+  // warp pipe: the armed ordinal of a 5th level. Mutually exclusive with wobble AND
+  // flash — the dark shade is its whole telegraph, stacking motion/flashing on it
+  // would bury the tell (same fairness rule as wobble×flash below).
+  const warpPipe = warpAtPipe > 0 && levelPipeCount === warpAtPipe;
+  if (warpPipe) warpAtPipe = 0;   // one per band — consumed on spawn
   // flash-through pipe (level 10+, 1-in-5): mutually exclusive with wobble — stacking
   // both effects on one pipe would compound two learn-the-pattern mechanics at once,
   // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02).
-  const flashPipe = level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
-  const wobble = !flashPipe && level >= 6 && Math.random() < 0.35;
+  const flashPipe = !warpPipe && level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
+  const wobble = !warpPipe && !flashPipe && level >= 6 && Math.random() < 0.35;
   pipes.push({
     x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
     wobble, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false,
     fallTimer: wobble ? Math.round(rnd(55, 100)) : 0,
     flashPipe, translucentNow: false,
+    warpPipe, warpSide: warpPipe ? (Math.random() < 0.5 ? 'top' : 'bottom') : null,
   });
 }
 
@@ -457,6 +484,10 @@ function setLevel(n) {
   pipeSpeed       = BASE_SPEED + (n - 1) * 0.18;
   pipesUntilLevel = 10;
   lvlEl.textContent = `LEVEL ${n}`;
+  // arm the warp pipe: on every 5th level exactly ONE of this level's 10 pipes
+  // (ordinal picked at random, never the very first so the level-up moment breathes)
+  levelPipeCount = 0;
+  warpAtPipe = (n % WARP_LEVEL_EVERY === 0) ? Math.floor(rnd(2, 10)) : 0;
 }
 
 // bird.r depends on BOTH how inflated (hurt) and how shrunk (buffed) the bird is —
@@ -464,6 +495,203 @@ function setLevel(n) {
 // (Osimo 2026-08-02: shrink bomb stacks on top of the existing inflate system).
 function recomputeBirdRadius() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
+}
+
+// ─── Jimmy & Joe callouts (Osimo 2026-08-17) ─────────────────────────────────
+// Two banks of 50: beating your own personal best, and taking the global #1 spot.
+// Speakers ALTERNATE across callouts (persisted, so it alternates across runs too).
+// Guard-checked against SOUL.md: Jimmy = fast/specific, zero slang, never retracts;
+// Joe = flat, short, understated, targets Jimmy's hype not the player.
+const PB_LINES = {
+  JIMMY: [
+    "New personal best! I'm genuinely a little emotional about this.",
+    "That's a record. YOUR record. The best kind of record.",
+    "Past your best and still climbing — this is the good timeline.",
+    "New best! Somewhere your old score is filing a complaint.",
+    "You just outflew yourself. Think about the physics of that.",
+    "Personal best! I had a feeling about this run since flap one.",
+    "That's your new record. The old one had a good life.",
+    "Best run yet — and with MY commentary. Teamwork.",
+    "New personal best. I'd high-five you but Joe says I gesture too much.",
+    "Record broken! The bird looks the same. It isn't.",
+    "You beat yourself! In the one way that's actually healthy.",
+    "New best! Quick, act like you planned every second of it.",
+    "A personal record. Joe just nodded. That's huge, historically.",
+    "Past your best! Every flap from here is uncharted territory.",
+    "New record — the pipes officially have a problem now.",
+    "Personal best! Your thumb deserves its own tiny trophy.",
+    "You're beating the earlier you. Time travel, basically.",
+    "New best score. I'm updating everything I know about you.",
+    "Record! And on THIS gap size? Genuinely impressive.",
+    "A new best — the bird believed in you the whole time.",
+    "Personal best! History has already forgotten your old score.",
+    "New record and still going — my favourite kind of chaos.",
+    "You just lapped yourself. Not how laps work. Still counts.",
+    "New best! Somewhere a leaderboard just got a little nervous.",
+    "Past your record — from here on you're your own rival.",
+  ],
+  JOE: [
+    "A new personal best. Noted.",
+    "Better than your previous attempt. As trends go, acceptable.",
+    "New record. I'll update the file.",
+    "That beats your old score. The old score won't be missed.",
+    "Personal best. Statistically it had to happen eventually.",
+    "I had a mild expectation about this run. It was met.",
+    "New best. Try not to let Jimmy make it a whole thing.",
+    "An improvement. I'm as surprised as I ever get.",
+    "Your record, beaten by you. Efficient.",
+    "New personal best. The bar has moved. Slightly.",
+    "Better than before. Which is, technically, progress.",
+    "Record broken. No confetti. We discussed the confetti.",
+    "A new best. Jimmy is already too excited about it.",
+    "Duly logged. Your previous best is now historical data.",
+    "A personal record. Keep flapping, I suppose.",
+    "New best. I'm told this is, quote, hype.",
+    "You've exceeded yourself. The only person you needed to.",
+    "New record. My prediction stands, whenever I made it.",
+    "Improvement confirmed. Carry on.",
+    "Your old best has been informed. It took it quietly.",
+    "Personal best. Interesting.",
+    "New best score. The pipes remain unimpressed. I don't.",
+    "Record beaten. The bird had nothing to do with it.",
+    "A new record. Do not tell Jimmy I nodded.",
+    "Progress. Measurable. Rare.",
+  ],
+};
+const TOP_LINES = {
+  JIMMY: [
+    "That's the TOP SCORE. On the whole board. Right now. You.",
+    "Number one! Every name on that board just felt a chill.",
+    "TOP OF THE LEADERBOARD! Stay calm. I won't be.",
+    "You're first. In the world. Of this arcade. Which counts.",
+    "Highest score on the board! Genuinely historic. Locally.",
+    "NUMBER ONE! And you're still flying — protect that bird!",
+    "Top score! Someone out there just refreshed and gasped.",
+    "You lead the entire leaderboard. I have actual chills.",
+    "First place! The board is yours now. Act natural.",
+    "TOP SCORE! Joe's pretending not to watch. He's watching.",
+    "You've taken the crown! It's invisible but it's there.",
+    "Number one — every pipe from here is a victory lap.",
+    "THE record. Not yours. THE. This is the big one.",
+    "Top of the board! I'm talking fast because this is huge.",
+    "First place, live, mid-run. The coolest way to do it.",
+    "You're number one! Quick, look smug. Perfect.",
+    "TOP SCORE! I'd like to thank the bird. And you. Mostly you.",
+    "Leader of the whole board! Keep flapping — this is history.",
+    "Number one! The old champion just sat down slowly.",
+    "You own the top spot now. The view is excellent.",
+    "FIRST PLACE! This goes in the museum. The museum is my heart.",
+    "Top score! Blink twice if you're a robot. No — don't blink, FLY.",
+    "Number one! The leaderboard just became your biography.",
+    "THE TOP SPOT! And it happened while I was watching. Honoured.",
+    "First! Better than everyone. Including me. Especially me.",
+  ],
+  JOE: [
+    "That's the top score. Out of everyone. Hm.",
+    "First place. I've checked. Twice.",
+    "You now hold the record. The actual one.",
+    "Top of the board. I have no notes.",
+    "Number one. Jimmy has left his chair. I apologise in advance.",
+    "The entire leaderboard is now beneath you. Factually.",
+    "Top score. This was not entirely surprising to me.",
+    "First. Of everybody. I'm recording it in the ledger.",
+    "You've taken first place. Someone had to. It's you.",
+    "The record is yours. Handle it better than the last person.",
+    "Top of the board. That's quite a lot of beaten players.",
+    "Number one. I'd stand, but the moment will pass.",
+    "First place, worldwide. Well. Arcade-wide. Still.",
+    "The top score is yours. The committee — me — approves.",
+    "You lead the board. Every name under yours agreed reluctantly.",
+    "Top score confirmed. Not ideal. For them.",
+    "First. I'll allow Jimmy exactly one victory noise.",
+    "The whole leaderboard, and your name above it. Reasonable.",
+    "Number one. A previous champion is being philosophical.",
+    "Top of the board. I am, and I quote myself, impressed.",
+    "You're first. This is the part I don't undercut. Enjoy it.",
+    "Record holder. The bird did some of the work. Mostly you.",
+    "First place. Even my scepticism has stepped outside.",
+    "Top score. The data is unambiguous for once.",
+    "Number one on the board. That's the highest one. Carry on.",
+  ],
+};
+
+// Fetch the live #1 once at load — same endpoint ArcadeScores submits to. Offline /
+// empty board → topScore stays 0 and top-callouts simply never fire.
+fetch('/api/scores?game=' + GAME_ID)
+  .then(r => r.json())
+  .then(d => { if (d.scores && d.scores[0]) topScore = d.scores[0].s | 0; })
+  .catch(() => {});
+
+// ─── warp pipe state machine ─────────────────────────────────────────────────
+function startWarp(p) {
+  // remember the entry pair's geometry so the exit pair can mirror it
+  warp = {
+    phase: 'suck', t: 0, side: p.warpSide,
+    gapY: p.gapY, gapSize: p.gapSize,
+    // suck the bird toward the mouth of the half it touched
+    fromX: bird.x, fromY: bird.y,
+    toX: p.x + PIPE_W / 2,
+    toY: p.warpSide === 'bottom' ? p.gapY + p.gapSize + 10 : p.gapY - 10,
+  };
+  p.warpPipe = false;          // consumed — can't re-trigger
+  sfx.warp();
+  spawnParticles(warp.toX, warp.toY, '#0c7a40', 14);
+}
+
+function enterBonus() {
+  warp = { phase: 'bonus' };
+  bonusUntil = Date.now() + WARP_BONUS_MS;
+  pipes = [];                  // no pipes in the bonus room
+  // parachutes EVERYWHERE — seed a dense field, spread across the whole sky
+  for (let i = 0; i < BONUS_CHUTES; i++) {
+    enemies.push({
+      x: rnd(cw * 0.15, cw * 1.5),
+      y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
+      vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
+      alive: true, phase: Math.random() * Math.PI * 2, fast: false,
+    });
+  }
+  bird.x = cw * 0.30; bird.y = ch * 0.45; bird.vy = 0;
+  floaters.push({ x: cw / 2, y: ch * 0.3, text: '🎉 BONUS ROOM!', alpha: 1, vy: -1.2, color: '#0c7a40' });
+}
+
+function exitBonus() {
+  // fresh pipe pair mid-screen mirroring the entry pair; bird ALWAYS pops out of the
+  // TOP pipe's mouth (Osimo: bottom entry exits the one above it; top entry exits the
+  // one it entered) — counted so the exit pair can never double-score
+  const p = {
+    x: cw * 0.42, gapY: warp.gapY, gapSize: warp.gapSize, counted: true,
+    wobble: false, wobblePhase: 0, wobbleXOff: 0,
+    fallOffset: 0, falling: false, fallTimer: 0,
+    flashPipe: false, translucentNow: false, warpPipe: false, warpSide: null,
+  };
+  pipes.push(p);
+  enemies = [];                // clear the bonus field
+  warp = { phase: 'spit', t: 0, pipe: p };
+  bird.x = p.x + PIPE_W / 2;
+  bird.y = p.gapY - bird.r;    // inside the top pipe mouth
+  bird.vy = 0;
+  sfx.warpOut();
+  spawnParticles(bird.x, p.gapY, '#0c7a40', 14);
+}
+
+const JIMMY_INK = '#4dd9f5', JOE_INK = '#ffcf3d';
+function showCallout(kind) {
+  // strict alternation, persisted so it also alternates across runs/sessions
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('ff_callout_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('ff_callout_who', who);
+  } catch (e) {}
+  const bank = kind === 'top' ? TOP_LINES[who] : PB_LINES[who];
+  callout = {
+    who,
+    text: bank[Math.floor(Math.random() * bank.length)],
+    until: Date.now() + 3400,
+    kind,
+  };
+  sfx.best();
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
@@ -484,6 +712,13 @@ function initGame() {
   pipeSpawnAcc      = 0;
   enemySpawnAcc     = 0;
   enemySpawnCount   = 0;
+  warpAtPipe        = 0;
+  levelPipeCount    = 0;
+  warp              = null;
+  bonusUntil        = 0;
+  pbAnnounced       = false;
+  topAnnounced      = false;
+  callout           = null;
   popping           = false;
   popRingR          = 0;
   pipes     = [];
@@ -542,9 +777,40 @@ function update(dt) {
     return;
   }
 
+  // ── warp pipe phases (suck-in / spit-out animate the bird, world pauses) ──
+  if (warp && warp.phase === 'suck') {
+    warp.t += dt;
+    const k = Math.min(1, warp.t / WARP_SUCK_FRAMES);
+    bird.x = warp.fromX + (warp.toX - warp.fromX) * k;
+    bird.y = warp.fromY + (warp.toY - warp.fromY) * k;
+    bird.rot = k * (warp.side === 'bottom' ? 90 : -90);   // nose-dive into the mouth
+    if (warp.t >= WARP_SUCK_FRAMES) enterBonus();
+    return;
+  }
+  if (warp && warp.phase === 'spit') {
+    warp.t += dt;
+    const p = warp.pipe;
+    p.x -= pipeSpeed * dt;                  // exit pair scrolls like any pipe
+    bird.x = p.x + PIPE_W / 2;
+    bird.y = p.gapY - bird.r + (warp.t / WARP_SPIT_FRAMES) * (bird.r * 2 + 14);
+    bird.rot = 20;
+    if (warp.t >= WARP_SPIT_FRAMES) {
+      warp = null;
+      bird.vy = 1.5;
+      inflateInvincible = Math.max(inflateInvincible, Date.now() + 1200);
+    }
+    return;
+  }
+  const inBonus = warp && warp.phase === 'bonus';
+  if (inBonus && Date.now() >= bonusUntil) { exitBonus(); return; }
+
   // bird physics
   bird.vy += GRAVITY * dt;
   bird.y  += bird.vy * dt;
+  // glide back to the home column after a warp spit-out left the bird mid-screen
+  // (no-op in normal play — bird.x never otherwise moves off home)
+  const homeX = Math.round(cw * 0.22);
+  if (Math.abs(bird.x - homeX) > 1) bird.x += (homeX - bird.x) * Math.min(1, 0.05 * dt);
   // clamp rotation: nose-down on fall, nose-up on rise
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
 
@@ -571,18 +837,32 @@ function update(dt) {
 
   // spawn pipes/enemies — leaky-bucket accumulators, not frame%N, so cadence holds at
   // any frame rate (a stalled tick can't skip clean past an exact modulo boundary)
-  pipeSpawnAcc += dt;
-  if (pipeSpawnAcc >= PIPE_FRAMES) { pipeSpawnAcc -= PIPE_FRAMES; spawnPipe(); }
+  if (!inBonus) {
+    pipeSpawnAcc += dt;
+    if (pipeSpawnAcc >= PIPE_FRAMES) { pipeSpawnAcc -= PIPE_FRAMES; spawnPipe(); }
+  }
 
-  // spawn enemies: interval shrinks each level, min 45 frames
-  const eInt = Math.max(45, 88 - (level - 1) * 5);
-  if (frame > PIPE_FRAMES * 0.6) {
-    enemySpawnAcc += dt;
-    if (enemySpawnAcc >= eInt) {
-      enemySpawnAcc -= eInt;
-      spawnEnemy();
-      enemySpawnCount++;
-      if (level >= 10 && enemySpawnCount % 2 === 0) spawnEnemy(); // dual wave at L10+
+  // spawn enemies: interval shrinks each level, min 45 frames. In the bonus room the
+  // field just replenishes toward its seeded density — chutes everywhere, no cap games.
+  if (inBonus) {
+    if (enemies.length < BONUS_CHUTES) {
+      enemies.push({
+        x: cw + ENEMY_R + 8,
+        y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
+        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
+        alive: true, phase: Math.random() * Math.PI * 2, fast: false,
+      });
+    }
+  } else {
+    const eInt = Math.max(45, 88 - (level - 1) * 5);
+    if (frame > PIPE_FRAMES * 0.6) {
+      enemySpawnAcc += dt;
+      if (enemySpawnAcc >= eInt) {
+        enemySpawnAcc -= eInt;
+        spawnEnemy();
+        enemySpawnCount++;
+        if (level >= 10 && enemySpawnCount % 2 === 0) spawnEnemy(); // dual wave at L10+
+      }
     }
   }
 
@@ -646,6 +926,14 @@ function update(dt) {
     if (inX) {
       const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= p.gapY + p.gapSize;
       if (!inGap) {
+        // WARP PIPE: touching the dark half doesn't hurt — it sucks you in (Mario
+        // style) and opens the bonus room. Checked BEFORE the safe-passes so a
+        // star-powered bird still gets the warp (it's a bonus, not a hazard).
+        if (p.warpPipe) {
+          const hitTop = bird.y - bird.r < effGapY;
+          const hitSide = hitTop ? 'top' : 'bottom';
+          if (hitSide === p.warpSide) { startWarp(p); return; }
+        }
         // 3 independent ways to pass a pipe unharmed: ghost phase (stays true for the
         // ENTIRE traversal now — cleared only after full exit above), timed star power,
         // or this pipe currently flashing translucent.
@@ -829,6 +1117,17 @@ function update(dt) {
     f.alpha -= 0.028 * dt;
     if (f.alpha <= 0) floaters.splice(i, 1);
   }
+
+  // Jimmy & Joe callouts — once per run each. If a single score jump crosses BOTH your
+  // personal best AND the global #1, only the top-score line fires (the bigger moment);
+  // the PB flag is set too so the smaller one can't fire late and step on it.
+  if (!topAnnounced && topScore > 0 && score > topScore) {
+    topAnnounced = true; pbAnnounced = true;
+    showCallout('top');
+  } else if (!pbAnnounced && bestScore > 0 && score > bestScore) {
+    pbAnnounced = true;
+    showCallout('pb');
+  }
 }
 
 // ─── draw ────────────────────────────────────────────────────────────────────
@@ -862,8 +1161,8 @@ function draw() {
     const botY   = p.gapY + p.gapSize, botH = ch - GROUND_H - p.gapY - p.gapSize;
     const showGhostly = p.flashPipe && p.translucentNow;
     if (showGhostly) ctx.globalAlpha = 0.35;
-    drawPipe(p.x + xOff, 0,    PIPE_W, topH, false);
-    drawPipe(p.x,         botY, PIPE_W, botH, true);
+    drawPipe(p.x + xOff, 0,    PIPE_W, topH, false, p.warpPipe && p.warpSide === 'top');
+    drawPipe(p.x,         botY, PIPE_W, botH, true,  p.warpPipe && p.warpSide === 'bottom');
     if (showGhostly) ctx.globalAlpha = 1;
     // flash-through pipe outline — cyan glow while translucent (safe to fly through),
     // dim red pulse while solid (armed, telegraphs it's about to switch back)
@@ -970,6 +1269,54 @@ function draw() {
     ctx.fillText('TAP TO PLAY', cw * 0.5, ch * 0.68);
     ctx.restore();
   }
+
+  // bonus room banner + countdown
+  if (warp && warp.phase === 'bonus') {
+    const left = Math.max(0, Math.ceil((bonusUntil - Date.now()) / 1000));
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#7dffb8';
+    ctx.font = 'bold 22px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.shadowColor = '#0c7a40'; ctx.shadowBlur = 10;
+    ctx.fillText('BONUS ROOM', cw * 0.5, 54);
+    ctx.font = 'bold 15px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.fillText(`stomp everything — ${left}s`, cw * 0.5, 74);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  // Jimmy / Joe callout banner (PB + top-score lines)
+  if (callout && Date.now() < callout.until) {
+    const age   = 3400 - (callout.until - Date.now());
+    const fade  = age < 200 ? age / 200 : (callout.until - Date.now() < 400 ? (callout.until - Date.now()) / 400 : 1);
+    const ink   = callout.who === 'JIMMY' ? JIMMY_INK : JOE_INK;
+    // wrap to two lines max around the middle space
+    let l1 = callout.text, l2 = '';
+    if (l1.length > 36) {
+      const cut = l1.lastIndexOf(' ', Math.ceil(l1.length / 2) + 6);
+      if (cut > 8) { l2 = l1.slice(cut + 1); l1 = l1.slice(0, cut); }
+    }
+    const bh = l2 ? 58 : 42;
+    const by = 92;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = 'rgba(3,15,24,0.88)';
+    ctx.fillRect(cw * 0.5 - 165, by, 330, bh);
+    ctx.strokeStyle = ink; ctx.lineWidth = 2;
+    ctx.strokeRect(cw * 0.5 - 165, by, 330, bh);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = ink;
+    ctx.font = 'bold 12px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.fillText(callout.who, cw * 0.5, by + 14);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.fillText(l1, cw * 0.5, by + 29);
+    if (l2) ctx.fillText(l2, cw * 0.5, by + 44);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  } else if (callout && Date.now() >= callout.until) {
+    callout = null;
+  }
 }
 
 function drawGround() {
@@ -1010,31 +1357,39 @@ function drawCloud(x, y, w, alpha) {
   ctx.globalAlpha = 1;
 }
 
-function drawPipe(x, y, w, h, isBottom) {
+function drawPipe(x, y, w, h, isBottom, isWarp) {
   if (h <= 2) return;
 
-  // body gradient (left-to-right shading)
+  // body gradient (left-to-right shading). Warp half = the SAME pipe shape in a
+  // clearly darker green — the darkness IS the telegraph, no flashing, no motion.
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
-  g.addColorStop(0,    '#0a5e3a');
-  g.addColorStop(0.30, '#12834f');
-  g.addColorStop(0.65, '#0a6840');
-  g.addColorStop(1,    '#053a24');
+  if (isWarp) {
+    g.addColorStop(0,    '#043321');
+    g.addColorStop(0.30, '#0a5c36');
+    g.addColorStop(0.65, '#04452a');
+    g.addColorStop(1,    '#021c11');
+  } else {
+    g.addColorStop(0,    '#0a5e3a');
+    g.addColorStop(0.30, '#12834f');
+    g.addColorStop(0.65, '#0a6840');
+    g.addColorStop(1,    '#053a24');
+  }
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
 
   // cap
   const capH = 14;
   const capY = isBottom ? y : y + h - capH;
-  ctx.fillStyle = '#15a358';
+  ctx.fillStyle = isWarp ? '#0c7a40' : '#15a358';
   ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
 
   // dark edge under cap
-  ctx.fillStyle = '#053a24';
+  ctx.fillStyle = isWarp ? '#021c11' : '#053a24';
   const edgeY = isBottom ? capY : capY + capH - 2;
   ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
 
   // highlight strip
-  ctx.fillStyle = 'rgba(255,255,255,.07)';
+  ctx.fillStyle = isWarp ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.07)';
   ctx.fillRect(x + 3, y, 6, h);
 }
 
@@ -1302,7 +1657,8 @@ function showOverlay(finalScore) {
        Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.<br>
        Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!<br>
        <b>Lv5+:</b> 👻 ghosts let you phase one pipe free; 5-in-a-row = ⭐ STAR POWER.<br>
-       <b>Lv10+:</b> some pipes flash translucent — fly through when they do; 💜 bombs shrink you tiny.`;
+       <b>Lv10+:</b> some pipes flash translucent — fly through when they do; 💜 bombs shrink you tiny.<br>
+       <b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
