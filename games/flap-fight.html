@@ -269,9 +269,21 @@ const lvlEl   = document.getElementById('lvl');
 const muteBtn = document.getElementById('muteBtn');
 
 // ─── sound (pure WebAudio procedural sfx — no files) ─────────────────────────
+// EASTER EGG (Osimo 2026-08-17): the speaker button is a 3-way cycle —
+//   🔊 tones (classic sfx) → 🎙️ JnJ voice mode (Jimmy & Joe speak every sound,
+//   real Chatterbox voices from flap-fight-pack.json) → 🔇 mute → 🔊 …
+// In voice mode Joe replaces the procedural sfx (rotating funny barks, LOWER gain so
+// he never clashes with Jimmy), while Jimmy is the helpful one: counts the star chain
+// down ("four… three… two… one… star power!"), counts the star's final seconds, and
+// speaks Personal Best / Top Scorer announcements.
 let audioCtx = null;
-let muted = false;
-try { muted = localStorage.getItem('sfxMuted_flapfight') === '1'; } catch (e) {}
+let sfxMode = 'tones';   // 'tones' | 'voice' | 'mute'
+try {
+  const m = localStorage.getItem('sfxMode_flapfight');
+  if (m === 'voice' || m === 'mute' || m === 'tones') sfxMode = m;
+  else if (localStorage.getItem('sfxMuted_flapfight') === '1') sfxMode = 'mute'; // migrate old flag
+} catch (e) {}
+let muted = sfxMode === 'mute';   // playTone() keys off this — kept in sync by the cycle
 
 function initAudio() {
   if (!audioCtx) {
@@ -297,7 +309,120 @@ function playTone(freq, dur, type = 'sine', vol = 0.15, sweepTo = null, delay = 
   } catch (e) {}
 }
 
-const sfx = {
+// ─── JnJ voice pack (🎙️ mode) ────────────────────────────────────────────────
+// Real Chatterbox renders of Jimmy & Joe (canonical jimmy2/joe2 voices), packed by
+// tools/games/flapfight_voice_pack.py into games/flap-fight-pack.json exactly like
+// jnj-on-air's pack: {voice: {djb2(who|text): base64 mp3}}. The builder EXTRACTS the
+// (who,text) pairs from the VO_LINES table below — the game source is the single
+// source of truth, the pack can never drift from it.
+const VO_LINES = [
+  // Jimmy — the helpful one. Star-chain countdown + star-expiry countdown numbers:
+  ["JIMMY", "Five!"], ["JIMMY", "Four!"], ["JIMMY", "Three!"], ["JIMMY", "Two!"], ["JIMMY", "One!"],
+  ["JIMMY", "Star power!"],
+  // Jimmy — personal best announcements (rotating):
+  ["JIMMY", "Personal best!"],
+  ["JIMMY", "New personal best!"],
+  ["JIMMY", "That's a record!"],
+  ["JIMMY", "Best flight of your life!"],
+  ["JIMMY", "Past your best. Keep going!"],
+  ["JIMMY", "New record. That just happened!"],
+  // Jimmy — top scorer announcements (rotating):
+  ["JIMMY", "Top scorer!"],
+  ["JIMMY", "Number one!"],
+  ["JIMMY", "Top of the board!"],
+  ["JIMMY", "You're number one!"],
+  ["JIMMY", "Highest score in the whole arcade!"],
+  ["JIMMY", "The record is yours!"],
+  // Joe — every sound event, rotating variants, delivered flat:
+  ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."],
+  ["JOE", "ding."], ["JOE", "beep beep."], ["JOE", "points."],
+  ["JOE", "boom."], ["JOE", "pop."], ["JOE", "splat."], ["JOE", "got him."],
+  ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "unfortunate."],
+  ["JOE", "big boom."], ["JOE", "oh no."], ["JOE", "bye bye."], ["JOE", "that's that."],
+  ["JOE", "level up."], ["JOE", "onwards."], ["JOE", "up we go."],
+  ["JOE", "ooh."], ["JOE", "shiny."], ["JOE", "nice."],
+  ["JOE", "wheee."], ["JOE", "down we go."],
+  ["JOE", "and we're back."], ["JOE", "we return."],
+];
+const JOE_BARKS = {
+  flap:    ["boop.", "beep.", "flap."],
+  score:   ["ding.", "beep beep.", "points."],
+  stomp:   ["boom.", "pop.", "splat.", "got him."],
+  hit:     ["ouch.", "tiny ouch.", "crap.", "unfortunate."],
+  death:   ["big boom.", "oh no.", "bye bye.", "that's that."],
+  levelup: ["level up.", "onwards.", "up we go."],
+  bonus:   ["ooh.", "shiny.", "nice."],
+  warp:    ["wheee.", "down we go."],
+  warpOut: ["and we're back.", "we return."],
+};
+const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
+                      "Best flight of your life!", "Past your best. Keep going!",
+                      "New record. That just happened!"];
+const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
+                      "You're number one!", "Highest score in the whole arcade!",
+                      "The record is yours!"];
+const JIMMY_GAIN = 1.0, JOE_GAIN = 0.5;   // Joe sits under Jimmy so they never clash
+
+function djb2vo(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+
+const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, lastJoeMs: 0 };
+function loadVoicePack() {
+  if (VO.b64 || VO.loading) return;
+  VO.loading = true;
+  fetch('flap-fight-pack.json?v=1')
+    .then(r => r.json())
+    .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
+    .catch(() => { VO.loading = false; });
+}
+if (sfxMode === 'voice') loadVoicePack();   // returning 🎙️ player — warm the pack at load
+
+function voicePlay(who, text, gain) {
+  if (!audioCtx || !VO.b64) return;
+  const key = djb2vo(who + '|' + text);
+  const start = (buf) => {
+    try {
+      const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
+      src.buffer = buf; g.gain.value = gain;
+      src.connect(g); g.connect(audioCtx.destination);
+      if (who === 'JIMMY') {
+        // one Jimmy channel — a new line (countdown beat) cuts the previous one
+        if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} }
+        VO.jimmySrc = src;
+      }
+      src.start();
+    } catch (e) {}
+  };
+  const cached = VO.buffers[key];
+  if (cached) { start(cached); return; }
+  const b64 = VO.b64[key];
+  if (!b64) return;
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  audioCtx.decodeAudioData(bytes.buffer,
+    buf => { VO.buffers[key] = buf; start(buf); }, () => {});
+}
+
+function jimmySay(text) { voicePlay('JIMMY', text, JIMMY_GAIN); }
+function joeSay(event) {
+  const now = Date.now();
+  if (now - VO.lastJoeMs < 130) return;   // cap bark rate — flap fires at tap speed
+  VO.lastJoeMs = now;
+  const bank = JOE_BARKS[event];
+  if (!bank) return;
+  VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;   // rotate, don't repeat
+  voicePlay('JOE', bank[VO.rot[event]], JOE_GAIN);
+}
+function jimmyPick(bank) {
+  VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
+  return bank[VO.rot.__jim];
+}
+
+// ─── sfx dispatcher — tones / JnJ voices / mute per sfxMode ──────────────────
+const TONES = {
   // soft wing blip — fires at tap rate, kept quiet + short
   flap:  () => playTone(340, 0.06, 'triangle', 0.10, 520),
   // pass pipe (+10) — bright rising tick
@@ -329,15 +454,47 @@ const sfx = {
   // bonus-room exit — ascending pop back out
   warpOut: () => { playTone(180, 0.30, 'square', 0.15, 640); playTone(90, 0.30, 'triangle', 0.11, 320, 0.02); },
 };
+// Voice mode: Joe covers the event sounds; Jimmy owns star activation and the
+// best-score moment (spoken announcements handle PB/top in showCallout + die()).
+function dispatch(event, tonesFn) {
+  if (sfxMode === 'mute') return;
+  if (sfxMode === 'voice') {
+    if (event === 'star') { jimmySay('Star power!'); return; }
+    if (event === 'best') { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    joeSay(event);
+    return;
+  }
+  tonesFn();
+}
+const sfx = {
+  flap:    ()      => dispatch('flap',    TONES.flap),
+  score:   ()      => dispatch('score',   TONES.score),
+  stomp:   (c, p)  => dispatch('stomp',   () => TONES.stomp(c, p)),
+  bonus:   (p)     => dispatch('bonus',   () => TONES.bonus(p)),
+  star:    ()      => dispatch('star',    TONES.star),
+  hit:     ()      => dispatch('hit',     TONES.hit),
+  death:   ()      => dispatch('death',   TONES.death),
+  levelup: ()      => dispatch('levelup', TONES.levelup),
+  best:    ()      => dispatch('best',    TONES.best),
+  warp:    ()      => dispatch('warp',    TONES.warp),
+  warpOut: ()      => dispatch('warpOut', TONES.warpOut),
+};
 
-function updateMuteUI() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
+function updateMuteUI() {
+  muteBtn.textContent = sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊';
+}
 updateMuteUI();
 
 muteBtn.addEventListener('click', e => {
   e.stopPropagation();
   initAudio();
-  muted = !muted;
-  try { localStorage.setItem('sfxMuted_flapfight', muted ? '1' : '0'); } catch (e) {}
+  sfxMode = sfxMode === 'tones' ? 'voice' : sfxMode === 'voice' ? 'mute' : 'tones';
+  muted = sfxMode === 'mute';
+  try {
+    localStorage.setItem('sfxMode_flapfight', sfxMode);
+    localStorage.setItem('sfxMuted_flapfight', muted ? '1' : '0'); // keep legacy key honest
+  } catch (e) {}
+  if (sfxMode === 'voice') loadVoicePack();   // lazy fetch+decode on first entry
   updateMuteUI();
 });
 
@@ -363,6 +520,7 @@ let warpAtPipe, levelPipeCount, warp, bonusUntil;
 // callouts: server #1 score (fetched once at load), once-per-run announce flags, active banner
 let topScore = 0;
 let pbAnnounced, topAnnounced, callout;
+let lastStarSec = 99;   // 🎙️ star-expiry countdown — last second Jimmy spoke
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -691,7 +849,10 @@ function showCallout(kind) {
     until: Date.now() + 3400,
     kind,
   };
-  sfx.best();
+  // 🎙️ voice mode: Jimmy SPEAKS the announcement (right bank for the moment) —
+  // rotating variants; tones mode keeps the classic fanfare.
+  if (sfxMode === 'voice') jimmySay(jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO));
+  else sfx.best();
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
@@ -975,8 +1136,13 @@ function update(dt) {
         starChain = 0;
         starPower = true;
         starPowerUntil = Date.now() + STAR_POWER_MS;
+        lastStarSec = 99;   // re-arm the expiry countdown for this star
         sfx.star();
         floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
+      } else if (sfxMode === 'voice') {
+        // 🎙️ Jimmy counts the chain DOWN toward the star: stomp 1 → "Four!" … stomp 4
+        // → "One!" (the 5th is "Star power!" above). Chain reset (any hit) re-arms it.
+        jimmySay(['Four!', 'Three!', 'Two!', 'One!'][starChain - 1]);
       }
 
       // the smaller the bird, the squeakier every bounce sounds — grows with each
@@ -1098,8 +1264,17 @@ function update(dt) {
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, shrink: true });
   }
 
-  // star power expiry — the 5s window from the star chain above runs out
-  if (starPower && Date.now() >= starPowerUntil) starPower = false;
+  // star power expiry — the 5s window from the star chain above runs out.
+  // 🎙️ voice mode: Jimmy counts the final five seconds out loud ("Five!… One!") so the
+  // expiry never surprises you — the audio version of the ring-blink telegraph.
+  if (starPower) {
+    const sLeft = Math.ceil((starPowerUntil - Date.now()) / 1000);
+    if (sfxMode === 'voice' && sLeft >= 1 && sLeft <= 5 && sLeft < lastStarSec) {
+      lastStarSec = sLeft;
+      jimmySay(['One!', 'Two!', 'Three!', 'Four!', 'Five!'][sLeft - 1]);
+    }
+    if (Date.now() >= starPowerUntil) starPower = false;
+  }
 
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
