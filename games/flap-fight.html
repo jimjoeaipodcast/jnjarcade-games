@@ -248,7 +248,7 @@ const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // scroll motion) → spat out of the TOP pipe of a fresh pair (regardless of which half was
 // entered — bottom entry pops out of the one above it, top entry out of the one it entered).
 const WARP_LEVEL_EVERY = 5;         // arm one warp pipe on every Nth level
-const WARP_BONUS_MS    = 7000;      // bonus room duration (Osimo 2026-08-18: 6s → 7s)
+const WARP_BONUS_MS    = 22000;     // bonus room duration (Osimo 2026-08-18 v2: 7s → 22s)
 const WARP_SUCK_FRAMES = 42;        // suck-in animation length (60fps-equivalent ticks)
 const WARP_SPIT_FRAMES = 26;        // spit-out animation length
 const BONUS_CHUTES     = 12;        // parachutes seeded into the bonus room at entry
@@ -343,7 +343,9 @@ const VO_LINES = [
   ["JIMMY", "Thirty thousand points! History!"], ["JIMMY", "Still climbing! Unreal!"],
   ["JIMMY", "One hundred thousand points! Legend! Forever!"],
   // Joe — every sound event, rotating variants, delivered flat:
-  ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."],
+  ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."], ["JOE", "flip."], ["JOE", "flop."],
+  ["JOE", "flap flap."], ["JOE", "wing."], ["JOE", "effort."], ["JOE", "still flapping."],
+  ["JOE", "aerodynamics."],
   ["JOE", "boom."], ["JOE", "pop."], ["JOE", "splat."], ["JOE", "got him."],
   ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "that was a pipe."],
   ["JOE", "too high."], ["JOE", "the sky said no."], ["JOE", "bonk. upstairs."], ["JOE", "there's a roof."],
@@ -362,7 +364,9 @@ const VO_LINES = [
   ["JOE", "one hundred thousand. I have no jokes. Well done."],
 ];
 const JOE_BARKS = {
-  flap:    ["boop.", "beep.", "flap."],
+  // flap: extra variety (Osimo 2026-08-18 v2) + its own reduced gain — see joeSay()
+  flap:    ["boop.", "beep.", "flap.", "flip.", "flop.", "flap flap.", "wing.",
+            "effort.", "still flapping.", "aerodynamics."],
   // score: RETIRED from voice mode (Osimo 2026-08-18: "don't need Joe to say points
   // when crossing an opening") — pipe passes are silent in 🎙️, tones mode unchanged
   stomp:   ["boom.", "pop.", "splat.", "got him."],
@@ -419,7 +423,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=2')
+  fetch('flap-fight-pack.json?v=3')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -460,7 +464,9 @@ function joeSay(event) {
   const bank = JOE_BARKS[event];
   if (!bank) return;
   VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;   // rotate, don't repeat
-  voicePlay('JOE', bank[VO.rot[event]], JOE_GAIN);
+  // flap ONLY sits 15% under Joe's normal gain (Osimo 2026-08-18 v2) — it fires at tap
+  // rate, so it's ambience; every other Joe announcement stays at full JOE_GAIN
+  voicePlay('JOE', bank[VO.rot[event]], event === 'flap' ? JOE_GAIN * 0.85 : JOE_GAIN);
 }
 function jimmyPick(bank) {
   VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
