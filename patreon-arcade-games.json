@@ -128,26 +128,6 @@
       "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature \u2014 S-O-S rollover lanes (bonus \u00d72..\u00d75), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks \u2192 3-ball MULTIBALL (2\u00d7 scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers \u2014 invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT).",
       "ready": true,
       "ready_date": "2026-07-29"
-    },
-    {
-      "id": "face-lab",
-      "name": "FACE LAB",
-      "emoji": "\ud83c\udfa8",
-      "genre": "LAB \u00d7 LED FACES",
-      "url": "facelab.html",
-      "status": "ready",
-      "special": true,
-      "note": "Design an LED expression for Jimmy or Joe \u2014 the best get built into the diorama."
-    },
-    {
-      "id": "stl-lab",
-      "name": "STL LAB",
-      "emoji": "\ud83d\udda8\ufe0f",
-      "genre": "LAB \u00d7 3D PRINTS",
-      "url": "stl.html",
-      "status": "ready",
-      "special": true,
-      "note": "Print our studio. Free STL files for the cabinet, the mics, the whole set."
     }
   ]
 }
