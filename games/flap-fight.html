@@ -248,7 +248,7 @@ const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // scroll motion) → spat out of the TOP pipe of a fresh pair (regardless of which half was
 // entered — bottom entry pops out of the one above it, top entry out of the one it entered).
 const WARP_LEVEL_EVERY = 5;         // arm one warp pipe on every Nth level
-const WARP_BONUS_MS    = 6000;      // bonus room duration
+const WARP_BONUS_MS    = 7000;      // bonus room duration (Osimo 2026-08-18: 6s → 7s)
 const WARP_SUCK_FRAMES = 42;        // suck-in animation length (60fps-equivalent ticks)
 const WARP_SPIT_FRAMES = 26;        // spit-out animation length
 const BONUS_CHUTES     = 12;        // parachutes seeded into the bonus room at entry
@@ -786,18 +786,28 @@ function startWarp(p) {
   warp = {
     phase: 'suck', t: 0, side: p.warpSide,
     gapY: p.gapY, gapSize: p.gapSize,
+    // star power survives the warp (Osimo 2026-08-18: "didn't exit pipe with star") —
+    // freeze the remaining time at entry, restore it at the exit so the bonus room
+    // never eats an earned star
+    starRemainMs: starPower ? Math.max(0, starPowerUntil - Date.now()) : 0,
     // suck the bird toward the mouth of the half it touched
     fromX: bird.x, fromY: bird.y,
     toX: p.x + PIPE_W / 2,
     toY: p.warpSide === 'bottom' ? p.gapY + p.gapSize + 10 : p.gapY - 10,
   };
+  starPower = false;           // paused during the bonus, restored on exit
   p.warpPipe = false;          // consumed — can't re-trigger
   sfx.warp();
   spawnParticles(warp.toX, warp.toY, '#0c7a40', 14);
 }
 
 function enterBonus() {
-  warp = { phase: 'bonus' };
+  // carry the entry geometry + frozen star time THROUGH the bonus phase — the original
+  // shipped version replaced warp with a bare {phase:'bonus'}, so exitBonus() read
+  // warp.gapY as undefined → exit pipe gapY=undefined → bird.y=NaN → the bird froze at
+  // its last valid position (top-left, where the suck parked it) and never exited.
+  // THE Osimo 2026-08-18 stuck-bird bug.
+  warp = { phase: 'bonus', gapY: warp.gapY, gapSize: warp.gapSize, starRemainMs: warp.starRemainMs };
   bonusUntil = Date.now() + WARP_BONUS_MS;
   pipes = [];                  // no pipes in the bonus room
   // parachutes EVERYWHERE — seed a dense field, spread across the whole sky
@@ -816,16 +826,21 @@ function enterBonus() {
 function exitBonus() {
   // fresh pipe pair mid-screen mirroring the entry pair; bird ALWAYS pops out of the
   // TOP pipe's mouth (Osimo: bottom entry exits the one above it; top entry exits the
-  // one it entered) — counted so the exit pair can never double-score
+  // one it entered) — counted so the exit pair can never double-score.
+  // gapY clamped into a comfortable band: an entry pipe whose gap hugged the screen
+  // top would otherwise eject the bird right at the ceiling (Osimo 2026-08-18 report:
+  // bird at the top edge on exit) — the exit is a fresh pair, it owes the entry only
+  // its SIZE, not its exact height.
+  const exY = Math.min(Math.max(warp.gapY, 110), ch - GROUND_H - warp.gapSize - 60);
   const p = {
-    x: cw * 0.42, gapY: warp.gapY, gapSize: warp.gapSize, counted: true,
+    x: cw * 0.42, gapY: exY, gapSize: warp.gapSize, counted: true,
     wobble: false, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false, fallTimer: 0,
     flashPipe: false, translucentNow: false, warpPipe: false, warpSide: null,
   };
   pipes.push(p);
   enemies = [];                // clear the bonus field
-  warp = { phase: 'spit', t: 0, pipe: p };
+  warp = { phase: 'spit', t: 0, pipe: p, starRemainMs: warp.starRemainMs };
   bird.x = p.x + PIPE_W / 2;
   bird.y = p.gapY - bird.r;    // inside the top pipe mouth
   bird.vy = 0;
@@ -956,6 +971,13 @@ function update(dt) {
     bird.y = p.gapY - bird.r + (warp.t / WARP_SPIT_FRAMES) * (bird.r * 2 + 14);
     bird.rot = 20;
     if (warp.t >= WARP_SPIT_FRAMES) {
+      // star power restored with the time it had left at entry — the warp never
+      // eats an earned star (Osimo 2026-08-18)
+      if (warp.starRemainMs > 0) {
+        starPower = true;
+        starPowerUntil = Date.now() + warp.starRemainMs;
+        lastStarSec = 99;
+      }
       warp = null;
       bird.vy = 1.5;
       inflateInvincible = Math.max(inflateInvincible, Date.now() + 1200);
@@ -975,10 +997,19 @@ function update(dt) {
   // clamp rotation: nose-down on fall, nose-up on rise
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
 
-  // ceiling / floor — skip if invincible (1s after inflate hit)
+  // ceiling / floor — skip if invincible (1s after inflate hit).
+  // BONUS ROOM IS A SAFE ROOM (Osimo 2026-08-18 bug: the bird could sink, inflate
+  // twice off the floor and POP inside the reward room — death in a bonus room is
+  // never "the player's fault in hindsight"). In bonus the edges bounce softly
+  // instead of hurting.
   if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) {
-    if (Date.now() >= inflateInvincible) inflate();
-    return;
+    if (inBonus) {
+      if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = Math.abs(bird.vy) * 0.4; }
+      else { bird.y = ch - GROUND_H - bird.r; bird.vy = -Math.abs(bird.vy) * 0.6 - 2; }
+    } else {
+      if (Date.now() >= inflateInvincible) inflate();
+      return;
+    }
   }
 
   // scroll ground
@@ -1125,7 +1156,9 @@ function update(dt) {
     const chuteDist = Math.sqrt(dcx * dcx + dcy * dcy);
     if (chuteDist < bird.r + CHUTE_R && bird.vy > -2) {
       e.alive = false;
-      bird.vy = -7;
+      // bonus room: bounces at HALF the usual height (Osimo 2026-08-18) — h ∝ v²,
+      // so half height = velocity ÷ √2. Keeps the dense chute field controllable.
+      bird.vy = inBonus ? -7 / Math.SQRT2 : -7;
 
       // star-power chain: 5 consecutive stomps (any type, no miss) → 5s pass-through-
       // everything, Mario-star style. Available from LEVEL 1 (Osimo 2026-08-02 v2: "if
@@ -1155,7 +1188,7 @@ function update(dt) {
         // the top of its edge band — real bug, reported as "purple made me explode
         // instead of 3x jump" (Osimo 2026-08-02). A brief grace absorbs the overshoot
         // without touching the bounce height itself.
-        bird.vy = -7 * MEGA_BOUNCE_MULT;
+        bird.vy = (inBonus ? -7 / Math.SQRT2 : -7) * MEGA_BOUNCE_MULT;
         inflateInvincible = Math.max(inflateInvincible, Date.now() + MEGA_BOUNCE_GRACE_MS);
         sfx.bonus(pitchMult);
         spawnParticles(e.x, cy, '#a855f7', 16);
