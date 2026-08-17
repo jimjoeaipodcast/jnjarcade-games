@@ -344,8 +344,11 @@ const VO_LINES = [
   ["JIMMY", "One hundred thousand points! Legend! Forever!"],
   // Joe — every sound event, rotating variants, delivered flat:
   ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."], ["JOE", "flip."], ["JOE", "flop."],
-  ["JOE", "flap flap."], ["JOE", "wing."], ["JOE", "effort."], ["JOE", "still flapping."],
-  ["JOE", "aerodynamics."],
+  ["JOE", "flap flap."], ["JOE", "boing."], ["JOE", "whoops."], ["JOE", "bing."],
+  ["JOE", "bong."], ["JOE", "bounce."], ["JOE", "bippidi."], ["JOE", "boppidi."],
+  ["JOE", "ten in a row. I'm mildly moved."],
+  ["JOE", "fifteen straight. this is getting silly."],
+  ["JOE", "twenty. I'm framing this one."],
   ["JOE", "boom."], ["JOE", "pop."], ["JOE", "splat."], ["JOE", "got him."],
   ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "that was a pipe."],
   ["JOE", "too high."], ["JOE", "the sky said no."], ["JOE", "bonk. upstairs."], ["JOE", "there's a roof."],
@@ -364,9 +367,11 @@ const VO_LINES = [
   ["JOE", "one hundred thousand. I have no jokes. Well done."],
 ];
 const JOE_BARKS = {
-  // flap: extra variety (Osimo 2026-08-18 v2) + its own reduced gain — see joeSay()
-  flap:    ["boop.", "beep.", "flap.", "flip.", "flop.", "flap flap.", "wing.",
-            "effort.", "still flapping.", "aerodynamics."],
+  // flap: rotating variety (Osimo 2026-08-18 v3: aerodynamics/effort/wing OUT,
+  // boing/whoops/bing/bong/bounce IN) + its own reduced gain — see joeSay(). Every
+  // 5 FULL rotations Joe drops a "bippidi." — five more, "boppidi." — and repeat.
+  flap:    ["boop.", "beep.", "flap.", "flip.", "flop.", "flap flap.",
+            "boing.", "whoops.", "bing.", "bong.", "bounce."],
   // score: RETIRED from voice mode (Osimo 2026-08-18: "don't need Joe to say points
   // when crossing an opening") — pipe passes are silent in 🎙️, tones mode unchanged
   stomp:   ["boom.", "pop.", "splat.", "got him."],
@@ -404,6 +409,13 @@ const MILESTONE_VO = {
 const MILESTONE_BEYOND_VO = { JIMMY: "Still climbing! Unreal!", JOE: "still going. remarkable." };
 const LEGEND_VO = { JIMMY: "One hundred thousand points! Legend! Forever!",
                     JOE:   "one hundred thousand. I have no jokes. Well done." };
+// combo acknowledgments (Osimo 2026-08-18 v3): Joe marks the ×10/×15/×20 stomp chains —
+// combo cap raised 9 → 20 to make them reachable
+const COMBO_VO = {
+  10: "ten in a row. I'm mildly moved.",
+  15: "fifteen straight. this is getting silly.",
+  20: "twenty. I'm framing this one.",
+};
 const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
                       "Best flight of your life!", "Past your best. Keep going!",
                       "New record. That just happened!"];
@@ -423,7 +435,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=3')
+  fetch('flap-fight-pack.json?v=4')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -463,7 +475,22 @@ function joeSay(event) {
   VO.lastJoeMs = now;
   const bank = JOE_BARKS[event];
   if (!bank) return;
-  VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;   // rotate, don't repeat
+  // flap easter-egg cadence: after every 5 FULL rotations of the bank, the NEXT flap
+  // is "bippidi." — after 5 more, "boppidi." — alternating forever (Osimo 2026-08-18 v3)
+  if (event === 'flap' && VO.flapPending) {
+    const word = VO.flapPending;
+    VO.flapPending = null;
+    voicePlay('JOE', word, JOE_GAIN * 0.85);
+    return;
+  }
+  const prev = VO.rot[event] || 0;
+  VO.rot[event] = (prev + 1) % bank.length;   // rotate, don't repeat
+  if (event === 'flap' && VO.rot[event] === 0) {
+    VO.flapRots = (VO.flapRots || 0) + 1;
+    if (VO.flapRots % 5 === 0) {
+      VO.flapPending = (VO.flapRots / 5) % 2 === 1 ? 'bippidi.' : 'boppidi.';
+    }
+  }
   // flap ONLY sits 15% under Joe's normal gain (Osimo 2026-08-18 v2) — it fires at tap
   // rate, so it's ambience; every other Joe announcement stays at full JOE_GAIN
   voicePlay('JOE', bank[VO.rot[event]], event === 'flap' ? JOE_GAIN * 0.85 : JOE_GAIN);
@@ -532,6 +559,9 @@ function dispatch(event, tonesFn, arg) {
     if (event === 'score') return;                 // Osimo 2026-08-18: no bark on pipe pass
     if (event === 'hit')   { joeSay(arg || 'hitPipe'); return; }
     if (event === 'death') { deathVoice(); return; }
+    // combo thresholds: Joe's acknowledgment WINS over the regular stomp bark and
+    // bypasses the rate cap — it's the moment, not ambience
+    if (event === 'stomp' && COMBO_VO[arg]) { voicePlay('JOE', COMBO_VO[arg], JOE_GAIN); return; }
     joeSay(event);
     return;
   }
@@ -540,7 +570,7 @@ function dispatch(event, tonesFn, arg) {
 const sfx = {
   flap:    ()      => dispatch('flap',    TONES.flap),
   score:   ()      => dispatch('score',   TONES.score),
-  stomp:   (c, p)  => dispatch('stomp',   () => TONES.stomp(c, p)),
+  stomp:   (c, p)  => dispatch('stomp',   () => TONES.stomp(c, p), c),
   bonus:   (p)     => dispatch('bonus',   () => TONES.bonus(p)),
   shrink:  (p)     => dispatch('shrink',  () => TONES.bonus(p)),   // own Joe bank in 🎙️
   star:    ()      => dispatch('star',    TONES.star),
@@ -567,6 +597,8 @@ const sfx = {
   });
   JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
   JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
+  Object.values(COMBO_VO).forEach(t => chk('JOE', t));
+  ['bippidi.', 'boppidi.'].forEach(t => chk('JOE', t));
   if (miss.length) console.error('VO_LINES missing:', miss);
 })();
 
@@ -1371,7 +1403,9 @@ function update(dt) {
         // normal stomp — combo + points
         const now = Date.now();
         if (now - lastPopMs < COMBO_WINDOW) {
-          comboCount = Math.min(comboCount + 1, 9);
+          // cap 9 → 20 (Osimo 2026-08-18 v3) so the ×10/×15/×20 combo acknowledgments
+          // are actually reachable; stomp-squeak pitch still clamps at 9 inside TONES
+          comboCount = Math.min(comboCount + 1, 20);
         } else {
           comboCount = 1;
         }
