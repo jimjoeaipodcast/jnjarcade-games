@@ -50,7 +50,14 @@ export async function onRequestGet({ request, env }) {
   if (!GAME_RE.test(game)) return json({ error: 'bad game' }, 400);
   if (!env.PLAYS) return json({ scores: [] });
   try {
-    return json({ scores: (await readScores(env, game)).slice(0, SHOW) });
+    // legend = the FIRST player ever to clear 100k on this game (write-once, permanent —
+    // survives being beaten; Osimo 2026-08-18: "stays there forever even if someone
+    // beats his score"). null until it happens.
+    const legendRaw = await env.PLAYS.get('legend:' + game);
+    return json({
+      scores: (await readScores(env, game)).slice(0, SHOW),
+      legend: legendRaw ? JSON.parse(legendRaw) : null,
+    });
   } catch {
     return json({ scores: [] });
   }
@@ -77,6 +84,13 @@ export async function onRequestPost({ request, env }) {
     scores.sort((a, b) => b.s - a.s || a.t - b.t);
     if (scores.length > KEEP) scores.length = KEEP;
     await env.PLAYS.put('scores:' + game, JSON.stringify(scores));
+
+    // WRITE-ONCE legend: the first submitted score ever to clear 100k is enshrined
+    // permanently — never overwritten, even by a higher score later (Osimo 2026-08-18).
+    if (score >= 100000) {
+      const lk = 'legend:' + game;
+      if (!(await env.PLAYS.get(lk))) await env.PLAYS.put(lk, JSON.stringify(entry));
+    }
 
     const rank = scores.findIndex(e => e === entry) + 1; // 0 = fell off the board
     return json({

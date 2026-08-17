@@ -333,35 +333,81 @@ const VO_LINES = [
   ["JIMMY", "You're number one!"],
   ["JIMMY", "Highest score in the whole arcade!"],
   ["JIMMY", "The record is yours!"],
+  // Jimmy — deaths (low score < 500 gets the gentle roast):
+  ["JIMMY", "That was brief!"], ["JIMMY", "The warm-up run. Classic!"],
+  ["JIMMY", "We never speak of this one!"], ["JIMMY", "Even the pipes feel bad!"],
+  ["JIMMY", "What a run!"], ["JIMMY", "Down in a blaze of glory!"], ["JIMMY", "The bird will fly again!"],
+  // Jimmy — score milestones + the 100k legend moment:
+  ["JIMMY", "Ten thousand points!"], ["JIMMY", "Fifteen thousand! Absurd!"],
+  ["JIMMY", "Twenty thousand! Who are you?"], ["JIMMY", "Twenty five thousand!"],
+  ["JIMMY", "Thirty thousand points! History!"], ["JIMMY", "Still climbing! Unreal!"],
+  ["JIMMY", "One hundred thousand points! Legend! Forever!"],
   // Joe — every sound event, rotating variants, delivered flat:
   ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."],
-  ["JOE", "ding."], ["JOE", "beep beep."], ["JOE", "points."],
   ["JOE", "boom."], ["JOE", "pop."], ["JOE", "splat."], ["JOE", "got him."],
-  ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "unfortunate."],
+  ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "that was a pipe."],
+  ["JOE", "too high."], ["JOE", "the sky said no."], ["JOE", "bonk. upstairs."], ["JOE", "there's a roof."],
+  ["JOE", "gravity wins."], ["JOE", "ground. again."], ["JOE", "floor. classic."], ["JOE", "we've met, floor."],
+  ["JOE", "tiny."], ["JOE", "compact."], ["JOE", "travel size."], ["JOE", "where did you go."],
   ["JOE", "big boom."], ["JOE", "oh no."], ["JOE", "bye bye."], ["JOE", "that's that."],
+  ["JOE", "that was quick."], ["JOE", "a bold strategy."], ["JOE", "we don't talk about this one."],
+  ["JOE", "the pipes send their thanks."],
   ["JOE", "level up."], ["JOE", "onwards."], ["JOE", "up we go."],
   ["JOE", "ooh."], ["JOE", "shiny."], ["JOE", "nice."],
   ["JOE", "wheee."], ["JOE", "down we go."],
   ["JOE", "and we're back."], ["JOE", "we return."],
+  ["JOE", "ten thousand. huh."], ["JOE", "fifteen. thousand."], ["JOE", "twenty thousand. noted."],
+  ["JOE", "twenty five. I'm counting."], ["JOE", "thirty thousand. respect."],
+  ["JOE", "still going. remarkable."],
+  ["JOE", "one hundred thousand. I have no jokes. Well done."],
 ];
 const JOE_BARKS = {
   flap:    ["boop.", "beep.", "flap."],
-  score:   ["ding.", "beep beep.", "points."],
+  // score: RETIRED from voice mode (Osimo 2026-08-18: "don't need Joe to say points
+  // when crossing an opening") — pipe passes are silent in 🎙️, tones mode unchanged
   stomp:   ["boom.", "pop.", "splat.", "got him."],
-  hit:     ["ouch.", "tiny ouch.", "crap.", "unfortunate."],
-  death:   ["big boom.", "oh no.", "bye bye.", "that's that."],
+  // hit split by CAUSE (Osimo 2026-08-18: distinct funny lines for pipe vs ceiling vs floor)
+  hitPipe:    ["ouch.", "tiny ouch.", "crap.", "that was a pipe."],
+  hitCeiling: ["too high.", "the sky said no.", "bonk. upstairs.", "there's a roof."],
+  hitFloor:   ["gravity wins.", "ground. again.", "floor. classic.", "we've met, floor."],
+  shrink:  ["tiny.", "compact.", "travel size.", "where did you go."],
   levelup: ["level up.", "onwards.", "up we go."],
   bonus:   ["ooh.", "shiny.", "nice."],
   warp:    ["wheee.", "down we go."],
   warpOut: ["and we're back.", "we return."],
 };
+// death is score-aware and BOTH hosts take turns (Osimo 2026-08-18: "they can both say
+// something hilarious when you die, specially if you have a low score")
+const DEATH_LOW_VO = {   // score < 500 — the gentle roast
+  JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
+          "Even the pipes feel bad!"],
+  JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
+          "the pipes send their thanks."],
+};
+const DEATH_VO = {       // a proper run
+  JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!"],
+  JOE:   ["big boom.", "oh no.", "bye bye.", "that's that."],
+};
+// big-score milestones (Osimo 2026-08-18): 10k/15k/20k/25k/30k each get their own line,
+// then every 10k beyond gets the generic pair; 100k is the LEGEND moment (both speak).
+const MILESTONE_VO = {
+  10000: { JIMMY: "Ten thousand points!",            JOE: "ten thousand. huh." },
+  15000: { JIMMY: "Fifteen thousand! Absurd!",       JOE: "fifteen. thousand." },
+  20000: { JIMMY: "Twenty thousand! Who are you?",   JOE: "twenty thousand. noted." },
+  25000: { JIMMY: "Twenty five thousand!",           JOE: "twenty five. I'm counting." },
+  30000: { JIMMY: "Thirty thousand points! History!", JOE: "thirty thousand. respect." },
+};
+const MILESTONE_BEYOND_VO = { JIMMY: "Still climbing! Unreal!", JOE: "still going. remarkable." };
+const LEGEND_VO = { JIMMY: "One hundred thousand points! Legend! Forever!",
+                    JOE:   "one hundred thousand. I have no jokes. Well done." };
 const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
                       "Best flight of your life!", "Past your best. Keep going!",
                       "New record. That just happened!"];
 const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
                       "You're number one!", "Highest score in the whole arcade!",
                       "The record is yours!"];
-const JIMMY_GAIN = 1.0, JOE_GAIN = 0.5;   // Joe sits under Jimmy so they never clash
+// Osimo 2026-08-18: Joe −20%, Jimmy +15%
+const JIMMY_GAIN = 1.15, JOE_GAIN = 0.4;
 
 function djb2vo(s) {
   let h = 5381;
@@ -373,7 +419,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=1')
+  fetch('flap-fight-pack.json?v=2')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -449,6 +495,10 @@ const TONES = {
   levelup: () => { playTone(659, 0.09, 'triangle', 0.12); playTone(988, 0.12, 'triangle', 0.12, null, 0.09); },
   // new best score — little ascending fanfare
   best:  () => [523, 659, 784, 1047].forEach((f, i) => playTone(f, 0.14, 'triangle', 0.14, null, 0.15 + i * 0.09)),
+  // star about to expire — Mario-style "invincibility ending" warble: fast two-note
+  // alternation stepping down, the audio twin of the ring-blink telegraph
+  starWarn: () => [1568, 1245, 1568, 1175, 1480, 1109].forEach((f, i) =>
+    playTone(f, 0.09, 'square', 0.15, null, 0.085 * i)),
   // warp pipe suck-in — the classic descending pipe slide
   warp:  () => { playTone(520, 0.45, 'square', 0.16, 90); playTone(260, 0.45, 'triangle', 0.12, 45, 0.02); },
   // bonus-room exit — ascending pop back out
@@ -456,11 +506,26 @@ const TONES = {
 };
 // Voice mode: Joe covers the event sounds; Jimmy owns star activation and the
 // best-score moment (spoken announcements handle PB/top in showCallout + die()).
-function dispatch(event, tonesFn) {
+// Deaths alternate BOTH hosts, score-aware (< 500 = the gentle-roast bank).
+function deathVoice() {
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('ff_death_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('ff_death_who', who);
+  } catch (e) {}
+  const bank = (score < 500 ? DEATH_LOW_VO : DEATH_VO)[who];
+  voicePlay(who, bank[Math.floor(Math.random() * bank.length)],
+            who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN);
+}
+function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute') return;
   if (sfxMode === 'voice') {
-    if (event === 'star') { jimmySay('Star power!'); return; }
-    if (event === 'best') { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    if (event === 'star')  { jimmySay('Star power!'); return; }
+    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    if (event === 'score') return;                 // Osimo 2026-08-18: no bark on pipe pass
+    if (event === 'hit')   { joeSay(arg || 'hitPipe'); return; }
+    if (event === 'death') { deathVoice(); return; }
     joeSay(event);
     return;
   }
@@ -471,14 +536,33 @@ const sfx = {
   score:   ()      => dispatch('score',   TONES.score),
   stomp:   (c, p)  => dispatch('stomp',   () => TONES.stomp(c, p)),
   bonus:   (p)     => dispatch('bonus',   () => TONES.bonus(p)),
+  shrink:  (p)     => dispatch('shrink',  () => TONES.bonus(p)),   // own Joe bank in 🎙️
   star:    ()      => dispatch('star',    TONES.star),
-  hit:     ()      => dispatch('hit',     TONES.hit),
+  hit:     (cause) => dispatch('hit',     TONES.hit, cause),       // hitPipe|hitCeiling|hitFloor
   death:   ()      => dispatch('death',   TONES.death),
   levelup: ()      => dispatch('levelup', TONES.levelup),
   best:    ()      => dispatch('best',    TONES.best),
   warp:    ()      => dispatch('warp',    TONES.warp),
   warpOut: ()      => dispatch('warpOut', TONES.warpOut),
 };
+
+// every bank string must exist in VO_LINES or its clip silently never plays — assert at
+// load so drift shows up in the console (and the Playwright QA that reads it)
+(function voSelfCheck() {
+  const all = new Set(VO_LINES.map(([w, t]) => w + '|' + t));
+  const miss = [];
+  const chk = (w, t) => { if (!all.has(w + '|' + t)) miss.push(w + '|' + t); };
+  Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
+  ['JIMMY', 'JOE'].forEach(w => {
+    DEATH_LOW_VO[w].forEach(t => chk(w, t));
+    DEATH_VO[w].forEach(t => chk(w, t));
+    Object.values(MILESTONE_VO).forEach(m => chk(w, m[w]));
+    chk(w, MILESTONE_BEYOND_VO[w]); chk(w, LEGEND_VO[w]);
+  });
+  JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
+  if (miss.length) console.error('VO_LINES missing:', miss);
+})();
 
 function updateMuteUI() {
   muteBtn.textContent = sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊';
@@ -521,6 +605,7 @@ let warpAtPipe, levelPipeCount, warp, bonusUntil;
 let topScore = 0;
 let pbAnnounced, topAnnounced, callout;
 let lastStarSec = 99;   // 🎙️ star-expiry countdown — last second Jimmy spoke
+let lastMilestone = 0;  // biggest score milestone already celebrated this run
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
@@ -634,6 +719,48 @@ function spawnParticles(x, y, color, count) {
     const spd = rnd(2.5, 5.5);
     particles.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1.5,
                      alpha: 1, r: rnd(2.5, 5.5), color });
+  }
+}
+
+// confetti — multicolour rain from the top of the screen (milestones + the 100k legend)
+function spawnConfetti(count) {
+  const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8', '#c084fc', '#ff9900'];
+  for (let i = 0; i < count; i++) {
+    particles.push({ x: rnd(0, cw), y: rnd(-60, -4),
+                     vx: rnd(-1.2, 1.2), vy: rnd(1.2, 3.2),
+                     alpha: rnd(1.1, 1.6), r: rnd(2, 5), color: cols[i % cols.length] });
+  }
+}
+
+// score milestones (Osimo 2026-08-18): fixed rungs then every 10k beyond; 100k = LEGEND
+function nextMilestoneAfter(m) {
+  for (const v of [10000, 15000, 20000, 25000, 30000]) if (m < v) return v;
+  return m + 10000;
+}
+function fireMilestone(v) {
+  const legend = v === 100000;
+  floaters.push({ x: cw / 2, y: ch * 0.35,
+                  text: legend ? '🏆 100,000 — LEGEND!' : `🏅 ${v.toLocaleString('en-GB')}!`,
+                  alpha: 1.6, vy: -0.9, color: legend ? '#ffd23d' : '#7dffb8' });
+  spawnConfetti(legend ? 170 : 34);
+  if (sfxMode === 'voice') {
+    if (legend) {
+      // the one moment BOTH hosts speak — Jimmy first, Joe lands after him
+      jimmySay(LEGEND_VO.JIMMY);
+      setTimeout(() => voicePlay('JOE', LEGEND_VO.JOE, JOE_GAIN), 2400);
+    } else {
+      let who = 'JIMMY';
+      try {
+        const last = localStorage.getItem('ff_mile_who');
+        who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+        localStorage.setItem('ff_mile_who', who);
+      } catch (e) {}
+      const line = (MILESTONE_VO[v] || MILESTONE_BEYOND_VO)[who];
+      voicePlay(who, line, who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN);
+    }
+  } else if (sfxMode === 'tones') {
+    TONES.best();
+    if (legend) setTimeout(() => TONES.best(), 700);
   }
 }
 
@@ -895,6 +1022,7 @@ function initGame() {
   pbAnnounced       = false;
   topAnnounced      = false;
   callout           = null;
+  lastMilestone     = 0;
   popping           = false;
   popRingR          = 0;
   pipes     = [];
@@ -1007,7 +1135,7 @@ function update(dt) {
       if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = Math.abs(bird.vy) * 0.4; }
       else { bird.y = ch - GROUND_H - bird.r; bird.vy = -Math.abs(bird.vy) * 0.6 - 2; }
     } else {
-      if (Date.now() >= inflateInvincible) inflate();
+      if (Date.now() >= inflateInvincible) inflate(bird.y - bird.r < 0 ? 'ceiling' : 'floor');
       return;
     }
   }
@@ -1199,7 +1327,7 @@ function update(dt) {
       } else if (e.shrink) {
         // SHRINK BOMB — extra life (deflates one level, or a bonus if already at 0)
         // plus a stacking shrink — smaller bird threads the late-game gaps easier.
-        sfx.bonus(pitchMult);
+        sfx.shrink(pitchMult);
         spawnParticles(e.x, cy, '#e879f9', 14);
         spawnParticles(e.x, cy, '#7e22ce', 7);
         birdShrink = Math.min(birdShrink + 1, SHRINK_MAX);
@@ -1297,14 +1425,16 @@ function update(dt) {
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, shrink: true });
   }
 
-  // star power expiry — the 5s window from the star chain above runs out.
-  // 🎙️ voice mode: Jimmy counts the final five seconds out loud ("Five!… One!") so the
-  // expiry never surprises you — the audio version of the ring-blink telegraph.
+  // star power expiry — the window from the star chain above runs out.
+  // Osimo 2026-08-18 v2: Jimmy counting the final seconds CLASHED with his star-chain
+  // shoot countdown — retired. Instead, in BOTH sound modes, a Mario-style
+  // "invincibility ending" warble fires once when the ring starts blinking
+  // (STAR_WARN_MS = final 2s) — audio twin of the blink telegraph.
   if (starPower) {
-    const sLeft = Math.ceil((starPowerUntil - Date.now()) / 1000);
-    if (sfxMode === 'voice' && sLeft >= 1 && sLeft <= 5 && sLeft < lastStarSec) {
-      lastStarSec = sLeft;
-      jimmySay(['One!', 'Two!', 'Three!', 'Four!', 'Five!'][sLeft - 1]);
+    const msLeft = starPowerUntil - Date.now();
+    if (msLeft <= STAR_WARN_MS && lastStarSec !== -1) {
+      lastStarSec = -1;   // fired for this star
+      if (sfxMode !== 'mute') TONES.starWarn();
     }
     if (Date.now() >= starPowerUntil) starPower = false;
   }
@@ -1335,6 +1465,16 @@ function update(dt) {
   } else if (!pbAnnounced && bestScore > 0 && score > bestScore) {
     pbAnnounced = true;
     showCallout('pb');
+  }
+
+  // score milestones — one celebration per rung per run; a big jump that crosses
+  // several rungs only fires the highest (no confetti spam)
+  let m = nextMilestoneAfter(lastMilestone);
+  if (score >= m) {
+    // collapse multi-rung jumps to the highest — but never skip past the 100k legend
+    while (m !== 100000 && score >= nextMilestoneAfter(m)) m = nextMilestoneAfter(m);
+    lastMilestone = m;
+    fireMilestone(m);
   }
 }
 
@@ -1795,14 +1935,14 @@ function drawBird(x, y, rotDeg) {
 }
 
 // ─── inflate (hit but not dead yet) ──────────────────────────────────────────
-function inflate() {
+function inflate(cause) {
   if (birdInflate >= 2) { balloonPop(); return; }  // 3rd hit = pop death
   birdInflate++;
   starChain = 0;  // any hit breaks the star-power chain
   recomputeBirdRadius();
   bird.vy = -5;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
-  sfx.hit();
+  sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
   spawnParticles(bird.x, bird.y, '#ffffff', 8);
   spawnParticles(bird.x, bird.y, '#ffaa44', 6);
   const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!'];
