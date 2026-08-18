@@ -1657,13 +1657,19 @@ async function init() {
           (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
           (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : ARCADE
-      // RANK BY PLAYS, most first — same comparator as the members' halls so every
-      // surface agrees. Osimo 2026-08-18: "place games in order of most played to least
-      // played, jnj on air appears first in the regular arcade instead of 3rd. it appears
-      // correctly in the patreon one." This branch used to preserve file order ("curated"),
-      // which meant a brand-new cabinet inserted at the top of the JSON sat above cabinets
-      // with hundreds of plays. Plays move; the file does not.
+      // FREE CABINETS FIRST, then locked teasers — each group ranked by plays.
+      // Osimo 2026-08-18: "it should be above the locked games in order of most plays,
+      // flap fight, pin vaders, on air in ten, then all the locked games in order of
+      // plays from patreons."
+      //
+      // Two sort keys and the ORDER OF THEM MATTERS. Ranking by plays alone (my first
+      // pass) buried the newest FREE cabinet beneath locked ones with more history —
+      // which puts a paywall between a visitor and the thing they can actually play.
+      // Playable-now is the primary key; popularity only orders within each group.
+      // This branch previously preserved raw file order, so a cabinet inserted at the
+      // top of the JSON outranked everything regardless of either property.
       ? [...games].sort((a, b) =>
+          (a.locked ? 1 : 0) - (b.locked ? 1 : 0) ||
           (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
           (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : PATREON
