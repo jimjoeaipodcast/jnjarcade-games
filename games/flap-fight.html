@@ -284,6 +284,11 @@ try {
   else if (localStorage.getItem('sfxMuted_flapfight') === '1') sfxMode = 'mute'; // migrate old flag
 } catch (e) {}
 let muted = sfxMode === 'mute';   // playTone() keys off this — kept in sync by the cycle
+// Osimo 2026-08-18: double-tapping the speaker WHILE in 🎙️ mode toggles JUST Joe's
+// flap barks (including the bippidi/bopoidi cadence) off — everything else in voice
+// mode keeps talking. Persisted like the mode itself; meaningless outside voice mode.
+let flapVoiceOff = false;
+try { flapVoiceOff = localStorage.getItem('ff_flapVoiceOff_flapfight') === '1'; } catch (e) {}
 
 function initAudio() {
   if (!audioCtx) {
@@ -479,10 +484,14 @@ function joeSay(event) {
   // is "bippidi." and the flap RIGHT AFTER that — no waiting for another 5 rotations —
   // is "bopoidi." (Osimo 2026-08-18 v4: spelled for "Bop-pee-dee", fires on the very
   // next jump). Then normal rotation resumes until the next 5-rotation checkpoint.
+  // double-tap-mic silence (Osimo 2026-08-18 v5): the cadence/rotation bookkeeping keeps
+  // running underneath even while silenced, so re-enabling picks up exactly where it
+  // would have been — only the actual voicePlay() calls are skipped, same as a real mute.
+  const flapSilenced = event === 'flap' && flapVoiceOff;
   if (event === 'flap' && VO.flapPending) {
     const word = VO.flapPending;
     VO.flapPending = word === 'bippidi.' ? 'bopoidi.' : null;   // chain straight into it
-    voicePlay('JOE', word, JOE_GAIN * 0.85);
+    if (!flapSilenced) voicePlay('JOE', word, JOE_GAIN * 0.85);
     return;
   }
   const prev = VO.rot[event] || 0;
@@ -491,6 +500,7 @@ function joeSay(event) {
     VO.flapRots = (VO.flapRots || 0) + 1;
     if (VO.flapRots % 5 === 0) VO.flapPending = 'bippidi.';
   }
+  if (flapSilenced) return;
   // flap ONLY sits 15% under Joe's normal gain (Osimo 2026-08-18 v2) — it fires at tap
   // rate, so it's ambience; every other Joe announcement stays at full JOE_GAIN
   voicePlay('JOE', bank[VO.rot[event]], event === 'flap' ? JOE_GAIN * 0.85 : JOE_GAIN);
@@ -604,12 +614,12 @@ const sfx = {
 
 function updateMuteUI() {
   muteBtn.textContent = sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊';
+  // dim the mic to show "flap barks silenced" — only means anything in voice mode
+  muteBtn.style.opacity = (sfxMode === 'voice' && flapVoiceOff) ? '0.5' : '';
 }
 updateMuteUI();
 
-muteBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  initAudio();
+function cycleSfxMode() {
   sfxMode = sfxMode === 'tones' ? 'voice' : sfxMode === 'voice' ? 'mute' : 'tones';
   muted = sfxMode === 'mute';
   try {
@@ -618,6 +628,27 @@ muteBtn.addEventListener('click', e => {
   } catch (e) {}
   if (sfxMode === 'voice') loadVoicePack();   // lazy fetch+decode on first entry
   updateMuteUI();
+}
+
+// Single tap cycles 🔊→🎙️→🔇. Double tap ONLY means something while already in 🎙️ mode
+// (toggle flap barks off/on, staying in voice mode) — outside voice mode a double-tap is
+// just two ordinary taps, so the cycle stays instant there. Inside voice mode the first
+// tap is held for a short window to see if a second one follows, exactly like standard
+// double-click disambiguation.
+let muteBtnClickTimer = null;
+muteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  initAudio();
+  if (sfxMode !== 'voice') { cycleSfxMode(); return; }
+  if (muteBtnClickTimer) {
+    clearTimeout(muteBtnClickTimer);
+    muteBtnClickTimer = null;
+    flapVoiceOff = !flapVoiceOff;
+    try { localStorage.setItem('ff_flapVoiceOff_flapfight', flapVoiceOff ? '1' : '0'); } catch (e) {}
+    updateMuteUI();
+    return;
+  }
+  muteBtnClickTimer = setTimeout(() => { muteBtnClickTimer = null; cycleSfxMode(); }, 260);
 });
 
 // iOS/mobile unlock — create + resume on first real gesture (idempotent, re-resumes if suspended)
