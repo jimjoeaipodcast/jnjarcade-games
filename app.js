@@ -1657,7 +1657,15 @@ async function init() {
           (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
           (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : ARCADE
-      ? [...games]                      // curated order — exactly as listed, no play re-rank
+      // RANK BY PLAYS, most first — same comparator as the members' halls so every
+      // surface agrees. Osimo 2026-08-18: "place games in order of most played to least
+      // played, jnj on air appears first in the regular arcade instead of 3rd. it appears
+      // correctly in the patreon one." This branch used to preserve file order ("curated"),
+      // which meant a brand-new cabinet inserted at the top of the JSON sat above cabinets
+      // with hundreds of plays. Plays move; the file does not.
+      ? [...games].sort((a, b) =>
+          (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+          (GLOBAL_PLAYS[b.id] || 0) - (GLOBAL_PLAYS[a.id] || 0))
       : PATREON
       ? [...games].sort((a, b) =>
           (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
