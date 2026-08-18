@@ -2618,7 +2618,31 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
   ctx.stroke();
   ctx.shadowBlur = 0;
 }
-document.addEventListener('DOMContentLoaded', init);
+/* BOOT — must not depend on WHEN this file finishes parsing.
+   Osimo's Pixel, 2026-08-18, after five wrong diagnoses. His on-page diagnostic finally
+   reported the decisive facts: `init defined: function`, `WORLDS defined: object`, and the
+   hall genuinely EMPTY. So the file parsed fine and init simply never ran.
+
+   `addEventListener('DOMContentLoaded', ...)` only ever fires if the document is STILL
+   LOADING at the moment this line executes. If app.js finishes parsing after that event has
+   already gone — a slower phone, a cold cache, a big JS file, any timing shift — the
+   listener is attached to an event that will never fire again, and the arcade sits silent
+   forever. No error, nothing to see. It is a RACE, which is precisely why it hit one device
+   and not another, and why it "worked last night": the timing simply landed the other way.
+
+   Checking readyState first makes boot independent of that race. The load fallback covers
+   the remaining edge where readyState is 'interactive' but DOMContentLoaded was missed. */
+function boot() {
+  if (boot.done) return;            // idempotent: whichever path wins, init runs exactly once
+  boot.done = true;
+  init();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('load', boot);          // belt and braces
+} else {
+  boot();                            // document already parsed — run immediately
+}
 
 function chromeFlipperAttract(ctx, w, h, t, world, s) {
   if (!s.bx) { s.bx = w*0.5; s.by = h*0.35; s.vx = 1.4; s.vy = 0.8; }
