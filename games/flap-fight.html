@@ -338,10 +338,20 @@ const VO_LINES = [
   ["JIMMY", "You're number one!"],
   ["JIMMY", "Highest score in the whole arcade!"],
   ["JIMMY", "The record is yours!"],
-  // Jimmy — deaths (low score < 500 gets the gentle roast):
+  // Jimmy — end-of-game monologue, all four score tiers:
   ["JIMMY", "That was brief!"], ["JIMMY", "The warm-up run. Classic!"],
   ["JIMMY", "We never speak of this one!"], ["JIMMY", "Even the pipes feel bad!"],
+  ["JIMMY", "A speedrun of losing!"], ["JIMMY", "The bird barely woke up!"],
+  ["JIMMY", "Straight down. Committed, though!"],
   ["JIMMY", "What a run!"], ["JIMMY", "Down in a blaze of glory!"], ["JIMMY", "The bird will fly again!"],
+  ["JIMMY", "Respectable! The pipes disagree, but respectable!"],
+  ["JIMMY", "Solid flying. Questionable landing!"], ["JIMMY", "That was a proper flight!"],
+  ["JIMMY", "Now THAT was flying!"], ["JIMMY", "The bird is a professional!"],
+  ["JIMMY", "Someone's been practising!"], ["JIMMY", "That run had chapters!"],
+  ["JIMMY", "Big score. Bigger heart!"],
+  ["JIMMY", "Legendary flight! Frame it!"], ["JIMMY", "The pipes will tell stories about you!"],
+  ["JIMMY", "That wasn't a run, that was a career!"], ["JIMMY", "I ran out of things to count!"],
+  ["JIMMY", "Historic! Genuinely historic!"],
   // Jimmy — score milestones + the 100k legend moment:
   ["JIMMY", "Ten thousand points!"], ["JIMMY", "Fifteen thousand! Absurd!"],
   ["JIMMY", "Twenty thousand! Who are you?"], ["JIMMY", "Twenty five thousand!"],
@@ -362,6 +372,16 @@ const VO_LINES = [
   ["JOE", "big boom."], ["JOE", "oh no."], ["JOE", "bye bye."], ["JOE", "that's that."],
   ["JOE", "that was quick."], ["JOE", "a bold strategy."], ["JOE", "we don't talk about this one."],
   ["JOE", "the pipes send their thanks."],
+  ["JOE", "blink and you missed it. I blinked."], ["JOE", "gravity one, bird nil."],
+  ["JOE", "practice. presumably."],
+  ["JOE", "a reasonable effort. then a wall."], ["JOE", "decent. the ending needs work."],
+  ["JOE", "the middle part was good."],
+  ["JOE", "genuinely decent."], ["JOE", "I watched most of that. worth it."],
+  ["JOE", "the pipes needed a break anyway."], ["JOE", "quality flapping. noted in the ledger."],
+  ["JOE", "that was fine. very fine."],
+  ["JOE", "I stood up. briefly."], ["JOE", "that deserves a slow nod. here it is."],
+  ["JOE", "the leaderboard felt that."], ["JOE", "remarkable. I don't say that."],
+  ["JOE", "I'll be quoting this run."],
   ["JOE", "level up."], ["JOE", "onwards."], ["JOE", "up we go."],
   ["JOE", "ooh."], ["JOE", "shiny."], ["JOE", "nice."],
   ["JOE", "wheee."], ["JOE", "down we go."],
@@ -390,18 +410,54 @@ const JOE_BARKS = {
   warp:    ["wheee.", "down we go."],
   warpOut: ["and we're back.", "we return."],
 };
-// death is score-aware and BOTH hosts take turns (Osimo 2026-08-18: "they can both say
-// something hilarious when you die, specially if you have a low score")
-const DEATH_LOW_VO = {   // score < 500 — the gentle roast
-  JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
-          "Even the pipes feel bad!"],
-  JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
-          "the pipes send their thanks."],
-};
-const DEATH_VO = {       // a proper run
-  JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!"],
-  JOE:   ["big boom.", "oh no.", "bye bye.", "that's that."],
-};
+// END-OF-GAME MONOLOGUE (Osimo 2026-08-18 v6: "enrich what they say about your score at
+// the end… use them in BOTH regular sound and mic sound… random monologue based on score,
+// more funny stuff bigger repertoire"). Four score tiers, both hosts alternating, spoken
+// in 🔊 tones mode AND 🎙️ voice mode (mute stays silent). Tiers checked top-down.
+const DEATH_TIERS = [
+  { min: 15000,   // EPIC — the runs that deserve a speech
+    JIMMY: ["Legendary flight! Frame it!",
+            "The pipes will tell stories about you!",
+            "That wasn't a run, that was a career!",
+            "I ran out of things to count!",
+            "Historic! Genuinely historic!"],
+    JOE:   ["I stood up. briefly.",
+            "that deserves a slow nod. here it is.",
+            "the leaderboard felt that.",
+            "remarkable. I don't say that.",
+            "I'll be quoting this run."] },
+  { min: 5000,    // GOOD — a real flight
+    JIMMY: ["Now THAT was flying!",
+            "The bird is a professional!",
+            "Someone's been practising!",
+            "That run had chapters!",
+            "Big score. Bigger heart!"],
+    JOE:   ["genuinely decent.",
+            "I watched most of that. worth it.",
+            "the pipes needed a break anyway.",
+            "quality flapping. noted in the ledger.",
+            "that was fine. very fine."] },
+  { min: 500,     // MID — respectable, ended badly
+    JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!",
+            "Respectable! The pipes disagree, but respectable!",
+            "Solid flying. Questionable landing!",
+            "That was a proper flight!"],
+    JOE:   ["big boom.", "oh no.", "bye bye.", "that's that.",
+            "a reasonable effort. then a wall.",
+            "decent. the ending needs work.",
+            "the middle part was good."] },
+  { min: 0,       // LOW — the gentle roast
+    JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
+            "Even the pipes feel bad!",
+            "A speedrun of losing!",
+            "The bird barely woke up!",
+            "Straight down. Committed, though!"],
+    JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
+            "the pipes send their thanks.",
+            "blink and you missed it. I blinked.",
+            "gravity one, bird nil.",
+            "practice. presumably."] },
+];
 // big-score milestones (Osimo 2026-08-18): 10k/15k/20k/25k/30k each get their own line,
 // then every 10k beyond gets the generic pair; 100k is the LEGEND moment (both speak).
 const MILESTONE_VO = {
@@ -440,12 +496,14 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=5')
+  fetch('flap-fight-pack.json?v=6')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
-if (sfxMode === 'voice') loadVoicePack();   // returning 🎙️ player — warm the pack at load
+// warm the pack for any non-muted player at load — tones mode needs it too now, the
+// end-of-game monologue speaks in both sound modes (Osimo 2026-08-18 v6)
+if (sfxMode !== 'mute') loadVoicePack();
 
 function voicePlay(who, text, gain) {
   if (!audioCtx || !VO.b64) return;
@@ -557,18 +615,26 @@ function deathVoice() {
     who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
     localStorage.setItem('ff_death_who', who);
   } catch (e) {}
-  const bank = (score < 500 ? DEATH_LOW_VO : DEATH_VO)[who];
+  const tier = DEATH_TIERS.find(t => score >= t.min) || DEATH_TIERS[DEATH_TIERS.length - 1];
+  const bank = tier[who];
   voicePlay(who, bank[Math.floor(Math.random() * bank.length)],
             who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN);
 }
 function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute') return;
+  // death monologue plays in BOTH sound modes (Osimo 2026-08-18 v6): tones mode keeps
+  // its balloon-pop boom and the spoken line lands just after it; voice mode speaks
+  // immediately (the boom belongs to the tones world).
+  if (event === 'death') {
+    if (sfxMode === 'tones') { TONES.death(); setTimeout(deathVoice, 650); }
+    else deathVoice();
+    return;
+  }
   if (sfxMode === 'voice') {
     if (event === 'star')  { jimmySay('Star power!'); return; }
     if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
     if (event === 'score') return;                 // Osimo 2026-08-18: no bark on pipe pass
     if (event === 'hit')   { joeSay(arg || 'hitPipe'); return; }
-    if (event === 'death') { deathVoice(); return; }
     // combo thresholds: Joe's acknowledgment WINS over the regular stomp bark and
     // bypasses the rate cap — it's the moment, not ambience
     if (event === 'stomp' && COMBO_VO[arg]) { voicePlay('JOE', COMBO_VO[arg], JOE_GAIN); return; }
@@ -600,8 +666,7 @@ const sfx = {
   const chk = (w, t) => { if (!all.has(w + '|' + t)) miss.push(w + '|' + t); };
   Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
   ['JIMMY', 'JOE'].forEach(w => {
-    DEATH_LOW_VO[w].forEach(t => chk(w, t));
-    DEATH_VO[w].forEach(t => chk(w, t));
+    DEATH_TIERS.forEach(t => t[w].forEach(x => chk(w, x)));
     Object.values(MILESTONE_VO).forEach(m => chk(w, m[w]));
     chk(w, MILESTONE_BEYOND_VO[w]); chk(w, LEGEND_VO[w]);
   });
@@ -626,7 +691,7 @@ function cycleSfxMode() {
     localStorage.setItem('sfxMode_flapfight', sfxMode);
     localStorage.setItem('sfxMuted_flapfight', muted ? '1' : '0'); // keep legacy key honest
   } catch (e) {}
-  if (sfxMode === 'voice') loadVoicePack();   // lazy fetch+decode on first entry
+  if (sfxMode !== 'mute') loadVoicePack();   // tones mode speaks the death monologue too
   updateMuteUI();
 }
 
