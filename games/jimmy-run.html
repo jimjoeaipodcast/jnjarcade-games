@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>JIMMY RUN — JnJ Arcade</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  JIMMY RUN — TEMPLE RUN × MINION RUSH (Osimo 2026-08-18, v2 after DEAD AIR
+  DASH read as underwhelming: "like temple run but with Jimmy running").
+  PSEUDO-3D corridor runner: segment-projected studio hallway (racer/OutRun
+  pattern from GAME_BIBLE §13), 3 lanes, swipe left/right/up/down for
+  lane/jump/slide. THE DEAD AIR chases from behind — stumbles let it close in,
+  clean running pulls away. Minion Rush lends the HYPE fever meter + perks.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100dvh; background: #000; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none; }
+  #gameCanvas { display: block; width: 100vw; height: 100dvh; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             font-family: 'Courier New', monospace; color: #fff; text-align: center; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(28px, 8vw, 64px); letter-spacing: .06em;
+                color: var(--ink, #ff6b35); text-shadow: 0 0 24px var(--ink, #ff6b35); }
+  #overlay p { margin: 14px 0 26px; font-size: 14px; color: #9aa; max-width: 80vw; line-height: 1.5; }
+  #coinBtn { font: bold 18px 'Courier New', monospace; letter-spacing: .1em;
+             padding: 16px 38px; background: var(--ink, #ff6b35); color: #000;
+             border: none; border-radius: 10px; cursor: pointer;
+             box-shadow: 0 0 30px var(--ink, #ff6b35); }
+</style>
+<link rel="stylesheet" href="../cabinet.css?v=2">
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="overlay">
+  <h1>JIMMY RUN</h1>
+  <p>Jimmy's sprinting the studio corridors and the <b>DEAD AIR</b> is right behind him.<br>
+     Swipe ◀ ▶ to change lane · swipe ▲ to jump · swipe ▼ to slide.<br>
+     🛋 sofas — jump · 🎤 boom mics — slide · 🗄 racks — switch lane<br>
+     🍭 fills the HYPE meter · 🚀 rocket mows trolls · 🛡 shield · 🧲 magnet<br>
+     Stumble and the static closes in. Run clean and it falls behind.</p>
+  <button id="coinBtn">🪙 INSERT COIN</button>
+</div>
+<script src="../vendor/gsap.min.js"></script>
+<script src="../arcade-scores.js?v=18"></script>
+<script>
+(function () {
+'use strict';
+// ── IDENTITY ─────────────────────────────────────────────────────────────────
+const SLUG  = 'jimmy-run';
+const TITLE = 'JIMMY RUN';
+const INK   = '#ff6b35';
+document.documentElement.style.setProperty('--ink', INK);
+
+// ── CANVAS / VIEW ────────────────────────────────────────────────────────────
+const WORLD_W = 400, WORLD_H = 700;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const VIEW = { scale: 1, ox: 0, oy: 0 };
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR;
+  const s = Math.min(innerWidth / WORLD_W, innerHeight / WORLD_H);
+  VIEW.scale = s * DPR;
+  VIEW.ox = (canvas.width  - WORLD_W * VIEW.scale) / 2;
+  VIEW.oy = (canvas.height - WORLD_H * VIEW.scale) / 2;
+}
+addEventListener('resize', resize); resize();
+
+// ── PSEUDO-3D PROJECTION (racer/OutRun segment pattern, GAME_BIBLE §13) ──────
+const HORIZON = 232;                 // vanishing point y
+const CAM_D   = 1.2;                 // camera depth (fov-ish)
+const LANE_W  = 0.62;                // half-road units between lane centres
+const DRAW_SEGS = 46;                // segments drawn per frame
+const SEG_LEN = 1;                   // world z units per segment
+function project(laneX, z, elevY) {
+  // z in world units ahead of camera (>= 0.12), laneX in lane units (-1,0,1)
+  const sc = CAM_D / z;
+  return {
+    x: WORLD_W / 2 + sc * (laneX * LANE_W - playerX * LANE_W) * 190,
+    y: HORIZON + sc * (150 - (elevY || 0)),
+    s: sc,
+  };
+}
+
+// ── TUNING ───────────────────────────────────────────────────────────────────
+const SPEED0     = 0.052;    // z-units per tick at start
+const SPEED_MAX  = 0.115;
+const SPEED_RAMP = 0.0000045;// per metre
+const LANE_LERP  = 0.24;
+const JUMP_TICKS = 40;       // total airtime
+const JUMP_H     = 78;       // apex elevation (world px at player scale)
+const SLIDE_TICKS= 34;
+const HIT_Z      = 0.55;     // obstacle z at which collision resolves
+const HIT_WINDOW = 0.34;     // z tolerance
+const STATIC_DECAY = 0.0011; // dead-air proximity decay per tick while clean
+const STATIC_STUMBLE = 0.34; // proximity added on stumble
+const STATIC_CREEP = 0.00016;// passive creep per tick (never fully safe)
+const HYPE_NEED  = 8;
+const HYPE_MS    = 5200;
+const ROCKET_MS  = 2600;
+const MAGNET_MS  = 6500;
+const METRES_PER_Z = 3;
+
+// STUDIO FLOORS as distance milestones (reuse the DAD floor set — same VO clips)
+const FLOORS = [
+  { at: 0,    name: 'Basement Archive', wall: '#2a2118', floor: '#3a2e20', glow: '#6a5638' },
+  { at: 500,  name: 'Tape Library',     wall: '#1e2836', floor: '#2a3648', glow: '#4a6288' },
+  { at: 1200, name: 'Merch Room',       wall: '#2e2140', floor: '#3e2d54', glow: '#6a4d94' },
+  { at: 2100, name: 'Writers Room',     wall: '#332a18', floor: '#443a24', glow: '#7a6a3a' },
+  { at: 3200, name: 'Server Room',      wall: '#12301f', floor: '#1a402c', glow: '#2a7a52' },
+  { at: 4500, name: 'Studio Floor',     wall: '#3a1428', floor: '#4e1e38', glow: '#8a3062' },
+  { at: 6000, name: 'The Roof',         wall: '#1a2a48', floor: '#24365c', glow: '#4060a0' },
+  { at: 7800, name: 'Above the Show',   wall: '#141c30', floor: '#1c2840', glow: '#3a5080' },
+];
+
+// ── SFX MODES + VOICE (house pattern; clips shared with DAD/flap-fight) ──────
+let audioCtx = null;
+let sfxMode = 'tones';
+try {
+  const m = localStorage.getItem('sfxMode_' + SLUG);
+  if (m === 'voice' || m === 'mute' || m === 'tones') sfxMode = m;
+} catch (e) {}
+let muted = sfxMode === 'mute';
+let stepVoiceOff = false;     // double-tap mic: hush Joe's footstep/jump barks only
+try { stepVoiceOff = localStorage.getItem('jr_stepVoiceOff') === '1'; } catch (e) {}
+
+function unlockAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === 'suspended') { try { audioCtx.resume(); } catch (e) {} }
+}
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio, { passive: true });
+
+function tone(f0, f1, dur, type, vol, delay) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const t0 = audioCtx.currentTime + (delay || 0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(f0 * (1 + 0.05 * (Math.random() * 2 - 1)), t0);
+    if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+    g.gain.setValueAtTime(vol || 0.14, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+
+const VO_LINES = [
+  // ── reused (identical keys → clips shared from flap-fight / dead-air-dash packs) ──
+  ["JIMMY", "Personal best!"], ["JIMMY", "New personal best!"], ["JIMMY", "That's a record!"],
+  ["JIMMY", "Best flight of your life!"], ["JIMMY", "Past your best. Keep going!"],
+  ["JIMMY", "New record. That just happened!"],
+  ["JIMMY", "Top scorer!"], ["JIMMY", "Number one!"], ["JIMMY", "Top of the board!"],
+  ["JIMMY", "You're number one!"], ["JIMMY", "Highest score in the whole arcade!"],
+  ["JIMMY", "The record is yours!"],
+  ["JIMMY", "That was brief!"], ["JIMMY", "The warm-up run. Classic!"],
+  ["JIMMY", "We never speak of this one!"], ["JIMMY", "Even the pipes feel bad!"],
+  ["JIMMY", "A speedrun of losing!"], ["JIMMY", "The bird barely woke up!"],
+  ["JIMMY", "Straight down. Committed, though!"],
+  ["JIMMY", "What a run!"], ["JIMMY", "Down in a blaze of glory!"], ["JIMMY", "The bird will fly again!"],
+  ["JIMMY", "Respectable! The pipes disagree, but respectable!"],
+  ["JIMMY", "Solid flying. Questionable landing!"], ["JIMMY", "That was a proper flight!"],
+  ["JIMMY", "Now THAT was flying!"], ["JIMMY", "The bird is a professional!"],
+  ["JIMMY", "Someone's been practising!"], ["JIMMY", "That run had chapters!"],
+  ["JIMMY", "Big score. Bigger heart!"],
+  ["JIMMY", "Legendary flight! Frame it!"], ["JIMMY", "The pipes will tell stories about you!"],
+  ["JIMMY", "That wasn't a run, that was a career!"], ["JIMMY", "I ran out of things to count!"],
+  ["JIMMY", "Historic! Genuinely historic!"],
+  ["JOE", "that was quick."], ["JOE", "a bold strategy."], ["JOE", "we don't talk about this one."],
+  ["JOE", "the pipes send their thanks."], ["JOE", "blink and you missed it. I blinked."],
+  ["JOE", "gravity one, bird nil."], ["JOE", "practice. presumably."],
+  ["JOE", "big boom."], ["JOE", "oh no."], ["JOE", "bye bye."], ["JOE", "that's that."],
+  ["JOE", "a reasonable effort. then a wall."], ["JOE", "decent. the ending needs work."],
+  ["JOE", "the middle part was good."],
+  ["JOE", "genuinely decent."], ["JOE", "I watched most of that. worth it."],
+  ["JOE", "the pipes needed a break anyway."], ["JOE", "quality flapping. noted in the ledger."],
+  ["JOE", "that was fine. very fine."],
+  ["JOE", "I stood up. briefly."], ["JOE", "that deserves a slow nod. here it is."],
+  ["JOE", "the leaderboard felt that."], ["JOE", "remarkable. I don't say that."],
+  ["JOE", "I'll be quoting this run."],
+  ["JOE", "ten in a row. I'm mildly moved."],
+  ["JOE", "fifteen straight. this is getting silly."],
+  ["JOE", "twenty. I'm framing this one."],
+  ["JIMMY", "Basement Archive! It smells like history!"],
+  ["JIMMY", "Tape Library! Every episode ever!"],
+  ["JIMMY", "Merch Room! Buy or ByeBye lives here!"],
+  ["JIMMY", "Writers Room! Where the jokes are born!"],
+  ["JIMMY", "Server Room! Keep it cool, keep climbing!"],
+  ["JIMMY", "Studio Floor! We're basically on air!"],
+  ["JIMMY", "The Roof! Nothing above us but sky!"],
+  ["JIMMY", "Above the show! Uncharted territory!"],
+  ["JIMMY", "That was close! Too close!"], ["JIMMY", "Still alive! Somehow!"],
+  ["JIMMY", "The shield! I love the shield!"], ["JIMMY", "Heart rate: unprofessional!"],
+  ["JOE", "close one."], ["JOE", "mind the gap."], ["JOE", "not ideal."],
+  ["JOE", "rocket. naturally."], ["JOE", "up we go. rapidly."], ["JOE", "that's just showing off."],
+  ["JOE", "the ceiling is no longer a choice."],
+  ["JOE", "shield acquired."], ["JOE", "one free mistake."], ["JOE", "insurance."],
+  ["JOE", "magnet on."], ["JOE", "the lollipops come to you now."], ["JOE", "lazy. effective."],
+  ["JOE", "we are attracting objects now."],
+  ["JOE", "hype mode. apparently."], ["JOE", "he's glowing. that's new."], ["JOE", "sustain it. or don't."],
+  ["JOE", "troll deleted."], ["JOE", "blocked and reported."], ["JOE", "the comment section thins."],
+  ["JOE", "off he goes."], ["JOE", "climbing. again."], ["JOE", "the static is patient."],
+  ["JOE", "I'll be here."], ["JOE", "the game begins. try not to fall."], ["JOE", "begin. I will observe."],
+  ["JOE", "still watching."], ["JOE", "I had a sofa like that."], ["JOE", "the archive misses him."],
+  ["JOE", "this floor is my favourite."], ["JOE", "he can't hear me. probably for the best."],
+  ["JOE", "somewhere, a kettle boils."], ["JOE", "gravity's having an off day."],
+  ["JOE", "the podcast studio has terrible building codes."],
+  ["JOE", "how many floors does this building actually have."],
+  ["JOE", "ooh."], ["JOE", "shiny."], ["JOE", "nice."],
+  // ── new for JIMMY RUN ──
+  ["JOE", "hup."], ["JOE", "airborne."], ["JOE", "technically flying."],
+  ["JOE", "limbo."], ["JOE", "under it."], ["JOE", "low bridge."],
+  ["JOE", "that was furniture."], ["JOE", "he met a sofa."], ["JOE", "the corridor won that one."],
+  ["JOE", "chair. incoming."],
+];
+const JOE_BARKS = {
+  jump:    ["hup.", "airborne.", "technically flying."],
+  slide:   ["limbo.", "under it.", "low bridge."],
+  stumble: ["that was furniture.", "he met a sofa.", "the corridor won that one.", "not ideal."],
+  nearMiss:["close one.", "mind the gap."],
+  rocket:  ["rocket. naturally.", "up we go. rapidly.", "that's just showing off.",
+            "the ceiling is no longer a choice."],
+  shield:  ["shield acquired.", "one free mistake.", "insurance."],
+  magnet:  ["magnet on.", "the lollipops come to you now.", "lazy. effective.",
+            "we are attracting objects now."],
+  hype:    ["hype mode. apparently.", "he's glowing. that's new.", "sustain it. or don't."],
+  mow:     ["troll deleted.", "blocked and reported.", "the comment section thins.", "big boom."],
+  start:   ["off he goes.", "the static is patient.", "I'll be here.",
+            "the game begins. try not to fall.", "begin. I will observe."],
+  idle:    ["still watching.", "I had a sofa like that.", "the archive misses him.",
+            "this floor is my favourite.", "he can't hear me. probably for the best.",
+            "somewhere, a kettle boils.", "gravity's having an off day.",
+            "the podcast studio has terrible building codes.",
+            "how many floors does this building actually have."],
+  pickup:  ["ooh.", "shiny.", "nice."],
+};
+const JIMMY_FLOOR_VO = [
+  "Basement Archive! It smells like history!",
+  "Tape Library! Every episode ever!",
+  "Merch Room! Buy or ByeBye lives here!",
+  "Writers Room! Where the jokes are born!",
+  "Server Room! Keep it cool, keep climbing!",
+  "Studio Floor! We're basically on air!",
+  "The Roof! Nothing above us but sky!",
+  "Above the show! Uncharted territory!",
+];
+const JIMMY_SAVE_VO = ["That was close! Too close!", "Still alive! Somehow!",
+                       "The shield! I love the shield!", "Heart rate: unprofessional!"];
+const DEATH_TIERS = [
+  { min: 15000,
+    JIMMY: ["Legendary flight! Frame it!", "The pipes will tell stories about you!",
+            "That wasn't a run, that was a career!", "I ran out of things to count!",
+            "Historic! Genuinely historic!"],
+    JOE:   ["I stood up. briefly.", "that deserves a slow nod. here it is.",
+            "the leaderboard felt that.", "remarkable. I don't say that.", "I'll be quoting this run."] },
+  { min: 5000,
+    JIMMY: ["Now THAT was flying!", "The bird is a professional!", "Someone's been practising!",
+            "That run had chapters!", "Big score. Bigger heart!"],
+    JOE:   ["genuinely decent.", "I watched most of that. worth it.", "the pipes needed a break anyway.",
+            "quality flapping. noted in the ledger.", "that was fine. very fine."] },
+  { min: 500,
+    JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!",
+            "Respectable! The pipes disagree, but respectable!", "Solid flying. Questionable landing!",
+            "That was a proper flight!"],
+    JOE:   ["big boom.", "oh no.", "bye bye.", "that's that.", "a reasonable effort. then a wall.",
+            "decent. the ending needs work.", "the middle part was good."] },
+  { min: 0,
+    JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
+            "Even the pipes feel bad!", "A speedrun of losing!", "The bird barely woke up!",
+            "Straight down. Committed, though!"],
+    JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
+            "the pipes send their thanks.", "blink and you missed it. I blinked.",
+            "gravity one, bird nil.", "practice. presumably."] },
+];
+const COMBO_VO = {
+  10: "ten in a row. I'm mildly moved.",
+  15: "fifteen straight. this is getting silly.",
+  20: "twenty. I'm framing this one.",
+};
+const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
+                      "Best flight of your life!", "Past your best. Keep going!",
+                      "New record. That just happened!"];
+const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
+                      "You're number one!", "Highest score in the whole arcade!",
+                      "The record is yours!"];
+const JIMMY_GAIN = 1.15, JOE_GAIN = 0.4;
+
+(function voSelfCheck() {
+  const all = new Set(VO_LINES.map(([w, t]) => w + '|' + t));
+  const miss = [];
+  const chk = (w, t) => { if (!all.has(w + '|' + t)) miss.push(w + '|' + t); };
+  Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
+  ['JIMMY', 'JOE'].forEach(w => DEATH_TIERS.forEach(t => t[w].forEach(x => chk(w, x))));
+  JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_FLOOR_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_SAVE_VO.forEach(t => chk('JIMMY', t));
+  Object.values(COMBO_VO).forEach(t => chk('JOE', t));
+  if (miss.length) console.error('VO_LINES missing:', miss);
+})();
+
+function djb2vo(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, lastJoeMs: 0 };
+function loadVoicePack() {
+  if (VO.b64 || VO.loading) return;
+  VO.loading = true;
+  fetch('jimmy-run-pack.json?v=1')
+    .then(r => r.json())
+    .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
+    .catch(() => { VO.loading = false; });
+}
+if (sfxMode !== 'mute') loadVoicePack();
+
+function voicePlay(who, text, gain) {
+  if (!audioCtx || !VO.b64 || state === 'attract') return;
+  const key = djb2vo(who + '|' + text);
+  const start = (buf) => {
+    try {
+      const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
+      src.buffer = buf; g.gain.value = gain;
+      src.connect(g); g.connect(audioCtx.destination);
+      if (who === 'JIMMY') {
+        if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} }
+        VO.jimmySrc = src;
+      }
+      src.start();
+    } catch (e) {}
+  };
+  const cached = VO.buffers[key];
+  if (cached) { start(cached); return; }
+  const b64 = VO.b64[key];
+  if (!b64) return;
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; start(buf); }, () => {});
+}
+function jimmySay(text) { voicePlay('JIMMY', text, JIMMY_GAIN); }
+function joeSay(event) {
+  const now = Date.now();
+  if (now - VO.lastJoeMs < 140) return;
+  VO.lastJoeMs = now;
+  const bank = JOE_BARKS[event];
+  if (!bank) return;
+  if ((event === 'jump' || event === 'slide') && stepVoiceOff) return;
+  VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;
+  voicePlay('JOE', bank[VO.rot[event]],
+            (event === 'jump' || event === 'slide') ? JOE_GAIN * 0.85 : JOE_GAIN);
+}
+function jimmyPick(bank) {
+  VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
+  return bank[VO.rot.__jim];
+}
+function deathVoice() {
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('jr_death_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('jr_death_who', who);
+  } catch (e) {}
+  const tier = DEATH_TIERS.find(t => score >= t.min) || DEATH_TIERS[DEATH_TIERS.length - 1];
+  const bank = tier[who];
+  voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN);
+}
+const TONES = {
+  jump:   () => tone(300, 620, 0.1, 'triangle', 0.13),
+  slide:  () => tone(420, 160, 0.12, 'triangle', 0.12),
+  lane:   () => tone(500, 640, 0.05, 'square', 0.08),
+  pickup: () => tone(1046, 1568, 0.07, 'square', 0.12),
+  power:  () => { tone(660, 990, 0.1, 'square', 0.15); tone(990, 1320, 0.1, 'square', 0.13, 0.08); },
+  stumble:() => { tone(200, 60, 0.2, 'sawtooth', 0.2); },
+  mow:    () => { tone(180, 55, 0.1, 'square', 0.2); tone(900, 300, 0.14, 'sawtooth', 0.12, 0.03); },
+  hype:   () => [660, 830, 990, 1320].forEach((f, i) => tone(f, null, 0.1, 'square', 0.15, 0.06 * i)),
+  floor:  () => { tone(523, null, 0.1, 'triangle', 0.13); tone(784, null, 0.12, 'triangle', 0.13, 0.09); },
+  death:  () => { tone(300, 40, 0.5, 'sawtooth', 0.2); tone(90, 30, 0.7, 'sine', 0.22, 0.05); },
+  best:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, null, 0.13, 'triangle', 0.14, 0.12 * i)),
+  rocket: () => tone(140, 700, 0.6, 'sawtooth', 0.14),
+};
+function dispatch(event, tonesFn, arg) {
+  if (sfxMode === 'mute' || state === 'attract') return;
+  if (event === 'death') {
+    if (sfxMode === 'tones') { TONES.death(); setTimeout(deathVoice, 650); }
+    else deathVoice();
+    return;
+  }
+  if (sfxMode === 'voice') {
+    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    if (event === 'mow' && COMBO_VO[arg]) { voicePlay('JOE', COMBO_VO[arg], JOE_GAIN); return; }
+    if (event === 'floor') { jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]); return; }
+    if (event === 'save')  { jimmySay(jimmyPick(JIMMY_SAVE_VO)); return; }
+    if (event === 'lane') return;   // no bark on lane switch — too frequent
+    joeSay(event);
+    return;
+  }
+  if (event === 'floor') { TONES.floor(); setTimeout(() => jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]), 400); return; }
+  tonesFn && tonesFn();
+}
+const sfx = {
+  jump:   ()  => dispatch('jump',   TONES.jump),
+  slide:  ()  => dispatch('slide',  TONES.slide),
+  lane:   ()  => dispatch('lane',   TONES.lane),
+  pickup: ()  => dispatch('pickup', TONES.pickup),
+  rocket: ()  => dispatch('rocket', TONES.rocket),
+  shield: ()  => dispatch('shield', TONES.power),
+  magnet: ()  => dispatch('magnet', TONES.power),
+  hype:   ()  => dispatch('hype',   TONES.hype),
+  mow:    (c) => dispatch('mow',    TONES.mow, c),
+  stumble:()  => dispatch('stumble',TONES.stumble),
+  nearMiss:() => dispatch('nearMiss', null),
+  floor:  (i) => dispatch('floor',  TONES.floor, i),
+  save:   ()  => dispatch('save',   TONES.power),
+  start:  ()  => dispatch('start',  null),
+  idle:   ()  => dispatch('idle',   null),
+  death:  ()  => dispatch('death',  TONES.death),
+  best:   ()  => dispatch('best',   TONES.best),
+};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = 'attract';
+let score = 0, shakeT = 0;
+let dist = 0;                    // metres run
+let zPos = 0;                    // world z travelled
+let speed = SPEED0;
+let lane = 0, playerX = 0;       // lane: -1/0/1 target, playerX lerped
+let jumpT = 0, slideT = 0;       // ticks remaining
+let deadAir = 0.25;              // 0 (far) .. 1 (caught)
+let hypeMeter = 0, hypeUntil = 0, rocketUntil = 0, magnetUntil = 0, shieldOn = false;
+let mowCombo = 0, lastMowMs = 0;
+let floorIdx = 0, nextIdleMs = 0;
+let bestScore = 0, topScore = 0, pbAnnounced = false, topAnnounced = false, callout = null;
+let ents = [];                   // {z, lane, kind, taken/dead, moveDir?}
+let parts = [], floats = [];
+let stumbleFlash = 0;
+let curve = 0, curvePhase = 0;   // gentle corridor curve (visual)
+let bobPh = 0;
+
+try { bestScore = parseInt(localStorage.getItem('hs_' + SLUG) || '0', 10); } catch (e) {}
+fetch('/api/scores?game=' + SLUG).then(r => r.json())
+  .then(d => { if (d.scores && d.scores[0]) topScore = d.scores[0].s | 0; }).catch(() => {});
+
+// ── SPAWNING (fairness: every pattern is dodgeable by construction) ──────────
+// kinds: sofa (jump) · mic (slide) · rack (lane-blocker) · chair (crosses lanes)
+//        troll (lane-blocker, mowable) · pop (lollipop) · rocket/shield/magnet
+let nextSpawnZ = 6;    // ABSOLUTE z of the next wave; entities store z RELATIVE to player
+function spawnWave() {
+  const d = Math.min(1, dist / 3500);
+  const z = nextSpawnZ - zPos;   // convert to relative-ahead at spawn time
+  const r = Math.random();
+  const lanes = [-1, 0, 1];
+  if (r < 0.24) {
+    // sofa row: 1-2 lanes blocked low — jumpable in-lane
+    const block = d > 0.5 && Math.random() < 0.4 ? 2 : 1;
+    const picked = lanes.sort(() => Math.random() - 0.5).slice(0, block);
+    picked.forEach(L => ents.push({ z, lane: L, kind: 'sofa' }));
+  } else if (r < 0.46) {
+    // boom mic: overhead across 1-3 lanes — slide under
+    const span = Math.random() < 0.5 ? [-1, 0, 1] : [lanes[Math.floor(Math.random() * 3)]];
+    span.forEach(L => ents.push({ z, lane: L, kind: 'mic' }));
+  } else if (r < 0.66) {
+    // rack wall: block 2 lanes, ALWAYS leave one open (fairness by construction)
+    const open = lanes[Math.floor(Math.random() * 3)];
+    lanes.filter(L => L !== open).forEach(L => ents.push({ z, lane: L, kind: 'rack' }));
+  } else if (r < 0.80 && dist > 400) {
+    // troll standing in a lane — dodge or mow with rocket/hype
+    ents.push({ z, lane: lanes[Math.floor(Math.random() * 3)], kind: 'troll' });
+  } else if (r < 0.90 && dist > 800) {
+    // rolling chair: crosses lanes — time it
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    ents.push({ z, lane: -dir * 1.6, kind: 'chair', moveDir: dir });
+  } else {
+    // breather: lollipop arc down a lane
+    const L = lanes[Math.floor(Math.random() * 3)];
+    for (let i = 0; i < 4; i++) ents.push({ z: z + i * 0.55, lane: L, kind: 'pop' });
+  }
+  // bonus rolls
+  if (Math.random() < 0.30) {
+    const L = lanes[Math.floor(Math.random() * 3)];
+    for (let i = 0; i < 3; i++) ents.push({ z: z + 1.2 + i * 0.5, lane: L, kind: 'pop' });
+  }
+  if (Math.random() < 0.062) {
+    const kinds = ['rocket', 'shield', 'magnet'];
+    ents.push({ z: z + 1.0, lane: lanes[Math.floor(Math.random() * 3)],
+                kind: kinds[Math.floor(Math.random() * 3)] });
+  }
+  // spacing shrinks with difficulty but NEVER below reaction distance (absolute marker)
+  nextSpawnZ = zPos + z + Math.max(2.6, 4.6 - d * 1.7) + Math.random() * 1.4;
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+function initGame() {
+  score = 0; dist = 0; zPos = 0; speed = SPEED0;
+  lane = 0; playerX = 0; jumpT = 0; slideT = 0;
+  deadAir = 0.25;
+  hypeMeter = 0; hypeUntil = 0; rocketUntil = 0; magnetUntil = 0; shieldOn = false;
+  mowCombo = 0; floorIdx = 0;
+  pbAnnounced = false; topAnnounced = false; callout = null;
+  ents = []; parts = []; floats = [];
+  nextSpawnZ = 6; stumbleFlash = 0;
+  nextIdleMs = Date.now() + 15000 + Math.random() * 12000;
+  for (let i = 0; i < 5; i++) spawnWave();
+}
+
+// ── INPUT — swipes; mic 3-way + double-tap ───────────────────────────────────
+const DEADZONE = 17;
+let touchStart = null, micTapTimer = null;
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top)  * DPR - VIEW.oy) / VIEW.scale };
+}
+const MIC_ZONE = { x: WORLD_W - 52, y: 6, w: 46, h: 40 };
+function cycleSfxMode() {
+  sfxMode = sfxMode === 'tones' ? 'voice' : sfxMode === 'voice' ? 'mute' : 'tones';
+  muted = sfxMode === 'mute';
+  try { localStorage.setItem('sfxMode_' + SLUG, sfxMode); } catch (e) {}
+  if (sfxMode !== 'mute') loadVoicePack();
+}
+function onMicTap() {
+  unlockAudio();
+  if (sfxMode !== 'voice') { cycleSfxMode(); return; }
+  if (micTapTimer) {
+    clearTimeout(micTapTimer); micTapTimer = null;
+    stepVoiceOff = !stepVoiceOff;
+    try { localStorage.setItem('jr_stepVoiceOff', stepVoiceOff ? '1' : '0'); } catch (e) {}
+    return;
+  }
+  micTapTimer = setTimeout(() => { micTapTimer = null; cycleSfxMode(); }, 260);
+}
+function doLane(dir) {
+  const nl = Math.max(-1, Math.min(1, lane + dir));
+  if (nl !== lane) { lane = nl; sfx.lane(); }
+}
+function doJump() {
+  if (jumpT <= 0 && slideT <= 0) { jumpT = JUMP_TICKS; sfx.jump(); }
+}
+function doSlide() {
+  if (slideT <= 0 && jumpT <= 0) { slideT = SLIDE_TICKS; sfx.slide(); }
+}
+function onDown(e) {
+  const p = e.touches ? e.touches[0] : e;
+  const w = toWorld(p.clientX, p.clientY);
+  if (w.x >= MIC_ZONE.x && w.x <= MIC_ZONE.x + MIC_ZONE.w && w.y >= MIC_ZONE.y && w.y <= MIC_ZONE.y + MIC_ZONE.h) {
+    onMicTap();
+    if (e.cancelable) e.preventDefault();
+    touchStart = null;
+    return;
+  }
+  touchStart = { x: p.clientX, y: p.clientY };
+  if (e.cancelable) e.preventDefault();
+}
+function onUp(e) {
+  if (!touchStart || state !== 'playing') { touchStart = null; return; }
+  const p = e.changedTouches ? e.changedTouches[0] : e;
+  const dx = p.clientX - touchStart.x, dy = p.clientY - touchStart.y;
+  if (Math.hypot(dx, dy) >= DEADZONE) {
+    if (Math.abs(dx) > Math.abs(dy)) doLane(dx > 0 ? 1 : -1);
+    else if (dy < 0) doJump();
+    else doSlide();
+  }
+  touchStart = null;
+  if (e.cancelable) e.preventDefault();
+}
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchend', onUp, { passive: false });
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mouseup', onUp);
+document.addEventListener('keydown', e => {
+  if (state !== 'playing') return;
+  if (e.key === 'ArrowLeft') doLane(-1);
+  if (e.key === 'ArrowRight') doLane(1);
+  if (e.key === 'ArrowUp') doJump();
+  if (e.key === 'ArrowDown') doSlide();
+});
+
+// ── JUICE ────────────────────────────────────────────────────────────────────
+function burst(x, y, n, c0, c1) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 1.2 + Math.random() * 2.6;
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2,
+                 t: 0, life: 24 + Math.random() * 14, s0: 3, s1: 0.6,
+                 c0: c0 || INK, c1: c1 || '#ffffff' });
+  }
+}
+function confetti(n) {
+  const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8', '#c084fc', '#ff9900'];
+  for (let i = 0; i < n; i++)
+    parts.push({ x: Math.random() * WORLD_W, y: -10 - Math.random() * 30,
+                 vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random() * 2,
+                 t: 0, life: 60 + Math.random() * 40, s0: 2.5, s1: 1.5,
+                 c0: cols[i % 6], c1: cols[(i + 3) % 6] });
+}
+function float(x, y, text, color) {
+  floats.push({ x, y, text, a: 1.4, vy: -1.1, color: color || '#fff' });
+}
+
+// ── COLLISION / STUMBLE / DEATH ──────────────────────────────────────────────
+function playerElev() { // 0 grounded, up to JUMP_H at apex
+  if (jumpT <= 0) return 0;
+  const k = 1 - jumpT / JUMP_TICKS;               // 0..1
+  return JUMP_H * 4 * k * (1 - k);                // parabola
+}
+function stumble() {
+  if (state === 'attract') { deadAir = Math.min(deadAir, 0.3); return; }   // demo never dies
+  if (shieldOn) {
+    shieldOn = false;
+    sfx.save();
+    float(WORLD_W / 2, 460, '🛡 SAVED!', '#4dd9f5');
+    burst(WORLD_W / 2, 480, 14, '#4dd9f5');
+    return;
+  }
+  deadAir += STATIC_STUMBLE;
+  speed = Math.max(SPEED0 * 0.75, speed * 0.55);
+  stumbleFlash = 16;
+  shakeT = 12;
+  sfx.stumble();
+  burst(WORLD_W / 2, 500, 14, '#ffffff', '#ff6b35');
+  if (deadAir >= 1) die();
+}
+function die() {
+  if (state === 'attract') { deadAir = 0.25; return; }   // demo never shows game-over
+  if (state !== 'playing') return;
+  state = 'ended';
+  sfx.death();
+  shakeT = 16;
+  if (score > bestScore) {
+    bestScore = score;
+    try { localStorage.setItem('hs_' + SLUG, bestScore); } catch (e) {}
+  }
+  setTimeout(() => {
+    if (window.ArcadeScores) {
+      ArcadeScores.show({ game: SLUG, title: TITLE, score: score, accent: INK,
+                          onClose: () => { initGame(); state = 'playing'; sfx.start(); } });
+    } else { initGame(); state = 'playing'; }
+  }, 900);
+}
+
+// ── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dt) {
+  if (state === 'attract') attractAI(dt);
+  if (state !== 'playing' && state !== 'attract') { stepParts(dt); return; }
+  const now = Date.now();
+  const hype = hypeUntil > now;
+  const rocket = rocketUntil > now;
+
+  // speed ramps with distance; rocket/hype boost it
+  const targetSpeed = Math.min(SPEED_MAX, SPEED0 + dist * SPEED_RAMP) *
+                      (rocket ? 1.55 : hype ? 1.25 : 1);
+  speed += (targetSpeed - speed) * 0.03 * dt;
+  zPos += speed * dt;
+  const newDist = Math.floor(zPos * METRES_PER_Z);
+  if (newDist > dist) { score += (newDist - dist); dist = newDist; }
+  bobPh += speed * 3.2 * dt;
+
+  // gentle visual curve drifts
+  curvePhase += 0.003 * dt;
+  curve = Math.sin(curvePhase) * 0.35 + Math.sin(curvePhase * 0.37) * 0.2;
+
+  // lane lerp
+  playerX += (lane - playerX) * LANE_LERP * dt;
+
+  // timers
+  if (jumpT > 0) jumpT -= dt;
+  if (slideT > 0) slideT -= dt;
+
+  // dead air pressure
+  deadAir = Math.max(0, Math.min(1.2, deadAir + STATIC_CREEP * dt - (rocket ? 0.004 : STATIC_DECAY) * dt));
+  if (deadAir >= 1) { die(); return; }
+
+  // floors
+  if (floorIdx < FLOORS.length - 1 && dist >= FLOORS[floorIdx + 1].at) {
+    floorIdx++;
+    sfx.floor(floorIdx);
+    float(WORLD_W / 2, 200, '🏢 ' + FLOORS[floorIdx].name.toUpperCase(), '#7dffb8');
+    confetti(18);
+  }
+
+  // entities approach
+  const magnet = magnetUntil > now;
+  for (const e of ents) {
+    if (e.dead) continue;
+    e.z -= speed * dt;
+    if (e.kind === 'chair') e.lane += e.moveDir * 0.016 * dt;
+    // magnet pulls lollipops toward player lane once close
+    if (magnet && e.kind === 'pop' && e.z < 4) e.lane += (playerX - e.lane) * 0.15 * dt;
+
+    // resolve at the hit window
+    if (e.z <= HIT_Z && e.z > HIT_Z - HIT_WINDOW) {
+      const inLane = Math.abs(e.lane - playerX) < 0.5;
+      if (!inLane) continue;
+      const elev = playerElev();
+      if (e.kind === 'pop') {
+        e.dead = true;
+        const v = hype ? 50 : 25;
+        score += v;
+        float(WORLD_W / 2 + e.lane * 90, 440, '+' + v, '#ff7bd5');
+        sfx.pickup();
+        hypeMeter = Math.min(HYPE_NEED, hypeMeter + 1);
+        if (hypeMeter >= HYPE_NEED && !hype) {
+          hypeMeter = 0;
+          hypeUntil = now + HYPE_MS;
+          sfx.hype();
+          float(WORLD_W / 2, 380, '🔥 HYPE MODE!', '#ffd23d');
+          confetti(24);
+        }
+      } else if (e.kind === 'rocket') { e.dead = true; rocketUntil = now + ROCKET_MS; sfx.rocket(); float(WORLD_W / 2, 400, '🚀 ON AIR!', '#ff9900'); }
+      else if (e.kind === 'shield') { e.dead = true; shieldOn = true; sfx.shield(); float(WORLD_W / 2, 400, '🛡 SHIELD', '#4dd9f5'); }
+      else if (e.kind === 'magnet') { e.dead = true; magnetUntil = now + MAGNET_MS; sfx.magnet(); float(WORLD_W / 2, 400, '🧲 MAGNET', '#c084fc'); }
+      else if (e.kind === 'troll') {
+        if (rocket || hype) {
+          e.dead = true;
+          mowCombo = (now - lastMowMs < 3000) ? Math.min(mowCombo + 1, 20) : 1;
+          lastMowMs = now;
+          const pts = 50 * mowCombo;
+          score += pts;
+          sfx.mow(mowCombo);
+          float(WORLD_W / 2 + e.lane * 90, 430, mowCombo >= 2 ? `+${pts} ×${mowCombo}` : '+' + pts, '#ffd23d');
+          burst(WORLD_W / 2 + e.lane * 90, 460, 14, '#9fe8ff', '#c084fc');
+        } else { e.dead = true; stumble(); }
+      }
+      else if (e.kind === 'sofa') {
+        if (elev > 30) { /* cleared */ if (!e.scored) { e.scored = true; } }
+        else { e.dead = true; stumble(); }
+      }
+      else if (e.kind === 'mic') {
+        // overheads: sliding = safe (mic passes above); upright OR jumping into it = hit
+        if (slideT <= 0) { e.dead = true; stumble(); }
+      }
+      else if (e.kind === 'rack' || e.kind === 'chair') {
+        e.dead = true; stumble();
+      }
+    }
+  }
+  // mic special-case: sliding under = safe, so only resolve when NOT sliding
+  // (handled above — slid case leaves the mic alive to pass overhead visually)
+
+  ents = ents.filter(e => !e.dead && e.z > -1.5 && Math.abs(e.lane) < 2.4);
+  while (nextSpawnZ - zPos < 30) spawnWave();
+
+  // callouts
+  if (!topAnnounced && topScore > 0 && score > topScore) {
+    topAnnounced = true; pbAnnounced = true;
+    showCallout('top');
+  } else if (!pbAnnounced && bestScore > 0 && score > bestScore) {
+    pbAnnounced = true;
+    showCallout('pb');
+  }
+
+  if (sfxMode === 'voice' && now > nextIdleMs && state === 'playing') {
+    nextIdleMs = now + 22000 + Math.random() * 20000;
+    sfx.idle();
+  }
+
+  if (stumbleFlash > 0) stumbleFlash -= dt;
+  stepParts(dt);
+}
+function stepParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.t += dt;
+    if (p.t > p.life) { parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.1 * dt;
+  }
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i];
+    f.y += f.vy * dt; f.a -= 0.025 * dt;
+    if (f.a <= 0) floats.splice(i, 1);
+  }
+}
+function showCallout(kind) {
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('jr_callout_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('jr_callout_who', who);
+  } catch (e) {}
+  callout = { who, kind, until: Date.now() + 3200 };
+  confetti(kind === 'top' ? 60 : 36);
+  const line = jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO);
+  if (sfxMode === 'voice') jimmySay(line);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line), 600); }
+  callout.text = line;
+}
+
+// ── ATTRACT AI — dodges competently, silent ──────────────────────────────────
+function attractAI(dt) {
+  // look at the nearest threat in the hit corridor and react like a decent player
+  let nearest = null;
+  for (const e of ents) {
+    if (e.dead || e.kind === 'pop') continue;
+    if (e.z > HIT_Z && e.z < 5 && (!nearest || e.z < nearest.z)) nearest = e;
+  }
+  if (nearest && nearest.z < 2.4) {
+    const inLane = Math.abs(nearest.lane - playerX) < 0.5;
+    if (inLane) {
+      if (nearest.kind === 'sofa') { if (jumpT <= 0) jumpT = JUMP_TICKS; }
+      else if (nearest.kind === 'mic') { if (slideT <= 0) slideT = SLIDE_TICKS; }
+      else {
+        // lane-dodge: find an open lane at that z
+        const blocked = ents.filter(x => !x.dead && x.kind !== 'pop' && Math.abs(x.z - nearest.z) < 0.8)
+                            .map(x => Math.round(x.lane));
+        for (const L of [0, -1, 1]) if (!blocked.includes(L)) { lane = L; break; }
+      }
+    }
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+// lerpCol returns HEX so its output can feed back into lerpCol/shade — an rgb(...)
+// return here made shade() parse 'gb(' as hex → NaN → invalid fillStyle → the canvas
+// silently kept the previous style and the whole corridor painted as background black.
+function lerpCol(a, b, k) {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  const h = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return '#' + h(pa[0] + (pb[0] - pa[0]) * k) + h(pa[1] + (pb[1] - pa[1]) * k) + h(pa[2] + (pb[2] - pa[2]) * k);
+}
+function shade(hex, k) { return lerpCol(hex, '#000000', k); }
+
+// single source of truth for the fake-curve x drift — corridor strips AND entities
+// use this same function so obstacles always sit exactly on their lane's drawn path
+function corridorShift(z) { return curve * z * z * 2.2; }
+
+function drawCorridor() {
+  const F = FLOORS[floorIdx];
+  const FN = FLOORS[Math.min(floorIdx + 1, FLOORS.length - 1)];
+  const span = Math.max(1, FN.at - F.at);
+  const bk = Math.min(1, Math.max(0, (dist - F.at) / span));
+  const wallC = lerpCol(F.wall, FN.wall, bk);
+  const floorC = lerpCol(F.floor, FN.floor, bk);
+  const glowC = lerpCol(F.glow, FN.glow, bk);
+
+  // sky/void above horizon
+  ctx.fillStyle = shade(wallC, 0.75);
+  ctx.fillRect(0, 0, WORLD_W, HORIZON);
+
+  // segment strips — EXPONENTIAL z spacing so screen-space bands stay even near the
+  // camera (linear z gave giant stripes in the foreground); draw back-to-front
+  const zAt = n => 0.30 * Math.pow(1.095, n);
+  let prev = null;
+  for (let n = DRAW_SEGS; n >= 1; n--) {
+    const z = zAt(n);
+    const zNext = zAt(n + 1);
+    const segIdx = Math.floor((zPos + z) / 0.8);       // world-anchored band pattern
+    const sc = CAM_D / z;
+    const scN = CAM_D / zNext;
+    const y  = HORIZON + sc * 150;
+    const yN = HORIZON + scN * 150;
+    const halfW  = sc * 1.9 * 190;
+    const halfWN = scN * 1.9 * 190;
+    const cx  = WORLD_W / 2 + sc * ((-playerX * LANE_W) * 190 + corridorShift(z));
+    const cxN = WORLD_W / 2 + scN * ((-playerX * LANE_W) * 190 + corridorShift(zNext));
+    const fog = Math.min(0.72, n / DRAW_SEGS * 0.85);
+
+    // floor strip (alternating boards, scrolls with travel)
+    ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.07), fog);
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
+    ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
+    ctx.closePath(); ctx.fill();
+
+    // lane divider dashes — bright enough to read the 3 lanes at a glance
+    if (segIdx % 2 === 0) {
+      ctx.fillStyle = shade(lerpCol(glowC, '#ffffff', 0.35), fog * 0.7);
+      for (const L of [-0.5, 0.5]) {
+        const lx = cx + sc * (L * LANE_W) * 190;
+        const dw = Math.max(2, 3.4 * sc);
+        ctx.fillRect(lx - dw / 2, Math.min(y, yN), dw, Math.abs(y - yN) * 0.6 + 1);
+      }
+    }
+
+    // walls: verticals from floor edge up, converging
+    const wallH  = sc * 340;
+    const wallHN = scN * 340;
+    ctx.fillStyle = shade(wallC, fog);
+    ctx.beginPath();  // left wall
+    ctx.moveTo(cx - halfW, y); ctx.lineTo(cx - halfW, y - wallH);
+    ctx.lineTo(cxN - halfWN, yN - wallHN); ctx.lineTo(cxN - halfWN, yN);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();  // right wall
+    ctx.moveTo(cx + halfW, y); ctx.lineTo(cx + halfW, y - wallH);
+    ctx.lineTo(cxN + halfWN, yN - wallHN); ctx.lineTo(cxN + halfWN, yN);
+    ctx.closePath(); ctx.fill();
+
+    // wall dressing every few segments: glow strip + poster
+    if (segIdx % 4 === 0) {
+      ctx.fillStyle = shade(glowC, fog * 0.6);
+      ctx.fillRect(cx - halfW + 2, y - wallH * 0.72, Math.max(1.5, 4 * sc * 2), wallH * 0.4);
+      ctx.fillRect(cx + halfW - 2 - Math.max(1.5, 4 * sc * 2), y - wallH * 0.72, Math.max(1.5, 4 * sc * 2), wallH * 0.4);
+    }
+    if (segIdx % 7 === 0) {
+      ctx.fillStyle = shade(lerpCol(wallC, '#ffffff', 0.18), fog);
+      ctx.fillRect(cx - halfW + 6 * sc * 2, y - wallH * 0.55, 22 * sc * 2, 16 * sc * 2);
+    }
+
+    // ceiling
+    const ceilY  = y - wallH;
+    const ceilYN = yN - wallHN;
+    ctx.fillStyle = shade(wallC, Math.min(0.85, fog + 0.25));
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, ceilY); ctx.lineTo(cx + halfW, ceilY);
+    ctx.lineTo(cxN + halfWN, ceilYN); ctx.lineTo(cxN - halfWN, ceilYN);
+    ctx.closePath(); ctx.fill();
+    // hanging cable every 9 segs
+    if (segIdx % 9 === 0) {
+      ctx.strokeStyle = shade('#111111', fog);
+      ctx.lineWidth = Math.max(1, 2 * sc * 2);
+      ctx.beginPath(); ctx.moveTo(cx, ceilY); ctx.lineTo(cx, ceilY + 18 * sc * 2); ctx.stroke();
+    }
+    prev = { y, cx, halfW };
+  }
+  return { glowC };
+}
+
+function entScreen(e) {
+  const z = Math.max(0.14, e.z);
+  const sc = CAM_D / z;
+  return {
+    x: WORLD_W / 2 + sc * (((e.lane - playerX) * LANE_W) * 190 + corridorShift(z)),
+    y: HORIZON + sc * 150,
+    s: sc,
+  };
+}
+function drawEnt(e) {
+  const p = entScreen(e);
+  const u = p.s * 2;                       // unit scale
+  if (p.y < HORIZON - 4 || p.s < 0.05) return;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  if (e.kind === 'pop') {
+    ctx.fillStyle = '#ff7bd5';
+    ctx.beginPath(); ctx.arc(0, -10 * u, 5.5 * u, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-0.8 * u, -5 * u, 1.6 * u, 6 * u);
+  } else if (e.kind === 'sofa') {
+    ctx.fillStyle = '#8a4a3a';
+    ctx.fillRect(-24 * u, -16 * u, 48 * u, 16 * u);
+    ctx.fillStyle = '#a95a46';
+    ctx.fillRect(-24 * u, -20 * u, 48 * u, 6 * u);
+    ctx.fillStyle = '#6a3a2e';
+    ctx.fillRect(-26 * u, -18 * u, 5 * u, 18 * u);
+    ctx.fillRect(21 * u, -18 * u, 5 * u, 18 * u);
+  } else if (e.kind === 'mic') {
+    // overhead boom: bar high across the lane + dangling mic
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = Math.max(1.5, 3 * u);
+    ctx.beginPath(); ctx.moveTo(-30 * u, -52 * u); ctx.lineTo(30 * u, -52 * u); ctx.stroke();
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-4 * u, -52 * u, 8 * u, 14 * u);
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(0, -34 * u, 6 * u, 0, Math.PI * 2); ctx.fill();
+  } else if (e.kind === 'rack') {
+    ctx.fillStyle = '#4a4136';
+    ctx.fillRect(-22 * u, -46 * u, 44 * u, 46 * u);
+    ctx.fillStyle = '#5c5244';
+    for (let i = 0; i < 3; i++) ctx.fillRect(-20 * u, (-40 + i * 14) * u, 40 * u, 3 * u);
+    ctx.fillStyle = '#2e2820';
+    for (let i = 0; i < 6; i++) ctx.fillRect((-17 + i * 6) * u, -37 * u, 4 * u, 9 * u);
+  } else if (e.kind === 'chair') {
+    ctx.fillStyle = '#20242c';
+    ctx.fillRect(-9 * u, -26 * u, 18 * u, 20 * u);
+    ctx.fillStyle = '#2c313c';
+    ctx.fillRect(-9 * u, -34 * u, 18 * u, 9 * u);
+    ctx.beginPath(); ctx.arc(0, -3 * u, 4 * u, 0, Math.PI * 2); ctx.fill();
+  } else if (e.kind === 'troll') {
+    ctx.fillStyle = '#6a5acd';
+    ctx.beginPath(); ctx.arc(0, -16 * u, 12 * u, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-6 * u, -20 * u, 4 * u, 4 * u); ctx.fillRect(2 * u, -20 * u, 4 * u, 4 * u);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-5 * u, -19 * u, 2 * u, 2 * u); ctx.fillRect(3 * u, -19 * u, 2 * u, 2 * u);
+    ctx.fillStyle = '#2a1a5d';
+    ctx.fillRect(-5 * u, -9 * u, 10 * u, 2 * u);
+  } else { // powerups
+    ctx.font = `${Math.max(8, 16 * u)}px sans-serif`;
+    ctx.textAlign = 'center';
+    const bob = Math.sin(Date.now() / 260 + e.z) * 3 * u;
+    ctx.fillText(e.kind === 'rocket' ? '🚀' : e.kind === 'shield' ? '🛡️' : '🧲', 0, -12 * u + bob);
+  }
+  ctx.restore();
+}
+
+function drawJimmy() {
+  // back view, bottom centre-ish at his lane; run cycle + jump/slide poses
+  const now = Date.now();
+  const hype = hypeUntil > now;
+  const rocket = rocketUntil > now;
+  const elev = playerElev();
+  const px = WORLD_W / 2;
+  const bob = Math.sin(bobPh) * 2.5 * (jumpT > 0 ? 0 : 1);
+  const py = 560 - elev + bob;
+  const run = Math.floor(bobPh * 1.6) % 4;
+  const legA = [4, 0, -4, 0][run];
+  const sliding = slideT > 0;
+
+  // shadow stays on the floor — detaches on jump
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(px, 570, 28 - elev * 0.12, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(1.3, 1.3);   // presence — he's the star of the corridor
+  if (hype) {
+    const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8'];
+    ctx.fillStyle = cols[Math.floor(now / 90) % 4];
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.arc(0, -26, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (shieldOn) {
+    ctx.strokeStyle = '#4dd9f5';
+    ctx.globalAlpha = 0.7; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, -26, 36, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (sliding) {
+    // slide: low silhouette
+    ctx.fillStyle = '#35e0c8';
+    ctx.fillRect(-16, -18, 32, 14);
+    ctx.fillStyle = '#f2c79b';
+    ctx.fillRect(-8, -28, 16, 11);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-8, -30, 16, 4);
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(-10, -27, 3, 7); ctx.fillRect(7, -27, 3, 7);
+    ctx.fillStyle = '#22333f';
+    ctx.fillRect(-18, -8, 14, 6); ctx.fillRect(4, -8, 14, 6);
+  } else {
+    // legs (run cycle)
+    ctx.fillStyle = '#22333f';
+    ctx.fillRect(-9, -14, 7, 14 + legA);
+    ctx.fillRect(2, -14, 7, 14 - legA);
+    // shoes
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(-10, -2 + legA, 9, 4);
+    ctx.fillRect(1, -2 - legA, 9, 4);
+    // hoodie torso (back view)
+    ctx.fillStyle = '#35e0c8';
+    ctx.fillRect(-13, -40, 26, 27);
+    ctx.fillStyle = '#2ab8a4';
+    ctx.fillRect(-13, -18, 26, 5);
+    // hood detail
+    ctx.fillStyle = '#2ab8a4';
+    ctx.fillRect(-9, -42, 18, 6);
+    // arms pumping
+    ctx.fillStyle = '#35e0c8';
+    ctx.fillRect(-18, -36 + legA * 0.8, 6, 16);
+    ctx.fillRect(12, -36 - legA * 0.8, 6, 16);
+    // head (back) + headphones
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-9, -56, 18, 15);
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(-12, -52, 3, 8); ctx.fillRect(9, -52, 3, 8);
+    ctx.fillRect(-10, -58, 20, 3);
+  }
+  if (rocket) {
+    ctx.fillStyle = '#ff9900';
+    const fl = 8 + Math.random() * 8;
+    ctx.fillRect(-5, sliding ? -2 : 0, 4, fl);
+    ctx.fillRect(2, sliding ? -2 : 0, 4, fl);
+  }
+  ctx.restore();
+}
+
+function render() {
+  const now = Date.now();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#04060a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (shakeT > 0) { shakeT--; ctx.translate((Math.random() - .5) * shakeT * 0.8, (Math.random() - .5) * shakeT * 0.8); }
+
+  drawCorridor();
+
+  // entities back-to-front
+  const sorted = [...ents].filter(e => !e.dead && e.z > 0.13 && e.z < 14).sort((a, b) => b.z - a.z);
+  for (const e of sorted) drawEnt(e);
+
+  drawJimmy();
+
+  // speed lines when fast
+  const spdK = (speed - SPEED0) / (SPEED_MAX - SPEED0);
+  if (spdK > 0.35 || rocketUntil > now) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.05 + spdK * 0.1})`;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + now * 0.001;
+      const r1 = 210 + (now * 0.4 + i * 43) % 130;
+      ctx.beginPath();
+      ctx.moveTo(WORLD_W / 2 + Math.cos(a) * r1, HORIZON + Math.sin(a) * r1 * 0.8);
+      ctx.lineTo(WORLD_W / 2 + Math.cos(a) * (r1 + 36), HORIZON + Math.sin(a) * (r1 + 36) * 0.8);
+      ctx.stroke();
+    }
+  }
+
+  // particles
+  for (const p of parts) {
+    const kk = p.t / p.life, F = 0.08;
+    const fade = kk < F ? kk / F : kk > 1 - F ? (1 - kk) / F : 1;
+    ctx.globalAlpha = Math.min(1, fade);
+    ctx.fillStyle = kk < 0.5 ? p.c0 : p.c1;
+    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.4, p.s0 + (p.s1 - p.s0) * kk), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // THE DEAD AIR — static creeping in from the screen edges with proximity
+  if (deadAir > 0.05) {
+    const w = deadAir * 90;
+    for (let i = 0; i < deadAir * 260; i++) {
+      const side = Math.random();
+      let nx, ny;
+      if (side < 0.35) { nx = Math.random() * w; ny = Math.random() * WORLD_H; }
+      else if (side < 0.7) { nx = WORLD_W - Math.random() * w; ny = Math.random() * WORLD_H; }
+      else { nx = Math.random() * WORLD_W; ny = WORLD_H - Math.random() * w * 1.3; }
+      const v = Math.random();
+      ctx.fillStyle = v > 0.6 ? 'rgba(230,230,230,0.5)' : v > 0.3 ? 'rgba(140,140,140,0.4)' : 'rgba(60,60,60,0.4)';
+      ctx.fillRect(nx, ny, 2.5, 2.5);
+    }
+    if (deadAir > 0.55) {
+      ctx.fillStyle = `rgba(255,50,50,${(deadAir - 0.55) * 0.25 * (Math.sin(now * 0.01) * 0.5 + 0.5)})`;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    }
+  }
+  if (stumbleFlash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${stumbleFlash / 16 * 0.3})`;
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  }
+
+  // HUD
+  ctx.font = 'bold 20px "Courier New", monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE ' + score, 12, 10);
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillStyle = '#ffd9a8';
+  ctx.fillText(dist + 'm · ' + FLOORS[floorIdx].name.toUpperCase(), 12, 34);
+  // hype meter
+  ctx.fillStyle = '#222';
+  ctx.fillRect(12, 54, 90, 8);
+  const hk = hypeUntil > now ? (hypeUntil - now) / HYPE_MS : hypeMeter / HYPE_NEED;
+  ctx.fillStyle = hypeUntil > now ? '#ffd23d' : '#ff7bd5';
+  ctx.fillRect(12, 54, 90 * Math.max(0, Math.min(1, hk)), 8);
+  // dead-air proximity bar
+  ctx.fillStyle = '#222';
+  ctx.fillRect(12, 68, 90, 6);
+  ctx.fillStyle = deadAir > 0.66 ? '#ff4444' : deadAir > 0.4 ? '#ffaa33' : '#5a5a5a';
+  ctx.fillRect(12, 68, 90 * Math.min(1, deadAir), 6);
+  ctx.font = '9px "Courier New", monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText('DEAD AIR', 12, 77);
+  // mic
+  ctx.font = '22px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.globalAlpha = (sfxMode === 'voice' && stepVoiceOff) ? 0.5 : 1;
+  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 12, 12);
+  ctx.globalAlpha = 1;
+
+  // floaters
+  ctx.font = 'bold 15px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  for (const fl of floats) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, fl.a));
+    ctx.fillStyle = fl.color;
+    ctx.fillText(fl.text, fl.x, fl.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // callout banner
+  if (callout && now < callout.until) {
+    const ink2 = '#4dd9f5';
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(20,8,3,0.9)';
+    ctx.fillRect(WORLD_W / 2 - 150, 96, 300, 46);
+    ctx.strokeStyle = ink2; ctx.lineWidth = 2;
+    ctx.strokeRect(WORLD_W / 2 - 150, 96, 300, 46);
+    ctx.fillStyle = ink2;
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText('JIMMY', WORLD_W / 2, 104);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.fillText(callout.text || '', WORLD_W / 2, 120);
+    ctx.globalAlpha = 1;
+  } else if (callout && now >= callout.until) callout = null;
+
+  if (state === 'attract') {
+    ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now * 0.005);
+    ctx.fillText('INSERT COIN', WORLD_W / 2, WORLD_H * 0.86);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── LOOP (dt in 60fps ticks) ─────────────────────────────────────────────────
+let lastMs = null;
+function loop() {
+  const nowMs = performance.now();
+  let dt = 1;
+  if (lastMs !== null) {
+    dt = (nowMs - lastMs) / (1000 / 60);
+    dt = Math.min(Math.max(dt, 0.1), 3);
+  }
+  lastMs = nowMs;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('coinBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  unlockAudio();
+  initGame();
+  state = 'playing';
+  sfx.start();
+});
+
+initGame();
+requestAnimationFrame(loop);
+
+// headless QA hooks
+window.__jr = {
+  get state() { return state; }, set state(v) { state = v; },
+  get score() { return score; }, set score(v) { score = v; },
+  get dist() { return dist; }, get speed() { return speed; },
+  get lane() { return lane; }, set lane(v) { lane = v; },
+  get playerX() { return playerX; }, set playerX(v) { playerX = v; },
+  get jumpT() { return jumpT; }, get slideT() { return slideT; },
+  get deadAir() { return deadAir; }, set deadAir(v) { deadAir = v; },
+  get ents() { return ents; }, set ents(v) { ents = v; },
+  get shieldOn() { return shieldOn; }, set shieldOn(v) { shieldOn = v; },
+  get hypeUntil() { return hypeUntil; }, get rocketUntil() { return rocketUntil; },
+  set rocketUntil(v) { rocketUntil = v; },
+  get floorIdx() { return floorIdx; }, get callout() { return callout; },
+  get sfxMode() { return sfxMode; }, set sfxMode(v) { sfxMode = v; },
+  get VO() { return VO; }, get VO_LINES() { return VO_LINES; },
+  set bestScore(v) { bestScore = v; }, set topScore(v) { topScore = v; },
+  update, initGame, die, stumble, doJump, doSlide, doLane, djb2vo, spawnWave,
+  playerElev,
+};
+})();
+</script>
+</body>
+</html>

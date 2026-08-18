@@ -43,6 +43,21 @@
   ],
   "games": [
     {
+      "id": "jimmy-run",
+      "name": "JIMMY RUN",
+      "emoji": "🏃",
+      "genre": "TEMPLE RUN × MINION RUSH",
+      "url": "games/jimmy-run.html",
+      "ai_file": "games/jimmy-run.html",
+      "status": "wip",
+      "special": "Game Lab — first PSEUDO-3D RUNNER cabinet",
+      "note": "Jimmy sprints the studio corridors in full pseudo-3D while the DEAD AIR closes in behind. Swipe lanes, jump sofas, slide under boom mics, dodge racks + rolling chairs. Lollipops fill the HYPE meter; rocket mows the trolls. 7 studio floors, full Jimmy+Joe voice mode.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-08-18",
+      "ready": true,
+      "ready_date": "2026-08-18"
+    },
+    {
       "id": "dead-air-dash",
       "name": "DEAD AIR DASH",
       "emoji": "📡",

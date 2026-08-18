@@ -29,6 +29,13 @@ function bumpPlays(id) {
 /* ── Per-game worlds ──────────────────────────────────────── */
 
 const WORLDS = {
+  'jimmy-run': {
+    ink: '#ff6b35', dim: '#5c2814', pit: '#140a04', glowsoft: 'rgba(255,107,53,0.22)',
+    genre: 'TEMPLE RUN × MINION RUSH',
+    quote: '"he ran past the writers room at full sprint. the deadline noticed. deadlines always notice."',
+    by: 'JOE',
+    attract: runAttract,
+  },
   'dead-air-dash': {
     ink: '#35e0c8', dim: '#11544b', pit: '#04120f', glowsoft: 'rgba(53,224,200,0.22)',
     genre: 'TEMPLE RUN × DOODLE JUMP',
@@ -352,7 +359,7 @@ function buildCabinet(game) {
     return cab;
   }
   // play=1 skips the game's own start screen; v busts any stale cached copy
-  play.href = game.url + '?play=1&v=21';
+  play.href = game.url + '?play=1&v=22';
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
     // Remember which hall launched this cabinet so the score screen returns the player
@@ -455,6 +462,56 @@ function startAttract(canvas, world) {
    that blasts the arkanoid brick wall at the top. */
 
 /* FLAP-FIGHT attract — real physics, AI targets gap, dies on pipe hit */
+function runAttract(ctx, w, h, t, world, s) {
+  // JIMMY RUN cassette: mini pseudo-3D corridor rushing at the viewer, Jimmy's back
+  // bobbing at the bottom, obstacles flying past. Subject-centered (no camera pan).
+  if (!s.init) { s.init = true; s.z = 0; s.obs = [8, 15, 22].map(z => ({ z, l: [-1, 0, 1][z % 3] })); }
+  s.z += 0.11;
+  ctx.fillStyle = '#140a04'; ctx.fillRect(0, 0, w, h);
+  const HZ = h * 0.32, CD = 1.1;
+  // floor strips
+  for (let n = 26; n >= 1; n--) {
+    const z = 0.32 * Math.pow(1.13, n), sc = CD / z;
+    const y = HZ + sc * h * 0.22, hw = sc * w * 0.62;
+    const idx = Math.floor((s.z + z) / 0.9);
+    ctx.fillStyle = idx % 2 ? '#2a1c10' : '#32220f';
+    const zN = 0.32 * Math.pow(1.13, n + 1), scN = CD / zN;
+    const yN = HZ + scN * h * 0.22, hwN = scN * w * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - hw, y); ctx.lineTo(w / 2 + hw, y);
+    ctx.lineTo(w / 2 + hwN, yN); ctx.lineTo(w / 2 - hwN, yN);
+    ctx.closePath(); ctx.fill();
+    if (idx % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,150,80,0.5)';
+      for (const L of [-0.33, 0.33]) ctx.fillRect(w / 2 + L * hw * 1.05 - 1, Math.min(y, yN), 2, Math.abs(y - yN) * 0.5 + 1);
+    }
+    // walls
+    ctx.fillStyle = '#20140a';
+    ctx.fillRect(w / 2 - hw - 3 * sc * 6, y - sc * h * 0.5, 3 * sc * 6, sc * h * 0.5);
+    ctx.fillRect(w / 2 + hw, y - sc * h * 0.5, 3 * sc * 6, sc * h * 0.5);
+  }
+  // obstacles rushing past
+  for (const o of s.obs) {
+    o.z -= 0.11;
+    if (o.z < 0.4) { o.z = 20 + Math.random() * 8; o.l = [-1, 0, 1][(Math.random() * 3) | 0]; }
+    const sc = CD / o.z;
+    const y = HZ + sc * h * 0.22, x = w / 2 + sc * o.l * w * 0.2;
+    ctx.fillStyle = '#7a4434';
+    ctx.fillRect(x - 8 * sc * 6, y - 6 * sc * 6, 16 * sc * 6, 6 * sc * 6);
+  }
+  // Jimmy back view, bobbing
+  const bob = Math.sin(t * 0.012) * 2;
+  const jx = w / 2, jy = h * 0.8 + bob;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(jx, h * 0.83, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#35e0c8'; ctx.fillRect(jx - 6, jy - 12, 12, 10);
+  ctx.fillStyle = '#3a2a1a'; ctx.fillRect(jx - 4, jy - 19, 8, 7);
+  ctx.fillStyle = '#101418'; ctx.fillRect(jx - 5, jy - 20, 10, 2);
+  ctx.fillStyle = '#22333f';
+  const legA = Math.sin(t * 0.024) * 2;
+  ctx.fillRect(jx - 4, jy - 2, 3, 4 + legA); ctx.fillRect(jx + 1, jy - 2, 3, 4 - legA);
+}
+
 function dashAttract(ctx, w, h, t, world, s) {
   // DEAD AIR DASH cassette: Jimmy bounces up an endless platform ladder while the
   // static wall creeps below. World scrolls down past the camera — subject stays
