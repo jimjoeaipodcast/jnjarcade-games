@@ -288,5 +288,66 @@
       navigator.serviceWorker.register('/sw.js').catch(function(){});
     }
   </script>
+<script>
+/* SELF-HEAL — Osimo 2026-08-18: arcades rendered on his wife's iPhone and stayed EMPTY on
+   his Pixel after the code was verified live from three pages. A service worker registered
+   at scope "/" (from index.html) intercepts every page on this origin, so one stale client
+   can keep serving old JS indefinitely while the server is perfectly healthy — and the user
+   has no way to tell, because the page looks deliberate: header, no cabinets, no error.
+
+   This runs from the HTML, which is served no-cache/must-revalidate, so the healer itself
+   can never be the stale thing. If the cabinet hall is still empty a few seconds after load
+   AND the app did not deliberately render an empty state, we tear down every service worker
+   and cache and reload ONCE. The sessionStorage latch makes a reload loop impossible — if
+   the page is still empty after the heal, it stops and leaves it alone rather than
+   thrashing the device. */
+(function () {
+  var HEALED = 'jnjHealed_v1';
+  setTimeout(function () {
+    var hall = document.getElementById('cabinets');
+    if (!hall) return;                                   // page has no hall (hub pages) — fine
+    if (hall.children.length > 0) return;                // cabinets present — fine
+    if (hall.querySelector('.hall-empty')) return;       // app CHOSE to show an empty state
+    try { if (sessionStorage.getItem(HEALED)) return; sessionStorage.setItem(HEALED, '1'); }
+    catch (e) { return; }                                // no storage = no latch = never heal
+    var done = function () { location.reload(true); };
+    var jobs = [];
+    if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.map(function (r) { return r.unregister(); }));
+      }).catch(function () {}));
+    }
+    if (window.caches && caches.keys) {
+      jobs.push(caches.keys().then(function (ks) {
+        return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+      }).catch(function () {}));
+    }
+    (jobs.length ? Promise.all(jobs) : Promise.resolve()).then(done, done);
+  }, 6000);
+})();
+</script>
+<script>
+/* Build stamp — lets a phone report what it is actually running without devtools.
+   Tap the marquee 5 times to see it. Diagnosing Osimo's Pixel had no other channel. */
+(function () {
+  var n = 0, t = 0;
+  document.addEventListener('click', function () {
+    var now = Date.now();
+    n = (now - t < 800) ? n + 1 : 1; t = now;
+    if (n < 5) return;
+    n = 0;
+    var sw = 'n/a';
+    try { sw = navigator.serviceWorker && navigator.serviceWorker.controller ? 'ACTIVE' : 'none'; } catch (e) {}
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#111;' +
+      'color:#ffd23d;font:12px/1.5 monospace;padding:10px 12px;border:1px solid #ffd23d55;border-radius:8px';
+    d.textContent = 'BUILD 2026-08-18c · app.js=' + ('77' || '?') +
+      ' · cabinets=' + (document.getElementById('cabinets') ? document.getElementById('cabinets').children.length : 'n/a') +
+      ' · sw=' + sw + ' · tap to close';
+    d.onclick = function () { d.remove(); };
+    document.body.appendChild(d);
+  }, true);
+})();
+</script>
 </body>
 </html>
