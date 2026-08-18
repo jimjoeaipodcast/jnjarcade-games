@@ -40,8 +40,9 @@
   <h1>JIMMY RUN</h1>
   <p>Jimmy's sprinting the studio corridors and the <b>DEAD AIR</b> is right behind him.<br>
      Swipe ◀ ▶ to change lane · swipe ▲ to jump · swipe ▼ to slide.<br>
-     🛋 sofas — jump · 🎤 boom mics — slide · 🗄 racks — switch lane<br>
-     🍭 fills the HYPE meter · 🚀 rocket mows trolls · 🛡 shield · 🧲 magnet<br>
+     🛋 sofas — jump · 🚨 low ON AIR rigs — slide under · 🗄 racks — switch lane<br>
+     7 perks: 🚀 rocket · 🛡 shield · 🧲 magnet · ☕ double score<br>
+     🌟 golden pops · ⏱ slow-mo · 💪 MEGA JIMMY smashes everything<br>
      Stumble and the static closes in. Run clean and it falls behind.</p>
   <button id="coinBtn">🪙 INSERT COIN</button>
 </div>
@@ -105,18 +106,32 @@ const HYPE_NEED  = 8;
 const HYPE_MS    = 5200;
 const ROCKET_MS  = 2600;
 const MAGNET_MS  = 6500;
+const COFFEE_MS  = 8000;    // ×2 all score
+const GOLD_MS    = 8000;    // lollipops worth 100
+const SLOWMO_MS  = 5000;    // world at 55% speed — breathing room
+const MEGA_MS    = 4000;    // giant, invincible, auto-mows everything
 const METRES_PER_Z = 3;
 
-// STUDIO FLOORS as distance milestones (reuse the DAD floor set — same VO clips)
+// CANON STUDIO PALETTE — lifted from jnj-on-air.html's C table (Osimo 2026-08-18 v3:
+// "should look like our studio in on air in 10", corridor was "dark and dingy")
+const CP = {
+  brick: '#7a4a34', brickDark: '#5e372a', mortar: '#4a2c22',
+  floor: '#4a382c', floorLine: '#3a2c22', rug: '#b0475a', rugDark: '#8d3648',
+  wood: '#6b4a2c', brass: '#e8a13c',
+  jimmyA: '#e8e2d4', jimmyB: '#c9c2b0', jimmyTrim: '#d4a13c',
+  visor: '#0c0e12', led: '#eef4ff',
+};
+// STUDIO FLOORS as distance milestones — all warm studio variants now, tinting the
+// canon brick/floor rather than replacing the look (reuse the DAD floor-name VO clips)
 const FLOORS = [
-  { at: 0,    name: 'Basement Archive', wall: '#2a2118', floor: '#3a2e20', glow: '#6a5638' },
-  { at: 500,  name: 'Tape Library',     wall: '#1e2836', floor: '#2a3648', glow: '#4a6288' },
-  { at: 1200, name: 'Merch Room',       wall: '#2e2140', floor: '#3e2d54', glow: '#6a4d94' },
-  { at: 2100, name: 'Writers Room',     wall: '#332a18', floor: '#443a24', glow: '#7a6a3a' },
-  { at: 3200, name: 'Server Room',      wall: '#12301f', floor: '#1a402c', glow: '#2a7a52' },
-  { at: 4500, name: 'Studio Floor',     wall: '#3a1428', floor: '#4e1e38', glow: '#8a3062' },
-  { at: 6000, name: 'The Roof',         wall: '#1a2a48', floor: '#24365c', glow: '#4060a0' },
-  { at: 7800, name: 'Above the Show',   wall: '#141c30', floor: '#1c2840', glow: '#3a5080' },
+  { at: 0,    name: 'Basement Archive', wall: '#7a4a34', floor: '#4a382c', glow: '#e8a13c' },
+  { at: 500,  name: 'Tape Library',     wall: '#6a4a44', floor: '#463830', glow: '#e8b95c' },
+  { at: 1200, name: 'Merch Room',       wall: '#7a4454', floor: '#4a3438', glow: '#f088a0' },
+  { at: 2100, name: 'Writers Room',     wall: '#7a5a34', floor: '#4c3e28', glow: '#f0c860' },
+  { at: 3200, name: 'Server Room',      wall: '#4a5a44', floor: '#384432', glow: '#80d0a0' },
+  { at: 4500, name: 'Studio Floor',     wall: '#8a4444', floor: '#503232', glow: '#ff8080' },
+  { at: 6000, name: 'The Roof',         wall: '#54506a', floor: '#3c3a4c', glow: '#a0a0e0' },
+  { at: 7800, name: 'Above the Show',   wall: '#4a4a62', floor: '#363646', glow: '#9090d0' },
 ];
 
 // ── SFX MODES + VOICE (house pattern; clips shared with DAD/flap-fight) ──────
@@ -219,6 +234,10 @@ const VO_LINES = [
   ["JOE", "limbo."], ["JOE", "under it."], ["JOE", "low bridge."],
   ["JOE", "that was furniture."], ["JOE", "he met a sofa."], ["JOE", "the corridor won that one."],
   ["JOE", "chair. incoming."],
+  ["JOE", "espresso. of course."], ["JOE", "caffeinated. dangerous."],
+  ["JOE", "everything's gold now."], ["JOE", "premium lollipops."],
+  ["JOE", "time. slower. somehow."], ["JOE", "bullet time. allegedly."],
+  ["JOE", "he's enormous."], ["JOE", "big Jimmy. very big."],
 ];
 const JOE_BARKS = {
   jump:    ["hup.", "airborne.", "technically flying."],
@@ -231,6 +250,10 @@ const JOE_BARKS = {
   magnet:  ["magnet on.", "the lollipops come to you now.", "lazy. effective.",
             "we are attracting objects now."],
   hype:    ["hype mode. apparently.", "he's glowing. that's new.", "sustain it. or don't."],
+  coffee:  ["espresso. of course.", "caffeinated. dangerous."],
+  gold:    ["everything's gold now.", "premium lollipops."],
+  slowmo:  ["time. slower. somehow.", "bullet time. allegedly."],
+  mega:    ["he's enormous.", "big Jimmy. very big."],
   mow:     ["troll deleted.", "blocked and reported.", "the comment section thins.", "big boom."],
   start:   ["off he goes.", "the static is patient.", "I'll be here.",
             "the game begins. try not to fall.", "begin. I will observe."],
@@ -315,7 +338,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('jimmy-run-pack.json?v=1')
+  fetch('jimmy-run-pack.json?v=2')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -385,6 +408,10 @@ const TONES = {
   death:  () => { tone(300, 40, 0.5, 'sawtooth', 0.2); tone(90, 30, 0.7, 'sine', 0.22, 0.05); },
   best:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, null, 0.13, 'triangle', 0.14, 0.12 * i)),
   rocket: () => tone(140, 700, 0.6, 'sawtooth', 0.14),
+  coffee: () => { tone(880, 1175, 0.08, 'square', 0.14); tone(1175, 1568, 0.1, 'square', 0.12, 0.07); },
+  gold:   () => [784, 988, 1319, 1568].forEach((f, i) => tone(f, null, 0.09, 'triangle', 0.14, 0.05 * i)),
+  slowmo: () => tone(880, 220, 0.5, 'sine', 0.15),
+  mega:   () => { tone(80, 200, 0.35, 'sawtooth', 0.2); tone(200, 400, 0.3, 'square', 0.16, 0.2); },
 };
 function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute' || state === 'attract') return;
@@ -415,6 +442,10 @@ const sfx = {
   magnet: ()  => dispatch('magnet', TONES.power),
   hype:   ()  => dispatch('hype',   TONES.hype),
   mow:    (c) => dispatch('mow',    TONES.mow, c),
+  coffee: ()  => dispatch('coffee', TONES.coffee),
+  gold:   ()  => dispatch('gold',   TONES.gold),
+  slowmo: ()  => dispatch('slowmo', TONES.slowmo),
+  mega:   ()  => dispatch('mega',   TONES.mega),
   stumble:()  => dispatch('stumble',TONES.stumble),
   nearMiss:() => dispatch('nearMiss', null),
   floor:  (i) => dispatch('floor',  TONES.floor, i),
@@ -435,6 +466,7 @@ let lane = 0, playerX = 0;       // lane: -1/0/1 target, playerX lerped
 let jumpT = 0, slideT = 0;       // ticks remaining
 let deadAir = 0.25;              // 0 (far) .. 1 (caught)
 let hypeMeter = 0, hypeUntil = 0, rocketUntil = 0, magnetUntil = 0, shieldOn = false;
+let coffeeUntil = 0, goldUntil = 0, slowmoUntil = 0, megaUntil = 0;
 let mowCombo = 0, lastMowMs = 0;
 let floorIdx = 0, nextIdleMs = 0;
 let bestScore = 0, topScore = 0, pbAnnounced = false, topAnnounced = false, callout = null;
@@ -487,10 +519,12 @@ function spawnWave() {
     const L = lanes[Math.floor(Math.random() * 3)];
     for (let i = 0; i < 3; i++) ents.push({ z: z + 1.2 + i * 0.5, lane: L, kind: 'pop' });
   }
-  if (Math.random() < 0.062) {
-    const kinds = ['rocket', 'shield', 'magnet'];
+  if (Math.random() < 0.085) {
+    // 7-perk pool, weighted: the classics common, slow-mo and MEGA the rare treats
+    const pool = ['rocket', 'rocket', 'shield', 'shield', 'magnet', 'magnet',
+                  'coffee', 'coffee', 'gold', 'gold', 'slowmo', 'mega'];
     ents.push({ z: z + 1.0, lane: lanes[Math.floor(Math.random() * 3)],
-                kind: kinds[Math.floor(Math.random() * 3)] });
+                kind: pool[Math.floor(Math.random() * pool.length)] });
   }
   // spacing shrinks with difficulty but NEVER below reaction distance (absolute marker)
   nextSpawnZ = zPos + z + Math.max(2.6, 4.6 - d * 1.7) + Math.random() * 1.4;
@@ -502,6 +536,7 @@ function initGame() {
   lane = 0; playerX = 0; jumpT = 0; slideT = 0;
   deadAir = 0.25;
   hypeMeter = 0; hypeUntil = 0; rocketUntil = 0; magnetUntil = 0; shieldOn = false;
+  coffeeUntil = 0; goldUntil = 0; slowmoUntil = 0; megaUntil = 0;
   mowCombo = 0; floorIdx = 0;
   pbAnnounced = false; topAnnounced = false; callout = null;
   ents = []; parts = []; floats = [];
@@ -645,20 +680,25 @@ function die() {
 }
 
 // ── UPDATE ───────────────────────────────────────────────────────────────────
+function addScore(n) {
+  score += coffeeUntil > Date.now() ? n * 2 : n;   // ☕ coffee doubles EVERYTHING
+}
 function update(dt) {
   if (state === 'attract') attractAI(dt);
   if (state !== 'playing' && state !== 'attract') { stepParts(dt); return; }
   const now = Date.now();
   const hype = hypeUntil > now;
   const rocket = rocketUntil > now;
+  const mega = megaUntil > now;
+  const slow = slowmoUntil > now;
 
-  // speed ramps with distance; rocket/hype boost it
+  // speed ramps with distance; rocket/hype boost it; ⏱ stopwatch calms the world
   const targetSpeed = Math.min(SPEED_MAX, SPEED0 + dist * SPEED_RAMP) *
-                      (rocket ? 1.55 : hype ? 1.25 : 1);
+                      (rocket ? 1.55 : hype ? 1.25 : 1) * (slow ? 0.55 : 1);
   speed += (targetSpeed - speed) * 0.03 * dt;
   zPos += speed * dt;
   const newDist = Math.floor(zPos * METRES_PER_Z);
-  if (newDist > dist) { score += (newDist - dist); dist = newDist; }
+  if (newDist > dist) { addScore(newDist - dist); dist = newDist; }
   bobPh += speed * 3.2 * dt;
 
   // gentle visual curve drifts
@@ -700,9 +740,9 @@ function update(dt) {
       const elev = playerElev();
       if (e.kind === 'pop') {
         e.dead = true;
-        const v = hype ? 50 : 25;
-        score += v;
-        float(WORLD_W / 2 + e.lane * 90, 440, '+' + v, '#ff7bd5');
+        const v = goldUntil > now ? 100 : hype ? 50 : 25;
+        addScore(v);
+        float(WORLD_W / 2 + e.lane * 90, 440, '+' + v, goldUntil > now ? '#ffd23d' : '#ff7bd5');
         sfx.pickup();
         hypeMeter = Math.min(HYPE_NEED, hypeMeter + 1);
         if (hypeMeter >= HYPE_NEED && !hype) {
@@ -715,28 +755,35 @@ function update(dt) {
       } else if (e.kind === 'rocket') { e.dead = true; rocketUntil = now + ROCKET_MS; sfx.rocket(); float(WORLD_W / 2, 400, '🚀 ON AIR!', '#ff9900'); }
       else if (e.kind === 'shield') { e.dead = true; shieldOn = true; sfx.shield(); float(WORLD_W / 2, 400, '🛡 SHIELD', '#4dd9f5'); }
       else if (e.kind === 'magnet') { e.dead = true; magnetUntil = now + MAGNET_MS; sfx.magnet(); float(WORLD_W / 2, 400, '🧲 MAGNET', '#c084fc'); }
+      else if (e.kind === 'coffee') { e.dead = true; coffeeUntil = now + COFFEE_MS; sfx.coffee(); float(WORLD_W / 2, 400, '☕ DOUBLE SCORE', '#e8a13c'); }
+      else if (e.kind === 'gold')   { e.dead = true; goldUntil = now + GOLD_MS; sfx.gold(); float(WORLD_W / 2, 400, '🌟 GOLDEN POPS', '#ffd23d'); }
+      else if (e.kind === 'slowmo') { e.dead = true; slowmoUntil = now + SLOWMO_MS; sfx.slowmo(); float(WORLD_W / 2, 400, '⏱ SLOW-MO', '#9fd4ff'); }
+      else if (e.kind === 'mega')   { e.dead = true; megaUntil = now + MEGA_MS; sfx.mega(); float(WORLD_W / 2, 400, '💪 MEGA JIMMY!', '#ff6b35'); confetti(20); shakeT = 8; }
       else if (e.kind === 'troll') {
-        if (rocket || hype) {
+        if (rocket || hype || mega) {
           e.dead = true;
           mowCombo = (now - lastMowMs < 3000) ? Math.min(mowCombo + 1, 20) : 1;
           lastMowMs = now;
           const pts = 50 * mowCombo;
-          score += pts;
+          addScore(pts);
           sfx.mow(mowCombo);
           float(WORLD_W / 2 + e.lane * 90, 430, mowCombo >= 2 ? `+${pts} ×${mowCombo}` : '+' + pts, '#ffd23d');
           burst(WORLD_W / 2 + e.lane * 90, 460, 14, '#9fe8ff', '#c084fc');
         } else { e.dead = true; stumble(); }
       }
       else if (e.kind === 'sofa') {
-        if (elev > 30) { /* cleared */ if (!e.scored) { e.scored = true; } }
+        if (mega) { e.dead = true; addScore(30); sfx.mow(1); burst(WORLD_W / 2 + e.lane * 90, 480, 16, '#a95a46', '#ffd23d'); shakeT = 8; }
+        else if (elev > 30) { /* cleared */ if (!e.scored) { e.scored = true; } }
         else { e.dead = true; stumble(); }
       }
       else if (e.kind === 'mic') {
-        // overheads: sliding = safe (mic passes above); upright OR jumping into it = hit
-        if (slideT <= 0) { e.dead = true; stumble(); }
+        // overheads: sliding = safe (rig passes above); MEGA rips it down; else = hit
+        if (mega) { e.dead = true; addScore(30); sfx.mow(1); burst(WORLD_W / 2 + e.lane * 90, 420, 16, '#ff3b3b', '#ffd23d'); shakeT = 8; }
+        else if (slideT <= 0) { e.dead = true; stumble(); }
       }
       else if (e.kind === 'rack' || e.kind === 'chair') {
-        e.dead = true; stumble();
+        if (mega) { e.dead = true; addScore(30); sfx.mow(1); burst(WORLD_W / 2 + e.lane * 90, 460, 16, '#5c5244', '#ffd23d'); shakeT = 8; }
+        else { e.dead = true; stumble(); }
       }
     }
   }
@@ -861,16 +908,25 @@ function drawCorridor() {
     const cxN = WORLD_W / 2 + scN * ((-playerX * LANE_W) * 190 + corridorShift(zNext));
     const fog = Math.min(0.72, n / DRAW_SEGS * 0.85);
 
-    // floor strip (alternating boards, scrolls with travel)
-    ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.07), fog);
+    // wood floor strip (alternating boards, scrolls with travel) — warm studio tones
+    ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.09), fog * 0.8);
     ctx.beginPath();
     ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
     ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
     ctx.closePath(); ctx.fill();
 
-    // lane divider dashes — bright enough to read the 3 lanes at a glance
+    // THE RED RUG — a runner carpet down the centre lane, the studio's signature
+    const rugW  = sc * LANE_W * 190 * 0.86;
+    const rugWN = scN * LANE_W * 190 * 0.86;
+    ctx.fillStyle = shade(segIdx % 2 ? CP.rug : CP.rugDark, fog * 0.8);
+    ctx.beginPath();
+    ctx.moveTo(cx - rugW / 1.6, y); ctx.lineTo(cx + rugW / 1.6, y);
+    ctx.lineTo(cxN + rugWN / 1.6, yN); ctx.lineTo(cxN - rugWN / 1.6, yN);
+    ctx.closePath(); ctx.fill();
+
+    // lane divider dashes — brass, reading the 3 lanes at a glance
     if (segIdx % 2 === 0) {
-      ctx.fillStyle = shade(lerpCol(glowC, '#ffffff', 0.35), fog * 0.7);
+      ctx.fillStyle = shade(CP.brass, fog * 0.55);
       for (const L of [-0.5, 0.5]) {
         const lx = cx + sc * (L * LANE_W) * 190;
         const dw = Math.max(2, 3.4 * sc);
@@ -878,10 +934,10 @@ function drawCorridor() {
       }
     }
 
-    // walls: verticals from floor edge up, converging
+    // BRICK walls, converging — mortar bands every other segment
     const wallH  = sc * 340;
     const wallHN = scN * 340;
-    ctx.fillStyle = shade(wallC, fog);
+    ctx.fillStyle = shade(segIdx % 2 ? wallC : lerpCol(wallC, CP.mortar, 0.35), fog * 0.85);
     ctx.beginPath();  // left wall
     ctx.moveTo(cx - halfW, y); ctx.lineTo(cx - halfW, y - wallH);
     ctx.lineTo(cxN - halfWN, yN - wallHN); ctx.lineTo(cxN - halfWN, yN);
@@ -891,30 +947,74 @@ function drawCorridor() {
     ctx.lineTo(cxN + halfWN, yN - wallHN); ctx.lineTo(cxN + halfWN, yN);
     ctx.closePath(); ctx.fill();
 
-    // wall dressing every few segments: glow strip + poster
+    // wall dressing (2000s detail pass):
+    // brass sconces with a warm glow halo every 4 segments
     if (segIdx % 4 === 0) {
-      ctx.fillStyle = shade(glowC, fog * 0.6);
-      ctx.fillRect(cx - halfW + 2, y - wallH * 0.72, Math.max(1.5, 4 * sc * 2), wallH * 0.4);
-      ctx.fillRect(cx + halfW - 2 - Math.max(1.5, 4 * sc * 2), y - wallH * 0.72, Math.max(1.5, 4 * sc * 2), wallH * 0.4);
+      const gs = Math.max(2, 5 * sc);
+      for (const side of [-1, 1]) {
+        const wx = cx + side * (halfW - 4 * sc);
+        const wy = y - wallH * 0.62;
+        ctx.fillStyle = shade(CP.brass, fog * 0.4);
+        ctx.beginPath(); ctx.roundRect(wx - gs / 2, wy, gs, gs * 2.2, gs / 2); ctx.fill();
+        const halo = ctx.createRadialGradient(wx, wy + gs, 0, wx, wy + gs, gs * 5);
+        halo.addColorStop(0, 'rgba(232,161,60,' + (0.22 * (1 - fog)) + ')');
+        halo.addColorStop(1, 'rgba(232,161,60,0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(wx, wy + gs, gs * 5, 0, Math.PI * 2); ctx.fill();
+      }
     }
+    // framed JIM & JOE portraits every 7 segments
     if (segIdx % 7 === 0) {
-      ctx.fillStyle = shade(lerpCol(wallC, '#ffffff', 0.18), fog);
-      ctx.fillRect(cx - halfW + 6 * sc * 2, y - wallH * 0.55, 22 * sc * 2, 16 * sc * 2);
+      const pw = 24 * sc * 2, ph2 = 18 * sc * 2;
+      const wx = cx - halfW + 6 * sc * 2;
+      ctx.fillStyle = shade('#8a6a2c', fog);
+      ctx.fillRect(wx, y - wallH * 0.55, pw, ph2);
+      ctx.fillStyle = shade('#2c2418', fog);
+      ctx.fillRect(wx + pw * 0.1, y - wallH * 0.55 + ph2 * 0.1, pw * 0.8, ph2 * 0.8);
+      ctx.fillStyle = shade('#e5d9b8', fog);
+      ctx.beginPath(); ctx.arc(wx + pw / 2, y - wallH * 0.55 + ph2 * 0.5, pw * 0.16, 0, Math.PI * 2); ctx.fill();
+    }
+    // glowing red ON AIR sign every 11 segments (right wall) — the studio heartbeat
+    if (segIdx % 11 === 0) {
+      const sw = 26 * sc * 2, sh = 10 * sc * 2;
+      const wx = cx + halfW - 8 * sc * 2 - sw;
+      const wy = y - wallH * 0.7;
+      ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = 12 * (1 - fog);
+      ctx.fillStyle = shade('#ff3b3b', fog * 0.5);
+      ctx.beginPath(); ctx.roundRect(wx, wy, sw, sh, 3 * sc); ctx.fill();
+      ctx.shadowBlur = 0;
+      if (sc > 0.5) {
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(4, 5 * sc * 2)}px "Courier New", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText('ON AIR', wx + sw / 2, wy + sh * 0.72);
+      }
     }
 
-    // ceiling
+    // wood-beam ceiling
     const ceilY  = y - wallH;
     const ceilYN = yN - wallHN;
-    ctx.fillStyle = shade(wallC, Math.min(0.85, fog + 0.25));
+    ctx.fillStyle = shade(segIdx % 3 ? CP.wood : lerpCol(CP.wood, '#000000', 0.25), Math.min(0.85, fog + 0.2));
     ctx.beginPath();
     ctx.moveTo(cx - halfW, ceilY); ctx.lineTo(cx + halfW, ceilY);
     ctx.lineTo(cxN + halfWN, ceilYN); ctx.lineTo(cxN - halfWN, ceilYN);
     ctx.closePath(); ctx.fill();
-    // hanging cable every 9 segs
+    // hanging stage light with a soft warm cone every 9 segments
     if (segIdx % 9 === 0) {
-      ctx.strokeStyle = shade('#111111', fog);
+      ctx.strokeStyle = shade('#222222', fog);
       ctx.lineWidth = Math.max(1, 2 * sc * 2);
-      ctx.beginPath(); ctx.moveTo(cx, ceilY); ctx.lineTo(cx, ceilY + 18 * sc * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, ceilY); ctx.lineTo(cx, ceilY + 12 * sc * 2); ctx.stroke();
+      ctx.fillStyle = shade('#333333', fog);
+      ctx.beginPath(); ctx.roundRect(cx - 5 * sc * 2, ceilY + 12 * sc * 2, 10 * sc * 2, 6 * sc * 2, 2 * sc); ctx.fill();
+      const cone = ctx.createLinearGradient(cx, ceilY + 16 * sc * 2, cx, y);
+      cone.addColorStop(0, 'rgba(255,230,170,' + (0.16 * (1 - fog)) + ')');
+      cone.addColorStop(1, 'rgba(255,230,170,0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(cx - 4 * sc * 2, ceilY + 16 * sc * 2);
+      ctx.lineTo(cx + 4 * sc * 2, ceilY + 16 * sc * 2);
+      ctx.lineTo(cx + 22 * sc * 2, y); ctx.lineTo(cx - 22 * sc * 2, y);
+      ctx.closePath(); ctx.fill();
     }
     prev = { y, cx, halfW };
   }
@@ -950,14 +1050,30 @@ function drawEnt(e) {
     ctx.fillRect(-26 * u, -18 * u, 5 * u, 18 * u);
     ctx.fillRect(21 * u, -18 * u, 5 * u, 18 * u);
   } else if (e.kind === 'mic') {
-    // overhead boom: bar high across the lane + dangling mic
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = Math.max(1.5, 3 * u);
-    ctx.beginPath(); ctx.moveTo(-30 * u, -52 * u); ctx.lineTo(30 * u, -52 * u); ctx.stroke();
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-4 * u, -52 * u, 8 * u, 14 * u);
-    ctx.fillStyle = '#555';
-    ctx.beginPath(); ctx.arc(0, -34 * u, 6 * u, 0, Math.PI * 2); ctx.fill();
+    // LOW-HUNG "ON AIR" SIGN RIG (Osimo v3: old boom mic "doesn't look like anything
+    // you can slide under") — truss posts both sides, glowing red sign at HEAD height,
+    // clear open gap underneath. Unmissable "duck!" read.
+    ctx.fillStyle = '#3a3a42';
+    ctx.fillRect(-32 * u, -58 * u, 5 * u, 58 * u);
+    ctx.fillRect(27 * u, -58 * u, 5 * u, 58 * u);
+    ctx.fillStyle = '#2a2a30';
+    ctx.fillRect(-32 * u, -58 * u, 64 * u, 5 * u);
+    // the sign — hangs to mid-body height, glowing hot red
+    ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = Math.min(18, 16 * u);
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath(); ctx.roundRect(-24 * u, -50 * u, 48 * u, 20 * u, 4 * u); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (u > 0.5) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(5, 10 * u)}px "Courier New", monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ON AIR', 0, -37 * u);
+    }
+    // hazard stripes on the sign's bottom edge — "this is the thing you hit"
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = i % 2 ? '#ffd23d' : '#1a1a1a';
+      ctx.fillRect((-24 + i * 8) * u, -31 * u, 8 * u, 3 * u);
+    }
   } else if (e.kind === 'rack') {
     ctx.fillStyle = '#4a4136';
     ctx.fillRect(-22 * u, -46 * u, 44 * u, 46 * u);
@@ -980,11 +1096,17 @@ function drawEnt(e) {
     ctx.fillRect(-5 * u, -19 * u, 2 * u, 2 * u); ctx.fillRect(3 * u, -19 * u, 2 * u, 2 * u);
     ctx.fillStyle = '#2a1a5d';
     ctx.fillRect(-5 * u, -9 * u, 10 * u, 2 * u);
-  } else { // powerups
+  } else { // powerups — floating pickup with a soft glow disc (2000s presentation)
+    const bob = Math.sin(Date.now() / 260 + e.z) * 3 * u;
+    const halo = ctx.createRadialGradient(0, -14 * u + bob, 0, 0, -14 * u + bob, 16 * u);
+    halo.addColorStop(0, 'rgba(255,220,140,0.35)');
+    halo.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(0, -14 * u + bob, 16 * u, 0, Math.PI * 2); ctx.fill();
     ctx.font = `${Math.max(8, 16 * u)}px sans-serif`;
     ctx.textAlign = 'center';
-    const bob = Math.sin(Date.now() / 260 + e.z) * 3 * u;
-    ctx.fillText(e.kind === 'rocket' ? '🚀' : e.kind === 'shield' ? '🛡️' : '🧲', 0, -12 * u + bob);
+    const icons = { rocket: '🚀', shield: '🛡️', magnet: '🧲', coffee: '☕', gold: '🌟', slowmo: '⏱️', mega: '💪' };
+    ctx.fillText(icons[e.kind] || '❓', 0, -12 * u + bob);
   }
   ctx.restore();
 }
@@ -1010,7 +1132,11 @@ function drawJimmy() {
 
   ctx.save();
   ctx.translate(px, py);
-  ctx.scale(1.3, 1.3);   // presence — he's the star of the corridor
+  const megaK = megaUntil > now ? 2.0 : 1.3;   // 💪 MEGA: giant Jimmy
+  ctx.scale(megaK, megaK);
+  if (megaUntil > now) {
+    ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 18;
+  }
   if (hype) {
     const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8'];
     ctx.fillStyle = cols[Math.floor(now / 90) % 4];
@@ -1024,45 +1150,52 @@ function drawJimmy() {
     ctx.beginPath(); ctx.arc(0, -26, 36, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  // CANON JIMMY (jnj-on-air sprite language): white/cream armour, gold trim, helmet
+  // with the LED visor glow spilling round the edges. Back view — he runs AWAY.
   if (sliding) {
-    // slide: low silhouette
-    ctx.fillStyle = '#35e0c8';
-    ctx.fillRect(-16, -18, 32, 14);
-    ctx.fillStyle = '#f2c79b';
-    ctx.fillRect(-8, -28, 16, 11);
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(-8, -30, 16, 4);
-    ctx.fillStyle = '#101418';
-    ctx.fillRect(-10, -27, 3, 7); ctx.fillRect(7, -27, 3, 7);
-    ctx.fillStyle = '#22333f';
-    ctx.fillRect(-18, -8, 14, 6); ctx.fillRect(4, -8, 14, 6);
+    // slide: armour bot flat-out feet first, gold soles leading
+    ctx.fillStyle = CP.jimmyB;
+    ctx.beginPath(); ctx.roundRect(-20, -16, 40, 13, 5); ctx.fill();   // body horizontal
+    ctx.fillStyle = CP.jimmyA;
+    ctx.beginPath(); ctx.roundRect(-8, -26, 20, 12, 5); ctx.fill();    // helmet
+    ctx.fillStyle = CP.jimmyTrim;
+    ctx.fillRect(-24, -14, 6, 9); ctx.fillRect(-24, -14, 6, 9);        // boots forward
+    ctx.fillStyle = CP.led; ctx.globalAlpha = 0.5;
+    ctx.fillRect(10, -24, 3, 8);                                        // visor glow sliver
+    ctx.globalAlpha = 1;
   } else {
-    // legs (run cycle)
-    ctx.fillStyle = '#22333f';
-    ctx.fillRect(-9, -14, 7, 14 + legA);
-    ctx.fillRect(2, -14, 7, 14 - legA);
-    // shoes
-    ctx.fillStyle = '#e8e8e8';
-    ctx.fillRect(-10, -2 + legA, 9, 4);
-    ctx.fillRect(1, -2 - legA, 9, 4);
-    // hoodie torso (back view)
-    ctx.fillStyle = '#35e0c8';
-    ctx.fillRect(-13, -40, 26, 27);
-    ctx.fillStyle = '#2ab8a4';
-    ctx.fillRect(-13, -18, 26, 5);
-    // hood detail
-    ctx.fillStyle = '#2ab8a4';
-    ctx.fillRect(-9, -42, 18, 6);
-    // arms pumping
-    ctx.fillStyle = '#35e0c8';
-    ctx.fillRect(-18, -36 + legA * 0.8, 6, 16);
-    ctx.fillRect(12, -36 - legA * 0.8, 6, 16);
-    // head (back) + headphones
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(-9, -56, 18, 15);
-    ctx.fillStyle = '#101418';
-    ctx.fillRect(-12, -52, 3, 8); ctx.fillRect(9, -52, 3, 8);
-    ctx.fillRect(-10, -58, 20, 3);
+    // legs (run cycle) — cream with gold knee trim
+    ctx.fillStyle = CP.jimmyB;
+    ctx.beginPath(); ctx.roundRect(-9, -16 - legA * 0.3, 8, 16 + legA, 3); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(1, -16 + legA * 0.3, 8, 16 - legA, 3); ctx.fill();
+    ctx.fillStyle = CP.jimmyTrim;
+    ctx.fillRect(-9, -16, 8, 3); ctx.fillRect(1, -16, 8, 3);           // knee trim
+    // boots
+    ctx.fillStyle = CP.jimmyA;
+    ctx.beginPath(); ctx.roundRect(-11, -3 + legA, 10, 4, 2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(1, -3 - legA, 10, 4, 2); ctx.fill();
+    // torso — rounded cream armour (back), belt line
+    ctx.fillStyle = CP.jimmyA;
+    ctx.beginPath(); ctx.roundRect(-14, -44, 28, 30, 6); ctx.fill();
+    ctx.fillStyle = CP.jimmyB;
+    ctx.fillRect(-14, -22, 28, 4);                                     // belt
+    // back vents
+    ctx.fillStyle = CP.jimmyB;
+    for (let v = 0; v < 3; v++) ctx.fillRect(-8, -40 + v * 4, 16, 2);
+    // arms pumping — darker cream with GOLD shoulder pads (the canon tell)
+    ctx.fillStyle = CP.jimmyB;
+    ctx.beginPath(); ctx.roundRect(-20, -42 + legA * 0.8, 6, 18, 3); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(14, -42 - legA * 0.8, 6, 18, 3); ctx.fill();
+    ctx.fillStyle = CP.jimmyTrim;
+    ctx.beginPath(); ctx.roundRect(-21, -47, 9, 7, 3); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(12, -47, 9, 7, 3); ctx.fill();
+    // helmet (rounded, cream) + LED glow leaking round the sides
+    ctx.fillStyle = CP.jimmyA;
+    ctx.beginPath(); ctx.roundRect(-11, -66, 22, 24, 8); ctx.fill();
+    ctx.fillStyle = CP.led;
+    ctx.globalAlpha = 0.45;
+    ctx.fillRect(-12, -60, 2, 10); ctx.fillRect(10, -60, 2, 10);       // visor glow edges
+    ctx.globalAlpha = 1;
   }
   if (rocket) {
     ctx.fillStyle = '#ff9900';
@@ -1136,6 +1269,11 @@ function render() {
     ctx.fillStyle = `rgba(255,255,255,${stumbleFlash / 16 * 0.3})`;
     ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   }
+  // ⏱ slow-mo: cool blue wash so the effect reads instantly
+  if (slowmoUntil > now) {
+    ctx.fillStyle = 'rgba(120,180,255,0.10)';
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  }
 
   // HUD
   ctx.font = 'bold 20px "Courier New", monospace';
@@ -1159,6 +1297,26 @@ function render() {
   ctx.font = '9px "Courier New", monospace';
   ctx.fillStyle = '#888';
   ctx.fillText('DEAD AIR', 12, 77);
+  // active-perk chips with draining time bars (2000s HUD polish)
+  const perks = [
+    ['🚀', rocketUntil, ROCKET_MS], ['🧲', magnetUntil, MAGNET_MS],
+    ['☕', coffeeUntil, COFFEE_MS], ['🌟', goldUntil, GOLD_MS],
+    ['⏱️', slowmoUntil, SLOWMO_MS], ['💪', megaUntil, MEGA_MS],
+  ].filter(p => p[1] > now);
+  if (shieldOn) perks.unshift(['🛡️', now + 1, 1]);
+  let chipX = 12;
+  for (const [icon, until, total] of perks) {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(chipX, 90, 26, 26, 6); ctx.fill();
+    ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(icon, chipX + 13, 94);
+    if (total > 1) {
+      ctx.fillStyle = '#ffd23d';
+      ctx.fillRect(chipX + 3, 112, 20 * Math.max(0, Math.min(1, (until - now) / total)), 2.5);
+    }
+    chipX += 30;
+  }
+  ctx.textAlign = 'left';
   // mic
   ctx.font = '22px sans-serif';
   ctx.textAlign = 'right';
@@ -1243,6 +1401,11 @@ window.__jr = {
   get shieldOn() { return shieldOn; }, set shieldOn(v) { shieldOn = v; },
   get hypeUntil() { return hypeUntil; }, get rocketUntil() { return rocketUntil; },
   set rocketUntil(v) { rocketUntil = v; },
+  get coffeeUntil() { return coffeeUntil; }, set coffeeUntil(v) { coffeeUntil = v; },
+  get goldUntil() { return goldUntil; }, set goldUntil(v) { goldUntil = v; },
+  get slowmoUntil() { return slowmoUntil; }, set slowmoUntil(v) { slowmoUntil = v; },
+  get megaUntil() { return megaUntil; }, set megaUntil(v) { megaUntil = v; },
+  addScore,
   get floorIdx() { return floorIdx; }, get callout() { return callout; },
   get sfxMode() { return sfxMode; }, set sfxMode(v) { sfxMode = v; },
   get VO() { return VO; }, get VO_LINES() { return VO_LINES; },
