@@ -1,5 +1,5 @@
 /* JnJ Arcade — minimal service worker for PWA installability */
-const CACHE = 'jnj-v2';
+const CACHE = 'jnj-v3';   // bumped 2026-08-18: forces activate() to delete every older cache on installed PWAs
 const PRECACHE = [
   '/assets/icons/jnj-logo-192.png',
   '/assets/icons/jnj-logo-512.png',
