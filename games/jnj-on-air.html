@@ -997,11 +997,16 @@ function drawJimmySprite(x, feetY) {
   const talkBob = player.talkT > 0 ? Math.sin(worldT * 0.02) * 2 : 0;
   if (walking && SPR.jimmyWalk && SPR.jimmyWalk.length === 8 && SPR.jimmyWalk.every(Boolean)) {
     const f = Math.floor(player.walkPhase) % 8;
-    drawSprite(SPR.jimmyWalk[f], x, feetY, 171, player.facing > 0, 0);
+    // FLIP WHEN MOVING LEFT, not right. The source art already faces RIGHT (visor on the
+    // right of the helmet), so mirroring on facing>0 turned him around exactly when he
+    // walked right — Osimo: "walks backwards regardless of direction". I originally
+    // misdiagnosed this as bad frames and replaced good art chasing it; the frames were
+    // always fine, the flag was inverted.
+    drawSprite(SPR.jimmyWalk[f], x, feetY, 171, player.facing < 0, 0);
     return true;
   }
   if (!walking && SPR.jimmyFront) { drawSprite(SPR.jimmyFront, x, feetY, 171, false, talkBob); return true; }
-  if (SPR.jimmySide) { drawSprite(SPR.jimmySide, x, feetY, 171, player.facing > 0, talkBob); return true; }
+  if (SPR.jimmySide) { drawSprite(SPR.jimmySide, x, feetY, 171, player.facing < 0, talkBob); return true; }
   return false;
 }
 function drawJoeSprite(x, feetY) {

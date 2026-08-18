@@ -2094,22 +2094,41 @@ function onairAttract(ctx, w, h, t, world, s) {
 
   // hosts
   function bot(x, y, scB, colA, colTrim, ph, face) {
+    // Osimo 2026-08-18: "that white sprite on the left behaves weirdly". It was a stack of
+    // rectangles whose legs slid sideways with no body motion — it read as a glitching box,
+    // not a person. Now: legs SWING from the hip and alternate front/back, the body bobs on
+    // the passing pose, arms counter-swing, and a ground shadow keeps him planted.
     ctx.save(); ctx.translate(x, y); if (face < 0) ctx.scale(-1, 1);
-    const o = Math.sin(ph * Math.PI) * 3 * scB;
+    const sw = Math.sin(ph * Math.PI * 2);            // -1..1 stride
+    const bob = Math.abs(Math.cos(ph * Math.PI * 2)) * 1.2 * scB;
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(0, 1 * scB, 8 * scB, 2.2 * scB, 0, 0, 7); ctx.fill();
+    ctx.translate(0, -bob);
+    // legs: rear leg darker so the swing reads at cassette size
+    const legY = -10 * scB, legH = 10 * scB, legW = 4 * scB;
+    ctx.fillStyle = colTrim;
+    ctx.save(); ctx.translate(-1 * scB, legY); ctx.rotate(-sw * 0.42);
+    ctx.fillRect(-legW / 2, 0, legW, legH); ctx.restore();
     ctx.fillStyle = colA;
-    ctx.fillRect(-5 * scB + o, -10 * scB, 4 * scB, 10 * scB);
-    ctx.fillRect(1 * scB - o, -10 * scB, 4 * scB, 10 * scB);
-    ctx.fillRect(-7 * scB, -24 * scB, 14 * scB, 15 * scB);
+    ctx.save(); ctx.translate(1 * scB, legY); ctx.rotate(sw * 0.42);
+    ctx.fillRect(-legW / 2, 0, legW, legH); ctx.restore();
+    // torso + shoulder trim
+    ctx.fillStyle = colA; ctx.fillRect(-7 * scB, -24 * scB, 14 * scB, 15 * scB);
     ctx.fillStyle = colTrim;
     ctx.fillRect(-9 * scB, -25 * scB, 5 * scB, 3 * scB);
     ctx.fillRect(4 * scB, -25 * scB, 5 * scB, 3 * scB);
+    // arms counter-swing the legs
+    ctx.fillStyle = colA;
+    ctx.save(); ctx.translate(-7 * scB, -22 * scB); ctx.rotate(sw * 0.5);
+    ctx.fillRect(-1.6 * scB, 0, 3.2 * scB, 9 * scB); ctx.restore();
+    ctx.save(); ctx.translate(7 * scB, -22 * scB); ctx.rotate(-sw * 0.5);
+    ctx.fillRect(-1.6 * scB, 0, 3.2 * scB, 9 * scB); ctx.restore();
+    // helmet, visor toward the facing side
     ctx.fillStyle = colA; ctx.fillRect(-6 * scB, -36 * scB, 12 * scB, 12 * scB);
-    ctx.fillStyle = '#0c0e12';
-    // visor OFFSET to the facing side — the attract Jimmy walks facing his direction too
-    ctx.fillRect(-2.5 * scB, -34 * scB, 8 * scB, 8 * scB);
+    ctx.fillStyle = '#0c0e12'; ctx.fillRect(-2 * scB, -34 * scB, 7.5 * scB, 8 * scB);
     ctx.fillStyle = '#eef4ff';
-    ctx.fillRect(0, -32 * scB, 2 * scB, 1.2 * scB);
-    ctx.fillRect(3 * scB, -32 * scB, 2 * scB, 1.2 * scB);
+    ctx.fillRect(0.5 * scB, -32 * scB, 1.8 * scB, 1.2 * scB);
+    ctx.fillRect(3.4 * scB, -32 * scB, 1.8 * scB, 1.2 * scB);
     ctx.restore();
   }
   bot(s.jx, fy, sc, '#e8e2d4', '#d4a13c', walking ? s.walkPh % 1 : 0, s.face);
