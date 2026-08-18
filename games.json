@@ -52,7 +52,9 @@
       "special": "Game Lab #12 — first ADVENTURE cabinet",
       "note": "v4 2026-08-18: studio replated (clear floor walkway — no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on — tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock — emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
       "ready": true,
-      "ready_date": "2026-08-18"
+      "ready_date": "2026-08-18",
+      "releaseDate": "2026-08-18",
+      "week": 12
     }
   ]
 }
