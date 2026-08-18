@@ -2,7 +2,7 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "🛍️",
+      "emoji": "\ud83d\udecd\ufe0f",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
       "gradient": [
         "#FF9F0A",
@@ -12,7 +12,7 @@
     },
     {
       "name": "X",
-      "emoji": "✕",
+      "emoji": "\u2715",
       "url": "https://x.com/JimJoeAiPodcast",
       "gradient": [
         "#2b2b2b",
@@ -22,7 +22,7 @@
     },
     {
       "name": "Patreon",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
       "gradient": [
         "#FF6E4A",
@@ -32,7 +32,7 @@
     },
     {
       "name": "Ko-fi",
-      "emoji": "☕",
+      "emoji": "\u2615",
       "url": "https://ko-fi.com/jimmynjoe",
       "gradient": [
         "#FF5E5B",
@@ -43,10 +43,25 @@
   ],
   "games": [
     {
+      "id": "jimmy-run",
+      "name": "JIMMY RUN",
+      "emoji": "\ud83c\udfc3",
+      "genre": "TEMPLE RUN \u00d7 MINION RUSH",
+      "url": "games/jimmy-run.html",
+      "ai_file": "games/jimmy-run.html",
+      "status": "wip",
+      "special": "Game Lab \u2014 first PSEUDO-3D RUNNER cabinet",
+      "note": "Jimmy sprints the On Air studio corridors in full pseudo-3D while the DEAD AIR closes in behind. Swipe lanes, jump sofas, slide under the low ON AIR sign rigs, dodge racks + rolling chairs. 7 perks: rocket, shield, magnet, coffee x2, golden pops, slow-mo, MEGA smash. Full Jimmy+Joe voice mode.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-08-18",
+      "ready": true,
+      "ready_date": "2026-08-18"
+    },
+    {
       "id": "hop-man",
       "name": "HOP-MAN",
-      "emoji": "🐸",
-      "genre": "PAC-MAN × FROGGER",
+      "emoji": "\ud83d\udc38",
+      "genre": "PAC-MAN \u00d7 FROGGER",
       "url": "games/hop-man.html",
       "status": "wip",
       "special": "Game Lab #2",
@@ -57,8 +72,8 @@
     {
       "id": "flap-fight",
       "name": "FLAP FIGHT",
-      "emoji": "🎈",
-      "genre": "BALLOON FIGHT × FLAPPY BIRD",
+      "emoji": "\ud83c\udf88",
+      "genre": "BALLOON FIGHT \u00d7 FLAPPY BIRD",
       "url": "games/flap-fight.html",
       "status": "wip",
       "special": "Game Lab #2",
@@ -69,20 +84,20 @@
     {
       "id": "candy-tris",
       "name": "CRUSHTRIS",
-      "emoji": "🍬",
-      "genre": "CANDY CRUSH × TETRIS",
+      "emoji": "\ud83c\udf6c",
+      "genre": "CANDY CRUSH \u00d7 TETRIS",
       "url": "games/candy-tris.html",
       "status": "wip",
       "special": "Game Lab #5",
-      "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2×2 = fish. Tap a special candy then a neighbour to smash combos.",
+      "note": "CC rules: 4-in-line = striped, 5 = colour bomb, L/T = wrapped, 2\u00d72 = fish. Tap a special candy then a neighbour to smash combos.",
       "ready": true,
       "ready_date": "2026-07-02"
     },
     {
       "id": "snake",
       "name": "SNAKE BLASTER",
-      "emoji": "🐍",
-      "genre": "SNAKE × ARKANOID",
+      "emoji": "\ud83d\udc0d",
+      "genre": "SNAKE \u00d7 ARKANOID",
       "url": "games/snake.html",
       "status": "wip",
       "special": "Game Lab #1",
@@ -93,8 +108,8 @@
     {
       "id": "angry-worms",
       "name": "ANGRY WORMS",
-      "emoji": "🐛",
-      "genre": "ANGRY BIRDS × WORMS",
+      "emoji": "\ud83d\udc1b",
+      "genre": "ANGRY BIRDS \u00d7 WORMS",
       "url": "games/angry-worms.html",
       "status": "ready",
       "special": "Game Lab #13",
@@ -108,8 +123,8 @@
     {
       "id": "doom-3d",
       "name": "DOOM MARI-OH 3D",
-      "emoji": "👹",
-      "genre": "DOOM × MARIO",
+      "emoji": "\ud83d\udc79",
+      "genre": "DOOM \u00d7 MARIO",
       "url": "games/doom-3d.html",
       "status": "wip",
       "special": "Game Lab #1",
@@ -120,24 +135,24 @@
     {
       "id": "pin-vaders",
       "name": "PIN-VADERS",
-      "emoji": "🛸",
-      "genre": "PINBALL × SPACE INVADERS",
+      "emoji": "\ud83d\udef8",
+      "genre": "PINBALL \u00d7 SPACE INVADERS",
       "url": "games/pin-vaders.html",
       "status": "wip",
-      "special": "Game Lab #13 — first PINBALL cabinet",
-      "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature — S-O-S rollover lanes (bonus ×2..×5), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks → 3-ball MULTIBALL (2× scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers — invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT).",
+      "special": "Game Lab #13 \u2014 first PINBALL cabinet",
+      "note": "v2 DELUXE 2026-07-06: full pinball feature set around the invasion signature \u2014 S-O-S rollover lanes (bonus \u00d72..\u00d75), two drop-target bunker banks (left arms an ENERGY SHIELD drain-saver, right calls the UFO), mothership saucer with skill shot + 2 locks \u2192 3-ball MULTIBALL (2\u00d7 scores), laser cannon on a moving rail (ball hit = snipes the lowest alien), spinner, animated lane chevrons, DMD ticker screen, per-ball bonus tally, BOSS MOTHERSHIP every 4th wave (HP pips, descends like the grid). Aliens still march down at your flippers \u2014 invasion line still costs the ball. Hold halves = flippers, drag lane = plunger, swipe up = nudge (3 = TILT).",
       "ready": true,
       "ready_date": "2026-07-29"
     },
     {
       "id": "jnj-on-air",
       "name": "JNJ: ON AIR IN 10 MINUTES",
-      "emoji": "🎙️",
-      "genre": "MONKEY ISLAND × TALK SHOW",
+      "emoji": "\ud83c\udf99\ufe0f",
+      "genre": "MONKEY ISLAND \u00d7 TALK SHOW",
       "url": "games/jnj-on-air.html",
       "status": "ready",
-      "special": "Game Lab #12 — first ADVENTURE cabinet",
-      "note": "v4 2026-08-18: studio replated (clear floor walkway — no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on — tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock — emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
+      "special": "Game Lab #12 \u2014 first ADVENTURE cabinet",
+      "note": "v4 2026-08-18: studio replated (clear floor walkway \u2014 no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on \u2014 tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock \u2014 emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
       "ready": true,
       "ready_date": "2026-08-18"
     }
