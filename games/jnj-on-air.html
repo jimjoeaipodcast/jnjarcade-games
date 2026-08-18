@@ -298,7 +298,7 @@ const ROOMS = {
       { id: 'joe',        x: 640, y: 300, w: 120, h: 200, walkX: 585, label: 'JOE' },
       { id: 'decanter',   x: 420, y: 278, w: 50,  h: 70,  walkX: 390, label: 'THE DECANTER', counter: 'decanter' },
       { id: 'lolliTray',  x: 532, y: 316, w: 66,  h: 44,  walkX: 630, label: 'THE OUTRO TRAY' },
-      { id: 'cableSpot',  x: 316, y: 420, w: 84,  h: 46,  walkX: 300, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
+      { id: 'cableSpot',  x: 312, y: 376, w: 88,  h: 48,  walkX: 300, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
       { id: 'fridge',     x: 4,   y: 298, w: 80,  h: 138, walkX: 120, label: 'MINI-FRIDGE' },
       { id: 'socket',     x: 612, y: 234, w: 42,  h: 48,  walkX: 585, label: 'WALL SOCKET' },
       { id: 'table',      x: 360, y: 330, w: 248, h: 96,  walkX: 320, label: 'THE TABLE' },
@@ -338,15 +338,22 @@ const ROOMS = {
       { id: 'sharkBlanket', x: 410, y: 414, w: 184, h: 104, walkX: 375, label: 'SHARK BLANKET' },
       { id: 'bitsBox',    x: 462, y: 298, w: 242, h: 104, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
       { id: 'cassettes',  x: 604, y: 402, w: 280, h: 124, walkX: 558, label: 'CASSETTE PILE' },
-      { id: 'plant',      x: 754, y: 262, w: 160, h: 234, walkX: 700, label: 'FAKE PLANT' },
+      // BROOM BEFORE PLANT. Hit-testing is first-match and the plant spans x754-914, which
+      // covers the broom's x872-932 — so every tap on the broom was answered by the plant
+      // and it could not be picked up (Osimo 2026-08-18: "clicking on broom not allowing me
+      // to pick it up"). Same trap as the studio chesterfield swallowing the arcade doorway:
+      // a big scenery rect listed above a small pickup silently eats it. PICKUPS AND EXITS
+      // GO FIRST; decorative scenery last.
       { id: 'broomSpot',  x: 872, y: 286, w: 60,  h: 210, walkX: 820, label: 'THE BROOM', hideWhen: () => flags.gotBroom },
+      { id: 'plant',      x: 754, y: 262, w: 160, h: 234, walkX: 700, label: 'FAKE PLANT' },
       { id: 'shelves',    x: 0,   y: 28,  w: 332, h: 314, walkX: 230, label: 'THE SHELVES' },
     ],
   },
 };
 
 // ── ART PACK (pixel plates + sprite sheets + VO) — lazy, canvas fallback ────
-const PLATES = {};              // roomId -> Image (320x180, drawn x3, smoothing off)
+const PLATES = {};
+let kettlePatch = null;   // cached feathered shelf patch for the taken kettle              // roomId -> Image (320x180, drawn x3, smoothing off)
 const SPR = {};                 // jimmyFront/jimmySide/jimmyWalk[]/joeFront/joeWalk[]
 let VOICE = null;               // djb2(who|text) -> base64 mp3
 const voiceBuffers = {};
@@ -1342,7 +1349,7 @@ function overlayStudio() {
   // spare mike cable next to the mics base". It used to sit alone mid-floor, reading as
   // a stray object; at the stand's base it reads as studio kit that belongs there.
   if (!flags.gotCable) {
-    const cxx = 356, cyy = 442;   // tight to the left stand foot (world ~360,420)
+    const cxx = 350, cyy = 402;   // AT the stand foot (Osimo's mark, world ~352,400)
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.beginPath(); ctx.ellipse(cxx, cyy + 8, 32, 6, 0, 0, 7); ctx.fill();
     ctx.strokeStyle = '#23232b'; ctx.lineWidth = 5;
@@ -1351,9 +1358,18 @@ function overlayStudio() {
     ctx.beginPath(); ctx.ellipse(cxx, cyy - 4, 21, 7, 0, 0, 7); ctx.stroke();
     ctx.strokeStyle = '#4a4a56'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(cxx, cyy - 7, 13, 5, 0, 0, 7); ctx.stroke();
-    // jack end resting against the stand foot
+    // lead running from the coil UP to the mic stand + a jack plugged into its base, so it
+    // reads as cable belonging to that mic rather than a coil dropped nearby.
+    // Osimo 2026-08-18: "next to the base of the mike... so it looks like it's attached".
+    ctx.strokeStyle = '#23232b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cxx + 22, cyy - 3);
+    ctx.quadraticCurveTo(cxx + 34, cyy - 8, cxx + 38, cyy - 16);
+    ctx.stroke();
     ctx.fillStyle = '#6a6a78';
-    ctx.beginPath(); ctx.roundRect(cxx + 24, cyy - 6, 11, 5, 2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(cxx + 35, cyy - 22, 7, 8, 2); ctx.fill();
+    ctx.fillStyle = '#3a3a44';
+    ctx.fillRect(cxx + 37, cyy - 21, 3, 5);
   }
   // wall socket in the brick gap between screen and right portrait
   ctx.fillStyle = '#ddd5c4'; ctx.beginPath(); ctx.roundRect(618, 240, 32, 38, 4); ctx.fill();
@@ -1458,10 +1474,63 @@ function overlayProp() {
   ctx.restore();
   // kettle gone: shadowed empty shelf patch
   if (flags.gotKettle) {
-    // Shadow patch sits over the PHOTOGRAPHIC kettle (x~195-300) — it used to cover
-    // x52-144, an empty stretch of shelf, leaving the taken kettle fully visible.
-    ctx.fillStyle = 'rgba(28,18,12,0.92)';
-    ctx.beginPath(); ctx.roundRect(192, 264, 112, 94, 8); ctx.fill();
+    // KETTLE REMOVED — patch the shelf with REAL SHELF PIXELS, not a dark rectangle.
+    // Osimo 2026-08-18: "when we remove the kettle it doesn't look great... make sure it
+    // overlays perfectly". The old patch was a flat rounded rect of rgba(28,18,12,0.92)
+    // painted over a lit photograph: hard edges, wrong tone, and it read as a black hole
+    // on the shelf — worse than leaving the kettle there.
+    //
+    // Instead we blit the clean empty stretch of the SAME shelf that sits just right of the
+    // kettle (plate x93-103, y92-116) over the kettle's footprint (plate x68-94). Same
+    // photograph, same lamp, same shelf, so tone and grain match by construction.
+    //
+    // Tiled at the plate's NATIVE 3x rather than stretched: the donor is 10 plate px wide,
+    // so three 30px-wide draws cover the 78px gap with the surrounding pixel scale intact.
+    // Stretching 10->78 would have been either blocky (NEAREST, ~7.8x) or mushy (smoothed)
+    // against 3x neighbours. Clipped so the tiling cannot spill past the kettle's box, and
+    // the shelf's front edge below y348 is deliberately left untouched.
+    const P = PLATES.prop;
+    if (P) {
+      // Built ONCE into an offscreen canvas and cached — a hard-edged blit still reads as a
+      // rectangle no matter how well the donor matches, so the patch is feathered at its
+      // borders and only its centre fully replaces the kettle.
+      if (!kettlePatch) {
+        const W = 78, H = 72;
+        kettlePatch = document.createElement('canvas');
+        kettlePatch.width = W; kettlePatch.height = H;
+        const g = kettlePatch.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        // donor chosen by MEASUREMENT, not eye: every column of this shelf band was scanned
+        // for bright pixels and a run with none was taken. x93-103 looked clean but carried
+        // a small pale clip that tiled into three identical copies — visible and fake.
+        // x61-68 is the bay immediately left of the kettle: object-free, same lamp.
+        for (let i = 0; i < 4; i++) g.drawImage(P, 61, 92, 7, 24, i * 21, 0, 21, H);
+        // lift it to the lamp-lit level of the spot it replaces (the donor bay sits in shade)
+        g.globalCompositeOperation = 'lighter';
+        g.fillStyle = 'rgba(46,32,22,0.55)';
+        g.fillRect(0, 0, W, H);
+        // feather every edge so no rectangle boundary survives
+        g.globalCompositeOperation = 'destination-out';
+        const fade = (x0, y0, x1, y1, w, h) => {
+          const grd = g.createLinearGradient(x0, y0, x1, y1);
+          grd.addColorStop(0, 'rgba(0,0,0,1)');
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grd; g.fillRect(Math.min(x0, x1), Math.min(y0, y1), w, h);
+        };
+        fade(0, 0, 12, 0, 12, H);          // left
+        fade(W, 0, W - 12, 0, 12, H);      // right
+        fade(0, 0, 0, 10, W, 10);          // top
+        fade(0, H, 0, H - 10, W, 10);      // bottom
+      }
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(kettlePatch, 204, 276);
+      ctx.restore();
+    } else {
+      // canvas-fallback room (no art pack): the old dark patch is still the best available
+      ctx.fillStyle = 'rgba(28,18,12,0.92)';
+      ctx.beginPath(); ctx.roundRect(192, 264, 112, 94, 8); ctx.fill();
+    }
   }
   // BROOM — leaning in the right corner of the storage room (Osimo 2026-08-18).
   // Moved here from the studio. The puzzle still solves: rig = cable + magnet (NOT broom),
