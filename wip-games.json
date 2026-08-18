@@ -43,6 +43,21 @@
   ],
   "games": [
     {
+      "id": "dead-air-dash",
+      "name": "DEAD AIR DASH",
+      "emoji": "📡",
+      "genre": "TEMPLE RUN × DOODLE JUMP",
+      "url": "games/dead-air-dash.html",
+      "ai_file": "games/dead-air-dash.html",
+      "status": "wip",
+      "special": "Game Lab — first VERTICAL RUNNER cabinet",
+      "note": "Jimmy bounces up the studio floors while the DEAD AIR static rises below. Drag to steer, edges wrap. Lollipops fill the HYPE meter; rocket/shield/magnet/spring-shoes on platforms; bounce ON trolls to pop them. Full Jimmy+Joe voice mode on the speaker button.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-08-18",
+      "ready": true,
+      "ready_date": "2026-08-18"
+    },
+    {
       "id": "brick-invaders",
       "name": "BRICK-INVADERS",
       "emoji": "🧱",

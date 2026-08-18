@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DEAD AIR DASH — JnJ Arcade</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  DEAD AIR DASH — TEMPLE RUN × DOODLE JUMP (Osimo 2026-08-18)
+  Core loop: Doodle Jump vertical bounce (drag-steer + screen wrap).
+  Signature: THE DEAD AIR — a rising wall of broadcast static chasing from
+  below (Temple Run's pressure, verticalised). Jimmy climbs the studio floors;
+  Joe commentates. Minion Rush lends the HYPE meter fever mode + perks.
+  Built from _template.html per game-builder skill.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100dvh; background: #000; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none; }
+  #gameCanvas { display: block; width: 100vw; height: 100dvh; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             font-family: 'Courier New', monospace; color: #fff; text-align: center; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(28px, 8vw, 64px); letter-spacing: .06em;
+                color: var(--ink, #35e0c8); text-shadow: 0 0 24px var(--ink, #35e0c8); }
+  #overlay p { margin: 14px 0 26px; font-size: 14px; color: #9aa; max-width: 80vw; line-height: 1.5; }
+  #coinBtn { font: bold 18px 'Courier New', monospace; letter-spacing: .1em;
+             padding: 16px 38px; background: var(--ink, #35e0c8); color: #000;
+             border: none; border-radius: 10px; cursor: pointer;
+             box-shadow: 0 0 30px var(--ink, #35e0c8); }
+</style>
+<link rel="stylesheet" href="../cabinet.css?v=2">
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="overlay">
+  <h1>DEAD AIR DASH</h1>
+  <p>Jimmy's late for the show and the <b>DEAD AIR</b> is rising.<br>
+     Drag to steer — he bounces on his own. Edges wrap.<br>
+     🍭 fills the HYPE meter · bounce ON trolls to pop them<br>
+     🚀 rocket · 🛡 shield · 🧲 magnet · 👟 spring shoes<br>
+     Climb the studio floors. Don't let the static catch you.</p>
+  <button id="coinBtn">🪙 INSERT COIN</button>
+</div>
+<script src="../vendor/gsap.min.js"></script>
+<script src="../arcade-scores.js?v=18"></script>
+<script>
+(function () {
+'use strict';
+// ── IDENTITY ─────────────────────────────────────────────────────────────────
+const SLUG  = 'dead-air-dash';
+const TITLE = 'DEAD AIR DASH';
+const INK   = '#35e0c8';
+document.documentElement.style.setProperty('--ink', INK);
+
+// ── WORLD + PIXEL PIPELINE ───────────────────────────────────────────────────
+// Logical portrait world. Rendered to a LOW-RES offscreen then integer-upscaled
+// with imageSmoothing off (pin-vaders lesson: that one pipeline change is what
+// makes canvas shapes read as pixel art). HUD draws on the crisp top layer.
+const WORLD_W = 400, WORLD_H = 700;
+const PIX = 2;                              // world renders at 1/PIX resolution
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const off = document.createElement('canvas');
+off.width = WORLD_W / PIX; off.height = WORLD_H / PIX;
+const octx = off.getContext('2d');
+const VIEW = { scale: 1, ox: 0, oy: 0 };
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR;
+  const s = Math.min(innerWidth / WORLD_W, innerHeight / WORLD_H);
+  VIEW.scale = s * DPR;
+  VIEW.ox = (canvas.width  - WORLD_W * VIEW.scale) / 2;
+  VIEW.oy = (canvas.height - WORLD_H * VIEW.scale) / 2;
+}
+addEventListener('resize', resize); resize();
+
+// ── PHYSICS / TUNING (60fps-equivalent ticks; loop feeds dt like flap-fight) ─
+const GRAV        = 0.32;      // gravity per tick²
+const BOUNCE_VY   = -11.5;     // normal platform bounce (≈206px rise, gaps max 165)
+const SPRING_VY   = -19;       // spring platform
+const SHOE_VY     = -15.5;     // spring-shoes boosted bounce
+const ROCKET_VY   = -13.5;     // sustained during rocket
+const ROCKET_MS   = 2200;
+const MAGNET_MS   = 6500;
+const MAGNET_R    = 130;
+const HYPE_MS     = 5000;      // fever mode length
+const HYPE_NEED   = 8;         // lollipops to fill the meter
+const STEER_K     = 0.16;      // ease toward finger x
+const TROLL_R     = 16;
+const POP_R       = 15;        // lollipop pickup radius
+const PLAYER_W    = 22, PLAYER_H = 30;
+const START_GAP   = [78, 140]; // platform vertical gap range at start
+const END_GAP     = [100, 165];// ...at full difficulty (guaranteed < bounce rise)
+const PLAT_W0     = 66, PLAT_W1 = 46;
+const STATIC_BASE = 0.55;      // dead-air rise speed per tick at start
+const STATIC_MAX  = 1.55;
+const STATIC_LEASH = 620;      // static never lags more than this below the camera
+
+// STUDIO FLOORS — each introduces ONE new element (difficulty ramps one axis at
+// a time) and shifts the palette. Heights in world-pixels climbed.
+const FLOORS = [
+  { at: 0,    name: 'Basement Archive', sky0: '#0a0e18', sky1: '#141b2b', wall: '#1d2435', intro: 'static' },
+  { at: 900,  name: 'Tape Library',     sky0: '#0d1420', sky1: '#1a2438', wall: '#243048', intro: 'moving' },
+  { at: 2100, name: 'Merch Room',       sky0: '#141020', sky1: '#241c38', wall: '#322a4a', intro: 'crumble' },
+  { at: 3600, name: 'Writers Room',     sky0: '#181410', sky1: '#2b2418', wall: '#3d3422', intro: 'troll' },
+  { at: 5400, name: 'Server Room',      sky0: '#081410', sky1: '#12281e', wall: '#1c3a2c', intro: 'vanish' },
+  { at: 7500, name: 'Studio Floor',     sky0: '#160a12', sky1: '#2a1424', wall: '#3e1e34', intro: 'fast' },
+  { at: 9900, name: 'The Roof',         sky0: '#0a1020', sky1: '#1c2c50', wall: '#28407a', intro: 'sparse' },
+  { at: 12600,name: 'Above the Show',   sky0: '#060a14', sky1: '#101a30', wall: '#182848', intro: 'all' },
+];
+
+// ── SFX MODES + VOICE PACK (flap-fight pattern, byte-compatible keys) ────────
+let audioCtx = null;
+let sfxMode = 'tones';
+try {
+  const m = localStorage.getItem('sfxMode_' + SLUG);
+  if (m === 'voice' || m === 'mute' || m === 'tones') sfxMode = m;
+} catch (e) {}
+let muted = sfxMode === 'mute';
+let bounceVoiceOff = false;   // double-tap the mic: silence Joe's bounce barks only
+try { bounceVoiceOff = localStorage.getItem('dad_bounceVoiceOff') === '1'; } catch (e) {}
+
+function unlockAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === 'suspended') { try { audioCtx.resume(); } catch (e) {} }
+}
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio, { passive: true });
+
+function tone(f0, f1, dur, type, vol, delay) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const t0 = audioCtx.currentTime + (delay || 0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(f0 * (1 + 0.05 * (Math.random() * 2 - 1)), t0); // pitch jitter
+    if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+    g.gain.setValueAtTime(vol || 0.14, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+
+// VOICE LINES — reused flap-fight texts keep IDENTICAL djb2 keys, so their clips
+// are shared into this game's pack by the builder without re-rendering.
+const VO_LINES = [
+  // ── reused from flap-fight (same text = same key = same clip) ──
+  ["JIMMY", "Personal best!"], ["JIMMY", "New personal best!"], ["JIMMY", "That's a record!"],
+  ["JIMMY", "Best flight of your life!"], ["JIMMY", "Past your best. Keep going!"],
+  ["JIMMY", "New record. That just happened!"],
+  ["JIMMY", "Top scorer!"], ["JIMMY", "Number one!"], ["JIMMY", "Top of the board!"],
+  ["JIMMY", "You're number one!"], ["JIMMY", "Highest score in the whole arcade!"],
+  ["JIMMY", "The record is yours!"],
+  ["JIMMY", "That was brief!"], ["JIMMY", "The warm-up run. Classic!"],
+  ["JIMMY", "We never speak of this one!"], ["JIMMY", "Even the pipes feel bad!"],
+  ["JIMMY", "A speedrun of losing!"], ["JIMMY", "The bird barely woke up!"],
+  ["JIMMY", "Straight down. Committed, though!"],
+  ["JIMMY", "What a run!"], ["JIMMY", "Down in a blaze of glory!"], ["JIMMY", "The bird will fly again!"],
+  ["JIMMY", "Respectable! The pipes disagree, but respectable!"],
+  ["JIMMY", "Solid flying. Questionable landing!"], ["JIMMY", "That was a proper flight!"],
+  ["JIMMY", "Now THAT was flying!"], ["JIMMY", "The bird is a professional!"],
+  ["JIMMY", "Someone's been practising!"], ["JIMMY", "That run had chapters!"],
+  ["JIMMY", "Big score. Bigger heart!"],
+  ["JIMMY", "Legendary flight! Frame it!"], ["JIMMY", "The pipes will tell stories about you!"],
+  ["JIMMY", "That wasn't a run, that was a career!"], ["JIMMY", "I ran out of things to count!"],
+  ["JIMMY", "Historic! Genuinely historic!"],
+  ["JOE", "that was quick."], ["JOE", "a bold strategy."], ["JOE", "we don't talk about this one."],
+  ["JOE", "the pipes send their thanks."], ["JOE", "blink and you missed it. I blinked."],
+  ["JOE", "gravity one, bird nil."], ["JOE", "practice. presumably."],
+  ["JOE", "big boom."], ["JOE", "oh no."], ["JOE", "bye bye."], ["JOE", "that's that."],
+  ["JOE", "a reasonable effort. then a wall."], ["JOE", "decent. the ending needs work."],
+  ["JOE", "the middle part was good."],
+  ["JOE", "genuinely decent."], ["JOE", "I watched most of that. worth it."],
+  ["JOE", "the pipes needed a break anyway."], ["JOE", "quality flapping. noted in the ledger."],
+  ["JOE", "that was fine. very fine."],
+  ["JOE", "I stood up. briefly."], ["JOE", "that deserves a slow nod. here it is."],
+  ["JOE", "the leaderboard felt that."], ["JOE", "remarkable. I don't say that."],
+  ["JOE", "I'll be quoting this run."],
+  ["JOE", "ten in a row. I'm mildly moved."],
+  ["JOE", "fifteen straight. this is getting silly."],
+  ["JOE", "twenty. I'm framing this one."],
+  ["JOE", "boing."], ["JOE", "whoops."], ["JOE", "ooh."], ["JOE", "shiny."], ["JOE", "nice."],
+  ["JOE", "level up."], ["JOE", "onwards."], ["JOE", "up we go."],
+  // ── new for this game — Joe bounce barks (rotating, reduced gain) ──
+  ["JOE", "bounce."], ["JOE", "up."], ["JOE", "higher."], ["JOE", "again."],
+  ["JOE", "still going up."], ["JOE", "the physics check out."],
+  ["JOE", "upward momentum. noted."], ["JOE", "quite a lot of air."],
+  // Joe — platform breaks / near misses:
+  ["JOE", "that platform quit."], ["JOE", "close one."], ["JOE", "budget flooring."],
+  ["JOE", "structural issues."], ["JOE", "mind the gap."],
+  ["JOE", "the platform has abandoned us."], ["JOE", "not ideal."],
+  // Joe — powerups:
+  ["JOE", "rocket. naturally."], ["JOE", "up we go. rapidly."], ["JOE", "that's just showing off."],
+  ["JOE", "the ceiling is no longer a choice."],
+  ["JOE", "shield acquired."], ["JOE", "one free mistake."], ["JOE", "insurance."],
+  ["JOE", "magnet on."], ["JOE", "the lollipops come to you now."], ["JOE", "lazy. effective."],
+  ["JOE", "we are attracting objects now."],
+  ["JOE", "spring shoes."], ["JOE", "bouncy footwear."], ["JOE", "health and safety approved. barely."],
+  ["JOE", "the bounce is more aggressive."],
+  // Joe — hype mode:
+  ["JOE", "hype mode. apparently."], ["JOE", "he's glowing. that's new."], ["JOE", "sustain it. or don't."],
+  // Joe — troll stomps:
+  ["JOE", "troll deleted."], ["JOE", "blocked and reported."], ["JOE", "the comment section thins."],
+  // Joe — game start (flat):
+  ["JOE", "off he goes."], ["JOE", "climbing. again."], ["JOE", "the static is patient."],
+  ["JOE", "I'll be here."], ["JOE", "the game begins. try not to fall."], ["JOE", "begin. I will observe."],
+  // Joe — rare random idle quips:
+  ["JOE", "still watching."], ["JOE", "I had a sofa like that."], ["JOE", "the archive misses him."],
+  ["JOE", "this floor is my favourite."], ["JOE", "he can't hear me. probably for the best."],
+  ["JOE", "somewhere, a kettle boils."], ["JOE", "gravity's having an off day."],
+  ["JOE", "the podcast studio has terrible building codes."],
+  ["JOE", "how many floors does this building actually have."],
+  // Jimmy — floor milestone announcements (energetic):
+  ["JIMMY", "Basement Archive! It smells like history!"],
+  ["JIMMY", "Tape Library! Every episode ever!"],
+  ["JIMMY", "Merch Room! Buy or ByeBye lives here!"],
+  ["JIMMY", "Writers Room! Where the jokes are born!"],
+  ["JIMMY", "Server Room! Keep it cool, keep climbing!"],
+  ["JIMMY", "Studio Floor! We're basically on air!"],
+  ["JIMMY", "The Roof! Nothing above us but sky!"],
+  ["JIMMY", "Above the show! Uncharted territory!"],
+  // Jimmy — near-death saves (shield / big catch):
+  ["JIMMY", "That was close! Too close!"],
+  ["JIMMY", "Still alive! Somehow!"],
+  ["JIMMY", "The shield! I love the shield!"],
+  ["JIMMY", "Heart rate: unprofessional!"],
+];
+const JOE_BARKS = {
+  bounce:  ["boing.", "bounce.", "up.", "higher.", "again.", "still going up.",
+            "the physics check out.", "upward momentum. noted.", "quite a lot of air."],
+  breakP:  ["that platform quit.", "whoops.", "budget flooring.", "structural issues.",
+            "the platform has abandoned us."],
+  nearMiss:["close one.", "mind the gap.", "not ideal."],
+  rocket:  ["rocket. naturally.", "up we go. rapidly.", "that's just showing off.",
+            "the ceiling is no longer a choice."],
+  shield:  ["shield acquired.", "one free mistake.", "insurance."],
+  magnet:  ["magnet on.", "the lollipops come to you now.", "lazy. effective.",
+            "we are attracting objects now."],
+  shoes:   ["spring shoes.", "bouncy footwear.", "health and safety approved. barely.",
+            "the bounce is more aggressive."],
+  hype:    ["hype mode. apparently.", "he's glowing. that's new.", "sustain it. or don't."],
+  stomp:   ["troll deleted.", "blocked and reported.", "the comment section thins.", "big boom."],
+  start:   ["off he goes.", "climbing. again.", "the static is patient.", "I'll be here.",
+            "the game begins. try not to fall.", "begin. I will observe."],
+  idle:    ["still watching.", "I had a sofa like that.", "the archive misses him.",
+            "this floor is my favourite.", "he can't hear me. probably for the best.",
+            "somewhere, a kettle boils.", "gravity's having an off day.",
+            "the podcast studio has terrible building codes.",
+            "how many floors does this building actually have."],
+  pickup:  ["ooh.", "shiny.", "nice."],
+};
+const JIMMY_FLOOR_VO = [
+  "Basement Archive! It smells like history!",
+  "Tape Library! Every episode ever!",
+  "Merch Room! Buy or ByeBye lives here!",
+  "Writers Room! Where the jokes are born!",
+  "Server Room! Keep it cool, keep climbing!",
+  "Studio Floor! We're basically on air!",
+  "The Roof! Nothing above us but sky!",
+  "Above the show! Uncharted territory!",
+];
+const JIMMY_SAVE_VO = ["That was close! Too close!", "Still alive! Somehow!",
+                       "The shield! I love the shield!", "Heart rate: unprofessional!"];
+const DEATH_TIERS = [
+  { min: 15000,
+    JIMMY: ["Legendary flight! Frame it!", "The pipes will tell stories about you!",
+            "That wasn't a run, that was a career!", "I ran out of things to count!",
+            "Historic! Genuinely historic!"],
+    JOE:   ["I stood up. briefly.", "that deserves a slow nod. here it is.",
+            "the leaderboard felt that.", "remarkable. I don't say that.", "I'll be quoting this run."] },
+  { min: 5000,
+    JIMMY: ["Now THAT was flying!", "The bird is a professional!", "Someone's been practising!",
+            "That run had chapters!", "Big score. Bigger heart!"],
+    JOE:   ["genuinely decent.", "I watched most of that. worth it.", "the pipes needed a break anyway.",
+            "quality flapping. noted in the ledger.", "that was fine. very fine."] },
+  { min: 500,
+    JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!",
+            "Respectable! The pipes disagree, but respectable!", "Solid flying. Questionable landing!",
+            "That was a proper flight!"],
+    JOE:   ["big boom.", "oh no.", "bye bye.", "that's that.", "a reasonable effort. then a wall.",
+            "decent. the ending needs work.", "the middle part was good."] },
+  { min: 0,
+    JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
+            "Even the pipes feel bad!", "A speedrun of losing!", "The bird barely woke up!",
+            "Straight down. Committed, though!"],
+    JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
+            "the pipes send their thanks.", "blink and you missed it. I blinked.",
+            "gravity one, bird nil.", "practice. presumably."] },
+];
+const COMBO_VO = {
+  10: "ten in a row. I'm mildly moved.",
+  15: "fifteen straight. this is getting silly.",
+  20: "twenty. I'm framing this one.",
+};
+const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
+                      "Best flight of your life!", "Past your best. Keep going!",
+                      "New record. That just happened!"];
+const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
+                      "You're number one!", "Highest score in the whole arcade!",
+                      "The record is yours!"];
+const JIMMY_GAIN = 1.15, JOE_GAIN = 0.4;
+
+// every bank string must exist in VO_LINES or its clip silently never plays
+(function voSelfCheck() {
+  const all = new Set(VO_LINES.map(([w, t]) => w + '|' + t));
+  const miss = [];
+  const chk = (w, t) => { if (!all.has(w + '|' + t)) miss.push(w + '|' + t); };
+  Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
+  ['JIMMY', 'JOE'].forEach(w => DEATH_TIERS.forEach(t => t[w].forEach(x => chk(w, x))));
+  JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_FLOOR_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_SAVE_VO.forEach(t => chk('JIMMY', t));
+  Object.values(COMBO_VO).forEach(t => chk('JOE', t));
+  if (miss.length) console.error('VO_LINES missing:', miss);
+})();
+
+function djb2vo(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, lastJoeMs: 0 };
+function loadVoicePack() {
+  if (VO.b64 || VO.loading) return;
+  VO.loading = true;
+  fetch('dead-air-dash-pack.json?v=1')
+    .then(r => r.json())
+    .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
+    .catch(() => { VO.loading = false; });
+}
+if (sfxMode !== 'mute') loadVoicePack();
+
+function voicePlay(who, text, gain) {
+  if (!audioCtx || !VO.b64 || state === 'attract') return;
+  const key = djb2vo(who + '|' + text);
+  const start = (buf) => {
+    try {
+      const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
+      src.buffer = buf; g.gain.value = gain;
+      src.connect(g); g.connect(audioCtx.destination);
+      if (who === 'JIMMY') {
+        if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} }
+        VO.jimmySrc = src;
+      }
+      src.start();
+    } catch (e) {}
+  };
+  const cached = VO.buffers[key];
+  if (cached) { start(cached); return; }
+  const b64 = VO.b64[key];
+  if (!b64) return;
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; start(buf); }, () => {});
+}
+function jimmySay(text) { voicePlay('JIMMY', text, JIMMY_GAIN); }
+function joeSay(event) {
+  const now = Date.now();
+  if (now - VO.lastJoeMs < 140) return;
+  VO.lastJoeMs = now;
+  const bank = JOE_BARKS[event];
+  if (!bank) return;
+  if (event === 'bounce' && bounceVoiceOff) return;
+  VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;
+  voicePlay('JOE', bank[VO.rot[event]], event === 'bounce' ? JOE_GAIN * 0.85 : JOE_GAIN);
+}
+function jimmyPick(bank) {
+  VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
+  return bank[VO.rot.__jim];
+}
+function deathVoice() {
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('dad_death_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('dad_death_who', who);
+  } catch (e) {}
+  const tier = DEATH_TIERS.find(t => score >= t.min) || DEATH_TIERS[DEATH_TIERS.length - 1];
+  const bank = tier[who];
+  voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN);
+}
+
+// tone recipes
+const TONES = {
+  bounce: () => tone(300, 520, 0.07, 'triangle', 0.10),
+  spring: () => tone(420, 1100, 0.16, 'square', 0.16),
+  pickup: () => tone(1046, 1568, 0.07, 'square', 0.12),
+  power:  () => { tone(660, 990, 0.1, 'square', 0.15); tone(990, 1320, 0.1, 'square', 0.13, 0.08); },
+  stomp:  () => { tone(180, 55, 0.1, 'square', 0.2); tone(900, 300, 0.14, 'sawtooth', 0.12, 0.03); },
+  breakP: () => tone(240, 90, 0.16, 'sawtooth', 0.14),
+  hype:   () => [660, 830, 990, 1320].forEach((f, i) => tone(f, null, 0.1, 'square', 0.15, 0.06 * i)),
+  floor:  () => { tone(523, null, 0.1, 'triangle', 0.13); tone(784, null, 0.12, 'triangle', 0.13, 0.09); },
+  hurt:   () => { tone(180, 50, 0.25, 'sawtooth', 0.2); },
+  death:  () => { tone(300, 40, 0.5, 'sawtooth', 0.2); tone(90, 30, 0.7, 'sine', 0.22, 0.05); },
+  best:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, null, 0.13, 'triangle', 0.14, 0.12 * i)),
+  rocket: () => tone(140, 700, 0.6, 'sawtooth', 0.14),
+};
+function dispatch(event, tonesFn, arg) {
+  if (sfxMode === 'mute' || state === 'attract') return;
+  if (event === 'death') {
+    if (sfxMode === 'tones') { TONES.death(); setTimeout(deathVoice, 650); }
+    else deathVoice();
+    return;
+  }
+  if (sfxMode === 'voice') {
+    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    if (event === 'stomp' && COMBO_VO[arg]) { voicePlay('JOE', COMBO_VO[arg], JOE_GAIN); return; }
+    if (event === 'floor') { jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]); return; }
+    if (event === 'save')  { jimmySay(jimmyPick(JIMMY_SAVE_VO)); return; }
+    joeSay(event);
+    return;
+  }
+  // tones mode: floor announcements still speak (they're the level fanfare)
+  if (event === 'floor') { TONES.floor(); setTimeout(() => jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]), 400); return; }
+  tonesFn && tonesFn();
+}
+const sfx = {
+  bounce: ()  => dispatch('bounce', TONES.bounce),
+  spring: ()  => dispatch('shoes',  TONES.spring),
+  pickup: ()  => dispatch('pickup', TONES.pickup),
+  rocket: ()  => dispatch('rocket', TONES.rocket),
+  shield: ()  => dispatch('shield', TONES.power),
+  magnet: ()  => dispatch('magnet', TONES.power),
+  shoes:  ()  => dispatch('shoes',  TONES.power),
+  hype:   ()  => dispatch('hype',   TONES.hype),
+  stomp:  (c) => dispatch('stomp',  TONES.stomp, c),
+  breakP: ()  => dispatch('breakP', TONES.breakP),
+  nearMiss:() => dispatch('nearMiss', null),
+  floor:  (i) => dispatch('floor',  TONES.floor, i),
+  save:   ()  => dispatch('save',   TONES.power),
+  start:  ()  => dispatch('start',  null),
+  idle:   ()  => dispatch('idle',   null),
+  death:  ()  => dispatch('death',  TONES.death),
+  best:   ()  => dispatch('best',   TONES.best),
+};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = 'attract';                  // attract | playing | ended
+let score = 0, shakeT = 0;
+let cam = 0;                            // camera top edge in world y (negative going up)
+let heightM = 0;                        // metres climbed (score driver)
+let bestScore = 0, topScore = 0, pbAnnounced = false, topAnnounced = false, callout = null;
+let player, plats, pops, powers, trolls, parts, floats;
+let staticY = 0, staticSpd = STATIC_BASE;
+let hypeMeter = 0, hypeUntil = 0;
+let rocketUntil = 0, magnetUntil = 0, shieldOn = false, shoeCount = 0;
+let stompCombo = 0, lastStompMs = 0;
+let floorIdx = 0, nextIdleMs = 0;
+let seedX = 0;                          // attract steering memory
+
+try { bestScore = parseInt(localStorage.getItem('hs_' + SLUG) || '0', 10); } catch (e) {}
+fetch('/api/scores?game=' + SLUG).then(r => r.json())
+  .then(d => { if (d.scores && d.scores[0]) topScore = d.scores[0].s | 0; }).catch(() => {});
+
+// ── PLATFORM GENERATION (fairness: every gap is reachable by construction) ───
+// types: 0 static · 1 moving · 2 crumble · 3 vanish (fades after one bounce) · 4 spring
+let genY;             // y of the last generated platform (going up = decreasing)
+function difficulty() { return Math.min(1, heightM / 2400); }
+function allowedTypes() {
+  const d = heightM * 7;   // world px climbed
+  const t = [0];
+  if (d >= FLOORS[1].at) t.push(1);
+  if (d >= FLOORS[2].at) t.push(2);
+  if (d >= FLOORS[4].at) t.push(3);
+  return t;
+}
+function spawnPlat(y, forceType) {
+  const d = difficulty();
+  const w = PLAT_W0 + (PLAT_W1 - PLAT_W0) * d;
+  const types = allowedTypes();
+  let type = forceType != null ? forceType : types[Math.floor(Math.random() * types.length)];
+  // springs are a bonus roll on top of static
+  if (forceType == null && type === 0 && Math.random() < 0.10) type = 4;
+  const p = {
+    x: Math.random() * (WORLD_W - w), y, w, h: 12, type,
+    vx: type === 1 ? (Math.random() < 0.5 ? -1 : 1) * (0.8 + d * 0.9) : 0,
+    crumbleT: -1, gone: false, vanishA: 1,
+  };
+  plats.push(p);
+  // dressings: lollipops in a small arc above some platforms
+  if (Math.random() < 0.35) {
+    const n = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++)
+      pops.push({ x: p.x + p.w * (0.2 + 0.6 * (n === 1 ? 0.5 : i / (n - 1))), y: y - 26 - Math.random() * 18, taken: false });
+  }
+  // powerups: rare, sit on the platform
+  if (Math.random() < 0.055) {
+    const kinds = ['rocket', 'shield', 'magnet', 'shoes'];
+    powers.push({ x: p.x + p.w / 2, y: y - 16, kind: kinds[Math.floor(Math.random() * kinds.length)], taken: false });
+  }
+  // trolls float between platforms once the Writers Room unlocks
+  if (heightM * 7 >= FLOORS[3].at && Math.random() < (0.10 + d * 0.06)) {
+    trolls.push({ x: 30 + Math.random() * (WORLD_W - 60), y: y - 50 - Math.random() * 30,
+                  vx: (Math.random() < 0.5 ? -1 : 1) * (0.5 + d * 0.8), r: TROLL_R, alive: true, ph: Math.random() * 6.28 });
+  }
+  return p;
+}
+function gapNow() {
+  const d = difficulty();
+  const g0 = START_GAP[0] + (END_GAP[0] - START_GAP[0]) * d;
+  const g1 = START_GAP[1] + (END_GAP[1] - START_GAP[1]) * d;
+  const sparse = heightM * 7 >= FLOORS[6].at ? 1.06 : 1;   // Roof: slightly sparser
+  return (g0 + Math.random() * (g1 - g0)) * sparse;
+}
+function topUpPlatforms() {
+  while (genY > cam - 220) {
+    genY -= gapNow();
+    spawnPlat(genY);
+    // crumble/vanish platforms never appear twice in a row at the same height band —
+    // guarantee a solid landing option: if the roll was fragile, add a static nearby
+    const last = plats[plats.length - 1];
+    if ((last.type === 2 || last.type === 3) && Math.random() < 0.6) {
+      const q = spawnPlat(genY - 8, 0);
+      q.x = (last.x + WORLD_W / 2) % (WORLD_W - q.w);
+    }
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+function initGame() {
+  player = { x: WORLD_W / 2, y: WORLD_H - 90, vx: 0, vy: BOUNCE_VY, targetX: WORLD_W / 2,
+             face: 1, runPh: 0 };
+  plats = []; pops = []; powers = []; trolls = []; parts = []; floats = [];
+  score = 0; heightM = 0; cam = 0;
+  staticY = WORLD_H + 160; staticSpd = STATIC_BASE;
+  hypeMeter = 0; hypeUntil = 0; rocketUntil = 0; magnetUntil = 0; shieldOn = false; shoeCount = 0;
+  stompCombo = 0; lastStompMs = 0; floorIdx = 0;
+  pbAnnounced = false; topAnnounced = false; callout = null;
+  nextIdleMs = Date.now() + 14000 + Math.random() * 12000;
+  // starting platforms: a guaranteed ladder up + one under the player
+  genY = WORLD_H - 60;
+  spawnPlat(genY, 0).x = WORLD_W / 2 - PLAT_W0 / 2;
+  for (let i = 0; i < 10; i++) { genY -= 85 + Math.random() * 40; spawnPlat(genY, 0); }
+}
+
+// ── INPUT — drag steers, edges wrap; mic button 3-way + double-tap ───────────
+const DEADZONE = 17;
+let touchOn = false, micTapTimer = null;
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top)  * DPR - VIEW.oy) / VIEW.scale };
+}
+const MIC_ZONE = { x: WORLD_W - 52, y: 6, w: 46, h: 40 };
+function cycleSfxMode() {
+  sfxMode = sfxMode === 'tones' ? 'voice' : sfxMode === 'voice' ? 'mute' : 'tones';
+  muted = sfxMode === 'mute';
+  try { localStorage.setItem('sfxMode_' + SLUG, sfxMode); } catch (e) {}
+  if (sfxMode !== 'mute') loadVoicePack();
+}
+function onMicTap() {
+  unlockAudio();
+  if (sfxMode !== 'voice') { cycleSfxMode(); return; }
+  if (micTapTimer) {
+    clearTimeout(micTapTimer); micTapTimer = null;
+    bounceVoiceOff = !bounceVoiceOff;
+    try { localStorage.setItem('dad_bounceVoiceOff', bounceVoiceOff ? '1' : '0'); } catch (e) {}
+    return;
+  }
+  micTapTimer = setTimeout(() => { micTapTimer = null; cycleSfxMode(); }, 260);
+}
+function onDown(e) {
+  const p = e.touches ? e.touches[0] : e;
+  const w = toWorld(p.clientX, p.clientY);
+  if (w.x >= MIC_ZONE.x && w.x <= MIC_ZONE.x + MIC_ZONE.w && w.y >= MIC_ZONE.y && w.y <= MIC_ZONE.y + MIC_ZONE.h) {
+    onMicTap();
+    if (e.cancelable) e.preventDefault();
+    return;
+  }
+  touchOn = true;
+  if (state === 'playing' && player) player.targetX = w.x;
+  if (e.cancelable) e.preventDefault();
+}
+function onMove(e) {
+  if (!touchOn || state !== 'playing' || !player) return;
+  const p = e.touches ? e.touches[0] : e;
+  player.targetX = toWorld(p.clientX, p.clientY).x;
+  if (e.cancelable) e.preventDefault();
+}
+function onUp(e) { touchOn = false; if (e.cancelable) e.preventDefault(); }
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+canvas.addEventListener('touchend', onUp, { passive: false });
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+canvas.addEventListener('mouseup', onUp);
+document.addEventListener('keydown', e => {
+  if (state !== 'playing' || !player) return;
+  if (e.key === 'ArrowLeft')  player.targetX = Math.max(0, player.targetX - 60);
+  if (e.key === 'ArrowRight') player.targetX = Math.min(WORLD_W, player.targetX + 60);
+});
+
+// ── JUICE ────────────────────────────────────────────────────────────────────
+function burst(x, y, n, c0, c1) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 1.2 + Math.random() * 2.6;
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2,
+                 t: 0, life: 24 + Math.random() * 14, s0: 3, s1: 0.6,
+                 c0: c0 || INK, c1: c1 || '#ffffff' });
+  }
+}
+function confetti(n) {
+  const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8', '#c084fc', '#ff9900'];
+  for (let i = 0; i < n; i++)
+    parts.push({ x: Math.random() * WORLD_W, y: cam - 20 - Math.random() * 40,
+                 vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random() * 2,
+                 t: 0, life: 60 + Math.random() * 40, s0: 2.5, s1: 1.5,
+                 c0: cols[i % 6], c1: cols[(i + 3) % 6] });
+}
+function float(x, y, text, color) {
+  floats.push({ x, y, text, a: 1.4, vy: -1.1, color: color || '#fff' });
+}
+
+// ── UPDATE ───────────────────────────────────────────────────────────────────
+function bounceOff(p) {
+  const shoes = shoeCount > 0;
+  if (shoes) shoeCount--;
+  player.vy = p && p.type === 4 ? SPRING_VY : shoes ? SHOE_VY : BOUNCE_VY;
+  if (hypeUntil > Date.now()) player.vy *= 1.18;
+  if (p && p.type === 4) { sfx.spring(); burst(player.x, p.y, 10, '#ffd23d'); }
+  else sfx.bounce();
+  stompCombo = 0;   // combo is stomp-chain only; touching a platform resets it
+  if (p && p.type === 2) { p.crumbleT = 14; }
+  if (p && p.type === 3) { p.gone = true; }
+}
+function die() {
+  if (state !== 'playing') return;
+  state = 'ended';
+  sfx.death();
+  burst(player.x, player.y, 30, '#ffffff', '#35e0c8');
+  shakeT = 14;
+  if (score > bestScore) {
+    bestScore = score;
+    try { localStorage.setItem('hs_' + SLUG, bestScore); } catch (e) {}
+  }
+  setTimeout(() => {
+    if (window.ArcadeScores) {
+      ArcadeScores.show({ game: SLUG, title: TITLE, score: score, accent: INK,
+                          onClose: () => { initGame(); state = 'playing'; sfx.start(); } });
+    } else { initGame(); state = 'playing'; }
+  }, 900);
+}
+function update(dt) {
+  if (state === 'attract') { attractStep(dt); }
+  if (state !== 'playing' && state !== 'attract') {
+    stepParts(dt);
+    return;
+  }
+  const now = Date.now();
+  const hype = hypeUntil > now;
+  const rocket = rocketUntil > now;
+
+  // steer
+  const dx = player.targetX - player.x;
+  player.vx = dx * STEER_K * dt;
+  if (Math.abs(player.vx) > 9) player.vx = Math.sign(player.vx) * 9;
+  player.x += player.vx;
+  if (Math.abs(player.vx) > 0.4) player.face = Math.sign(player.vx);
+  player.runPh += Math.abs(player.vx) * 0.09 * dt;
+  // wrap
+  if (player.x < -PLAYER_W / 2) player.x = WORLD_W + PLAYER_W / 2 - 1;
+  if (player.x > WORLD_W + PLAYER_W / 2) player.x = -PLAYER_W / 2 + 1;
+
+  // vertical
+  if (rocket) {
+    player.vy = ROCKET_VY;
+    if (Math.random() < 0.5) burst(player.x, player.y + PLAYER_H / 2, 1, '#ff9900', '#ffd23d');
+  } else {
+    player.vy += GRAV * dt;
+  }
+  player.y += player.vy * dt;
+
+  // platform collision (falling only, feet within platform span)
+  if (player.vy > 0 && !rocket) {
+    for (const p of plats) {
+      if (p.gone || p.crumbleT === 0) continue;
+      const feet = player.y + PLAYER_H / 2;
+      if (feet >= p.y && feet <= p.y + p.h + player.vy * dt + 2 &&
+          player.x > p.x - 6 && player.x < p.x + p.w + 6) {
+        player.y = p.y - PLAYER_H / 2;
+        bounceOff(p);
+        break;
+      }
+    }
+  }
+
+  // platform dynamics
+  for (const p of plats) {
+    if (p.type === 1) {
+      p.x += p.vx * dt;
+      if (p.x < 0 || p.x + p.w > WORLD_W) p.vx *= -1;
+    }
+    if (p.crumbleT > 0) {
+      p.crumbleT -= dt;
+      if (p.crumbleT <= 0) { p.crumbleT = 0; sfx.breakP(); burst(p.x + p.w / 2, p.y, 8, '#8a7a5a'); }
+    }
+    if (p.gone && p.vanishA > 0) p.vanishA -= 0.08 * dt;
+  }
+
+  // camera follows upward only
+  const targetCam = player.y - WORLD_H * 0.55;
+  if (targetCam < cam) cam += (targetCam - cam) * 0.12 * dt;
+  const climbed = Math.max(0, Math.round((-(cam)) / 7));
+  if (climbed > heightM) {
+    score += (climbed - heightM);
+    heightM = climbed;
+  }
+
+  // floor milestones
+  const px = heightM * 7;
+  if (floorIdx < FLOORS.length - 1 && px >= FLOORS[floorIdx + 1].at) {
+    floorIdx++;
+    sfx.floor(floorIdx);
+    float(WORLD_W / 2, cam + 160, '🏢 ' + FLOORS[floorIdx].name.toUpperCase(), '#7dffb8');
+    confetti(18);
+  }
+
+  // dead air rises — speed scales with height, leashed to the camera
+  staticSpd = STATIC_BASE + (STATIC_MAX - STATIC_BASE) * difficulty() *
+              (heightM * 7 >= FLOORS[5].at ? 1.15 : 1);
+  staticY -= staticSpd * dt;             // static rises (up = smaller y)
+  if (staticY > cam + WORLD_H + STATIC_LEASH) staticY = cam + WORLD_H + STATIC_LEASH;
+
+  // player vs dead air
+  if (player.y + PLAYER_H / 2 > staticY) {
+    if (shieldOn) {
+      shieldOn = false;
+      player.vy = SPRING_VY;             // shield hurls you back up
+      sfx.save();
+      float(player.x, player.y - 30, '🛡 SAVED!', '#4dd9f5');
+      burst(player.x, player.y, 16, '#4dd9f5');
+    } else { die(); return; }
+  }
+  // fell below the screen (into static territory regardless)
+  if (player.y > cam + WORLD_H + 80) { die(); return; }
+
+  // lollipops
+  const magnet = magnetUntil > now;
+  for (const c of pops) {
+    if (c.taken) continue;
+    if (magnet) {
+      const d2 = Math.hypot(c.x - player.x, c.y - player.y);
+      if (d2 < MAGNET_R) { c.x += (player.x - c.x) * 0.25 * dt; c.y += (player.y - c.y) * 0.25 * dt; }
+    }
+    if (Math.abs(c.x - player.x) < POP_R + 8 && Math.abs(c.y - player.y) < POP_R + 12) {
+      c.taken = true;
+      const v = hype ? 50 : 25;
+      score += v;
+      float(c.x, c.y, '+' + v, '#ff7bd5');
+      sfx.pickup();
+      burst(c.x, c.y, 6, '#ff7bd5', '#fff');
+      hypeMeter = Math.min(HYPE_NEED, hypeMeter + 1);
+      if (hypeMeter >= HYPE_NEED && !hype) {
+        hypeMeter = 0;
+        hypeUntil = now + HYPE_MS;
+        sfx.hype();
+        float(player.x, player.y - 40, '🔥 HYPE MODE!', '#ffd23d');
+        confetti(24);
+      }
+    }
+  }
+
+  // powerups
+  for (const pw of powers) {
+    if (pw.taken) continue;
+    if (Math.abs(pw.x - player.x) < 20 && Math.abs(pw.y - player.y) < 24) {
+      pw.taken = true;
+      burst(pw.x, pw.y, 12, '#ffd23d');
+      if (pw.kind === 'rocket') { rocketUntil = now + ROCKET_MS; sfx.rocket(); float(pw.x, pw.y - 20, '🚀 ON AIR!', '#ff9900'); }
+      if (pw.kind === 'shield') { shieldOn = true; sfx.shield(); float(pw.x, pw.y - 20, '🛡 SHIELD', '#4dd9f5'); }
+      if (pw.kind === 'magnet') { magnetUntil = now + MAGNET_MS; sfx.magnet(); float(pw.x, pw.y - 20, '🧲 MAGNET', '#c084fc'); }
+      if (pw.kind === 'shoes')  { shoeCount = 3; sfx.shoes(); float(pw.x, pw.y - 20, '👟 SPRING ×3', '#7dffb8'); }
+    }
+  }
+
+  // trolls
+  for (const t of trolls) {
+    if (!t.alive) continue;
+    t.x += t.vx * dt;
+    t.ph += 0.06 * dt;
+    t.y += Math.sin(t.ph) * 0.5 * dt;
+    if (t.x < t.r || t.x > WORLD_W - t.r) t.vx *= -1;
+    const dxp = player.x - t.x, dyp = player.y - t.y;
+    const dist = Math.hypot(dxp, dyp);
+    if (dist < t.r + PLAYER_W / 2) {
+      const falling = player.vy > 1.5;
+      const above = player.y < t.y - t.r * 0.3;
+      if ((falling && above) || hype || rocketUntil > now) {
+        // stomp
+        t.alive = false;
+        player.vy = BOUNCE_VY * 0.9;
+        stompCombo = (now - lastStompMs < 2600) ? stompCombo + 1 : 1;
+        lastStompMs = now;
+        const pts = 50 * Math.min(stompCombo, 20);
+        score += pts;
+        sfx.stomp(stompCombo);
+        float(t.x, t.y - 20, stompCombo >= 2 ? `+${pts} ×${stompCombo}` : '+' + pts, '#ffd23d');
+        burst(t.x, t.y, 14, '#9fe8ff', '#c084fc');
+      } else if (shieldOn) {
+        shieldOn = false;
+        t.alive = false;
+        sfx.save();
+        float(player.x, player.y - 30, '🛡 SAVED!', '#4dd9f5');
+        burst(t.x, t.y, 12, '#4dd9f5');
+      } else { die(); return; }
+    }
+  }
+
+  // callouts (PB / top-score) + confetti — same triggers as flap-fight
+  if (!topAnnounced && topScore > 0 && score > topScore) {
+    topAnnounced = true; pbAnnounced = true;
+    showCallout('top');
+  } else if (!pbAnnounced && bestScore > 0 && score > bestScore) {
+    pbAnnounced = true;
+    showCallout('pb');
+  }
+
+  // rare idle Joe quip
+  if (sfxMode === 'voice' && now > nextIdleMs && state === 'playing') {
+    nextIdleMs = now + 20000 + Math.random() * 20000;
+    sfx.idle();
+  }
+
+  topUpPlatforms();
+
+  // prune off-screen entities (below static / far below camera)
+  const cutoff = cam + WORLD_H + 260;
+  plats = plats.filter(p => p.y < cutoff && p.vanishA > 0);
+  pops = pops.filter(c => !c.taken && c.y < cutoff);
+  powers = powers.filter(p => !p.taken && p.y < cutoff);
+  trolls = trolls.filter(t => t.alive && t.y < cutoff);
+
+  stepParts(dt);
+}
+function stepParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.t += dt;
+    if (p.t > p.life) { parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.12 * dt;
+  }
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i];
+    f.y += f.vy * dt; f.a -= 0.025 * dt;
+    if (f.a <= 0) floats.splice(i, 1);
+  }
+}
+function showCallout(kind) {
+  let who = 'JIMMY';
+  try {
+    const last = localStorage.getItem('dad_callout_who');
+    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
+    localStorage.setItem('dad_callout_who', who);
+  } catch (e) {}
+  callout = { who, kind, until: Date.now() + 3200 };
+  confetti(kind === 'top' ? 60 : 36);
+  const line = jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO);
+  if (sfxMode === 'voice') jimmySay(line);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line), 600); }
+  callout.text = line;
+}
+
+// ── ATTRACT AI — steers to the best reachable platform, competent + silent ───
+function attractStep(dt) {
+  if (!player) { initGame(); }
+  // pick the nearest platform ABOVE within horizontal reach, steer under it
+  let target = null, bd = 1e9;
+  for (const p of plats) {
+    if (p.gone || p.crumbleT === 0) continue;
+    if (p.y < player.y - 15 && p.y > player.y - 260) {
+      const d = Math.abs(p.x + p.w / 2 - player.x) + (player.y - p.y) * 0.4;
+      if (d < bd) { bd = d; target = p; }
+    }
+  }
+  if (target) player.targetX = target.x + target.w / 2;
+  // never let the demo die: if the bot is about to fall into static, rescue-bounce
+  if (player.y + PLAYER_H / 2 > staticY - 30 || player.y > cam + WORLD_H + 40) {
+    player.vy = SPRING_VY;
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function lerpCol(a, b, k) {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  return `rgb(${Math.round(pa[0] + (pb[0] - pa[0]) * k)},${Math.round(pa[1] + (pb[1] - pa[1]) * k)},${Math.round(pa[2] + (pb[2] - pa[2]) * k)})`;
+}
+function drawJimmy(g, x, y) {
+  // pixel Jimmy: cyan hoodie, headphones, runs while steering
+  const run = Math.floor(player.runPh) % 4;
+  const legA = [2, 0, -2, 0][run];
+  g.save();
+  g.translate(x, y);
+  if (player.face < 0) g.scale(-1, 1);
+  // legs
+  g.fillStyle = '#22333f';
+  g.fillRect(-5, 8, 4, 7 + legA);
+  g.fillRect(1, 8, 4, 7 - legA);
+  // hoodie body
+  g.fillStyle = '#35e0c8';
+  g.fillRect(-7, -4, 14, 13);
+  g.fillStyle = '#2ab8a4';
+  g.fillRect(-7, 5, 14, 4);
+  // arms
+  g.fillStyle = '#35e0c8';
+  g.fillRect(-10, -2, 3, 8 - legA);
+  g.fillRect(7, -2, 3, 8 + legA);
+  // head
+  g.fillStyle = '#f2c79b';
+  g.fillRect(-6, -15, 12, 11);
+  // hair
+  g.fillStyle = '#3a2a1a';
+  g.fillRect(-6, -16, 12, 4);
+  // headphones
+  g.fillStyle = '#101418';
+  g.fillRect(-8, -13, 2, 6);
+  g.fillRect(6, -13, 2, 6);
+  g.fillRect(-7, -17, 14, 2);
+  // eye
+  g.fillStyle = '#101418';
+  g.fillRect(2, -11, 2, 2);
+  g.restore();
+}
+function drawTroll(g, t) {
+  g.save();
+  g.translate(t.x, t.y);
+  g.fillStyle = '#6a5acd';
+  g.beginPath(); g.arc(0, 0, t.r, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#4a3a9d';
+  g.fillRect(-t.r, -2, t.r * 2, 4);
+  // angry eyes + frown
+  g.fillStyle = '#fff';
+  g.fillRect(-8, -8, 5, 5); g.fillRect(3, -8, 5, 5);
+  g.fillStyle = '#000';
+  g.fillRect(-6, -6, 2, 2); g.fillRect(5, -6, 2, 2);
+  g.fillStyle = '#2a1a5d';
+  g.fillRect(-5, 6, 10, 2);
+  g.restore();
+}
+function render() {
+  const g = octx;
+  const s = 1 / PIX;
+  const now = Date.now();
+  const hype = hypeUntil > now;
+  g.setTransform(s, 0, 0, s, 0, -cam * s);
+  g.imageSmoothingEnabled = false;
+
+  // sky per floor, lerped between bands
+  const px = heightM * 7;
+  const f = FLOORS[floorIdx], fn = FLOORS[Math.min(floorIdx + 1, FLOORS.length - 1)];
+  const span = Math.max(1, fn.at - f.at);
+  const k = Math.min(1, Math.max(0, (px - f.at) / span));
+  const grd = g.createLinearGradient(0, cam, 0, cam + WORLD_H);
+  grd.addColorStop(0, lerpCol(f.sky0, fn.sky0, k));
+  grd.addColorStop(1, lerpCol(f.sky1, fn.sky1, k));
+  g.fillStyle = grd;
+  g.fillRect(0, cam, WORLD_W, WORLD_H);
+
+  // parallax studio wall: shelf lines + posters
+  g.fillStyle = lerpCol(f.wall, fn.wall, k);
+  for (let i = 0; i < 8; i++) {
+    const wy = Math.floor((cam * 0.5) / 130) * 130 + i * 130;
+    const yy = wy - cam * 0.5 + cam;   // parallax 0.5
+    g.fillRect(0, yy, WORLD_W, 5);
+    g.fillRect(30 + (i % 3) * 120, yy - 34, 44, 30);
+  }
+
+  // platforms
+  for (const p of plats) {
+    if (p.crumbleT === 0) continue;
+    g.globalAlpha = p.gone ? Math.max(0, p.vanishA) : 1;
+    const shake = p.crumbleT > 0 ? (Math.random() - 0.5) * 2 : 0;
+    let c0 = '#3f7f6f', c1 = '#57a98f';
+    if (p.type === 1) { c0 = '#3f5f8f'; c1 = '#5f87c9'; }
+    if (p.type === 2) { c0 = '#7f6a3f'; c1 = '#a98d57'; }
+    if (p.type === 3) { c0 = '#6f3f7f'; c1 = '#a057a9'; }
+    if (p.type === 4) { c0 = '#7f3f3f'; c1 = '#d05757'; }
+    g.fillStyle = c0;
+    g.fillRect(p.x + shake, p.y, p.w, p.h);
+    g.fillStyle = c1;
+    g.fillRect(p.x + shake, p.y, p.w, 4);
+    if (p.type === 4) { g.fillStyle = '#ffd23d'; g.fillRect(p.x + p.w / 2 - 6 + shake, p.y - 5, 12, 5); }
+    g.globalAlpha = 1;
+  }
+
+  // lollipops
+  for (const c of pops) {
+    if (c.taken) continue;
+    g.fillStyle = '#ff7bd5';
+    g.beginPath(); g.arc(c.x, c.y, 6, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fff';
+    g.fillRect(c.x - 1, c.y + 5, 2, 8);
+    g.fillStyle = '#ffb7e8';
+    g.fillRect(c.x - 2, c.y - 3, 3, 3);
+  }
+
+  // powerups
+  for (const pw of powers) {
+    if (pw.taken) continue;
+    const bob = Math.sin(now / 300 + pw.x) * 3;
+    g.font = '14px sans-serif';
+    g.textAlign = 'center';
+    g.fillText(pw.kind === 'rocket' ? '🚀' : pw.kind === 'shield' ? '🛡️' : pw.kind === 'magnet' ? '🧲' : '👟',
+               pw.x, pw.y + bob);
+  }
+
+  // trolls
+  for (const t of trolls) if (t.alive) drawTroll(g, t);
+
+  // player + trails
+  if (player) {
+    if (hype) {
+      const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8'];
+      g.fillStyle = cols[Math.floor(now / 90) % 4];
+      g.globalAlpha = 0.5;
+      g.beginPath(); g.arc(player.x, player.y, 20, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1;
+    }
+    if (shieldOn) {
+      g.strokeStyle = '#4dd9f5';
+      g.globalAlpha = 0.7;
+      g.lineWidth = 2;
+      g.beginPath(); g.arc(player.x, player.y - 3, 19, 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = 1;
+    }
+    if (rocketUntil > now) {
+      g.fillStyle = '#ff9900';
+      g.fillRect(player.x - 3, player.y + 14, 6, 8 + Math.random() * 6);
+    }
+    drawJimmy(g, player.x, player.y);
+  }
+
+  // particles
+  for (const p of parts) {
+    const kk = p.t / p.life, F = 0.08;
+    const fade = kk < F ? kk / F : kk > 1 - F ? (1 - kk) / F : 1;
+    g.globalAlpha = Math.min(1, fade);
+    g.fillStyle = kk < 0.5 ? p.c0 : p.c1;
+    const r = p.s0 + (p.s1 - p.s0) * kk;
+    g.beginPath(); g.arc(p.x, p.y, Math.max(0.4, r), 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // THE DEAD AIR — animated static wall
+  if (staticY < cam + WORLD_H + 40) {
+    const top = Math.max(cam, staticY);
+    g.fillStyle = '#0a0a0a';
+    g.fillRect(0, staticY, WORLD_W, cam + WORLD_H - staticY + 60);
+    // static noise band
+    for (let i = 0; i < 240; i++) {
+      const nx = Math.random() * WORLD_W;
+      const ny = staticY + Math.random() * Math.min(120, cam + WORLD_H - staticY + 60);
+      const v = Math.random();
+      g.fillStyle = v > 0.6 ? '#e8e8e8' : v > 0.3 ? '#888' : '#333';
+      g.fillRect(nx, ny, 2.5, 2.5);
+    }
+    // warning fringe
+    g.fillStyle = 'rgba(255,60,60,0.65)';
+    g.fillRect(0, staticY - 2, WORLD_W, 3);
+  }
+
+  // ── upscale to screen ──
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#04060a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (shakeT > 0) { shakeT--; ctx.translate((Math.random() - .5) * shakeT * 0.8, (Math.random() - .5) * shakeT * 0.8); }
+  ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, WORLD_W, WORLD_H);
+
+  // ── crisp HUD layer ──
+  ctx.font = 'bold 20px "Courier New", monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE ' + score, 12, 10);
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillStyle = '#9fe8ff';
+  ctx.fillText(heightM + 'm · ' + FLOORS[floorIdx].name.toUpperCase(), 12, 34);
+  // hype meter
+  ctx.fillStyle = '#222';
+  ctx.fillRect(12, 54, 90, 8);
+  const hk = hypeUntil > now ? (hypeUntil - now) / HYPE_MS : hypeMeter / HYPE_NEED;
+  ctx.fillStyle = hypeUntil > now ? '#ffd23d' : '#ff7bd5';
+  ctx.fillRect(12, 54, 90 * Math.max(0, Math.min(1, hk)), 8);
+  // mic
+  ctx.font = '22px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.globalAlpha = (sfxMode === 'voice' && bounceVoiceOff) ? 0.5 : 1;
+  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 12, 12);
+  ctx.globalAlpha = 1;
+
+  // floaters (crisp layer, world coords need cam offset)
+  ctx.font = 'bold 15px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  for (const fl of floats) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, fl.a));
+    ctx.fillStyle = fl.color;
+    ctx.fillText(fl.text, fl.x, fl.y - cam);
+  }
+  ctx.globalAlpha = 1;
+
+  // callout banner
+  if (callout && now < callout.until) {
+    const ink2 = callout.who === 'JIMMY' ? '#4dd9f5' : '#ffcf3d';
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(3,15,24,0.9)';
+    ctx.fillRect(WORLD_W / 2 - 150, 84, 300, 46);
+    ctx.strokeStyle = ink2; ctx.lineWidth = 2;
+    ctx.strokeRect(WORLD_W / 2 - 150, 84, 300, 46);
+    ctx.fillStyle = ink2;
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText('JIMMY', WORLD_W / 2, 92);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.fillText(callout.text || '', WORLD_W / 2, 108);
+    ctx.globalAlpha = 1;
+  } else if (callout && now >= callout.until) callout = null;
+
+  // attract overlay hint
+  if (state === 'attract') {
+    ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now * 0.005);
+    ctx.fillText('INSERT COIN', WORLD_W / 2, WORLD_H * 0.8);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── LOOP — frame-rate independent (dt in 60fps ticks, flap-fight lesson) ─────
+let lastMs = null, animId = null;
+function loop() {
+  const nowMs = performance.now();
+  let dt = 1;
+  if (lastMs !== null) {
+    dt = (nowMs - lastMs) / (1000 / 60);
+    dt = Math.min(Math.max(dt, 0.1), 3);
+  }
+  lastMs = nowMs;
+  update(dt);
+  render();
+  animId = requestAnimationFrame(loop);
+}
+
+// ── COIN / START ─────────────────────────────────────────────────────────────
+document.getElementById('coinBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  unlockAudio();
+  initGame();
+  state = 'playing';
+  sfx.start();
+});
+
+initGame();          // attract runs on a real world from frame one
+requestAnimationFrame(loop);
+
+// headless QA hooks (playtest-by-evaluate)
+window.__dad = {
+  get state() { return state; }, set state(v) { state = v; },
+  get player() { return player; }, get plats() { return plats; },
+  get score() { return score; }, set score(v) { score = v; },
+  get staticY() { return staticY; }, set staticY(v) { staticY = v; },
+  get heightM() { return heightM; },
+  get trolls() { return trolls; }, get powers() { return powers; }, get pops() { return pops; },
+  get hypeUntil() { return hypeUntil; }, get shieldOn() { return shieldOn; }, set shieldOn(v) { shieldOn = v; },
+  get sfxMode() { return sfxMode; }, set sfxMode(v) { sfxMode = v; },
+  get VO() { return VO; }, get VO_LINES() { return VO_LINES; },
+  update, initGame, die, djb2vo, spawnPlat,
+  get cam() { return cam; },
+  get floorIdx() { return floorIdx; },
+  set bestScore(v) { bestScore = v; }, set topScore(v) { topScore = v; },
+  get callout() { return callout; },
+};
+})();
+</script>
+</body>
+</html>

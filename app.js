@@ -29,6 +29,13 @@ function bumpPlays(id) {
 /* ── Per-game worlds ──────────────────────────────────────── */
 
 const WORLDS = {
+  'dead-air-dash': {
+    ink: '#35e0c8', dim: '#11544b', pit: '#04120f', glowsoft: 'rgba(53,224,200,0.22)',
+    genre: 'TEMPLE RUN × DOODLE JUMP',
+    quote: '"he bounced past the server room. the static was very patient. it always is."',
+    by: 'JOE',
+    attract: dashAttract,
+  },
   'brick-invaders': {
     ink: '#7dff5a', dim: '#1e4a14', pit: '#081204', glowsoft: 'rgba(125,255,90,0.22)',
     genre: 'BREAKOUT × SPACE INVADERS',
@@ -345,7 +352,7 @@ function buildCabinet(game) {
     return cab;
   }
   // play=1 skips the game's own start screen; v busts any stale cached copy
-  play.href = game.url + '?play=1&v=20';
+  play.href = game.url + '?play=1&v=21';
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
     // Remember which hall launched this cabinet so the score screen returns the player
@@ -448,6 +455,68 @@ function startAttract(canvas, world) {
    that blasts the arkanoid brick wall at the top. */
 
 /* FLAP-FIGHT attract — real physics, AI targets gap, dies on pipe hit */
+function dashAttract(ctx, w, h, t, world, s) {
+  // DEAD AIR DASH cassette: Jimmy bounces up an endless platform ladder while the
+  // static wall creeps below. World scrolls down past the camera — subject stays
+  // centered (anti-pattern: never pan a screen-sized room's camera).
+  if (!s.init) {
+    s.init = true;
+    s.py = h * 0.55; s.pvy = -2.6; s.px = w * 0.45;
+    s.scroll = 0;
+    s.plats = [];
+    for (let i = 0; i < 6; i++)
+      s.plats.push({ x: (0.12 + 0.6 * ((i * 0.37) % 1)) * w, y: h * 0.9 - i * h * 0.22, w: w * 0.2 });
+    s.noise = Array.from({ length: 40 }, () => Math.random());
+  }
+  const G = 0.09, BV = -2.9;
+  s.pvy += G; s.py += s.pvy;
+  // steer toward the platform above
+  let target = null;
+  for (const p of s.plats) if (p.y < s.py - 4 && (!target || p.y > target.y)) target = p;
+  if (target) s.px += ((target.x + target.w / 2) - s.px) * 0.06;
+  // bounce
+  for (const p of s.plats) {
+    if (s.pvy > 0 && s.py + 6 >= p.y && s.py + 6 <= p.y + 6 && s.px > p.x - 6 && s.px < p.x + p.w + 6) {
+      s.pvy = BV;
+    }
+  }
+  // camera: keep Jimmy in the middle band by scrolling the world down
+  if (s.py < h * 0.42) {
+    const d = h * 0.42 - s.py;
+    s.py += d; for (const p of s.plats) p.y += d;
+    s.scroll += d;
+  }
+  // recycle platforms below the screen to above
+  for (const p of s.plats) {
+    if (p.y > h + 10) { p.y -= h + h * 0.22; p.x = (0.1 + Math.random() * 0.62) * w; }
+  }
+  // bg
+  ctx.fillStyle = '#0a0e18'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(53,224,200,0.06)';
+  for (let i = 0; i < 4; i++) ctx.fillRect(0, ((s.scroll * 0.4 + i * h / 4) % h), w, 2);
+  // platforms
+  for (const p of s.plats) {
+    ctx.fillStyle = '#3f7f6f'; ctx.fillRect(p.x, p.y, p.w, 5);
+    ctx.fillStyle = '#57a98f'; ctx.fillRect(p.x, p.y, p.w, 2);
+  }
+  // static wall at the bottom
+  const sy = h * 0.92;
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, sy, w, h - sy);
+  for (let i = 0; i < 40; i++) {
+    const v = s.noise[i] = (s.noise[i] * 9301 + 49297) % 233280 / 233280;
+    ctx.fillStyle = v > 0.6 ? '#ddd' : v > 0.3 ? '#777' : '#333';
+    ctx.fillRect((i / 40) * w + (v * 5), sy + v * (h - sy) * 0.8, 2, 2);
+  }
+  ctx.fillStyle = 'rgba(255,60,60,0.6)'; ctx.fillRect(0, sy - 1, w, 2);
+  // Jimmy (tiny): hoodie + headphones
+  ctx.fillStyle = '#35e0c8'; ctx.fillRect(s.px - 4, s.py - 4, 8, 8);
+  ctx.fillStyle = '#f2c79b'; ctx.fillRect(s.px - 3, s.py - 9, 6, 5);
+  ctx.fillStyle = '#101418'; ctx.fillRect(s.px - 4, s.py - 10, 8, 1);
+  // sparkle trail
+  ctx.fillStyle = 'rgba(53,224,200,0.5)';
+  ctx.fillRect(s.px - 1, s.py + 6, 2, 3);
+}
+
 function flapAttract(ctx, w, h, t, world, s) {
   const GROUND = Math.max(10, h * 0.10);
   const PW     = Math.max(12, w * 0.14);
