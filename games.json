@@ -2,7 +2,7 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "\ud83d\udecd\ufe0f",
+      "emoji": "🛍️",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
       "gradient": [
         "#FF9F0A",
@@ -12,7 +12,7 @@
     },
     {
       "name": "X",
-      "emoji": "\u2715",
+      "emoji": "✕",
       "url": "https://x.com/JimJoeAiPodcast",
       "gradient": [
         "#2b2b2b",
@@ -22,7 +22,7 @@
     },
     {
       "name": "Patreon",
-      "emoji": "\u2615",
+      "emoji": "☕",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
       "gradient": [
         "#FF6E4A",
@@ -32,7 +32,7 @@
     },
     {
       "name": "Ko-fi",
-      "emoji": "\u2615",
+      "emoji": "☕",
       "url": "https://ko-fi.com/jimmynjoe",
       "gradient": [
         "#FF5E5B",
@@ -41,5 +41,18 @@
       "label": "KoFi"
     }
   ],
-  "games": []
+  "games": [
+    {
+      "id": "jnj-on-air",
+      "name": "JNJ: ON AIR IN 10 MINUTES",
+      "emoji": "🎙️",
+      "genre": "MONKEY ISLAND × TALK SHOW",
+      "url": "games/jnj-on-air.html",
+      "status": "ready",
+      "special": "Game Lab #12 — first ADVENTURE cabinet",
+      "note": "v4 2026-08-18: studio replated (clear floor walkway — no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on — tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock — emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
+      "ready": true,
+      "ready_date": "2026-08-18"
+    }
+  ]
 }
