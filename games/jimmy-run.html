@@ -1385,6 +1385,26 @@ function gloss(x, y, rx, ry, alpha) {
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
 }
+// soft dark ambient-occlusion pool — where two glossy parts meet, real 3D reads darker there
+function aoPool(x, y, rx, ry, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+  g.addColorStop(0, `rgba(10,6,4,${alpha})`);
+  g.addColorStop(1, 'rgba(10,6,4,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+}
+// moving specular sweep — a bright diagonal band that slides across the body as it
+// bobs, the classic "polished plastic catching a moving light" cheat
+function sweep(x0, y0, x1, y1, w, phase, alpha) {
+  const t = (Math.sin(phase) + 1) / 2;             // 0..1 travel
+  const mx = x0 + (x1 - x0) * t, my = y0 + (y1 - y0) * t;
+  const g = ctx.createLinearGradient(mx - w, my, mx + w, my);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.5, `rgba(255,255,255,${alpha})`);
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x0 - w, Math.min(y0, y1) - 2, (x1 - x0) + w * 2 + 4, Math.abs(y1 - y0) + 4);
+}
 // shared body geometry for BOTH runners — col = { a: base tone, b: shadow tone,
 // trim: gold/bronze accent }. Back view; slide rolls face-up to show the LED face.
 function drawRunnerBody(sliding, col) {
@@ -1467,9 +1487,14 @@ function drawRunnerBody(sliding, col) {
     ctx.quadraticCurveTo(0, -50, -15, -46);
     ctx.closePath(); ctx.fill(); ctx.stroke();
     gloss(-6, -38, 9, 12, 0.22);
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
+    sweep(-16, -46, 15, -15, 5, bobPh * 0.5, 0.16);      // moving shine as he bobs
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;    // cool rim (left)
     ctx.beginPath(); ctx.moveTo(-14.4, -44); ctx.quadraticCurveTo(-16, -30, -12.6, -17); ctx.stroke();
+    ctx.strokeStyle = `${FLOORS[floorIdx].glow}66`; ctx.lineWidth = 1.1;   // warm bounce (right, sconce-tinted)
+    ctx.beginPath(); ctx.moveTo(14.4, -44); ctx.quadraticCurveTo(16, -30, 12.6, -17); ctx.stroke();
     ctx.lineWidth = 1.6;
+    aoPool(-9, -44.5, 4, 3, 0.35); aoPool(9, -44.5, 4, 3, 0.35);   // collar shadow (helmet overlaps most of it)
+    aoPool(0, -17.5, 8, 3, 0.28);                                    // torso/hip seam
     // belt + buckle (canon)
     ctx.fillStyle = col.b; ctx.fillRect(-13, -22, 26, 4.5);
     ctx.fillStyle = col.trim;
@@ -1511,12 +1536,15 @@ function drawRunnerBody(sliding, col) {
       ctx.strokeStyle = 'rgba(255,240,200,0.75)'; ctx.lineWidth = 1.4;
       ctx.beginPath(); ctx.arc(s * 21 - 0.5, -46, 4, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
       ctx.lineWidth = 1.6;
+      aoPool(s * 17, -41, 3, 3.5, 0.3);                 // shoulder/arm seam shadow
     }
     // helmet — gradient dome, accent centre stripe, ear pods, shine, LED glow at edges
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-12, 12);
     ctx.beginPath(); ctx.roundRect(-12, -68, 24, 26, 9); ctx.fill(); ctx.stroke();
     gloss(-4, -63, 6, 5, 0.32);
+    sweep(-12, -62, 12, -50, 3, bobPh * 0.5 + 1, 0.14);
+    aoPool(-9, -46, 3, 3, 0.3); aoPool(9, -46, 3, 3, 0.3);   // helmet/torso underside
     ctx.fillStyle = col.trim;                           // centre stripe
     ctx.beginPath(); ctx.roundRect(-1.6, -68, 3.2, 26, 1.6); ctx.fill();
     ctx.fillStyle = col.b;                              // ear pods
@@ -1551,6 +1579,15 @@ function drawRunner() {
   ctx.beginPath();
   ctx.ellipse(px, 570, 28 - elev * 0.12, 7, 0, 0, Math.PI * 2);
   ctx.fill();
+  // polished-floor reflection smear — a soft, faded streak of his own colour under the
+  // feet, like the rug is glossy enough to bounce him back (cheap "wet floor" cheat)
+  if (elev < 4 && !sliding) {
+    const rc = activeRunner === 'jimmy' ? CP.jimmyTrim : CP.joeTrim;
+    const rg = ctx.createLinearGradient(px, 572, px, 600);
+    rg.addColorStop(0, `${rc}33`); rg.addColorStop(1, `${rc}00`);
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.ellipse(px, 585, 20, 16, 0, 0, Math.PI * 2); ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(px, py);
