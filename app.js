@@ -1484,10 +1484,22 @@ function setupTurbo() {
 let GLOBAL_PLAYS = {};
 
 async function fetchGlobalPlays() {
+  // HARD TIMEOUT. Osimo's Pixel showed an empty hall for hours while every other device
+  // rendered fine, with no console error — because init() does
+  //     await Promise.all([fetch(gamesJson), fetchGlobalPlays()])
+  // and this function had a catch but NO timeout. A catch only saves you from a request
+  // that FAILS; a request that HANGS (blocked by a content filter, DNS black-hole, stalled
+  // worker) never settles, so Promise.all never settles, so the cabinet-building code after
+  // it never runs. The comment used to say "stats are decoration; the arcade works without
+  // them" — true for failures, false for hangs, and that gap took the whole arcade down on
+  // one device while the origin was perfectly healthy.
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => { try { ctrl && ctrl.abort(); } catch (e) {} }, 3000);
   try {
-    const r = await fetch('/api/plays', { cache: 'no-store' });
+    const r = await fetch('/api/plays', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
     if (r.ok) GLOBAL_PLAYS = await r.json();
-  } catch { /* stats are decoration; the arcade works without them */ }
+  } catch (e) { /* decoration only — ranking falls back to file order */ }
+  finally { clearTimeout(timer); }
 }
 
 function reportPlay(id) {
@@ -1633,9 +1645,15 @@ async function init() {
               : WIP ? 'wip-games.json'
               : PATREON ? 'patreon-games.json'
               : 'games.json';
+    // The games list is the ONLY thing the hall needs. Plays are a ranking nicety, so they
+    // get their own timeout AND a settle-guard: whatever happens to /api/plays, the cabinets
+    // render. Previously one unsettled decoration request blanked the entire arcade.
     const [resp] = await Promise.all([
       fetch(src + '?v=' + Date.now()),
-      fetchGlobalPlays(),
+      Promise.race([
+        fetchGlobalPlays(),
+        new Promise(res => setTimeout(res, 3500)),
+      ]).catch(() => {}),
     ]);
     const data = await resp.json();
     const games = data.games || [];

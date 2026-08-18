@@ -1,6 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+/* VISIBLE ERROR REPORTER — Osimo 2026-08-18. His Pixel shows a blank hall while the same
+   URL renders everywhere I can test. A phone has no console, so a JS error there is
+   completely invisible and I have been reduced to guessing. This prints any script error
+   ON THE PAGE. It is registered FIRST, before any other script, so it can catch a parse or
+   load failure in app.js itself — which is the leading theory: if app.js fails to parse on
+   his Chrome, init() never exists, nothing runs, and the page renders header-only with no
+   error anyone can see. */
+(function () {
+  function box(msg) {
+    try {
+      var d = document.getElementById('jnjErrBox');
+      if (!d) {
+        d = document.createElement('div'); d.id = 'jnjErrBox';
+        d.style.cssText = 'position:fixed;left:6px;right:6px;top:6px;z-index:99999;max-height:52vh;' +
+          'overflow:auto;background:#2a0b0b;color:#ffb4b4;font:11px/1.45 monospace;padding:9px 11px;' +
+          'border:1px solid #ff6b6b;border-radius:8px;white-space:pre-wrap;word-break:break-word';
+        d.onclick = function () { d.remove(); };
+        (document.body || document.documentElement).appendChild(d);
+      }
+      d.textContent += msg + '\n';
+    } catch (e) {}
+  }
+  window.addEventListener('error', function (e) {
+    if (e.target && e.target.tagName === 'SCRIPT') { box('LOAD FAILED: ' + (e.target.src || '?')); return; }
+    box('ERROR: ' + (e.message || '?') + '\n  at ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?'));
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    box('PROMISE: ' + ((e.reason && (e.reason.message || e.reason)) || '?'));
+  });
+  /* If app.js parsed but init never ran, say so plainly rather than showing nothing. */
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      var hall = document.getElementById('cabinets');
+      if (!hall || hall.children.length) return;
+      box('DIAGNOSTIC: hall still empty.'
+        + '\n  init defined: ' + (typeof init)
+        + '\n  WORLDS defined: ' + (typeof WORLDS)
+        + '\n  sw controller: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'YES' : 'no')
+        + '\n  ua: ' + navigator.userAgent.slice(0, 90));
+    }, 4000);
+  });
+})();
+</script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
