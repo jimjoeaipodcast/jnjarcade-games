@@ -1377,15 +1377,19 @@ function drawEnt(e) {
   ctx.restore();
 }
 
-// soft radial specular highlight — the "glossy toy robot" read (Osimo v5 reference photo)
-function gloss(x, y, rx, ry, alpha) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
-  g.addColorStop(0, `rgba(255,255,255,${alpha})`);
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+// form-shading gradient — every rounded part is lit from one consistent direction
+// (screen-left) so it reads as a cylinder/sphere WITHOUT any specular highlight or
+// reflection (Osimo: "zero reflections, just emulate the 3D look"). Pure diffuse
+// light→mid→shadow banding, the technique flat-shaded 3D-look games actually use.
+function shadeGrad(x0, x1, base) {
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, lerpCol(base, '#ffffff', 0.32));
+  g.addColorStop(0.5, base);
+  g.addColorStop(1, lerpCol(base, '#000000', 0.4));
+  return g;
 }
-// soft dark ambient-occlusion pool — where two glossy parts meet, real 3D reads darker there
+// soft dark ambient-occlusion pool — where two parts meet, real 3D reads darker there.
+// Pure shadow/geometry cue, not a reflection — this is the primary volume signal now.
 function aoPool(x, y, rx, ry, alpha) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
   g.addColorStop(0, `rgba(10,6,4,${alpha})`);
@@ -1393,43 +1397,24 @@ function aoPool(x, y, rx, ry, alpha) {
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
 }
-// moving specular sweep — a bright diagonal band that slides across the body as it
-// bobs, the classic "polished plastic catching a moving light" cheat
-function sweep(x0, y0, x1, y1, w, phase, alpha) {
-  const t = (Math.sin(phase) + 1) / 2;             // 0..1 travel
-  const mx = x0 + (x1 - x0) * t, my = y0 + (y1 - y0) * t;
-  const g = ctx.createLinearGradient(mx - w, my, mx + w, my);
-  g.addColorStop(0, 'rgba(255,255,255,0)');
-  g.addColorStop(0.5, `rgba(255,255,255,${alpha})`);
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(x0 - w, Math.min(y0, y1) - 2, (x1 - x0) + w * 2 + 4, Math.abs(y1 - y0) + 4);
-}
 // shared body geometry for BOTH runners — col = { a: base tone, b: shadow tone,
 // trim: gold/bronze accent }. Back view; slide rolls face-up to show the LED face.
 function drawRunnerBody(sliding, col) {
   const now = Date.now();
   const OUT = 'rgba(30,24,18,0.55)';
-  const bodyGrad = (x0, x1) => {
-    const g = ctx.createLinearGradient(x0, 0, x1, 0);
-    g.addColorStop(0, lerpCol(col.a, '#ffffff', 0.45));
-    g.addColorStop(0.55, col.a);
-    g.addColorStop(1, col.b);
-    return g;
-  };
+  const bodyGrad = (x0, x1) => shadeGrad(x0, x1, col.a);
   ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
   if (sliding) {
     // SLIDE: face-up under the rig — full canon LED face on the visor
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-22, 22);
     ctx.beginPath(); ctx.roundRect(-22, -17, 40, 14, 6); ctx.fill(); ctx.stroke();  // body
-    gloss(-6, -13, 12, 4, 0.28);
     ctx.fillStyle = col.b;
     ctx.fillRect(-6, -17, 5, 14);                                       // belt band
     ctx.fillStyle = col.trim;
     ctx.beginPath(); ctx.arc(-3.5, -10, 2.6, 0, Math.PI * 2); ctx.fill(); // buckle
     // legs forward, metal-soled boots leading
-    ctx.fillStyle = col.b;
+    ctx.fillStyle = shadeGrad(-34, -20, col.b);
     ctx.beginPath(); ctx.roundRect(-34, -14, 14, 5, 2); ctx.fill();
     ctx.beginPath(); ctx.roundRect(-34, -8, 14, 5, 2); ctx.fill();
     ctx.fillStyle = col.trim;
@@ -1438,7 +1423,6 @@ function drawRunnerBody(sliding, col) {
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(4, 30);
     ctx.beginPath(); ctx.roundRect(6, -29, 24, 24, 9); ctx.fill(); ctx.stroke();
-    gloss(14, -24, 8, 4, 0.3);
     ctx.fillStyle = CP.visor;
     ctx.beginPath(); ctx.roundRect(9, -25, 18, 15, 5); ctx.fill();
     ctx.shadowColor = CP.led; ctx.shadowBlur = 6;
@@ -1460,25 +1444,26 @@ function drawRunnerBody(sliding, col) {
     const tuck = jumpT > 0 ? 5 : 0;                     // knees tuck on jump
     const run = Math.floor(bobPh * 1.6) % 4;
     const legA = [4, 0, -4, 0][run];
-    // legs — two segments (thigh swings, shin follows), glossy ball-joint knees
+    // legs — two segments (thigh swings, shin follows), each shaded as a rounded
+    // cylinder under the one consistent light (left=lit, right=shadow — no gloss)
     for (const s of [-1, 1]) {
       const sw = s < 0 ? legA : -legA;                  // stride offset per leg
       const hx = s * 5 - 4 + s * 0.5;                   // hip x
       ctx.strokeStyle = OUT;
-      ctx.fillStyle = s < 0 ? lerpCol(col.a, '#ffffff', 0.3) : col.b;    // near leg lighter
+      ctx.fillStyle = shadeGrad(hx, hx + 8, col.b);
       ctx.beginPath(); ctx.roundRect(hx, -18 - sw * 0.25 - tuck, 8, 10 + sw * 0.55, 3.5); ctx.fill(); ctx.stroke();   // thigh
+      ctx.fillStyle = shadeGrad(hx + sw * 0.35, hx + sw * 0.35 + 7, col.b);
       ctx.beginPath(); ctx.roundRect(hx + sw * 0.35, -9 + sw * 0.3 - tuck * 1.6, 7, 9 - sw * 0.4 + tuck * 0.6, 3); ctx.fill(); ctx.stroke(); // shin
       ctx.fillStyle = col.trim;                         // ball-joint knee
       ctx.beginPath(); ctx.arc(hx + 4 + sw * 0.2, -9.5 - sw * 0.1 - tuck * 1.2, 2.7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.beginPath(); ctx.arc(hx + 3.3 + sw * 0.2, -10.3 - sw * 0.1 - tuck * 1.2, 0.9, 0, Math.PI * 2); ctx.fill();
       // boot with metal sole
-      ctx.fillStyle = col.a;
+      ctx.fillStyle = shadeGrad(hx - 2 + sw * 0.5, hx + 9 + sw * 0.5, col.a);
       ctx.beginPath(); ctx.roundRect(hx - 2 + sw * 0.5, -2 + sw * 0.55 - tuck * 2, 11, 4.5, 2); ctx.fill();
       ctx.fillStyle = col.trim;
       ctx.fillRect(hx - 2 + sw * 0.5, 1.6 + sw * 0.55 - tuck * 2, 11, 1.6);
     }
-    // torso — gradient armour, cel outline, waist taper, specular sheen + rim edge
+    // torso — one consistent light→shadow band, cel outline, waist taper. Ambient
+    // occlusion at every seam does the volume work instead of any shine/reflection.
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-15, 15);
     ctx.beginPath();
@@ -1486,26 +1471,16 @@ function drawRunnerBody(sliding, col) {
     ctx.lineTo(12, -15); ctx.quadraticCurveTo(17, -30, 15, -46);
     ctx.quadraticCurveTo(0, -50, -15, -46);
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    gloss(-6, -38, 9, 12, 0.22);
-    sweep(-16, -46, 15, -15, 5, bobPh * 0.5, 0.16);      // moving shine as he bobs
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;    // cool rim (left)
-    ctx.beginPath(); ctx.moveTo(-14.4, -44); ctx.quadraticCurveTo(-16, -30, -12.6, -17); ctx.stroke();
-    ctx.strokeStyle = `${FLOORS[floorIdx].glow}66`; ctx.lineWidth = 1.1;   // warm bounce (right, sconce-tinted)
-    ctx.beginPath(); ctx.moveTo(14.4, -44); ctx.quadraticCurveTo(16, -30, 12.6, -17); ctx.stroke();
-    ctx.lineWidth = 1.6;
     aoPool(-9, -44.5, 4, 3, 0.35); aoPool(9, -44.5, 4, 3, 0.35);   // collar shadow (helmet overlaps most of it)
     aoPool(0, -17.5, 8, 3, 0.28);                                    // torso/hip seam
     // belt + buckle (canon)
     ctx.fillStyle = col.b; ctx.fillRect(-13, -22, 26, 4.5);
     ctx.fillStyle = col.trim;
     ctx.beginPath(); ctx.arc(0, -19.8, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.beginPath(); ctx.arc(-1, -20.6, 1.1, 0, Math.PI * 2); ctx.fill();
     // backpack broadcast unit — recessed panel, vents, blinking antenna LED
-    ctx.fillStyle = lerpCol(col.a, '#ffffff', 0.2);
+    ctx.fillStyle = shadeGrad(-9, 9, lerpCol(col.a, '#ffffff', 0.15));
     ctx.beginPath(); ctx.roundRect(-9, -43, 18, 16, 4); ctx.fill();
     ctx.strokeStyle = 'rgba(30,24,18,0.35)'; ctx.stroke();
-    gloss(-2, -40, 6, 5, 0.22);
     ctx.fillStyle = col.b;
     for (let v = 0; v < 3; v++) ctx.fillRect(-6, -40 + v * 4.5, 12, 2);
     ctx.fillStyle = col.trim; ctx.fillRect(-9, -43, 18, 2.2);       // trim top rail
@@ -1517,42 +1492,34 @@ function drawRunnerBody(sliding, col) {
     if (blink) { ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 6; }
     ctx.beginPath(); ctx.arc(11, -57, 1.8, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    // arms pumping — glossy ball-joint elbows + shoulder pads with a shine arc
+    // arms pumping — each segment shaded as its own lit cylinder, ball-joint elbows
     for (const s of [-1, 1]) {
       const sw = (s < 0 ? legA : -legA) * 0.8;
       ctx.strokeStyle = OUT;
-      ctx.fillStyle = col.b;
+      ctx.fillStyle = shadeGrad(s * 17 - 3, s * 17 + 3.5, col.b);
       ctx.beginPath(); ctx.roundRect(s * 17 - 3, -43 + sw, 6.5, 12, 3); ctx.fill(); ctx.stroke();   // upper arm
+      ctx.fillStyle = shadeGrad(s * 18 - 3, s * 18 + 3, col.b);
       ctx.beginPath(); ctx.roundRect(s * 18 - 3, -32 + sw * 1.4, 6, 10, 3); ctx.fill(); ctx.stroke(); // forearm
       ctx.fillStyle = col.trim;                         // ball-joint elbow
       ctx.beginPath(); ctx.arc(s * 19, -32.5 + sw * 1.2, 2.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.beginPath(); ctx.arc(s * 19 - 0.6, -33.2 + sw * 1.2, 0.9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = lerpCol(col.a, '#ffffff', 0.15);  // fist
+      ctx.fillStyle = shadeGrad(s * 19.5 - 3.2, s * 19.5 + 3.2, lerpCol(col.a, '#ffffff', 0.1));  // fist
       ctx.beginPath(); ctx.arc(s * 19.5, -22 + sw * 1.6, 3.2, 0, Math.PI * 2); ctx.fill();
-      // shoulder pad — accent, rounded, highlight arc
-      ctx.fillStyle = col.trim;
+      // shoulder pad — accent, rounded, form-shaded (no shine arc)
+      ctx.fillStyle = shadeGrad(s * 21 - 6.5, s * 21 + 6.5, col.trim);
       ctx.beginPath(); ctx.roundRect(s * 21 - 6.5, -50, 13, 9, 4); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,240,200,0.75)'; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.arc(s * 21 - 0.5, -46, 4, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
-      ctx.lineWidth = 1.6;
       aoPool(s * 17, -41, 3, 3.5, 0.3);                 // shoulder/arm seam shadow
     }
-    // helmet — gradient dome, accent centre stripe, ear pods, shine, LED glow at edges
+    // helmet — one consistent light→shadow band, accent centre stripe, ear pods,
+    // LED glow at edges. No dome shine — the AO at the collar carries the volume cue.
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-12, 12);
     ctx.beginPath(); ctx.roundRect(-12, -68, 24, 26, 9); ctx.fill(); ctx.stroke();
-    gloss(-4, -63, 6, 5, 0.32);
-    sweep(-12, -62, 12, -50, 3, bobPh * 0.5 + 1, 0.14);
     aoPool(-9, -46, 3, 3, 0.3); aoPool(9, -46, 3, 3, 0.3);   // helmet/torso underside
     ctx.fillStyle = col.trim;                           // centre stripe
     ctx.beginPath(); ctx.roundRect(-1.6, -68, 3.2, 26, 1.6); ctx.fill();
     ctx.fillStyle = col.b;                              // ear pods
     ctx.beginPath(); ctx.roundRect(-15, -59, 4, 9, 2); ctx.fill();
     ctx.beginPath(); ctx.roundRect(11, -59, 4, 9, 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.8;    // dome shine
-    ctx.beginPath(); ctx.arc(-3, -60, 6.5, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
-    ctx.lineWidth = 1.6;
     // LED visor glow spilling round both edges — pulses gently
     const pulse = 0.35 + Math.sin(now / 300) * 0.12;
     ctx.fillStyle = CP.led; ctx.globalAlpha = pulse;
@@ -1579,15 +1546,6 @@ function drawRunner() {
   ctx.beginPath();
   ctx.ellipse(px, 570, 28 - elev * 0.12, 7, 0, 0, Math.PI * 2);
   ctx.fill();
-  // polished-floor reflection smear — a soft, faded streak of his own colour under the
-  // feet, like the rug is glossy enough to bounce him back (cheap "wet floor" cheat)
-  if (elev < 4 && !sliding) {
-    const rc = activeRunner === 'jimmy' ? CP.jimmyTrim : CP.joeTrim;
-    const rg = ctx.createLinearGradient(px, 572, px, 600);
-    rg.addColorStop(0, `${rc}33`); rg.addColorStop(1, `${rc}00`);
-    ctx.fillStyle = rg;
-    ctx.beginPath(); ctx.ellipse(px, 585, 20, 16, 0, 0, Math.PI * 2); ctx.fill();
-  }
 
   ctx.save();
   ctx.translate(px, py);
