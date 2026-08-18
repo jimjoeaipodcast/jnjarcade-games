@@ -43,6 +43,8 @@
      🛋 sofas — jump · 🚨 low ON AIR rigs — slide under · 🗄 racks — switch lane<br>
      7 perks: 🚀 rocket · 🛡 shield · 🧲 magnet · ☕ double score<br>
      🌟 golden pops · ⏱ slow-mo · 💪 MEGA JIMMY smashes everything<br>
+     🎧 grab the tag pickup past Merch Room and Joe takes over the run — tag back anytime.<br>
+     Obstacles get trickier floor by floor: combos, drifting gaps, double trolls, gauntlets.<br>
      Stumble and the static closes in. Run clean and it falls behind.</p>
   <button id="coinBtn">🪙 INSERT COIN</button>
 </div>
@@ -119,8 +121,10 @@ const CP = {
   floor: '#4a382c', floorLine: '#3a2c22', rug: '#b0475a', rugDark: '#8d3648',
   wood: '#6b4a2c', brass: '#e8a13c',
   jimmyA: '#e8e2d4', jimmyB: '#c9c2b0', jimmyTrim: '#d4a13c',
+  joeA: '#9a6b3c', joeB: '#7c5430', joeTrim: '#b0764a',
   visor: '#0c0e12', led: '#eef4ff',
 };
+const JOE_UNLOCK_FLOOR = 2;   // Merch Room+ — "after several levels" a tag pickup can appear
 // STUDIO FLOORS as distance milestones — all warm studio variants now, tinting the
 // canon brick/floor rather than replacing the look (reuse the DAD floor-name VO clips)
 const FLOORS = [
@@ -238,6 +242,39 @@ const VO_LINES = [
   ["JOE", "everything's gold now."], ["JOE", "premium lollipops."],
   ["JOE", "time. slower. somehow."], ["JOE", "bullet time. allegedly."],
   ["JOE", "he's enormous."], ["JOE", "big Jimmy. very big."],
+  // ── TAG-IN: Joe becomes playable (Osimo 2026-08-18) ──
+  ["JIMMY", "Up and over!"], ["JIMMY", "Big hop, Joe!"],
+  ["JIMMY", "Slide it, Joe!"], ["JIMMY", "Under the wire!"],
+  ["JIMMY", "Oof, furniture!"], ["JIMMY", "Shake it off, Joe!"],
+  ["JIMMY", "So close!"], ["JIMMY", "Inches to spare!"],
+  ["JIMMY", "Rocket power, let's go!"], ["JIMMY", "Nothing's stopping him now!"],
+  ["JIMMY", "Shield's up!"], ["JIMMY", "One free hit!"],
+  ["JIMMY", "Magnet mode!"], ["JIMMY", "Pulling 'em all in!"],
+  ["JIMMY", "Hype mode, Joe!"], ["JIMMY", "He's glowing, literally!"],
+  ["JIMMY", "Double points, let's go!"], ["JIMMY", "Caffeine kicks in!"],
+  ["JIMMY", "Golden lollipops!"], ["JIMMY", "Everything's worth double!"],
+  ["JIMMY", "Time's crawling, use it, Joe!"], ["JIMMY", "Slow-mo, baby!"],
+  ["JIMMY", "He's huge, Joe!"], ["JIMMY", "Unstoppable Joe!"],
+  ["JIMMY", "Troll down!"], ["JIMMY", "Cleared the comments!"],
+  ["JIMMY", "Go get 'em, Joe!"], ["JIMMY", "Show 'em how it's done!"],
+  ["JIMMY", "Still got this, Joe!"], ["JIMMY", "One floor at a time!"],
+  ["JIMMY", "The studio's rooting for you!"],
+  ["JIMMY", "Nice grab!"], ["JIMMY", "Love it!"],
+  ["JIMMY", "Tag — you're up!"], ["JIMMY", "All yours, don't trip!"],
+  ["JIMMY", "I'm back in it!"], ["JIMMY", "Let's gooo!"], ["JIMMY", "Jimmy's taking it home!"],
+  ["JOE", "structurally concerning."],
+  ["JOE", "every episode. still not backed up properly."],
+  ["JOE", "buy or don't. your call."], ["JOE", "the jokes are worse in person."],
+  ["JOE", "don't touch anything blinking."], ["JOE", "technically live. try not to swear."],
+  ["JOE", "nobody approved this floor."], ["JOE", "this shouldn't exist."],
+  ["JOE", "still standing."], ["JOE", "the shield earns its keep."], ["JOE", "closer than I'd like."],
+  ["JOE", "personal best. noted."], ["JOE", "new record. don't get used to it."],
+  ["JOE", "past my best. moving on."],
+  ["JOE", "top of the board. as expected."], ["JOE", "number one. someone had to be."],
+  ["JOE", "the record's mine now."],
+  ["JOE", "fine. I'll show him how it's done."], ["JOE", "taking over. try to keep up."],
+  ["JOE", "someone has to do this properly."],
+  ["JOE", "your turn. don't embarrass us."], ["JOE", "back to you."], ["JOE", "I've done my bit."],
 ];
 const JOE_BARKS = {
   jump:    ["hup.", "airborne.", "technically flying."],
@@ -276,6 +313,45 @@ const JIMMY_FLOOR_VO = [
 ];
 const JIMMY_SAVE_VO = ["That was close! Too close!", "Still alive! Somehow!",
                        "The shield! I love the shield!", "Heart rate: unprofessional!"];
+// ── TAG-IN: when Joe is the one actually running, Jimmy narrates from the sideline
+// with his OWN hype bark bank (mirrors JOE_BARKS' role, Jimmy-flavoured) — and Joe
+// gets his own first-person milestone lines (floor/save/PB/top), dry and surgical.
+const JIMMY_BARKS = {
+  jump:    ["Up and over!", "Big hop, Joe!"],
+  slide:   ["Slide it, Joe!", "Under the wire!"],
+  stumble: ["Oof, furniture!", "Shake it off, Joe!"],
+  nearMiss:["So close!", "Inches to spare!"],
+  rocket:  ["Rocket power, let's go!", "Nothing's stopping him now!"],
+  shield:  ["Shield's up!", "One free hit!"],
+  magnet:  ["Magnet mode!", "Pulling 'em all in!"],
+  hype:    ["Hype mode, Joe!", "He's glowing, literally!"],
+  coffee:  ["Double points, let's go!", "Caffeine kicks in!"],
+  gold:    ["Golden lollipops!", "Everything's worth double!"],
+  slowmo:  ["Time's crawling, use it, Joe!", "Slow-mo, baby!"],
+  mega:    ["He's huge, Joe!", "Unstoppable Joe!"],
+  mow:     ["Troll down!", "Cleared the comments!"],
+  start:   ["Go get 'em, Joe!", "Show 'em how it's done!"],
+  idle:    ["Still got this, Joe!", "One floor at a time!", "The studio's rooting for you!"],
+  pickup:  ["Nice grab!", "Love it!"],
+};
+const JOE_FLOOR_VO = [
+  "structurally concerning.",
+  "every episode. still not backed up properly.",
+  "buy or don't. your call.",
+  "the jokes are worse in person.",
+  "don't touch anything blinking.",
+  "technically live. try not to swear.",
+  "nobody approved this floor.",
+  "this shouldn't exist.",
+];
+const JOE_SAVE_VO = ["still standing.", "the shield earns its keep.", "closer than I'd like."];
+const JOE_PB_VO  = ["personal best. noted.", "new record. don't get used to it.", "past my best. moving on."];
+const JOE_TOP_VO = ["top of the board. as expected.", "number one. someone had to be.", "the record's mine now."];
+const TAG_JIMMY_OUT = ["Tag — you're up!", "All yours, don't trip!", "Go get 'em, Joe!"];
+const TAG_JIMMY_IN  = ["I'm back in it!", "Let's gooo!", "Jimmy's taking it home!"];
+const TAG_JOE_IN    = ["fine. I'll show him how it's done.", "taking over. try to keep up.",
+                        "someone has to do this properly."];
+const TAG_JOE_OUT   = ["your turn. don't embarrass us.", "back to you.", "I've done my bit."];
 const DEATH_TIERS = [
   { min: 15000,
     JIMMY: ["Legendary flight! Frame it!", "The pipes will tell stories about you!",
@@ -320,11 +396,20 @@ const JIMMY_GAIN = 1.15, JOE_GAIN = 0.4;
   const miss = [];
   const chk = (w, t) => { if (!all.has(w + '|' + t)) miss.push(w + '|' + t); };
   Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
+  Object.values(JIMMY_BARKS).forEach(b => b.forEach(t => chk('JIMMY', t)));
   ['JIMMY', 'JOE'].forEach(w => DEATH_TIERS.forEach(t => t[w].forEach(x => chk(w, x))));
   JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
   JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
   JIMMY_FLOOR_VO.forEach(t => chk('JIMMY', t));
   JIMMY_SAVE_VO.forEach(t => chk('JIMMY', t));
+  JOE_FLOOR_VO.forEach(t => chk('JOE', t));
+  JOE_SAVE_VO.forEach(t => chk('JOE', t));
+  JOE_PB_VO.forEach(t => chk('JOE', t));
+  JOE_TOP_VO.forEach(t => chk('JOE', t));
+  TAG_JIMMY_OUT.forEach(t => chk('JIMMY', t));
+  TAG_JIMMY_IN.forEach(t => chk('JIMMY', t));
+  TAG_JOE_IN.forEach(t => chk('JOE', t));
+  TAG_JOE_OUT.forEach(t => chk('JOE', t));
   Object.values(COMBO_VO).forEach(t => chk('JOE', t));
   if (miss.length) console.error('VO_LINES missing:', miss);
 })();
@@ -338,7 +423,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('jimmy-run-pack.json?v=2')
+  fetch('jimmy-run-pack.json?v=3')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -369,20 +454,30 @@ function voicePlay(who, text, gain) {
   audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; start(buf); }, () => {});
 }
 function jimmySay(text) { voicePlay('JIMMY', text, JIMMY_GAIN); }
-function joeSay(event) {
+// commentaryBark: the SIDELINE character reacts to the RUNNER's micro-actions —
+// Joe's dry JOE_BARKS when Jimmy runs, Jimmy's hype JIMMY_BARKS when Joe runs.
+function commentaryBark(event) {
   const now = Date.now();
   if (now - VO.lastJoeMs < 140) return;
   VO.lastJoeMs = now;
-  const bank = JOE_BARKS[event];
+  const who = activeRunner === 'jimmy' ? 'JOE' : 'JIMMY';
+  const bank = (who === 'JOE' ? JOE_BARKS : JIMMY_BARKS)[event];
   if (!bank) return;
   if ((event === 'jump' || event === 'slide') && stepVoiceOff) return;
   VO.rot[event] = ((VO.rot[event] || 0) + 1) % bank.length;
-  voicePlay('JOE', bank[VO.rot[event]],
+  voicePlay(who, bank[VO.rot[event]],
             (event === 'jump' || event === 'slide') ? JOE_GAIN * 0.85 : JOE_GAIN);
 }
-function jimmyPick(bank) {
-  VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
-  return bank[VO.rot.__jim];
+function pickRot(key, bank) {
+  VO.rot[key] = ((VO.rot[key] || 0) + 1) % bank.length;
+  return bank[VO.rot[key]];
+}
+function jimmyPick(bank) { return pickRot('__jim', bank); }
+function joePick(bank) { return pickRot('__joe', bank); }
+// runnerSay: whoever is ACTUALLY running voices his own first-person milestone
+// (floor entry / shield save / personal best / top score) at full prominence.
+function runnerSay(text) {
+  voicePlay(activeRunner === 'jimmy' ? 'JIMMY' : 'JOE', text, JIMMY_GAIN);
 }
 function deathVoice() {
   let who = 'JIMMY';
@@ -412,7 +507,23 @@ const TONES = {
   gold:   () => [784, 988, 1319, 1568].forEach((f, i) => tone(f, null, 0.09, 'triangle', 0.14, 0.05 * i)),
   slowmo: () => tone(880, 220, 0.5, 'sine', 0.15),
   mega:   () => { tone(80, 200, 0.35, 'sawtooth', 0.2); tone(200, 400, 0.3, 'square', 0.16, 0.2); },
+  tag:    () => [660, 880, 1100].forEach((f, i) => tone(f, null, 0.1, 'triangle', 0.15, 0.08 * i)),
 };
+function floorLine() {
+  const i = Math.min(floorIdx, JIMMY_FLOOR_VO.length - 1);
+  return activeRunner === 'jimmy' ? JIMMY_FLOOR_VO[i] : JOE_FLOOR_VO[i];
+}
+function speakTag(newRunner) {
+  // both handoff halves, spoken regardless of tones/voice mode — a rare celebratory
+  // beat like a floor change, not a routine bark
+  if (newRunner === 'joe') {
+    voicePlay('JIMMY', jimmyPick(TAG_JIMMY_OUT), JIMMY_GAIN);
+    setTimeout(() => voicePlay('JOE', joePick(TAG_JOE_IN), JIMMY_GAIN), 550);
+  } else {
+    voicePlay('JOE', joePick(TAG_JOE_OUT), JIMMY_GAIN);
+    setTimeout(() => voicePlay('JIMMY', jimmyPick(TAG_JIMMY_IN), JIMMY_GAIN), 550);
+  }
+}
 function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute' || state === 'attract') return;
   if (event === 'death') {
@@ -420,16 +531,17 @@ function dispatch(event, tonesFn, arg) {
     else deathVoice();
     return;
   }
+  if (event === 'tag') { TONES.tag(); setTimeout(() => speakTag(arg), 300); return; }
   if (sfxMode === 'voice') {
-    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
+    if (event === 'best')  { runnerSay(activeRunner === 'jimmy' ? jimmyPick(JIMMY_PB_VO) : joePick(JOE_PB_VO)); return; }
     if (event === 'mow' && COMBO_VO[arg]) { voicePlay('JOE', COMBO_VO[arg], JOE_GAIN); return; }
-    if (event === 'floor') { jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]); return; }
-    if (event === 'save')  { jimmySay(jimmyPick(JIMMY_SAVE_VO)); return; }
+    if (event === 'floor') { runnerSay(floorLine()); return; }
+    if (event === 'save')  { runnerSay(activeRunner === 'jimmy' ? jimmyPick(JIMMY_SAVE_VO) : joePick(JOE_SAVE_VO)); return; }
     if (event === 'lane') return;   // no bark on lane switch — too frequent
-    joeSay(event);
+    commentaryBark(event);
     return;
   }
-  if (event === 'floor') { TONES.floor(); setTimeout(() => jimmySay(JIMMY_FLOOR_VO[Math.min(arg || 0, JIMMY_FLOOR_VO.length - 1)]), 400); return; }
+  if (event === 'floor') { TONES.floor(); setTimeout(() => runnerSay(floorLine()), 400); return; }
   tonesFn && tonesFn();
 }
 const sfx = {
@@ -446,6 +558,7 @@ const sfx = {
   gold:   ()  => dispatch('gold',   TONES.gold),
   slowmo: ()  => dispatch('slowmo', TONES.slowmo),
   mega:   ()  => dispatch('mega',   TONES.mega),
+  tag:    (w) => dispatch('tag',    TONES.tag, w),
   stumble:()  => dispatch('stumble',TONES.stumble),
   nearMiss:() => dispatch('nearMiss', null),
   floor:  (i) => dispatch('floor',  TONES.floor, i),
@@ -469,6 +582,8 @@ let hypeMeter = 0, hypeUntil = 0, rocketUntil = 0, magnetUntil = 0, shieldOn = f
 let coffeeUntil = 0, goldUntil = 0, slowmoUntil = 0, megaUntil = 0;
 let mowCombo = 0, lastMowMs = 0;
 let floorIdx = 0, nextIdleMs = 0;
+let activeRunner = 'jimmy';      // 'jimmy' | 'joe' — who's actually sprinting right now
+let nextTagDist = Infinity;      // dist (metres) at which the next tag-in pickup may spawn
 let bestScore = 0, topScore = 0, pbAnnounced = false, topAnnounced = false, callout = null;
 let ents = [];                   // {z, lane, kind, taken/dead, moveDir?}
 let parts = [], floats = [];
@@ -485,10 +600,14 @@ fetch('/api/scores?game=' + SLUG).then(r => r.json())
 //        troll (lane-blocker, mowable) · pop (lollipop) · rocket/shield/magnet
 let nextSpawnZ = 6;    // ABSOLUTE z of the next wave; entities store z RELATIVE to player
 function spawnWave() {
-  const d = Math.min(1, dist / 3500);
+  // difficulty ramps across the WHOLE building now (used to saturate by Server Room —
+  // Osimo: "more intricate obstacles as levels progress" needed room to keep climbing
+  // through the Roof/Above floors too)
+  const d = Math.min(1, dist / 6800);
   const z = nextSpawnZ - zPos;   // convert to relative-ahead at spawn time
   const r = Math.random();
   const lanes = [-1, 0, 1];
+  const t2 = floorIdx >= 2, t3 = floorIdx >= 4, t4 = floorIdx >= 6;   // Merch/Server/Roof+
   if (r < 0.24) {
     // sofa row: 1-2 lanes blocked low — jumpable in-lane
     const block = d > 0.5 && Math.random() < 0.4 ? 2 : 1;
@@ -498,17 +617,40 @@ function spawnWave() {
     // boom mic: overhead across 1-3 lanes — slide under
     const span = Math.random() < 0.5 ? [-1, 0, 1] : [lanes[Math.floor(Math.random() * 3)]];
     span.forEach(L => ents.push({ z, lane: L, kind: 'mic' }));
-  } else if (r < 0.66) {
-    // rack wall: block 2 lanes, ALWAYS leave one open (fairness by construction)
+  } else if (r < 0.60) {
+    // rack wall: block 2 lanes, ALWAYS leave one open (fairness by construction).
+    // Server Room+: the gap DRIFTS as it approaches — same fairness, read continuously.
     const open = lanes[Math.floor(Math.random() * 3)];
-    lanes.filter(L => L !== open).forEach(L => ents.push({ z, lane: L, kind: 'rack' }));
-  } else if (r < 0.80 && dist > 400) {
-    // troll standing in a lane — dodge or mow with rocket/hype
-    ents.push({ z, lane: lanes[Math.floor(Math.random() * 3)], kind: 'troll' });
-  } else if (r < 0.90 && dist > 800) {
+    const drift = t3 && Math.random() < 0.5 ? (Math.random() < 0.5 ? 1 : -1) * 0.4 : 0;
+    lanes.filter(L => L !== open).forEach(L => ents.push({ z, lane: L, kind: 'rack', moveDir: drift }));
+  } else if (r < 0.72 && dist > 400) {
+    // troll standing in a lane — dodge or mow with rocket/hype.
+    // Server Room+: sometimes TWO trolls in two lanes, third always clear.
+    if (t3 && Math.random() < 0.45) {
+      const clear = lanes[Math.floor(Math.random() * 3)];
+      lanes.filter(L => L !== clear).forEach(L => ents.push({ z, lane: L, kind: 'troll' }));
+    } else {
+      ents.push({ z, lane: lanes[Math.floor(Math.random() * 3)], kind: 'troll' });
+    }
+  } else if (r < 0.80 && dist > 800) {
     // rolling chair: crosses lanes — time it
     const dir = Math.random() < 0.5 ? 1 : -1;
     ents.push({ z, lane: -dir * 1.6, kind: 'chair', moveDir: dir });
+  } else if (t2 && r < 0.88) {
+    // JUMP-THEN-SLIDE COMBO (Merch Room+): sofa immediately followed by a rig, same
+    // lane — two reflexes back to back instead of one
+    const L = lanes[Math.floor(Math.random() * 3)];
+    ents.push({ z, lane: L, kind: 'sofa' });
+    ents.push({ z: z + 0.85, lane: L, kind: 'mic' });
+  } else if (t4 && r < 0.94) {
+    // THE GAUNTLET (The Roof+): rack telegraphs the one open lane, an all-lane rig
+    // means the slide is safe wherever you are, then a sofa waits in that SAME open
+    // lane — a 3-beat read → react → commit chain. Still fair: the open path is
+    // shown before it's needed, never assumed.
+    const open = lanes[Math.floor(Math.random() * 3)];
+    lanes.filter(L => L !== open).forEach(L => ents.push({ z, lane: L, kind: 'rack' }));
+    lanes.forEach(L => ents.push({ z: z + 0.95, lane: L, kind: 'mic' }));
+    ents.push({ z: z + 1.9, lane: open, kind: 'sofa' });
   } else {
     // breather: lollipop arc down a lane
     const L = lanes[Math.floor(Math.random() * 3)];
@@ -526,6 +668,14 @@ function spawnWave() {
     ents.push({ z: z + 1.0, lane: lanes[Math.floor(Math.random() * 3)],
                 kind: pool[Math.floor(Math.random() * pool.length)] });
   }
+  // TAG-IN — after Merch Room, an alternating pickup lets the player hand the run
+  // off between Jimmy and Joe. Rare (cooldown-gated), never stacks, own lane pickup.
+  if (floorIdx >= JOE_UNLOCK_FLOOR && dist >= nextTagDist &&
+      !ents.some(e => e.kind === 'tagjoe' || e.kind === 'tagjimmy')) {
+    ents.push({ z: z + 1.4, lane: lanes[Math.floor(Math.random() * 3)],
+                kind: activeRunner === 'jimmy' ? 'tagjoe' : 'tagjimmy' });
+    nextTagDist = dist + 900 + Math.random() * 500;
+  }
   // spacing shrinks with difficulty but NEVER below reaction distance (absolute marker)
   nextSpawnZ = zPos + z + Math.max(2.6, 4.6 - d * 1.7) + Math.random() * 1.4;
 }
@@ -538,6 +688,7 @@ function initGame() {
   hypeMeter = 0; hypeUntil = 0; rocketUntil = 0; magnetUntil = 0; shieldOn = false;
   coffeeUntil = 0; goldUntil = 0; slowmoUntil = 0; megaUntil = 0;
   mowCombo = 0; floorIdx = 0;
+  activeRunner = 'jimmy'; nextTagDist = FLOORS[JOE_UNLOCK_FLOOR].at + 60;
   pbAnnounced = false; topAnnounced = false; callout = null;
   ents = []; parts = []; floats = [];
   nextSpawnZ = 6; stumbleFlash = 0;
@@ -683,6 +834,15 @@ function die() {
 function addScore(n) {
   score += coffeeUntil > Date.now() ? n * 2 : n;   // ☕ coffee doubles EVERYTHING
 }
+function tagSwap(newRunner) {
+  if (newRunner === activeRunner) return;
+  activeRunner = newRunner;
+  const col = newRunner === 'joe' ? CP.joeTrim : CP.jimmyTrim;
+  burst(WORLD_W / 2, 480, 18, col, '#ffffff');
+  confetti(14);
+  float(WORLD_W / 2, 190, newRunner === 'joe' ? '🎧 JOE TAKES OVER' : '🎤 JIMMY TAKES OVER', col);
+  sfx.tag(newRunner);
+}
 function update(dt) {
   if (state === 'attract') attractAI(dt);
   if (state !== 'playing' && state !== 'attract') { stepParts(dt); return; }
@@ -700,6 +860,13 @@ function update(dt) {
   const newDist = Math.floor(zPos * METRES_PER_Z);
   if (newDist > dist) { addScore(newDist - dist); dist = newDist; }
   bobPh += speed * 3.2 * dt;
+  // sparkle trail off the rug — cosmetic hero-glow, both playing and attract
+  if (jumpT <= 0 && Math.random() < 0.5 * dt) {
+    parts.push({ x: WORLD_W / 2 + (Math.random() - 0.5) * 22, y: 566 + Math.random() * 6,
+                 vx: (Math.random() - 0.5) * 0.4, vy: -0.3 - Math.random() * 0.3,
+                 t: 0, life: 14 + Math.random() * 10, s0: 1.6, s1: 0.3,
+                 c0: '#ffe9b0', c1: '#ffffff' });
+  }
 
   // gentle visual curve drifts
   curvePhase += 0.003 * dt;
@@ -730,6 +897,7 @@ function update(dt) {
     if (e.dead) continue;
     e.z -= speed * dt;
     if (e.kind === 'chair') e.lane += e.moveDir * 0.016 * dt;
+    else if (e.kind === 'rack' && e.moveDir) e.lane += e.moveDir * 0.016 * dt;   // drifting gap (Server Room+)
     // magnet pulls lollipops toward player lane once close
     if (magnet && e.kind === 'pop' && e.z < 4) e.lane += (playerX - e.lane) * 0.15 * dt;
 
@@ -759,6 +927,7 @@ function update(dt) {
       else if (e.kind === 'gold')   { e.dead = true; goldUntil = now + GOLD_MS; sfx.gold(); float(WORLD_W / 2, 400, '🌟 GOLDEN POPS', '#ffd23d'); }
       else if (e.kind === 'slowmo') { e.dead = true; slowmoUntil = now + SLOWMO_MS; sfx.slowmo(); float(WORLD_W / 2, 400, '⏱ SLOW-MO', '#9fd4ff'); }
       else if (e.kind === 'mega')   { e.dead = true; megaUntil = now + MEGA_MS; sfx.mega(); float(WORLD_W / 2, 400, '💪 MEGA JIMMY!', '#ff6b35'); confetti(20); shakeT = 8; }
+      else if (e.kind === 'tagjoe' || e.kind === 'tagjimmy') { e.dead = true; tagSwap(e.kind === 'tagjoe' ? 'joe' : 'jimmy'); }
       else if (e.kind === 'troll') {
         if (rocket || hype || mega) {
           e.dead = true;
@@ -824,17 +993,16 @@ function stepParts(dt) {
   }
 }
 function showCallout(kind) {
-  let who = 'JIMMY';
-  try {
-    const last = localStorage.getItem('jr_callout_who');
-    who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
-    localStorage.setItem('jr_callout_who', who);
-  } catch (e) {}
+  // the ACTIVE runner voices his own milestone, first person — whoever's actually
+  // sprinting when it happens
+  const who = activeRunner === 'jimmy' ? 'JIMMY' : 'JOE';
   callout = { who, kind, until: Date.now() + 3200 };
   confetti(kind === 'top' ? 60 : 36);
-  const line = jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO);
-  if (sfxMode === 'voice') jimmySay(line);
-  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line), 600); }
+  const line = activeRunner === 'jimmy'
+    ? jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO)
+    : joePick(kind === 'top' ? JOE_TOP_VO : JOE_PB_VO);
+  if (sfxMode === 'voice') runnerSay(line);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => runnerSay(line), 600); }
   callout.text = line;
 }
 
@@ -1197,60 +1365,36 @@ function drawEnt(e) {
     ctx.beginPath(); ctx.arc(0, -14 * u + bob, 16 * u, 0, Math.PI * 2); ctx.fill();
     ctx.font = `${Math.max(8, 16 * u)}px sans-serif`;
     ctx.textAlign = 'center';
-    const icons = { rocket: '🚀', shield: '🛡️', magnet: '🧲', coffee: '☕', gold: '🌟', slowmo: '⏱️', mega: '💪' };
+    const icons = { rocket: '🚀', shield: '🛡️', magnet: '🧲', coffee: '☕', gold: '🌟', slowmo: '⏱️', mega: '💪',
+                    tagjoe: '🎧', tagjimmy: '🎤' };
     ctx.fillText(icons[e.kind] || '❓', 0, -12 * u + bob);
+    if (e.kind === 'tagjoe' || e.kind === 'tagjimmy') {
+      ctx.font = `bold ${Math.max(6, 9 * u)}px "Courier New", monospace`;
+      ctx.fillStyle = e.kind === 'tagjoe' ? CP.joeTrim : CP.jimmyTrim;
+      ctx.fillText('TAG', 0, -1 * u + bob);
+    }
   }
   ctx.restore();
 }
 
-function drawJimmy() {
-  // back view, bottom centre-ish at his lane; run cycle + jump/slide poses
+// soft radial specular highlight — the "glossy toy robot" read (Osimo v5 reference photo)
+function gloss(x, y, rx, ry, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+  g.addColorStop(0, `rgba(255,255,255,${alpha})`);
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+}
+// shared body geometry for BOTH runners — col = { a: base tone, b: shadow tone,
+// trim: gold/bronze accent }. Back view; slide rolls face-up to show the LED face.
+function drawRunnerBody(sliding, col) {
   const now = Date.now();
-  const hype = hypeUntil > now;
-  const rocket = rocketUntil > now;
-  const elev = playerElev();
-  const px = WORLD_W / 2;
-  const bob = Math.sin(bobPh) * 2.5 * (jumpT > 0 ? 0 : 1);
-  const py = 560 - elev + bob;
-  const run = Math.floor(bobPh * 1.6) % 4;
-  const legA = [4, 0, -4, 0][run];
-  const sliding = slideT > 0;
-
-  // shadow stays on the floor — detaches on jump
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(px, 570, 28 - elev * 0.12, 7, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.save();
-  ctx.translate(px, py);
-  const megaK = megaUntil > now ? 2.0 : 1.3;   // 💪 MEGA: giant Jimmy
-  ctx.scale(megaK, megaK);
-  if (megaUntil > now) {
-    ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 18;
-  }
-  if (hype) {
-    const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8'];
-    ctx.fillStyle = cols[Math.floor(now / 90) % 4];
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath(); ctx.arc(0, -26, 40, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  if (shieldOn) {
-    ctx.strokeStyle = '#4dd9f5';
-    ctx.globalAlpha = 0.7; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(0, -26, 36, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  // CANON JIMMY (jnj-on-air sprite language): white/cream armour, gold trim, helmet
-  // with the LED visor glow spilling round the edges. Back view — he runs AWAY.
-  // v4 detail pass (Osimo: "more effort than a few polygons"): cel outlines, gradient
-  // shading, two-segment run-cycle legs, belt buckle, backpack unit w/ blinking LED,
-  // helmet shine — and the slide rolls him face-up so the full LED face shows.
-  const OUT = 'rgba(30,24,18,0.55)';       // soft cel outline
+  const OUT = 'rgba(30,24,18,0.55)';
   const bodyGrad = (x0, x1) => {
     const g = ctx.createLinearGradient(x0, 0, x1, 0);
-    g.addColorStop(0, '#f4efe3'); g.addColorStop(0.55, CP.jimmyA); g.addColorStop(1, '#b8b09c');
+    g.addColorStop(0, lerpCol(col.a, '#ffffff', 0.45));
+    g.addColorStop(0.55, col.a);
+    g.addColorStop(1, col.b);
     return g;
   };
   ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
@@ -1259,20 +1403,22 @@ function drawJimmy() {
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-22, 22);
     ctx.beginPath(); ctx.roundRect(-22, -17, 40, 14, 6); ctx.fill(); ctx.stroke();  // body
-    ctx.fillStyle = CP.jimmyB;
+    gloss(-6, -13, 12, 4, 0.28);
+    ctx.fillStyle = col.b;
     ctx.fillRect(-6, -17, 5, 14);                                       // belt band
-    ctx.fillStyle = CP.jimmyTrim;
+    ctx.fillStyle = col.trim;
     ctx.beginPath(); ctx.arc(-3.5, -10, 2.6, 0, Math.PI * 2); ctx.fill(); // buckle
-    // legs forward, gold-soled boots leading
-    ctx.fillStyle = CP.jimmyB;
+    // legs forward, metal-soled boots leading
+    ctx.fillStyle = col.b;
     ctx.beginPath(); ctx.roundRect(-34, -14, 14, 5, 2); ctx.fill();
     ctx.beginPath(); ctx.roundRect(-34, -8, 14, 5, 2); ctx.fill();
-    ctx.fillStyle = CP.jimmyTrim;
+    ctx.fillStyle = col.trim;
     ctx.fillRect(-38, -14, 5, 5); ctx.fillRect(-38, -8, 5, 5);
     // helmet face-up + LED face (canon smirk language, simplified)
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(4, 30);
     ctx.beginPath(); ctx.roundRect(6, -29, 24, 24, 9); ctx.fill(); ctx.stroke();
+    gloss(14, -24, 8, 4, 0.3);
     ctx.fillStyle = CP.visor;
     ctx.beginPath(); ctx.roundRect(9, -25, 18, 15, 5); ctx.fill();
     ctx.shadowColor = CP.led; ctx.shadowBlur = 6;
@@ -1292,23 +1438,27 @@ function drawJimmy() {
     }
   } else {
     const tuck = jumpT > 0 ? 5 : 0;                     // knees tuck on jump
-    // legs — two segments (thigh swings, shin follows), gold knee caps, gold-soled boots
+    const run = Math.floor(bobPh * 1.6) % 4;
+    const legA = [4, 0, -4, 0][run];
+    // legs — two segments (thigh swings, shin follows), glossy ball-joint knees
     for (const s of [-1, 1]) {
       const sw = s < 0 ? legA : -legA;                  // stride offset per leg
       const hx = s * 5 - 4 + s * 0.5;                   // hip x
       ctx.strokeStyle = OUT;
-      ctx.fillStyle = s < 0 ? '#d6cfbc' : CP.jimmyB;    // near leg lighter
+      ctx.fillStyle = s < 0 ? lerpCol(col.a, '#ffffff', 0.3) : col.b;    // near leg lighter
       ctx.beginPath(); ctx.roundRect(hx, -18 - sw * 0.25 - tuck, 8, 10 + sw * 0.55, 3.5); ctx.fill(); ctx.stroke();   // thigh
       ctx.beginPath(); ctx.roundRect(hx + sw * 0.35, -9 + sw * 0.3 - tuck * 1.6, 7, 9 - sw * 0.4 + tuck * 0.6, 3); ctx.fill(); ctx.stroke(); // shin
-      ctx.fillStyle = CP.jimmyTrim;                     // knee cap
-      ctx.beginPath(); ctx.arc(hx + 4 + sw * 0.2, -9.5 - sw * 0.1 - tuck * 1.2, 2.4, 0, Math.PI * 2); ctx.fill();
-      // boot with gold sole
-      ctx.fillStyle = CP.jimmyA;
+      ctx.fillStyle = col.trim;                         // ball-joint knee
+      ctx.beginPath(); ctx.arc(hx + 4 + sw * 0.2, -9.5 - sw * 0.1 - tuck * 1.2, 2.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.arc(hx + 3.3 + sw * 0.2, -10.3 - sw * 0.1 - tuck * 1.2, 0.9, 0, Math.PI * 2); ctx.fill();
+      // boot with metal sole
+      ctx.fillStyle = col.a;
       ctx.beginPath(); ctx.roundRect(hx - 2 + sw * 0.5, -2 + sw * 0.55 - tuck * 2, 11, 4.5, 2); ctx.fill();
-      ctx.fillStyle = CP.jimmyTrim;
+      ctx.fillStyle = col.trim;
       ctx.fillRect(hx - 2 + sw * 0.5, 1.6 + sw * 0.55 - tuck * 2, 11, 1.6);
     }
-    // torso — gradient cream armour, cel outline, waist taper
+    // torso — gradient armour, cel outline, waist taper, specular sheen + rim edge
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-15, 15);
     ctx.beginPath();
@@ -1316,19 +1466,24 @@ function drawJimmy() {
     ctx.lineTo(12, -15); ctx.quadraticCurveTo(17, -30, 15, -46);
     ctx.quadraticCurveTo(0, -50, -15, -46);
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    // belt + gold buckle (canon)
-    ctx.fillStyle = CP.jimmyB; ctx.fillRect(-13, -22, 26, 4.5);
-    ctx.fillStyle = CP.jimmyTrim;
+    gloss(-6, -38, 9, 12, 0.22);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-14.4, -44); ctx.quadraticCurveTo(-16, -30, -12.6, -17); ctx.stroke();
+    ctx.lineWidth = 1.6;
+    // belt + buckle (canon)
+    ctx.fillStyle = col.b; ctx.fillRect(-13, -22, 26, 4.5);
+    ctx.fillStyle = col.trim;
     ctx.beginPath(); ctx.arc(0, -19.8, 3, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.beginPath(); ctx.arc(-1, -20.6, 1.1, 0, Math.PI * 2); ctx.fill();
     // backpack broadcast unit — recessed panel, vents, blinking antenna LED
-    ctx.fillStyle = '#cfc7b2';
+    ctx.fillStyle = lerpCol(col.a, '#ffffff', 0.2);
     ctx.beginPath(); ctx.roundRect(-9, -43, 18, 16, 4); ctx.fill();
     ctx.strokeStyle = 'rgba(30,24,18,0.35)'; ctx.stroke();
-    ctx.fillStyle = CP.jimmyB;
+    gloss(-2, -40, 6, 5, 0.22);
+    ctx.fillStyle = col.b;
     for (let v = 0; v < 3; v++) ctx.fillRect(-6, -40 + v * 4.5, 12, 2);
-    ctx.fillStyle = CP.jimmyTrim; ctx.fillRect(-9, -43, 18, 2.2);       // gold top rail
+    ctx.fillStyle = col.trim; ctx.fillRect(-9, -43, 18, 2.2);       // trim top rail
     ctx.strokeStyle = '#6a6254'; ctx.lineWidth = 1.4;                   // antenna
     ctx.beginPath(); ctx.moveTo(7, -43); ctx.lineTo(11, -56); ctx.stroke();
     ctx.lineWidth = 1.6;
@@ -1337,34 +1492,37 @@ function drawJimmy() {
     if (blink) { ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 6; }
     ctx.beginPath(); ctx.arc(11, -57, 1.8, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    // arms pumping — elbow pads + GOLD shoulder pads with a shine arc (the canon tell)
+    // arms pumping — glossy ball-joint elbows + shoulder pads with a shine arc
     for (const s of [-1, 1]) {
       const sw = (s < 0 ? legA : -legA) * 0.8;
       ctx.strokeStyle = OUT;
-      ctx.fillStyle = CP.jimmyB;
+      ctx.fillStyle = col.b;
       ctx.beginPath(); ctx.roundRect(s * 17 - 3, -43 + sw, 6.5, 12, 3); ctx.fill(); ctx.stroke();   // upper arm
       ctx.beginPath(); ctx.roundRect(s * 18 - 3, -32 + sw * 1.4, 6, 10, 3); ctx.fill(); ctx.stroke(); // forearm
-      ctx.fillStyle = CP.jimmyTrim;                     // elbow pad
-      ctx.beginPath(); ctx.arc(s * 19, -32.5 + sw * 1.2, 2.2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#e8dfc8';                        // fist
+      ctx.fillStyle = col.trim;                         // ball-joint elbow
+      ctx.beginPath(); ctx.arc(s * 19, -32.5 + sw * 1.2, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.arc(s * 19 - 0.6, -33.2 + sw * 1.2, 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = lerpCol(col.a, '#ffffff', 0.15);  // fist
       ctx.beginPath(); ctx.arc(s * 19.5, -22 + sw * 1.6, 3.2, 0, Math.PI * 2); ctx.fill();
-      // shoulder pad — gold, rounded, highlight arc
-      ctx.fillStyle = CP.jimmyTrim;
+      // shoulder pad — accent, rounded, highlight arc
+      ctx.fillStyle = col.trim;
       ctx.beginPath(); ctx.roundRect(s * 21 - 6.5, -50, 13, 9, 4); ctx.fill();
       ctx.strokeStyle = 'rgba(255,240,200,0.75)'; ctx.lineWidth = 1.4;
       ctx.beginPath(); ctx.arc(s * 21 - 0.5, -46, 4, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
       ctx.lineWidth = 1.6;
     }
-    // helmet — gradient dome, gold centre stripe, ear pods, shine, LED glow at the edges
+    // helmet — gradient dome, accent centre stripe, ear pods, shine, LED glow at edges
     ctx.strokeStyle = OUT;
     ctx.fillStyle = bodyGrad(-12, 12);
     ctx.beginPath(); ctx.roundRect(-12, -68, 24, 26, 9); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = CP.jimmyTrim;                       // centre stripe
+    gloss(-4, -63, 6, 5, 0.32);
+    ctx.fillStyle = col.trim;                           // centre stripe
     ctx.beginPath(); ctx.roundRect(-1.6, -68, 3.2, 26, 1.6); ctx.fill();
-    ctx.fillStyle = CP.jimmyB;                          // ear pods
+    ctx.fillStyle = col.b;                              // ear pods
     ctx.beginPath(); ctx.roundRect(-15, -59, 4, 9, 2); ctx.fill();
     ctx.beginPath(); ctx.roundRect(11, -59, 4, 9, 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.8;    // dome shine
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.8;    // dome shine
     ctx.beginPath(); ctx.arc(-3, -60, 6.5, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
     ctx.lineWidth = 1.6;
     // LED visor glow spilling round both edges — pulses gently
@@ -1375,6 +1533,47 @@ function drawJimmy() {
     ctx.beginPath(); ctx.roundRect(11.2, -62, 2.4, 12, 1.2); ctx.fill();
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   }
+}
+function drawRunner() {
+  // back view, bottom centre-ish at his lane; run cycle + jump/slide poses.
+  // Jimmy runs solo until tagged out; Joe takes the exact same rig once tagged in.
+  const now = Date.now();
+  const hype = hypeUntil > now;
+  const rocket = rocketUntil > now;
+  const elev = playerElev();
+  const px = WORLD_W / 2;
+  const bob = Math.sin(bobPh) * 2.5 * (jumpT > 0 ? 0 : 1);
+  const py = 560 - elev + bob;
+  const sliding = slideT > 0;
+
+  // shadow stays on the floor — detaches on jump
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(px, 570, 28 - elev * 0.12, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(px, py);
+  const megaK = megaUntil > now ? 2.0 : 1.3;   // 💪 MEGA: giant runner
+  ctx.scale(megaK, megaK);
+  if (megaUntil > now) {
+    ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 18;
+  }
+  if (hype) {
+    const cols = ['#ff4d6d', '#ffd23d', '#4dd9f5', '#7dffb8'];
+    ctx.fillStyle = cols[Math.floor(now / 90) % 4];
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.arc(0, -26, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (shieldOn) {
+    ctx.strokeStyle = '#4dd9f5';
+    ctx.globalAlpha = 0.7; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, -26, 36, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (activeRunner === 'jimmy') drawRunnerBody(sliding, { a: CP.jimmyA, b: CP.jimmyB, trim: CP.jimmyTrim });
+  else drawRunnerBody(sliding, { a: CP.joeA, b: CP.joeB, trim: CP.joeTrim });
   if (rocket) {
     ctx.fillStyle = '#ff9900';
     const fl = 8 + Math.random() * 8;
@@ -1398,7 +1597,7 @@ function render() {
   const sorted = [...ents].filter(e => !e.dead && e.z > 0.13 && e.z < 14).sort((a, b) => b.z - a.z);
   for (const e of sorted) drawEnt(e);
 
-  drawJimmy();
+  drawRunner();
 
   // speed lines when fast
   const spdK = (speed - SPEED0) / (SPEED_MAX - SPEED0);
@@ -1458,6 +1657,9 @@ function render() {
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillStyle = '#fff';
   ctx.fillText('SCORE ' + score, 12, 10);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = activeRunner === 'jimmy' ? CP.jimmyTrim : CP.joeTrim;
+  ctx.fillText(activeRunner === 'jimmy' ? '🎤 JIMMY' : '🎧 JOE', 155, 13);
   ctx.font = 'bold 14px "Courier New", monospace';
   ctx.fillStyle = '#ffd9a8';
   ctx.fillText(dist + 'm · ' + FLOORS[floorIdx].name.toUpperCase(), 12, 34);
@@ -1522,7 +1724,7 @@ function render() {
     ctx.strokeRect(WORLD_W / 2 - 150, 96, 300, 46);
     ctx.fillStyle = ink2;
     ctx.font = 'bold 11px "Courier New", monospace';
-    ctx.fillText('JIMMY', WORLD_W / 2, 104);
+    ctx.fillText(callout.who, WORLD_W / 2, 104);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 13px "Courier New", monospace';
     ctx.fillText(callout.text || '', WORLD_W / 2, 120);
@@ -1570,10 +1772,11 @@ requestAnimationFrame(loop);
 window.__jr = {
   get state() { return state; }, set state(v) { state = v; },
   get score() { return score; }, set score(v) { score = v; },
-  get dist() { return dist; }, get speed() { return speed; },
+  get dist() { return dist; }, set dist(v) { dist = v; }, get speed() { return speed; },
   get lane() { return lane; }, set lane(v) { lane = v; },
   get playerX() { return playerX; }, set playerX(v) { playerX = v; },
-  get jumpT() { return jumpT; }, get slideT() { return slideT; },
+  get jumpT() { return jumpT; }, set jumpT(v) { jumpT = v; },
+  get slideT() { return slideT; }, set slideT(v) { slideT = v; },
   get deadAir() { return deadAir; }, set deadAir(v) { deadAir = v; },
   get ents() { return ents; }, set ents(v) { ents = v; },
   get shieldOn() { return shieldOn; }, set shieldOn(v) { shieldOn = v; },
@@ -1584,7 +1787,9 @@ window.__jr = {
   get slowmoUntil() { return slowmoUntil; }, set slowmoUntil(v) { slowmoUntil = v; },
   get megaUntil() { return megaUntil; }, set megaUntil(v) { megaUntil = v; },
   addScore,
-  get floorIdx() { return floorIdx; }, get callout() { return callout; },
+  get floorIdx() { return floorIdx; }, set floorIdx(v) { floorIdx = v; }, get callout() { return callout; },
+  get activeRunner() { return activeRunner; }, set activeRunner(v) { activeRunner = v; },
+  tagSwap, get nextTagDist() { return nextTagDist; }, set nextTagDist(v) { nextTagDist = v; },
   get sfxMode() { return sfxMode; }, set sfxMode(v) { sfxMode = v; },
   get VO() { return VO; }, get VO_LINES() { return VO_LINES; },
   set bestScore(v) { bestScore = v; }, set topScore(v) { topScore = v; },
