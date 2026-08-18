@@ -963,16 +963,77 @@ function drawCorridor() {
         ctx.beginPath(); ctx.arc(wx, wy + gs, gs * 5, 0, Math.PI * 2); ctx.fill();
       }
     }
-    // framed JIM & JOE portraits every 7 segments
+    // framed portraits every 7 segments — gold bevel frame, alternating Jimmy (cream,
+    // smirk) / Joe (bronze, flat) LED-face busts, matching the On Air studio walls
     if (segIdx % 7 === 0) {
-      const pw = 24 * sc * 2, ph2 = 18 * sc * 2;
+      const pw = 24 * sc * 2, ph2 = 20 * sc * 2;
       const wx = cx - halfW + 6 * sc * 2;
+      const wy = y - wallH * 0.55;
+      const isJimmy = (segIdx / 7) % 2 === 0;
       ctx.fillStyle = shade('#8a6a2c', fog);
-      ctx.fillRect(wx, y - wallH * 0.55, pw, ph2);
+      ctx.fillRect(wx, wy, pw, ph2);
+      ctx.fillStyle = shade('#c9b06a', fog);                    // inner bevel
+      ctx.fillRect(wx + pw * 0.06, wy + ph2 * 0.06, pw * 0.88, ph2 * 0.88);
       ctx.fillStyle = shade('#2c2418', fog);
-      ctx.fillRect(wx + pw * 0.1, y - wallH * 0.55 + ph2 * 0.1, pw * 0.8, ph2 * 0.8);
-      ctx.fillStyle = shade('#e5d9b8', fog);
-      ctx.beginPath(); ctx.arc(wx + pw / 2, y - wallH * 0.55 + ph2 * 0.5, pw * 0.16, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(wx + pw * 0.12, wy + ph2 * 0.12, pw * 0.76, ph2 * 0.76);
+      // bust: helmet + shoulders
+      ctx.fillStyle = shade(isJimmy ? '#e8e2d4' : '#b07a4a', fog);
+      ctx.beginPath(); ctx.arc(wx + pw / 2, wy + ph2 * 0.42, pw * 0.17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(wx + pw * 0.28, wy + ph2 * 0.6, pw * 0.44, ph2 * 0.24);
+      if (sc > 0.45) {                                          // LED expression
+        ctx.strokeStyle = shade('#eef4ff', fog * 0.4); ctx.lineWidth = Math.max(1, 1.4 * sc);
+        ctx.beginPath();
+        const fx = wx + pw / 2, fy = wy + ph2 * 0.42;
+        if (isJimmy) { ctx.moveTo(fx - pw * 0.07, fy + pw * 0.04); ctx.quadraticCurveTo(fx + pw * 0.03, fy + pw * 0.1, fx + pw * 0.09, fy + pw * 0.02); }
+        else { ctx.moveTo(fx - pw * 0.07, fy + pw * 0.05); ctx.lineTo(fx + pw * 0.07, fy + pw * 0.05); }
+        ctx.stroke();
+      }
+    }
+    // big JIM & JOE studio screen every 13 segments (left wall) — the show's backdrop
+    if (segIdx % 13 === 0) {
+      const sw2 = 34 * sc * 2, sh2 = 20 * sc * 2;
+      const wx = cx - halfW + 4 * sc * 2;
+      const wy = y - wallH * 0.72;
+      ctx.fillStyle = shade('#2a2e38', fog);
+      ctx.fillRect(wx - 2 * sc, wy - 2 * sc, sw2 + 4 * sc, sh2 + 4 * sc);
+      ctx.fillStyle = shade('#0d0f14', fog * 0.6);
+      ctx.fillRect(wx, wy, sw2, sh2);
+      if (sc > 0.4) {
+        ctx.fillStyle = shade('#e5d9b8', fog * 0.5);
+        ctx.font = `bold ${Math.max(4, 7 * sc * 2)}px Georgia, serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('JIM & JOE', wx + sw2 / 2, wy + sh2 * 0.6);
+      }
+    }
+    // studio wall clock every 8 segments (right wall, offset from the ON AIR signs)
+    if ((segIdx + 3) % 8 === 0) {
+      const cr = 7 * sc * 2;
+      const wx = cx + halfW - 10 * sc * 2;
+      const wy = y - wallH * 0.6;
+      ctx.fillStyle = shade('#e8dfc8', fog * 0.6);
+      ctx.beginPath(); ctx.arc(wx, wy, cr, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = shade('#6b5a34', fog * 0.5); ctx.lineWidth = Math.max(1, 2 * sc);
+      ctx.stroke();
+      if (sc > 0.35) {
+        ctx.strokeStyle = shade('#222222', fog * 0.4); ctx.lineWidth = Math.max(1, 1.4 * sc);
+        ctx.beginPath();
+        ctx.moveTo(wx, wy); ctx.lineTo(wx + cr * 0.55, wy - cr * 0.3);
+        ctx.moveTo(wx, wy); ctx.lineTo(wx - cr * 0.15, wy - cr * 0.65);
+        ctx.stroke();
+      }
+    }
+    // low bookshelf every 10 segments (left wall, floor level) — spines in warm tones
+    if ((segIdx + 5) % 10 === 0) {
+      const bw = 20 * sc * 2, bh = 14 * sc * 2;
+      const wx = cx - halfW + 3 * sc * 2;
+      const wy = y - bh;
+      ctx.fillStyle = shade(CP.wood, fog * 0.8);
+      ctx.fillRect(wx, wy, bw, bh);
+      const spines = ['#8d3648', '#c9a35c', '#4a5a3c', '#6b4a2c', '#b0475a'];
+      for (let b = 0; b < 5; b++) {
+        ctx.fillStyle = shade(spines[(segIdx + b) % 5], fog * 0.7);
+        ctx.fillRect(wx + bw * 0.08 + b * bw * 0.17, wy + bh * 0.15, bw * 0.13, bh * 0.7);
+      }
     }
     // glowing red ON AIR sign every 11 segments (right wall) — the studio heartbeat
     if (segIdx % 11 === 0) {
@@ -991,6 +1052,14 @@ function drawCorridor() {
       }
     }
 
+    // dado rail — continuous brass line where wall meets floor, ties the hall together
+    ctx.strokeStyle = shade(CP.brass, Math.min(0.9, fog + 0.25));
+    ctx.lineWidth = Math.max(1, 1.6 * sc);
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, y - 2 * sc); ctx.lineTo(cxN - halfWN, yN - 2 * scN);
+    ctx.moveTo(cx + halfW, y - 2 * sc); ctx.lineTo(cxN + halfWN, yN - 2 * scN);
+    ctx.stroke();
+
     // wood-beam ceiling
     const ceilY  = y - wallH;
     const ceilYN = yN - wallHN;
@@ -999,6 +1068,22 @@ function drawCorridor() {
     ctx.moveTo(cx - halfW, ceilY); ctx.lineTo(cx + halfW, ceilY);
     ctx.lineTo(cxN + halfWN, ceilYN); ctx.lineTo(cxN - halfWN, ceilYN);
     ctx.closePath(); ctx.fill();
+
+    // broadcast cables sagging between hooks along both walls, just under the ceiling
+    if (segIdx % 2 === 0) {
+      ctx.strokeStyle = shade('#1e1a16', Math.min(0.9, fog + 0.15));
+      ctx.lineWidth = Math.max(1, 1.5 * sc);
+      for (const side of [-1, 1]) {
+        const x1 = cx + side * (halfW - 2 * sc);
+        const x2 = cxN + side * (halfWN - 2 * scN);
+        const y1 = ceilY + 6 * sc;
+        const y2 = ceilYN + 6 * scN;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo((x1 + x2) / 2, Math.max(y1, y2) + 8 * sc, x2, y2);
+        ctx.stroke();
+      }
+    }
     // hanging stage light with a soft warm cone every 9 segments
     if (segIdx % 9 === 0) {
       ctx.strokeStyle = shade('#222222', fog);
@@ -1053,26 +1138,33 @@ function drawEnt(e) {
     // LOW-HUNG "ON AIR" SIGN RIG (Osimo v3: old boom mic "doesn't look like anything
     // you can slide under") — truss posts both sides, glowing red sign at HEAD height,
     // clear open gap underneath. Unmissable "duck!" read.
+    // v4 (Osimo): "make sure the text is fully visible" — bigger sign face, glow on the
+    // BOX only (text drawn after blur reset so it never washes out), stripes strictly
+    // below the face, text shown from further away.
     ctx.fillStyle = '#3a3a42';
-    ctx.fillRect(-32 * u, -58 * u, 5 * u, 58 * u);
-    ctx.fillRect(27 * u, -58 * u, 5 * u, 58 * u);
+    ctx.fillRect(-36 * u, -60 * u, 5 * u, 60 * u);
+    ctx.fillRect(31 * u, -60 * u, 5 * u, 60 * u);
     ctx.fillStyle = '#2a2a30';
-    ctx.fillRect(-32 * u, -58 * u, 64 * u, 5 * u);
-    // the sign — hangs to mid-body height, glowing hot red
-    ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = Math.min(18, 16 * u);
-    ctx.fillStyle = '#ff3b3b';
-    ctx.beginPath(); ctx.roundRect(-24 * u, -50 * u, 48 * u, 20 * u, 4 * u); ctx.fill();
+    ctx.fillRect(-36 * u, -60 * u, 72 * u, 5 * u);
+    // sign box — glowing hot red with a darker border frame
+    ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = Math.min(16, 12 * u);
+    ctx.fillStyle = '#c92222';
+    ctx.beginPath(); ctx.roundRect(-30 * u, -54 * u, 60 * u, 24 * u, 4 * u); ctx.fill();
     ctx.shadowBlur = 0;
-    if (u > 0.5) {
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath(); ctx.roundRect(-27 * u, -52 * u, 54 * u, 20 * u, 3 * u); ctx.fill();
+    if (u > 0.3) {
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.max(5, 10 * u)}px "Courier New", monospace`;
+      ctx.font = `bold ${Math.max(6, 13 * u)}px "Courier New", monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText('ON AIR', 0, -37 * u);
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ON AIR', 0, -42 * u);
+      ctx.textBaseline = 'alphabetic';
     }
-    // hazard stripes on the sign's bottom edge — "this is the thing you hit"
+    // hazard stripes BELOW the sign face — "this is the thing you hit"
     for (let i = 0; i < 6; i++) {
       ctx.fillStyle = i % 2 ? '#ffd23d' : '#1a1a1a';
-      ctx.fillRect((-24 + i * 8) * u, -31 * u, 8 * u, 3 * u);
+      ctx.fillRect((-30 + i * 10) * u, -29 * u, 10 * u, 3.5 * u);
     }
   } else if (e.kind === 'rack') {
     ctx.fillStyle = '#4a4136';
@@ -1152,50 +1244,136 @@ function drawJimmy() {
   }
   // CANON JIMMY (jnj-on-air sprite language): white/cream armour, gold trim, helmet
   // with the LED visor glow spilling round the edges. Back view — he runs AWAY.
+  // v4 detail pass (Osimo: "more effort than a few polygons"): cel outlines, gradient
+  // shading, two-segment run-cycle legs, belt buckle, backpack unit w/ blinking LED,
+  // helmet shine — and the slide rolls him face-up so the full LED face shows.
+  const OUT = 'rgba(30,24,18,0.55)';       // soft cel outline
+  const bodyGrad = (x0, x1) => {
+    const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, '#f4efe3'); g.addColorStop(0.55, CP.jimmyA); g.addColorStop(1, '#b8b09c');
+    return g;
+  };
+  ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
   if (sliding) {
-    // slide: armour bot flat-out feet first, gold soles leading
+    // SLIDE: face-up under the rig — full canon LED face on the visor
+    ctx.strokeStyle = OUT;
+    ctx.fillStyle = bodyGrad(-22, 22);
+    ctx.beginPath(); ctx.roundRect(-22, -17, 40, 14, 6); ctx.fill(); ctx.stroke();  // body
     ctx.fillStyle = CP.jimmyB;
-    ctx.beginPath(); ctx.roundRect(-20, -16, 40, 13, 5); ctx.fill();   // body horizontal
-    ctx.fillStyle = CP.jimmyA;
-    ctx.beginPath(); ctx.roundRect(-8, -26, 20, 12, 5); ctx.fill();    // helmet
+    ctx.fillRect(-6, -17, 5, 14);                                       // belt band
     ctx.fillStyle = CP.jimmyTrim;
-    ctx.fillRect(-24, -14, 6, 9); ctx.fillRect(-24, -14, 6, 9);        // boots forward
-    ctx.fillStyle = CP.led; ctx.globalAlpha = 0.5;
-    ctx.fillRect(10, -24, 3, 8);                                        // visor glow sliver
-    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(-3.5, -10, 2.6, 0, Math.PI * 2); ctx.fill(); // buckle
+    // legs forward, gold-soled boots leading
+    ctx.fillStyle = CP.jimmyB;
+    ctx.beginPath(); ctx.roundRect(-34, -14, 14, 5, 2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-34, -8, 14, 5, 2); ctx.fill();
+    ctx.fillStyle = CP.jimmyTrim;
+    ctx.fillRect(-38, -14, 5, 5); ctx.fillRect(-38, -8, 5, 5);
+    // helmet face-up + LED face (canon smirk language, simplified)
+    ctx.strokeStyle = OUT;
+    ctx.fillStyle = bodyGrad(4, 30);
+    ctx.beginPath(); ctx.roundRect(6, -29, 24, 24, 9); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = CP.visor;
+    ctx.beginPath(); ctx.roundRect(9, -25, 18, 15, 5); ctx.fill();
+    ctx.shadowColor = CP.led; ctx.shadowBlur = 6;
+    ctx.strokeStyle = CP.led; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    ctx.beginPath();                                                    // eyes
+    ctx.arc(13.5, -20, 1.4, 0, Math.PI * 2);
+    ctx.moveTo(24, -20); ctx.arc(22.5, -20, 1.4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();                                                    // grin — he loves this
+    ctx.moveTo(13, -15); ctx.quadraticCurveTo(18, -12, 23, -15);
+    ctx.stroke();
+    ctx.shadowBlur = 0; ctx.lineWidth = 1.6;
+    // sparks off the slide
+    ctx.fillStyle = 'rgba(255,210,90,0.8)';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(-30 - Math.random() * 8, -3 + Math.random() * 4, 2.5, 2.5);
+    }
   } else {
-    // legs (run cycle) — cream with gold knee trim
-    ctx.fillStyle = CP.jimmyB;
-    ctx.beginPath(); ctx.roundRect(-9, -16 - legA * 0.3, 8, 16 + legA, 3); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(1, -16 + legA * 0.3, 8, 16 - legA, 3); ctx.fill();
+    const tuck = jumpT > 0 ? 5 : 0;                     // knees tuck on jump
+    // legs — two segments (thigh swings, shin follows), gold knee caps, gold-soled boots
+    for (const s of [-1, 1]) {
+      const sw = s < 0 ? legA : -legA;                  // stride offset per leg
+      const hx = s * 5 - 4 + s * 0.5;                   // hip x
+      ctx.strokeStyle = OUT;
+      ctx.fillStyle = s < 0 ? '#d6cfbc' : CP.jimmyB;    // near leg lighter
+      ctx.beginPath(); ctx.roundRect(hx, -18 - sw * 0.25 - tuck, 8, 10 + sw * 0.55, 3.5); ctx.fill(); ctx.stroke();   // thigh
+      ctx.beginPath(); ctx.roundRect(hx + sw * 0.35, -9 + sw * 0.3 - tuck * 1.6, 7, 9 - sw * 0.4 + tuck * 0.6, 3); ctx.fill(); ctx.stroke(); // shin
+      ctx.fillStyle = CP.jimmyTrim;                     // knee cap
+      ctx.beginPath(); ctx.arc(hx + 4 + sw * 0.2, -9.5 - sw * 0.1 - tuck * 1.2, 2.4, 0, Math.PI * 2); ctx.fill();
+      // boot with gold sole
+      ctx.fillStyle = CP.jimmyA;
+      ctx.beginPath(); ctx.roundRect(hx - 2 + sw * 0.5, -2 + sw * 0.55 - tuck * 2, 11, 4.5, 2); ctx.fill();
+      ctx.fillStyle = CP.jimmyTrim;
+      ctx.fillRect(hx - 2 + sw * 0.5, 1.6 + sw * 0.55 - tuck * 2, 11, 1.6);
+    }
+    // torso — gradient cream armour, cel outline, waist taper
+    ctx.strokeStyle = OUT;
+    ctx.fillStyle = bodyGrad(-15, 15);
+    ctx.beginPath();
+    ctx.moveTo(-15, -46); ctx.quadraticCurveTo(-17, -30, -12, -15);
+    ctx.lineTo(12, -15); ctx.quadraticCurveTo(17, -30, 15, -46);
+    ctx.quadraticCurveTo(0, -50, -15, -46);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // belt + gold buckle (canon)
+    ctx.fillStyle = CP.jimmyB; ctx.fillRect(-13, -22, 26, 4.5);
     ctx.fillStyle = CP.jimmyTrim;
-    ctx.fillRect(-9, -16, 8, 3); ctx.fillRect(1, -16, 8, 3);           // knee trim
-    // boots
-    ctx.fillStyle = CP.jimmyA;
-    ctx.beginPath(); ctx.roundRect(-11, -3 + legA, 10, 4, 2); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(1, -3 - legA, 10, 4, 2); ctx.fill();
-    // torso — rounded cream armour (back), belt line
-    ctx.fillStyle = CP.jimmyA;
-    ctx.beginPath(); ctx.roundRect(-14, -44, 28, 30, 6); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -19.8, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.arc(-1, -20.6, 1.1, 0, Math.PI * 2); ctx.fill();
+    // backpack broadcast unit — recessed panel, vents, blinking antenna LED
+    ctx.fillStyle = '#cfc7b2';
+    ctx.beginPath(); ctx.roundRect(-9, -43, 18, 16, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,24,18,0.35)'; ctx.stroke();
     ctx.fillStyle = CP.jimmyB;
-    ctx.fillRect(-14, -22, 28, 4);                                     // belt
-    // back vents
-    ctx.fillStyle = CP.jimmyB;
-    for (let v = 0; v < 3; v++) ctx.fillRect(-8, -40 + v * 4, 16, 2);
-    // arms pumping — darker cream with GOLD shoulder pads (the canon tell)
-    ctx.fillStyle = CP.jimmyB;
-    ctx.beginPath(); ctx.roundRect(-20, -42 + legA * 0.8, 6, 18, 3); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(14, -42 - legA * 0.8, 6, 18, 3); ctx.fill();
-    ctx.fillStyle = CP.jimmyTrim;
-    ctx.beginPath(); ctx.roundRect(-21, -47, 9, 7, 3); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(12, -47, 9, 7, 3); ctx.fill();
-    // helmet (rounded, cream) + LED glow leaking round the sides
-    ctx.fillStyle = CP.jimmyA;
-    ctx.beginPath(); ctx.roundRect(-11, -66, 22, 24, 8); ctx.fill();
-    ctx.fillStyle = CP.led;
-    ctx.globalAlpha = 0.45;
-    ctx.fillRect(-12, -60, 2, 10); ctx.fillRect(10, -60, 2, 10);       // visor glow edges
-    ctx.globalAlpha = 1;
+    for (let v = 0; v < 3; v++) ctx.fillRect(-6, -40 + v * 4.5, 12, 2);
+    ctx.fillStyle = CP.jimmyTrim; ctx.fillRect(-9, -43, 18, 2.2);       // gold top rail
+    ctx.strokeStyle = '#6a6254'; ctx.lineWidth = 1.4;                   // antenna
+    ctx.beginPath(); ctx.moveTo(7, -43); ctx.lineTo(11, -56); ctx.stroke();
+    ctx.lineWidth = 1.6;
+    const blink = Math.sin(now / 280) > 0;                              // antenna LED blinks
+    ctx.fillStyle = blink ? '#ff5a5a' : '#7a2a2a';
+    if (blink) { ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 6; }
+    ctx.beginPath(); ctx.arc(11, -57, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // arms pumping — elbow pads + GOLD shoulder pads with a shine arc (the canon tell)
+    for (const s of [-1, 1]) {
+      const sw = (s < 0 ? legA : -legA) * 0.8;
+      ctx.strokeStyle = OUT;
+      ctx.fillStyle = CP.jimmyB;
+      ctx.beginPath(); ctx.roundRect(s * 17 - 3, -43 + sw, 6.5, 12, 3); ctx.fill(); ctx.stroke();   // upper arm
+      ctx.beginPath(); ctx.roundRect(s * 18 - 3, -32 + sw * 1.4, 6, 10, 3); ctx.fill(); ctx.stroke(); // forearm
+      ctx.fillStyle = CP.jimmyTrim;                     // elbow pad
+      ctx.beginPath(); ctx.arc(s * 19, -32.5 + sw * 1.2, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8dfc8';                        // fist
+      ctx.beginPath(); ctx.arc(s * 19.5, -22 + sw * 1.6, 3.2, 0, Math.PI * 2); ctx.fill();
+      // shoulder pad — gold, rounded, highlight arc
+      ctx.fillStyle = CP.jimmyTrim;
+      ctx.beginPath(); ctx.roundRect(s * 21 - 6.5, -50, 13, 9, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,240,200,0.75)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(s * 21 - 0.5, -46, 4, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
+      ctx.lineWidth = 1.6;
+    }
+    // helmet — gradient dome, gold centre stripe, ear pods, shine, LED glow at the edges
+    ctx.strokeStyle = OUT;
+    ctx.fillStyle = bodyGrad(-12, 12);
+    ctx.beginPath(); ctx.roundRect(-12, -68, 24, 26, 9); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = CP.jimmyTrim;                       // centre stripe
+    ctx.beginPath(); ctx.roundRect(-1.6, -68, 3.2, 26, 1.6); ctx.fill();
+    ctx.fillStyle = CP.jimmyB;                          // ear pods
+    ctx.beginPath(); ctx.roundRect(-15, -59, 4, 9, 2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(11, -59, 4, 9, 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.8;    // dome shine
+    ctx.beginPath(); ctx.arc(-3, -60, 6.5, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
+    ctx.lineWidth = 1.6;
+    // LED visor glow spilling round both edges — pulses gently
+    const pulse = 0.35 + Math.sin(now / 300) * 0.12;
+    ctx.fillStyle = CP.led; ctx.globalAlpha = pulse;
+    ctx.shadowColor = CP.led; ctx.shadowBlur = 5;
+    ctx.beginPath(); ctx.roundRect(-13.6, -62, 2.4, 12, 1.2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(11.2, -62, 2.4, 12, 1.2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   }
   if (rocket) {
     ctx.fillStyle = '#ff9900';

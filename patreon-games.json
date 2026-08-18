@@ -43,6 +43,21 @@
   ],
   "games": [
     {
+      "id": "jimmy-run",
+      "name": "JIMMY RUN",
+      "emoji": "\ud83c\udfc3",
+      "genre": "TEMPLE RUN \u00d7 MINION RUSH",
+      "url": "games/jimmy-run.html",
+      "ai_file": "games/jimmy-run.html",
+      "status": "wip",
+      "special": "Game Lab \u2014 first PSEUDO-3D RUNNER cabinet",
+      "note": "Jimmy sprints the On Air studio corridors in full pseudo-3D while the DEAD AIR closes in behind. Swipe lanes, jump sofas, slide under the low ON AIR sign rigs, dodge racks + rolling chairs. 7 perks: rocket, shield, magnet, coffee x2, golden pops, slow-mo, MEGA smash. Full Jimmy+Joe voice mode.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-08-18",
+      "ready": true,
+      "ready_date": "2026-08-18"
+    },
+    {
       "id": "snake",
       "name": "SNAKE BLASTER",
       "emoji": "\ud83d\udc0d",
