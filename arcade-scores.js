@@ -52,6 +52,40 @@ function returnUrl() {
    localStorage, NOT sessionStorage — same reason as jnj_return above: iOS fullscreen nav
    and Add-to-Home-Screen silently drop sessionStorage, and this has to survive moving
    between cabinets, which is the entire point. */
+/* INSTALLED-APP FULLSCREEN GUARD — Osimo 2026-08-18: "remove that exit full screen message
+   from all games... if installed as a full screen app it shouldn't show the address bar ever
+   once in the app and stay in full screen mode at all times."
+
+   That banner is NOT ours — it is Android Chrome's own "swipe down to exit full screen"
+   toast, fired whenever a page calls requestFullscreen(). We cannot style or dismiss it.
+   What we CAN do is stop asking: the installed PWA already runs display:fullscreen, so
+   every requestFullscreen() call inside it is redundant AND is the thing summoning the
+   toast. Seventeen games call it individually, so the guard lives here — this file is
+   loaded by every one of them (verified: 0 games call requestFullscreen without it), which
+   makes it one edit instead of seventeen chances to break a game.
+
+   In a normal browser tab nothing changes: the call goes through exactly as before. */
+(function () {
+  function installedFullscreen() {
+    try {
+      return window.matchMedia('(display-mode: fullscreen)').matches ||
+             window.matchMedia('(display-mode: standalone)').matches ||
+             navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+  // Patch EVERY vendor spelling, not just the standard one — a half-patched API is worse
+  // than none, because the unpatched path still fires the toast and looks like a fluke.
+  ['requestFullscreen', 'webkitRequestFullscreen', 'mozRequestFullScreen', 'msRequestFullscreen']
+    .forEach(function (fn) {
+      var orig = Element.prototype[fn];
+      if (!orig) return;
+      Element.prototype[fn] = function () {
+        if (installedFullscreen()) return Promise.resolve();   // already fullscreen: no-op, no toast
+        try { return orig.apply(this, arguments); } catch (e) { return Promise.resolve(); }
+      };
+    });
+})();
+
 var NAME_KEY = 'jnj_arcade_name';
 function savedName() {
   try { return (localStorage.getItem(NAME_KEY) || '').toUpperCase(); } catch (e) { return ''; }
@@ -282,10 +316,12 @@ function show(opts) {
       input.value = prior;
       screen.querySelector('.as-h1').textContent = 'READY, ' + prior + '?';
     }
-    setTimeout(function () {
-      input.focus();
-      if (prior) { try { input.select(); } catch (e) {} }
-    }, 150);
+    // DO NOT focus when we already know the name. Osimo 2026-08-18: "if you already have
+    // the name from the previous game don't prompt the keyboard to pop up, allow the user to
+    // click submit score directly." Focusing raised the keyboard over a field that was
+    // already correct, so the common path (same player, next cabinet) made you dismiss a
+    // keyboard you never needed. Tapping the input still focuses it for anyone changing name.
+    if (!prior) setTimeout(function () { input.focus(); }, 150);
 
     /* KEYBOARD-AWARE LIFT — the guaranteed half of the fix.
        Suppressing autofill is best-effort (browsers ignore hints at will), so don't rely

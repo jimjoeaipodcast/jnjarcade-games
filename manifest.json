@@ -20,5 +20,11 @@
       "purpose": "any maskable"
     }
   ],
-  "_orientation_note": "was 'portrait' — an installed PWA obeys this as a HARD LOCK, so rotating the phone did nothing and screen.orientation.lock('landscape') inside the game was overridden by it (Osimo 2026-08-18). 'any' lets the hub pages stay portrait-friendly while a game can still request landscape."
+  "_orientation_note": "was 'portrait' — an installed PWA obeys this as a HARD LOCK, so rotating the phone did nothing and screen.orientation.lock('landscape') inside the game was overridden by it (Osimo 2026-08-18). 'any' lets the hub pages stay portrait-friendly while a game can still request landscape.",
+  "scope": "/",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "_scope_note": "scope + display_override added 2026-08-18 — Osimo: 'if installed as a full screen app it shouldn't show the address bar ever once in the app'. An absent scope lets Chrome treat in-site navigations as out-of-app."
 }
