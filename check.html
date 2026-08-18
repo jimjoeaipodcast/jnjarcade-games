@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JnJ — CONNECTION CHECK</title>
+<!--
+  /check — a deliberately dependency-free diagnostic page, created 2026-08-18.
+
+  WHY: Osimo's Pixel showed an empty arcade for hours while every other device rendered.
+  Each fix I shipped was verified live from my side and still failed on his, and the
+  on-page error reporter I added never appeared on his screen either — which means his
+  device was not receiving the new HTML at all, not that the new HTML was broken.
+
+  This page exists at a path that has NEVER been requested by any client, so no browser
+  cache, no service worker and no CDN edge can hold a copy of it. If this page loads and
+  reports cabinets, the site and his network are fine and the problem is purely stale
+  cached HTML. If this page ALSO fails, the problem is real and this page will say what it
+  is, on screen, on the phone.
+
+  No app.js, no shared CSS, no fonts, no service worker. Everything inline on purpose.
+-->
+<style>
+  body { margin:0; background:#0d0b12; color:#e8e2d4;
+         font:14px/1.6 ui-monospace, Menlo, Consolas, monospace; padding:16px; }
+  h1 { font-size:16px; color:#ffd23d; margin:0 0 4px; letter-spacing:.08em; }
+  .sub { color:#8a8496; font-size:12px; margin-bottom:16px; }
+  .row { padding:8px 10px; border:1px solid #2a2536; border-radius:8px; margin-bottom:8px;
+         background:#151221; word-break:break-word; }
+  .k { color:#8a8496; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .v { font-size:13px; }
+  .ok { color:#5ee08a; } .bad { color:#ff7b7b; } .warn { color:#ffcf5a; }
+  a.btn { display:block; text-align:center; background:#ffd23d; color:#1a1408; font-weight:700;
+          padding:13px; border-radius:10px; text-decoration:none; margin-top:14px; letter-spacing:.05em; }
+  #fix { display:block; width:100%; margin-top:10px; padding:13px; border-radius:10px;
+         background:#3a2a12; color:#ffd23d; border:1px solid #ffd23d55; font:inherit; font-weight:700; }
+</style>
+</head>
+<body>
+<h1>JNJ CONNECTION CHECK</h1>
+<div class="sub">This page has no cache history. What it shows is what your phone really gets.</div>
+<div id="out"></div>
+<button id="fix">🧹 WIPE THIS PHONE'S SITE CACHE + RELOAD</button>
+<a class="btn" href="/arcade">GO TO THE ARCADE →</a>
+
+<script>
+var out = document.getElementById('out');
+function row(k, v, cls) {
+  var d = document.createElement('div'); d.className = 'row';
+  d.innerHTML = '<div class="k">' + k + '</div><div class="v ' + (cls || '') + '">' + v + '</div>';
+  out.appendChild(d);
+}
+row('BUILD', '2026-08-18 · check v1', 'ok');
+row('TIME', new Date().toString());
+row('BROWSER', navigator.userAgent);
+
+/* Does the games data reach this device at all? Nothing else on the page depends on it. */
+fetch('/patreon-arcade-games.json?cb=' + Date.now(), { cache: 'no-store' })
+  .then(function (r) { return r.json(); })
+  .then(function (d) { row('GAMES DATA', (d.games || []).length + ' cabinets received', 'ok'); })
+  .catch(function (e) { row('GAMES DATA', 'FAILED — ' + e, 'bad'); });
+
+/* THE prime suspect: a play-counter request that never settles blocks the whole arcade.
+   Timed here so a hang is visible as a hang rather than as a blank page. */
+(function () {
+  var t0 = Date.now(), done = false;
+  setTimeout(function () { if (!done) row('PLAY COUNTER', 'STILL HANGING after 5s — THIS is what blanked your arcade', 'bad'); }, 5000);
+  fetch('/api/plays', { cache: 'no-store' })
+    .then(function (r) { done = true; row('PLAY COUNTER', 'replied in ' + (Date.now() - t0) + 'ms', 'ok'); })
+    .catch(function (e) { done = true; row('PLAY COUNTER', 'failed fast in ' + (Date.now() - t0) + 'ms (harmless) — ' + e, 'warn'); });
+})();
+
+/* Is a service worker holding this origin? */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    row('SERVICE WORKERS', rs.length ? rs.length + ' registered' + (navigator.serviceWorker.controller ? ' (CONTROLLING this page)' : '') : 'none',
+        rs.length ? 'warn' : 'ok');
+  }).catch(function () { row('SERVICE WORKERS', 'unavailable', 'warn'); });
+} else { row('SERVICE WORKERS', 'unsupported', 'ok'); }
+
+if (window.caches && caches.keys) {
+  caches.keys().then(function (k) { row('CACHES', k.length ? k.join(', ') : 'none', k.length ? 'warn' : 'ok'); });
+}
+
+/* Fetch the live arcade HTML and report whether it is the CURRENT build — this is what
+   proves "your phone is on an old copy" instead of me asserting it. */
+fetch('/patreon-arcade?cb=' + Date.now(), { cache: 'no-store' })
+  .then(function (r) { return r.text(); })
+  .then(function (h) {
+    row('ARCADE HTML', h.indexOf('jnjErrBox') > -1
+      ? 'CURRENT build reaching this device'
+      : 'OLD build — your phone is being served stale HTML', h.indexOf('jnjErrBox') > -1 ? 'ok' : 'bad');
+  })
+  .catch(function (e) { row('ARCADE HTML', 'FAILED — ' + e, 'bad'); });
+
+document.getElementById('fix').addEventListener('click', function () {
+  var jobs = [];
+  if ('serviceWorker' in navigator) {
+    jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+      return Promise.all(rs.map(function (r) { return r.unregister(); }));
+    }));
+  }
+  if (window.caches && caches.keys) {
+    jobs.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    }));
+  }
+  Promise.all(jobs).catch(function () {}).then(function () {
+    location.href = '/arcade?cb=' + Date.now();
+  });
+});
+</script>
+</body>
+</html>
