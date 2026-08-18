@@ -1729,10 +1729,27 @@ async function init() {
       if (typeof gsap !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         const cabs = hall.querySelectorAll('.cab');
         cabs.forEach(c => { c.style.animation = 'none'; });
-        gsap.fromTo(cabs, {y: 28, opacity: 0}, {
+        const tween = gsap.fromTo(cabs, {y: 28, opacity: 0}, {
           y: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
           delay: 0.45, stagger: 0.17,
         });
+        // FAILSAFE — the entrance must never be able to HIDE the arcade.
+        // Osimo's Pixel showed a permanently empty hall while /check proved the device was
+        // getting current HTML, all 8 cabinets of data, a 69ms API and had no service
+        // worker or cache at all. The cabinets were in the DOM the whole time and simply
+        // invisible: fromTo() sets opacity 0 on the FIRST frame, and the line above has
+        // already deleted the CSS entrance, so if the tween never advances — rAF throttled
+        // on a phone with dozens of tabs, page restored into the background, a stalled
+        // ticker — they stay at opacity 0 forever. No error, no empty-state, nothing to
+        // see. An animation is decoration; it may never be the reason content is unseen.
+        const reveal = () => cabs.forEach(c => {
+          if (parseFloat(getComputedStyle(c).opacity) < 0.99) {
+            try { gsap.killTweensOf(c); } catch (e) {}
+            c.style.opacity = '1'; c.style.transform = 'none';
+          }
+        });
+        if (tween && tween.eventCallback) tween.eventCallback('onComplete', reveal);
+        setTimeout(reveal, 2500);   // wall-clock, independent of rAF entirely
       }
     }
 
