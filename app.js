@@ -1484,22 +1484,10 @@ function setupTurbo() {
 let GLOBAL_PLAYS = {};
 
 async function fetchGlobalPlays() {
-  // HARD TIMEOUT. Osimo's Pixel showed an empty hall for hours while every other device
-  // rendered fine, with no console error — because init() does
-  //     await Promise.all([fetch(gamesJson), fetchGlobalPlays()])
-  // and this function had a catch but NO timeout. A catch only saves you from a request
-  // that FAILS; a request that HANGS (blocked by a content filter, DNS black-hole, stalled
-  // worker) never settles, so Promise.all never settles, so the cabinet-building code after
-  // it never runs. The comment used to say "stats are decoration; the arcade works without
-  // them" — true for failures, false for hangs, and that gap took the whole arcade down on
-  // one device while the origin was perfectly healthy.
-  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = setTimeout(() => { try { ctrl && ctrl.abort(); } catch (e) {} }, 3000);
   try {
-    const r = await fetch('/api/plays', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+    const r = await fetch('/api/plays', { cache: 'no-store' });
     if (r.ok) GLOBAL_PLAYS = await r.json();
-  } catch (e) { /* decoration only — ranking falls back to file order */ }
-  finally { clearTimeout(timer); }
+  } catch { /* stats are decoration; the arcade works without them */ }
 }
 
 function reportPlay(id) {
@@ -1645,15 +1633,9 @@ async function init() {
               : WIP ? 'wip-games.json'
               : PATREON ? 'patreon-games.json'
               : 'games.json';
-    // The games list is the ONLY thing the hall needs. Plays are a ranking nicety, so they
-    // get their own timeout AND a settle-guard: whatever happens to /api/plays, the cabinets
-    // render. Previously one unsettled decoration request blanked the entire arcade.
     const [resp] = await Promise.all([
       fetch(src + '?v=' + Date.now()),
-      Promise.race([
-        fetchGlobalPlays(),
-        new Promise(res => setTimeout(res, 3500)),
-      ]).catch(() => {}),
+      fetchGlobalPlays(),
     ]);
     const data = await resp.json();
     const games = data.games || [];
@@ -1729,27 +1711,10 @@ async function init() {
       if (typeof gsap !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         const cabs = hall.querySelectorAll('.cab');
         cabs.forEach(c => { c.style.animation = 'none'; });
-        const tween = gsap.fromTo(cabs, {y: 28, opacity: 0}, {
+        gsap.fromTo(cabs, {y: 28, opacity: 0}, {
           y: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
           delay: 0.45, stagger: 0.17,
         });
-        // FAILSAFE — the entrance must never be able to HIDE the arcade.
-        // Osimo's Pixel showed a permanently empty hall while /check proved the device was
-        // getting current HTML, all 8 cabinets of data, a 69ms API and had no service
-        // worker or cache at all. The cabinets were in the DOM the whole time and simply
-        // invisible: fromTo() sets opacity 0 on the FIRST frame, and the line above has
-        // already deleted the CSS entrance, so if the tween never advances — rAF throttled
-        // on a phone with dozens of tabs, page restored into the background, a stalled
-        // ticker — they stay at opacity 0 forever. No error, no empty-state, nothing to
-        // see. An animation is decoration; it may never be the reason content is unseen.
-        const reveal = () => cabs.forEach(c => {
-          if (parseFloat(getComputedStyle(c).opacity) < 0.99) {
-            try { gsap.killTweensOf(c); } catch (e) {}
-            c.style.opacity = '1'; c.style.transform = 'none';
-          }
-        });
-        if (tween && tween.eventCallback) tween.eventCallback('onComplete', reveal);
-        setTimeout(reveal, 2500);   // wall-clock, independent of rAF entirely
       }
     }
 
@@ -2045,157 +2010,58 @@ function faceLabAttract(ctx, w, h, t, world, s) {
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
 function onairAttract(ctx, w, h, t, world, s) {
-  // Looks like the GAME, not a screensaver (Osimo 2026-08-18: "fix that cassette to look
-  // like game play from the game"): point-and-click loop — tap ring on a hotspot, Jimmy
-  // walks to it FACING his direction, label chip, dialogue box typing out, inventory bar
-  // gaining the item. Scripted beats, looping.
-  if (!s.init) {
-    s.init = true; s.last = t; s.beat = 0; s.bt = 0;
-    s.jx = w * 0.25; s.face = 1; s.walkPh = 0; s.items = 1;
-  }
-  const dt = Math.min(t - s.last, 50); s.last = t;
-
-  // room: brick, screen, ON AIR, floor
+  // mini studio: brick wall, JIM & JOE screen, two armoured hosts, ON AIR blink
   ctx.fillStyle = '#5e372a'; ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = 'rgba(40,24,18,0.8)'; ctx.lineWidth = 1;
-  for (let y = 0; y < h * 0.74; y += 7) {
+  for (let y = 0; y < h; y += 8) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    for (let x = (y / 8) % 2 ? 10 : 0; x < w; x += 20) {
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 8); ctx.stroke();
+    }
   }
-  ctx.fillStyle = '#2b1d15'; ctx.fillRect(0, h * 0.74, w, h * 0.26);
-  ctx.fillStyle = '#3b2b22';
-  for (let x = 0; x < w; x += 14) ctx.fillRect(x, h * 0.74, 12, h * 0.26);
-  const sw = w * 0.38, sx = w * 0.31, sy = h * 0.1, sh = h * 0.2;
+  // floor
+  ctx.fillStyle = '#3b2b22'; ctx.fillRect(0, h * 0.78, w, h * 0.22);
+  ctx.fillStyle = '#b0475a'; ctx.fillRect(w * 0.2, h * 0.8, w * 0.6, h * 0.1);
+  // screen
+  const sw = w * 0.44, sx = (w - sw) / 2, sy = h * 0.12, sh = h * 0.22;
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(sx, sy, sw, sh);
   ctx.strokeStyle = '#2a2e38'; ctx.lineWidth = 2; ctx.strokeRect(sx, sy, sw, sh);
-  ctx.fillStyle = '#e5d9b8'; ctx.font = 'bold ' + Math.max(6, sw * 0.13) + 'px Georgia, serif';
+  ctx.fillStyle = '#e5d9b8'; ctx.font = 'bold ' + Math.max(7, sw * 0.14) + 'px Georgia, serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('JIM & JOE', sx + sw / 2, sy + sh / 2);
+  // ON AIR blink
   const on = Math.sin(t * 0.004) > 0;
-  ctx.fillStyle = on ? '#ff3b3b' : '#3a1414'; ctx.fillRect(w * 0.74, h * 0.05, w * 0.17, h * 0.075);
-  ctx.fillStyle = on ? '#fff' : '#7a4040'; ctx.font = 'bold ' + Math.max(5, w * 0.03) + 'px monospace';
-  ctx.fillText('ON AIR', w * 0.825, h * 0.088);
-
-  // scripted beats: walk to broom -> +BROOM -> walk to Joe -> dialogue -> loop
-  const SPOTS = { broom: w * 0.12, joe: w * 0.7 };
-  const sc = Math.max(1.1, h / 120), fy = h * 0.86;
-  s.bt += dt;
-  const B = ['walkBroom', 'grab', 'walkJoe', 'talk'];
-  const cur = B[s.beat % 4];
-  let target = cur === 'walkBroom' ? SPOTS.broom : cur === 'walkJoe' ? SPOTS.joe : null;
-  let walking = false;
-  if (target != null) {
-    const dx = target - s.jx;
-    if (Math.abs(dx) > 2) {
-      s.face = dx > 0 ? 1 : -1;
-      s.jx += Math.sign(dx) * dt * 0.045 * w * 0.001 * 60;
-      s.walkPh += dt * 0.012; walking = true;
-    } else { s.beat++; s.bt = 0; if (cur === 'walkBroom') {} }
-  } else if (s.bt > (cur === 'grab' ? 900 : 2600)) {
-    if (cur === 'grab') s.items = 2;
-    if (cur === 'talk') { s.items = 1; }
-    s.beat++; s.bt = 0;
-  }
-
-  // tap ring on the current target (the point-and-click signature)
-  if (target != null) {
-    const ringT = (t % 900) / 900;
-    ctx.strokeStyle = 'rgba(255,210,80,' + (1 - ringT) * 0.9 + ')';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(target, fy - 6 * sc, 4 + ringT * 14, 0, 7); ctx.stroke();
-  }
-  // label chip above target
-  if (target != null) {
-    const lbl = cur === 'walkBroom' ? 'THE BROOM' : 'JOE';
-    ctx.font = 'bold ' + Math.max(5, w * 0.026) + 'px monospace';
-    const tw2 = ctx.measureText(lbl).width + 10;
-    ctx.fillStyle = 'rgba(8,8,12,0.85)';
-    ctx.fillRect(target - tw2 / 2, fy - 46 * sc, tw2, 13);
-    ctx.fillStyle = '#ffd250'; ctx.fillText(lbl, target, fy - 46 * sc + 7);
-  }
-
-  // broom prop until grabbed
-  if (s.items < 2 || cur !== 'grab') {
-    ctx.strokeStyle = '#b58a4a'; ctx.lineWidth = 2 * sc * 0.5;
-    ctx.beginPath(); ctx.moveTo(SPOTS.broom, fy - 30 * sc); ctx.lineTo(SPOTS.broom, fy); ctx.stroke();
-    ctx.fillStyle = '#caa54c'; ctx.fillRect(SPOTS.broom - 4 * sc, fy - 6 * sc, 8 * sc, 6 * sc);
-  }
-  // +BROOM toast during grab
-  if (cur === 'grab') {
-    const rise = s.bt * 0.02;
-    ctx.fillStyle = 'rgba(255,255,255,' + Math.max(0, 1 - s.bt / 900) + ')';
-    ctx.font = 'bold ' + Math.max(6, w * 0.03) + 'px monospace';
-    ctx.fillText('+ BROOM', s.jx, fy - 52 * sc - rise);
-  }
-
-  // hosts
-  function bot(x, y, scB, colA, colTrim, ph, face) {
-    // Osimo 2026-08-18: "that white sprite on the left behaves weirdly". It was a stack of
-    // rectangles whose legs slid sideways with no body motion — it read as a glitching box,
-    // not a person. Now: legs SWING from the hip and alternate front/back, the body bobs on
-    // the passing pose, arms counter-swing, and a ground shadow keeps him planted.
-    ctx.save(); ctx.translate(x, y); if (face < 0) ctx.scale(-1, 1);
-    const sw = Math.sin(ph * Math.PI * 2);            // -1..1 stride
-    const bob = Math.abs(Math.cos(ph * Math.PI * 2)) * 1.2 * scB;
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.beginPath(); ctx.ellipse(0, 1 * scB, 8 * scB, 2.2 * scB, 0, 0, 7); ctx.fill();
-    ctx.translate(0, -bob);
-    // legs: rear leg darker so the swing reads at cassette size
-    const legY = -10 * scB, legH = 10 * scB, legW = 4 * scB;
-    ctx.fillStyle = colTrim;
-    ctx.save(); ctx.translate(-1 * scB, legY); ctx.rotate(-sw * 0.42);
-    ctx.fillRect(-legW / 2, 0, legW, legH); ctx.restore();
+  ctx.fillStyle = on ? '#ff3b3b' : '#3a1414';
+  ctx.fillRect(w * 0.72, h * 0.06, w * 0.18, h * 0.08);
+  ctx.fillStyle = on ? '#fff' : '#7a4040'; ctx.font = 'bold ' + Math.max(5, w * 0.032) + 'px monospace';
+  ctx.fillText('ON AIR', w * 0.81, h * 0.1);
+  // hosts: Jimmy (white/gold) left walking, Joe (rust) right seated
+  function bot(x, y, sc, colA, colTrim, walk) {
+    const ph = walk ? Math.sin(t * 0.01) : 0;
     ctx.fillStyle = colA;
-    ctx.save(); ctx.translate(1 * scB, legY); ctx.rotate(sw * 0.42);
-    ctx.fillRect(-legW / 2, 0, legW, legH); ctx.restore();
-    // torso + shoulder trim
-    ctx.fillStyle = colA; ctx.fillRect(-7 * scB, -24 * scB, 14 * scB, 15 * scB);
+    ctx.fillRect(x - 5 * sc + ph * 2, y - 10 * sc, 4 * sc, 10 * sc);
+    ctx.fillRect(x + 1 * sc - ph * 2, y - 10 * sc, 4 * sc, 10 * sc);
+    ctx.fillRect(x - 7 * sc, y - 24 * sc, 14 * sc, 15 * sc);
     ctx.fillStyle = colTrim;
-    ctx.fillRect(-9 * scB, -25 * scB, 5 * scB, 3 * scB);
-    ctx.fillRect(4 * scB, -25 * scB, 5 * scB, 3 * scB);
-    // arms counter-swing the legs
-    ctx.fillStyle = colA;
-    ctx.save(); ctx.translate(-7 * scB, -22 * scB); ctx.rotate(sw * 0.5);
-    ctx.fillRect(-1.6 * scB, 0, 3.2 * scB, 9 * scB); ctx.restore();
-    ctx.save(); ctx.translate(7 * scB, -22 * scB); ctx.rotate(-sw * 0.5);
-    ctx.fillRect(-1.6 * scB, 0, 3.2 * scB, 9 * scB); ctx.restore();
-    // helmet, visor toward the facing side
-    ctx.fillStyle = colA; ctx.fillRect(-6 * scB, -36 * scB, 12 * scB, 12 * scB);
-    ctx.fillStyle = '#0c0e12'; ctx.fillRect(-2 * scB, -34 * scB, 7.5 * scB, 8 * scB);
+    ctx.fillRect(x - 9 * sc, y - 25 * sc, 5 * sc, 3 * sc);
+    ctx.fillRect(x + 4 * sc, y - 25 * sc, 5 * sc, 3 * sc);
+    ctx.fillStyle = colA; ctx.fillRect(x - 6 * sc, y - 36 * sc, 12 * sc, 12 * sc);
+    ctx.fillStyle = '#0c0e12'; ctx.fillRect(x - 4.5 * sc, y - 34 * sc, 9 * sc, 8 * sc);
     ctx.fillStyle = '#eef4ff';
-    ctx.fillRect(0.5 * scB, -32 * scB, 1.8 * scB, 1.2 * scB);
-    ctx.fillRect(3.4 * scB, -32 * scB, 1.8 * scB, 1.2 * scB);
-    ctx.restore();
+    ctx.fillRect(x - 3 * sc, y - 32 * sc, 2 * sc, 1.2 * sc);
+    ctx.fillRect(x + 1 * sc, y - 32 * sc, 2 * sc, 1.2 * sc);
+    ctx.fillRect(x - 2 * sc, y - 29 * sc, 4 * sc, 1 * sc);
   }
-  bot(s.jx, fy, sc, '#e8e2d4', '#d4a13c', walking ? s.walkPh % 1 : 0, s.face);
-  bot(SPOTS.joe + w * 0.09, fy, sc, '#9a6b3c', '#b0764a', 0, -1);
-
-  // dialogue box while talking — the game's actual UI shape
-  if (cur === 'talk') {
-    const lines = ['JOE: Tea first. Then the lollipop.', 'JOE: Then, maybe, television.'];
-    const li = Math.floor(s.bt / 1300) % lines.length;
-    const txt = lines[li];
-    const shown = txt.slice(0, Math.floor((s.bt % 1300) / 28));
-    ctx.fillStyle = 'rgba(6,6,10,0.9)';
-    ctx.fillRect(w * 0.06, h * 0.6, w * 0.88, h * 0.13);
-    ctx.strokeStyle = '#caa54c'; ctx.lineWidth = 1; ctx.strokeRect(w * 0.06, h * 0.6, w * 0.88, h * 0.13);
-    ctx.fillStyle = '#ffd9a0'; ctx.font = Math.max(6, w * 0.028) + 'px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(shown, w * 0.09, h * 0.665);
-    ctx.textAlign = 'center';
-  }
-
-  // inventory bar — items appear as they are collected (gameplay's most recognisable HUD)
-  const isz = Math.max(9, w * 0.055);
-  for (let i = 0; i < 4; i++) {
-    const ix = w * 0.04 + i * (isz + 4), iy = h * 0.9;
-    ctx.fillStyle = 'rgba(10,10,16,0.85)';
-    ctx.fillRect(ix, iy, isz, isz);
-    ctx.strokeStyle = i < s.items ? '#ffd250' : '#3a3a44'; ctx.lineWidth = 1;
-    ctx.strokeRect(ix, iy, isz, isz);
-    if (i < s.items) {
-      ctx.font = Math.max(7, isz * 0.62) + 'px serif';
-      ctx.fillText(['🧽', '🧹'][i] || '?', ix + isz / 2, iy + isz / 2 + 1);
-    }
+  const fy = h * 0.86, sc = Math.max(1.2, h / 110);
+  const jx = w * 0.28 + Math.sin(t * 0.0012) * w * 0.1;
+  bot(jx, fy, sc, '#e8e2d4', '#d4a13c', true);
+  bot(w * 0.72, fy, sc, '#9a6b3c', '#b0764a', false);
+  // speech dots alternating (the banter)
+  const talker = Math.floor(t / 1600) % 2;
+  const bx = talker ? w * 0.72 : jx, dots = Math.floor(t / 300) % 4;
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < dots; i++) {
+    ctx.beginPath(); ctx.arc(bx + (i - 1) * 5 * sc, fy - 42 * sc, 1.4 * sc, 0, 7); ctx.fill();
   }
 }
 
@@ -2477,28 +2343,16 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
 }
 
 function pinVadersAttract(ctx, w, h, t, world, s) {
-  // REAL gameplay in miniature (Osimo 2026-08-18: "actual gameplay — the ball not
-  // responding in cassette like real game play"). The old toy bounced the ball off an
-  // invisible line and flicked BOTH flippers wherever the ball was — no cause, no
-  // effect. This one is an actual table: walls, gravity, a plunger launch up the right
-  // lane, and each flipper flips ONLY when the ball falls toward ITS side — the flip
-  // imparts the kick. Drains relaunch from the plunger like the real cabinet.
   if (!s.init) {
     s.init = true; s.last = t;
     s.stars = Array.from({ length: 24 }, () => ({
       x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.2 + 0.3, tw: Math.random() * 6 }));
     s.gx = w * 0.18; s.dir = 1; s.beat = 0; s.frame = 0;
     s.alive = Array.from({ length: 3 }, () => Array(4).fill(true));
-    s.ball = null; s.plunge = 0;             // plunge: 0 idle, >0 = charging countdown
-    s.flipL = 0; s.flipR = 0;                // >0 while a flipper is raised
+    s.ball = { x: w * 0.5, y: h * 0.5, vx: 0.9, vy: -1.2 };
+    s.flipT = 0; s.respawn = 0;
   }
   const dt = Math.min(t - s.last, 32); s.last = t;
-
-  // table geometry
-  const wallL = w * 0.05, wallR = w * 0.95, laneX = w * 0.885;   // plunger lane at right
-  const fy = h * 0.87;                                            // flipper pivot line
-  const pivotL = { x: w * 0.32, y: fy }, pivotR = { x: w * 0.68, y: fy };
-  const fLen = w * 0.15;
 
   // space backdrop
   ctx.fillStyle = '#0c0514'; ctx.fillRect(0, 0, w, h);
@@ -2509,17 +2363,7 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
   }
   ctx.globalAlpha = 1;
 
-  // table walls + inlane guides ending ON the flipper pivots (house rule)
-  ctx.strokeStyle = 'rgba(183,107,255,0.55)'; ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(wallL, h * 0.06); ctx.lineTo(wallL, h * 0.62);
-  ctx.lineTo(pivotL.x, fy);
-  ctx.moveTo(wallR, h * 0.06); ctx.lineTo(wallR, h * 0.62);
-  ctx.moveTo(laneX - w * 0.035, h * 0.3); ctx.lineTo(laneX - w * 0.035, h * 0.62);
-  ctx.lineTo(pivotR.x, fy);
-  ctx.stroke();
-
-  // marching invaders
+  // marching mini invaders
   s.beat += dt;
   if (s.beat > 460) {
     s.beat = 0; s.frame ^= 1;
@@ -2533,117 +2377,58 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
       const ax = s.gx + c * cw, ay = h * 0.12 + r * rh;
       ctx.fillStyle = ['#9fff8a', '#6ee7ff', '#ffffff'][r];
       const u = w * 0.008;
+      // tiny crab: body + legs alternate
       ctx.fillRect(ax - 3 * u, ay - u, 6 * u, 2 * u);
       ctx.fillRect(ax - 4 * u, ay, 8 * u, u);
       if (s.frame) { ctx.fillRect(ax - 4 * u, ay + 2 * u, u, u); ctx.fillRect(ax + 3 * u, ay + 2 * u, u, u); }
       else { ctx.fillRect(ax - 2 * u, ay + 2 * u, u, u); ctx.fillRect(ax + u, ay + 2 * u, u, u); }
     }
 
-  // plunger + launch
-  if (!s.ball) {
-    s.plunge += dt;
-    // ball waiting on the plunger, compressing
-    const compress = Math.min(1, s.plunge / 900);
-    ctx.fillStyle = '#f4f7ff';
-    ctx.beginPath(); ctx.arc(laneX, h * 0.8 - compress * -6, w * 0.018, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#b76bff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(laneX - 6, h * 0.84 + compress * 5);
-    ctx.lineTo(laneX + 6, h * 0.84 + compress * 5); ctx.stroke();
-    if (s.plunge > 1000) {
-      s.plunge = 0;
-      s.ball = { x: laneX, y: h * 0.78, vx: 0, vy: -(1.55 + Math.random() * 0.25) };
-    }
-  }
-
-  if (s.ball) {
-    const b = s.ball;
-    b.vy += 0.045 * dt * 0.06 * 16;               // gravity
-    b.x += b.vx * dt * 0.06; b.y += b.vy * dt * 0.06;
-
-    // top arch bends the launched ball out of the lane into the field
-    if (b.y < h * 0.09) { b.vy = Math.abs(b.vy) * 0.75; b.vx -= 0.6 + Math.random() * 0.4; }
-    if (b.x < wallL + 4) { b.x = wallL + 4; b.vx = Math.abs(b.vx) * 0.85; }
-    if (b.x > wallR - 4) { b.x = wallR - 4; b.vx = -Math.abs(b.vx) * 0.85; }
-    // lane guide keeps the field ball out of the plunger lane
-    if (b.vy > 0 && b.x > laneX - w * 0.035 - 4 && b.y > h * 0.3 && b.y < h * 0.62)
-      { b.x = laneX - w * 0.035 - 4; b.vx = -Math.abs(b.vx) * 0.7; }
-
-    // alien hits
-    for (let r = 0; r < 3; r++)
-      for (let c = 0; c < 4; c++) {
-        if (!s.alive[r][c]) continue;
-        const ax = s.gx + c * cw, ay = h * 0.12 + r * rh;
-        if (Math.abs(b.x - ax) < w * 0.04 && Math.abs(b.y - ay) < h * 0.045) {
-          s.alive[r][c] = false; b.vy = Math.abs(b.vy) * 0.9 + 0.4; b.vx += (Math.random() - 0.5) * 1.4;
-          if (s.alive.every(row => row.every(a => !a)))
-            s.alive = Array.from({ length: 3 }, () => Array(4).fill(true));
-        }
-      }
-
-    // FLIPPERS — the fix. Each one reacts to the ball on ITS side, just before arrival,
-    // and only a raised flipper imparts the kick. Missing the ball = drain, like the game.
-    const nearL = b.vy > 0 && b.y > fy - h * 0.09 && b.x > pivotL.x - w * 0.05 && b.x < pivotL.x + fLen + w * 0.02;
-    const nearR = b.vy > 0 && b.y > fy - h * 0.09 && b.x < pivotR.x + w * 0.05 && b.x > pivotR.x - fLen - w * 0.02;
-    const missChance = s.missRoll === undefined ? (s.missRoll = Math.random()) : s.missRoll;
-    if (nearL && s.flipL <= 0 && missChance > 0.12) s.flipL = 150;
-    if (nearR && s.flipR <= 0 && missChance > 0.12) s.flipR = 150;
-    s.flipL = Math.max(0, s.flipL - dt); s.flipR = Math.max(0, s.flipR - dt);
-
-    // contact with a RAISED flipper sends it back up toward the aliens
-    if (b.y > fy - 10 && b.y < fy + 8 && b.vy > 0) {
-      const onL = b.x >= pivotL.x - 4 && b.x <= pivotL.x + fLen;
-      const onR = b.x <= pivotR.x + 4 && b.x >= pivotR.x - fLen;
-      if ((onL && s.flipL > 0) || (onR && s.flipR > 0)) {
-        b.vy = -(1.5 + Math.random() * 0.5);
-        b.vx += onL ? (0.4 + Math.random() * 0.5) : -(0.4 + Math.random() * 0.5);
-        s.missRoll = Math.random();
+  // ball physics (toy — bounces around, kills an alien on touch)
+  const b = s.ball;
+  b.vy += 0.05; b.x += b.vx * dt * 0.06; b.y += b.vy * dt * 0.06;
+  if (b.x < w * 0.05 || b.x > w * 0.95) b.vx *= -1;
+  if (b.y < h * 0.05) b.vy = Math.abs(b.vy);
+  for (let r = 0; r < 3; r++)
+    for (let c = 0; c < 4; c++) {
+      if (!s.alive[r][c]) continue;
+      const ax = s.gx + c * cw, ay = h * 0.12 + r * rh;
+      if (Math.abs(b.x - ax) < w * 0.04 && Math.abs(b.y - ay) < h * 0.045) {
+        s.alive[r][c] = false; b.vy = 1.4; b.vx = (Math.random() - 0.5) * 2.4;
+        if (s.alive.every(row => row.every(a => !a)))
+          s.alive = Array.from({ length: 3 }, () => Array(4).fill(true));
       }
     }
-    // drain -> back to the plunger (relaunch), like losing the ball for real
-    if (b.y > h + 10) { s.ball = null; s.plunge = 0; s.missRoll = undefined; }
+  // flippers flick the ball back up
+  const fy = h * 0.86;
+  s.flipT = Math.max(0, s.flipT - dt);
+  if (b.y > fy - h * 0.03 && b.vy > 0) { b.vy = -(1.3 + Math.random() * 0.7); s.flipT = 140; }
+  if (b.y > h) { b.x = w * 0.5; b.y = h * 0.4; b.vy = -1; }
 
-    // ball
-    ctx.fillStyle = '#f4f7ff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.arc(b.x, b.y, w * 0.018, 0, 7); ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // draw flippers at their own angles (independent — the visible cause of the kick)
+  // draw flippers (flick = raised angle)
+  const lift = s.flipT > 0 ? -0.45 : 0.35;
   ctx.strokeStyle = '#b76bff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
   ctx.shadowColor = '#b76bff'; ctx.shadowBlur = 8;
-  const aL = s.flipL > 0 ? -0.5 : 0.32, aR = s.flipR > 0 ? -0.5 : 0.32;
   ctx.beginPath();
-  ctx.moveTo(pivotL.x, fy); ctx.lineTo(pivotL.x + Math.cos(aL) * fLen, fy + Math.sin(aL) * fLen);
-  ctx.moveTo(pivotR.x, fy); ctx.lineTo(pivotR.x - Math.cos(aR) * fLen, fy + Math.sin(aR) * fLen);
+  ctx.moveTo(w * 0.3, fy); ctx.lineTo(w * 0.3 + Math.cos(lift) * w * 0.14, fy + Math.sin(lift) * w * 0.14);
+  ctx.moveTo(w * 0.7, fy); ctx.lineTo(w * 0.7 - Math.cos(lift) * w * 0.14, fy + Math.sin(lift) * w * 0.14);
   ctx.stroke();
   ctx.shadowBlur = 0;
-}
-/* BOOT — must not depend on WHEN this file finishes parsing.
-   Osimo's Pixel, 2026-08-18, after five wrong diagnoses. His on-page diagnostic finally
-   reported the decisive facts: `init defined: function`, `WORLDS defined: object`, and the
-   hall genuinely EMPTY. So the file parsed fine and init simply never ran.
 
-   `addEventListener('DOMContentLoaded', ...)` only ever fires if the document is STILL
-   LOADING at the moment this line executes. If app.js finishes parsing after that event has
-   already gone — a slower phone, a cold cache, a big JS file, any timing shift — the
-   listener is attached to an event that will never fire again, and the arcade sits silent
-   forever. No error, nothing to see. It is a RACE, which is precisely why it hit one device
-   and not another, and why it "worked last night": the timing simply landed the other way.
+  // ball
+  ctx.fillStyle = '#f4f7ff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.arc(b.x, b.y, w * 0.018, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
 
-   Checking readyState first makes boot independent of that race. The load fallback covers
-   the remaining edge where readyState is 'interactive' but DOMContentLoaded was missed. */
-function boot() {
-  if (boot.done) return;            // idempotent: whichever path wins, init runs exactly once
-  boot.done = true;
-  init();
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
-  window.addEventListener('load', boot);          // belt and braces
-} else {
-  boot();                            // document already parsed — run immediately
+  ctx.textAlign = 'center';
+  ctx.font = 'bold ' + Math.round(w * 0.05) + 'px "Courier New", monospace';
+  ctx.fillStyle = 'rgba(183,107,255,0.55)';
+  ctx.fillText('PIN-VADERS', w / 2, h * 0.97);
 }
 
+document.addEventListener('DOMContentLoaded', init);
+
+/* ── Chrome Flipper attract — neon ball + mini pinball table ── */
 function chromeFlipperAttract(ctx, w, h, t, world, s) {
   if (!s.bx) { s.bx = w*0.5; s.by = h*0.35; s.vx = 1.4; s.vy = 0.8; }
   ctx.fillStyle = '#000a0c'; ctx.fillRect(0, 0, w, h);

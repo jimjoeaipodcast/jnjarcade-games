@@ -1,51 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script>
-/* VISIBLE ERROR REPORTER — Osimo 2026-08-18. His Pixel shows a blank hall while the same
-   URL renders everywhere I can test. A phone has no console, so a JS error there is
-   completely invisible and I have been reduced to guessing. This prints any script error
-   ON THE PAGE. It is registered FIRST, before any other script, so it can catch a parse or
-   load failure in app.js itself — which is the leading theory: if app.js fails to parse on
-   his Chrome, init() never exists, nothing runs, and the page renders header-only with no
-   error anyone can see. */
-(function () {
-  function box(msg) {
-    try {
-      var d = document.getElementById('jnjErrBox');
-      if (!d) {
-        d = document.createElement('div'); d.id = 'jnjErrBox';
-        d.style.cssText = 'position:fixed;left:6px;right:6px;top:6px;z-index:99999;max-height:52vh;' +
-          'overflow:auto;background:#2a0b0b;color:#ffb4b4;font:11px/1.45 monospace;padding:9px 11px;' +
-          'border:1px solid #ff6b6b;border-radius:8px;white-space:pre-wrap;word-break:break-word';
-        d.onclick = function () { d.remove(); };
-        (document.body || document.documentElement).appendChild(d);
-      }
-      d.textContent += msg + '\n';
-    } catch (e) {}
-  }
-  window.addEventListener('error', function (e) {
-    if (e.target && e.target.tagName === 'SCRIPT') { box('LOAD FAILED: ' + (e.target.src || '?')); return; }
-    box('ERROR: ' + (e.message || '?') + '\n  at ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?'));
-  }, true);
-  window.addEventListener('unhandledrejection', function (e) {
-    box('PROMISE: ' + ((e.reason && (e.reason.message || e.reason)) || '?'));
-  });
-  /* If app.js parsed but init never ran, say so plainly rather than showing nothing. */
-  window.addEventListener('load', function () {
-    setTimeout(function () {
-      var hall = document.getElementById('cabinets');
-      if (!hall || hall.children.length) return;
-      box('DIAGNOSTIC: hall still empty.'
-        + '\n  init defined: ' + (typeof init)
-        + '\n  WORLDS defined: ' + (typeof WORLDS)
-        + '\n  sw controller: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'YES' : 'no')
-        + '\n  ua: ' + navigator.userAgent.slice(0, 90));
-    }, 4000);
-  });
-})();
-</script>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -214,67 +169,6 @@
 
   <script src="arcade-scores.js?v=13"></script>
   <script src="vendor/gsap.min.js"></script>
-  <script src="app.js?v=patreon57c"></script>
-<script>
-/* SELF-HEAL — Osimo 2026-08-18: arcades rendered on his wife's iPhone and stayed EMPTY on
-   his Pixel after the code was verified live from three pages. A service worker registered
-   at scope "/" (from index.html) intercepts every page on this origin, so one stale client
-   can keep serving old JS indefinitely while the server is perfectly healthy — and the user
-   has no way to tell, because the page looks deliberate: header, no cabinets, no error.
-
-   This runs from the HTML, which is served no-cache/must-revalidate, so the healer itself
-   can never be the stale thing. If the cabinet hall is still empty a few seconds after load
-   AND the app did not deliberately render an empty state, we tear down every service worker
-   and cache and reload ONCE. The sessionStorage latch makes a reload loop impossible — if
-   the page is still empty after the heal, it stops and leaves it alone rather than
-   thrashing the device. */
-(function () {
-  var HEALED = 'jnjHealed_v1';
-  setTimeout(function () {
-    var hall = document.getElementById('cabinets');
-    if (!hall) return;                                   // page has no hall (hub pages) — fine
-    if (hall.children.length > 0) return;                // cabinets present — fine
-    if (hall.querySelector('.hall-empty')) return;       // app CHOSE to show an empty state
-    try { if (sessionStorage.getItem(HEALED)) return; sessionStorage.setItem(HEALED, '1'); }
-    catch (e) { return; }                                // no storage = no latch = never heal
-    var done = function () { location.reload(true); };
-    var jobs = [];
-    if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
-      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
-        return Promise.all(rs.map(function (r) { return r.unregister(); }));
-      }).catch(function () {}));
-    }
-    if (window.caches && caches.keys) {
-      jobs.push(caches.keys().then(function (ks) {
-        return Promise.all(ks.map(function (k) { return caches.delete(k); }));
-      }).catch(function () {}));
-    }
-    (jobs.length ? Promise.all(jobs) : Promise.resolve()).then(done, done);
-  }, 6000);
-})();
-</script>
-<script>
-/* Build stamp — lets a phone report what it is actually running without devtools.
-   Tap the marquee 5 times to see it. Diagnosing Osimo's Pixel had no other channel. */
-(function () {
-  var n = 0, t = 0;
-  document.addEventListener('click', function () {
-    var now = Date.now();
-    n = (now - t < 800) ? n + 1 : 1; t = now;
-    if (n < 5) return;
-    n = 0;
-    var sw = 'n/a';
-    try { sw = navigator.serviceWorker && navigator.serviceWorker.controller ? 'ACTIVE' : 'none'; } catch (e) {}
-    var d = document.createElement('div');
-    d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#111;' +
-      'color:#ffd23d;font:12px/1.5 monospace;padding:10px 12px;border:1px solid #ffd23d55;border-radius:8px';
-    d.textContent = 'BUILD 2026-08-18c · app.js=' + ('patreon57c' || '?') +
-      ' · cabinets=' + (document.getElementById('cabinets') ? document.getElementById('cabinets').children.length : 'n/a') +
-      ' · sw=' + sw + ' · tap to close';
-    d.onclick = function () { d.remove(); };
-    document.body.appendChild(d);
-  }, true);
-})();
-</script>
+  <script src="app.js?v=patreon57"></script>
 </body>
 </html>
