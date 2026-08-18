@@ -2564,6 +2564,8 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
   ctx.stroke();
   ctx.shadowBlur = 0;
 }
+document.addEventListener('DOMContentLoaded', init);
+
 function chromeFlipperAttract(ctx, w, h, t, world, s) {
   if (!s.bx) { s.bx = w*0.5; s.by = h*0.35; s.vx = 1.4; s.vy = 0.8; }
   ctx.fillStyle = '#000a0c'; ctx.fillRect(0, 0, w, h);
