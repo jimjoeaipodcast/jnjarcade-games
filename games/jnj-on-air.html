@@ -298,8 +298,7 @@ const ROOMS = {
       { id: 'joe',        x: 640, y: 300, w: 120, h: 200, walkX: 585, label: 'JOE' },
       { id: 'decanter',   x: 420, y: 278, w: 50,  h: 70,  walkX: 390, label: 'THE DECANTER', counter: 'decanter' },
       { id: 'lolliTray',  x: 532, y: 316, w: 66,  h: 44,  walkX: 630, label: 'THE OUTRO TRAY' },
-      { id: 'cableSpot',  x: 452, y: 448, w: 96,  h: 46,  walkX: 415, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
-      { id: 'broomSpot',  x: 84,  y: 288, w: 62,  h: 200, walkX: 165, label: 'THE BROOM', hideWhen: () => flags.gotBroom },
+      { id: 'cableSpot',  x: 316, y: 420, w: 84,  h: 46,  walkX: 300, label: 'SPARE MIC CABLE', hideWhen: () => flags.gotCable },
       { id: 'fridge',     x: 4,   y: 298, w: 80,  h: 138, walkX: 120, label: 'MINI-FRIDGE' },
       { id: 'socket',     x: 612, y: 234, w: 42,  h: 48,  walkX: 585, label: 'WALL SOCKET' },
       { id: 'table',      x: 360, y: 330, w: 248, h: 96,  walkX: 320, label: 'THE TABLE' },
@@ -340,6 +339,7 @@ const ROOMS = {
       { id: 'bitsBox',    x: 462, y: 298, w: 242, h: 104, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
       { id: 'cassettes',  x: 604, y: 402, w: 280, h: 124, walkX: 558, label: 'CASSETTE PILE' },
       { id: 'plant',      x: 754, y: 262, w: 160, h: 234, walkX: 700, label: 'FAKE PLANT' },
+      { id: 'broomSpot',  x: 872, y: 286, w: 60,  h: 210, walkX: 820, label: 'THE BROOM', hideWhen: () => flags.gotBroom },
       { id: 'shelves',    x: 0,   y: 28,  w: 332, h: 314, walkX: 230, label: 'THE SHELVES' },
     ],
   },
@@ -883,6 +883,19 @@ function walkTo(x, action) {
   player.targetX = x; player.action = action || null;
   player.facing = x >= player.x ? 1 : -1;
 }
+// FULLSCREEN RE-ENTRY on any tap. Osimo 2026-08-18: "once installed as an app, if I exit
+// the game play and try to go back in, turning my phone doesn't make it go full screen."
+// requestFullscreen is only permitted inside a user gesture, and a rotation is NOT one — so
+// after leaving fullscreen (scoreboard, app switch, back gesture) there was no way back in
+// except the small toggle. Any tap now re-arms it, which is a gesture the browser accepts.
+// Capture phase so it runs before the game's own handlers and never eats their input.
+canvas.addEventListener('pointerdown', () => {
+  if (state === 'attract' || document.fullscreenElement) return;
+  try {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    screen.orientation?.lock?.('landscape').catch(() => {});
+  } catch (e) {}
+}, { capture: true, passive: true });
 canvas.addEventListener('touchstart', onDown, { passive: false });
 canvas.addEventListener('touchend', onUp, { passive: false });
 canvas.addEventListener('mousedown', onDown);
@@ -1279,21 +1292,6 @@ function overlayStudio() {
     ctx.beginPath(); ctx.roundRect(802, 30, 94, 49, 6); ctx.stroke();
     ctx.shadowBlur = 0;
   }
-  // broom leaning against the left sofa arm (v2: sofa arm at x~41-100)
-  if (!flags.gotBroom) {
-    ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(106, 296); ctx.lineTo(122, 452); ctx.stroke();
-    ctx.strokeStyle = '#a8845c'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(104, 300); ctx.lineTo(119, 448); ctx.stroke();
-    ctx.fillStyle = '#c9a35c'; ctx.beginPath();
-    ctx.moveTo(108, 448); ctx.lineTo(138, 442); ctx.lineTo(146, 478); ctx.lineTo(116, 484); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#a8823c';
-    ctx.beginPath(); ctx.moveTo(108, 448); ctx.lineTo(138, 442); ctx.lineTo(140, 452); ctx.lineTo(111, 458); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#8a6a34'; ctx.lineWidth = 1.5;
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(114 + i * 7, 452); ctx.lineTo(120 + i * 7, 480); ctx.stroke(); }
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(126, 483, 22, 4, 0, 0, 7); ctx.fill();
-  }
   // MINI-FRIDGE — left wall, standing on the boards beside the chesterfield.
   // Osimo 2026-08-18: "place the fridge on the left, not behind our inventory, make it look
   // like the sofas and surrounding, magnet and menu can keep their current look."
@@ -1340,16 +1338,22 @@ function overlayStudio() {
       ctx.beginPath(); ctx.moveTo(fx + 36, fy + 61); ctx.lineTo(fx + 36, fy + 68); ctx.stroke();
     }
   })();
-  // cable coil on the boards in front of the table (v2 hotspot x452-548 y448-494)
+  // spare cable coiled at the foot of the LEFT mic stand — Osimo 2026-08-18: "move the
+  // spare mike cable next to the mics base". It used to sit alone mid-floor, reading as
+  // a stray object; at the stand's base it reads as studio kit that belongs there.
   if (!flags.gotCable) {
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(500, 478, 34, 7, 0, 0, 7); ctx.fill();
+    const cxx = 356, cyy = 442;   // tight to the left stand foot (world ~360,420)
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(cxx, cyy + 8, 32, 6, 0, 0, 7); ctx.fill();
     ctx.strokeStyle = '#23232b'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.ellipse(500, 470, 30, 10, 0, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cxx, cyy, 28, 9, 0, 0, 7); ctx.stroke();
     ctx.strokeStyle = '#33333d'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.ellipse(500, 466, 22, 8, 0, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cxx, cyy - 4, 21, 7, 0, 0, 7); ctx.stroke();
     ctx.strokeStyle = '#4a4a56'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(500, 463, 14, 5, 0, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cxx, cyy - 7, 13, 5, 0, 0, 7); ctx.stroke();
+    // jack end resting against the stand foot
+    ctx.fillStyle = '#6a6a78';
+    ctx.beginPath(); ctx.roundRect(cxx + 24, cyy - 6, 11, 5, 2); ctx.fill();
   }
   // wall socket in the brick gap between screen and right portrait
   ctx.fillStyle = '#ddd5c4'; ctx.beginPath(); ctx.roundRect(618, 240, 32, 38, 4); ctx.fill();
@@ -1458,6 +1462,25 @@ function overlayProp() {
     // x52-144, an empty stretch of shelf, leaving the taken kettle fully visible.
     ctx.fillStyle = 'rgba(28,18,12,0.92)';
     ctx.beginPath(); ctx.roundRect(192, 264, 112, 94, 8); ctx.fill();
+  }
+  // BROOM — leaning in the right corner of the storage room (Osimo 2026-08-18).
+  // Moved here from the studio. The puzzle still solves: rig = cable + magnet (NOT broom),
+  // so the key is still reachable without it; the broom now sits behind the same key that
+  // gates the kettle, which funnels both the tea and lollipop chains through the prop room.
+  // Verified by playthrough after the move, not assumed.
+  if (!flags.gotBroom) {
+    ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(924, 292); ctx.lineTo(896, 452); ctx.stroke();
+    ctx.strokeStyle = '#a8845c'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(922, 296); ctx.lineTo(894, 448); ctx.stroke();
+    ctx.fillStyle = '#c9a35c'; ctx.beginPath();
+    ctx.moveTo(880, 446); ctx.lineTo(910, 452); ctx.lineTo(904, 486); ctx.lineTo(874, 480); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#a8823c';
+    ctx.beginPath(); ctx.moveTo(880, 446); ctx.lineTo(910, 452); ctx.lineTo(908, 462); ctx.lineTo(879, 456); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#8a6a34'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(878 + i * 7, 452); ctx.lineTo(876 + i * 7, 482); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(890, 486, 22, 4, 0, 0, 7); ctx.fill();
   }
   drawExitArrow(24, 330, -1);
 }
