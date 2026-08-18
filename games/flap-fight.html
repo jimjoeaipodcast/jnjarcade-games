@@ -617,8 +617,9 @@ function deathVoice() {
   } catch (e) {}
   const tier = DEATH_TIERS.find(t => score >= t.min) || DEATH_TIERS[DEATH_TIERS.length - 1];
   const bank = tier[who];
-  voicePlay(who, bank[Math.floor(Math.random() * bank.length)],
-            who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN);
+  // end-of-game monologue: Joe at JIMMY's gain (Osimo 2026-08-18 v7) — it's the closing
+  // line of the run, not in-play ambience, so both hosts land at equal weight here
+  voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN);
 }
 function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute') return;
