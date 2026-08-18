@@ -367,9 +367,11 @@ function loadPack() {
   // keep serving the old pack forever, so a sprite or VO fix ships to the CDN and the
   // player still sees and hears the previous build — the game HTML updates, its assets
   // silently do not. v2 = 2026-08-03 walk-cycle frames + caps-fixed voice takes.
-  fetch('jnj-on-air-pack.json?v=3').then(r => r.json()).then(p => {
+  fetch('jnj-on-air-pack.json?v=4').then(r => r.json()).then(p => {
     for (const k of ['studio', 'corridor', 'prop'])
       if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
+    // Osimo's kettle-free shelf plate — overlaid on the shelves once the kettle is taken.
+    if (p.art && p.art.propKettleGone) mkImg(p.art.propKettleGone, im => { SPR.kettleGone = im; });
     if (p.sprites) {
       for (const k of ['jimmyFront', 'jimmySide', 'joeFront'])
         if (p.sprites[k]) mkImg(p.sprites[k], im => { SPR[k] = im; });
@@ -1474,82 +1476,29 @@ function overlayProp() {
   ctx.restore();
   // kettle gone: shadowed empty shelf patch
   if (flags.gotKettle) {
-    // KETTLE REMOVED — patch the shelf with REAL SHELF PIXELS, not a dark rectangle.
-    // Osimo 2026-08-18: "when we remove the kettle it doesn't look great... make sure it
-    // overlays perfectly". The old patch was a flat rounded rect of rgba(28,18,12,0.92)
-    // painted over a lit photograph: hard edges, wrong tone, and it read as a black hole
-    // on the shelf — worse than leaving the kettle there.
+    // KETTLE TAKEN — overlay the empty-shelf plate Osimo supplied.
+    // History worth keeping, because I got this wrong three times: (1) a flat dark rounded
+    // rect over a lit photo — read as a black hole; (2) a donor blit sampled from elsewhere
+    // on the same shelf — the donor carried a small pale clip that tiled into three obvious
+    // copies; (3) a per-column tilt-compensated blit — the shelf really does rise ~0.25 plate
+    // px per column, but compensating for it introduced a diagonal artefact and looked worse
+    // than either. Osimo then handed over a clean shelf image and said to use it. He was
+    // right: the correct fix was the asset, not more geometry.
     //
-    // Instead we blit the clean empty stretch of the SAME shelf that sits just right of the
-    // kettle (plate x93-103, y92-116) over the kettle's footprint (plate x68-94). Same
-    // photograph, same lamp, same shelf, so tone and grain match by construction.
-    //
-    // Tiled at the plate's NATIVE 3x rather than stretched: the donor is 10 plate px wide,
-    // so three 30px-wide draws cover the 78px gap with the surrounding pixel scale intact.
-    // Stretching 10->78 would have been either blocky (NEAREST, ~7.8x) or mushy (smoothed)
-    // against 3x neighbours. Clipped so the tiling cannot spill past the kettle's box, and
-    // the shelf's front edge below y348 is deliberately left untouched.
-    const P = PLATES.prop;
-    if (P) {
-      // Built ONCE into an offscreen canvas and cached — a hard-edged blit still reads as a
-      // rectangle no matter how well the donor matches, so the patch is feathered at its
-      // borders and only its centre fully replaces the kettle.
-      if (!kettlePatch) {
-        const W = 78, H = 72;
-        kettlePatch = document.createElement('canvas');
-        kettlePatch.width = W; kettlePatch.height = H;
-        const g = kettlePatch.getContext('2d');
-        g.imageSmoothingEnabled = false;
-        // donor chosen by MEASUREMENT, not eye: every column of this shelf band was scanned
-        // for bright pixels and a run with none was taken. x93-103 looked clean but carried
-        // a small pale clip that tiled into three identical copies — visible and fake.
-        // x61-68 is the bay immediately left of the kettle: object-free, same lamp.
-        for (let i = 0; i < 4; i++) g.drawImage(P, 61, 92, 7, 24, i * 21, 0, 21, H);
-        // lift it to the lamp-lit level of the spot it replaces (the donor bay sits in shade)
-        g.globalCompositeOperation = 'lighter';
-        g.fillStyle = 'rgba(46,32,22,0.55)';
-        g.fillRect(0, 0, W, H);
-        // feather every edge so no rectangle boundary survives
-        g.globalCompositeOperation = 'destination-out';
-        const fade = (x0, y0, x1, y1, w, h) => {
-          const grd = g.createLinearGradient(x0, y0, x1, y1);
-          grd.addColorStop(0, 'rgba(0,0,0,1)');
-          grd.addColorStop(1, 'rgba(0,0,0,0)');
-          g.fillStyle = grd; g.fillRect(Math.min(x0, x1), Math.min(y0, y1), w, h);
-        };
-        fade(0, 0, 12, 0, 12, H);          // left
-        fade(W, 0, W - 12, 0, 12, H);      // right
-        fade(0, 0, 0, 10, W, 10);          // top
-        fade(0, H, 0, H - 10, W, 10);      // bottom
-      }
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(kettlePatch, 204, 276);
+    // Its placement is NOT eyeballed — his crop was located in the plate by normalised
+    // cross-correlation (best match plate x16-112, y36-153, corr 0.93), which is world
+    // x48-336, y108-459. Stored plate-native at 3x so it lands pixel-for-pixel.
+    const KG = SPR.kettleGone;
+    if (KG) {
+      ctx.save(); ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(KG, 48, 108, 288, 351);
       ctx.restore();
+    } else if (PLATES.prop) {
+      // pack loaded but this asset missing — leave the kettle rather than paint a black box
     } else {
-      // canvas-fallback room (no art pack): the old dark patch is still the best available
       ctx.fillStyle = 'rgba(28,18,12,0.92)';
       ctx.beginPath(); ctx.roundRect(192, 264, 112, 94, 8); ctx.fill();
     }
-  }
-  // BROOM — leaning in the right corner of the storage room (Osimo 2026-08-18).
-  // Moved here from the studio. The puzzle still solves: rig = cable + magnet (NOT broom),
-  // so the key is still reachable without it; the broom now sits behind the same key that
-  // gates the kettle, which funnels both the tea and lollipop chains through the prop room.
-  // Verified by playthrough after the move, not assumed.
-  if (!flags.gotBroom) {
-    ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(924, 292); ctx.lineTo(896, 452); ctx.stroke();
-    ctx.strokeStyle = '#a8845c'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(922, 296); ctx.lineTo(894, 448); ctx.stroke();
-    ctx.fillStyle = '#c9a35c'; ctx.beginPath();
-    ctx.moveTo(880, 446); ctx.lineTo(910, 452); ctx.lineTo(904, 486); ctx.lineTo(874, 480); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#a8823c';
-    ctx.beginPath(); ctx.moveTo(880, 446); ctx.lineTo(910, 452); ctx.lineTo(908, 462); ctx.lineTo(879, 456); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#8a6a34'; ctx.lineWidth = 1.5;
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(878 + i * 7, 452); ctx.lineTo(876 + i * 7, 482); ctx.stroke(); }
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.beginPath(); ctx.ellipse(890, 486, 22, 4, 0, 0, 7); ctx.fill();
   }
   drawExitArrow(24, 330, -1);
 }
