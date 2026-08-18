@@ -345,7 +345,7 @@ const VO_LINES = [
   // Joe — every sound event, rotating variants, delivered flat:
   ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."], ["JOE", "flip."], ["JOE", "flop."],
   ["JOE", "flap flap."], ["JOE", "boing."], ["JOE", "whoops."], ["JOE", "bing."],
-  ["JOE", "bong."], ["JOE", "bounce."], ["JOE", "bippidi."], ["JOE", "boppidi."],
+  ["JOE", "bong."], ["JOE", "bounce."], ["JOE", "bippidi."], ["JOE", "bopoidi."],
   ["JOE", "ten in a row. I'm mildly moved."],
   ["JOE", "fifteen straight. this is getting silly."],
   ["JOE", "twenty. I'm framing this one."],
@@ -369,7 +369,7 @@ const VO_LINES = [
 const JOE_BARKS = {
   // flap: rotating variety (Osimo 2026-08-18 v3: aerodynamics/effort/wing OUT,
   // boing/whoops/bing/bong/bounce IN) + its own reduced gain — see joeSay(). Every
-  // 5 FULL rotations Joe drops a "bippidi." — five more, "boppidi." — and repeat.
+  // 5 FULL rotations Joe drops "bippidi." then "bopoidi." on the very next jump.
   flap:    ["boop.", "beep.", "flap.", "flip.", "flop.", "flap flap.",
             "boing.", "whoops.", "bing.", "bong.", "bounce."],
   // score: RETIRED from voice mode (Osimo 2026-08-18: "don't need Joe to say points
@@ -435,7 +435,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=4')
+  fetch('flap-fight-pack.json?v=5')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -476,10 +476,12 @@ function joeSay(event) {
   const bank = JOE_BARKS[event];
   if (!bank) return;
   // flap easter-egg cadence: after every 5 FULL rotations of the bank, the NEXT flap
-  // is "bippidi." — after 5 more, "boppidi." — alternating forever (Osimo 2026-08-18 v3)
+  // is "bippidi." and the flap RIGHT AFTER that — no waiting for another 5 rotations —
+  // is "bopoidi." (Osimo 2026-08-18 v4: spelled for "Bop-pee-dee", fires on the very
+  // next jump). Then normal rotation resumes until the next 5-rotation checkpoint.
   if (event === 'flap' && VO.flapPending) {
     const word = VO.flapPending;
-    VO.flapPending = null;
+    VO.flapPending = word === 'bippidi.' ? 'bopoidi.' : null;   // chain straight into it
     voicePlay('JOE', word, JOE_GAIN * 0.85);
     return;
   }
@@ -487,9 +489,7 @@ function joeSay(event) {
   VO.rot[event] = (prev + 1) % bank.length;   // rotate, don't repeat
   if (event === 'flap' && VO.rot[event] === 0) {
     VO.flapRots = (VO.flapRots || 0) + 1;
-    if (VO.flapRots % 5 === 0) {
-      VO.flapPending = (VO.flapRots / 5) % 2 === 1 ? 'bippidi.' : 'boppidi.';
-    }
+    if (VO.flapRots % 5 === 0) VO.flapPending = 'bippidi.';
   }
   // flap ONLY sits 15% under Joe's normal gain (Osimo 2026-08-18 v2) — it fires at tap
   // rate, so it's ambience; every other Joe announcement stays at full JOE_GAIN
@@ -598,7 +598,7 @@ const sfx = {
   JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
   JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
   Object.values(COMBO_VO).forEach(t => chk('JOE', t));
-  ['bippidi.', 'boppidi.'].forEach(t => chk('JOE', t));
+  ['bippidi.', 'bopoidi.'].forEach(t => chk('JOE', t));
   if (miss.length) console.error('VO_LINES missing:', miss);
 })();
 
