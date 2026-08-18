@@ -1126,10 +1126,14 @@ function showCallout(kind) {
     until: Date.now() + 3400,
     kind,
   };
-  // 🎙️ voice mode: Jimmy SPEAKS the announcement (right bank for the moment) —
-  // rotating variants; tones mode keeps the classic fanfare.
-  if (sfxMode === 'voice') jimmySay(jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO));
-  else sfx.best();
+  // PB / top-score is a MOMENT in every sound mode (Osimo 2026-08-18 v8: "a Jimmy
+  // on-screen message popped up instead of Jimmy speaking + confetti"): confetti always,
+  // and Jimmy SPEAKS in both sound modes — voice mode immediately, tones mode right
+  // after its classic fanfare (same boom-then-line pattern as the death monologue).
+  spawnConfetti(kind === 'top' ? 90 : 50);
+  const line = jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO);
+  if (sfxMode === 'voice') jimmySay(line);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line), 600); }
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
@@ -2073,6 +2077,22 @@ function drawBird(x, y, rotDeg) {
 
 // ─── inflate (hit but not dead yet) ──────────────────────────────────────────
 function inflate(cause) {
+  // SHRINK STACKS ARE ARMOR (Osimo 2026-08-18 v8: hit a pipe while super tiny → it
+  // killed him; wanted the hit to cost the shrink, not a life). Any hit while shrunk
+  // wipes ALL shrink stacks — bird pops back to its starting size ("you can lose all
+  // the super tiny by hitting the pipe once"), takes NO inflate damage, and gets the
+  // usual invincibility flash. The chain still breaks — it was still a hit.
+  if (birdShrink > 0) {
+    birdShrink = 0;
+    starChain = 0;
+    recomputeBirdRadius();
+    bird.vy = -5;
+    inflateInvincible = Date.now() + 1000;
+    sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
+    spawnParticles(bird.x, bird.y, '#e879f9', 10);
+    floaters.push({ x: bird.x, y: bird.y - bird.r - 6, text: '💜 SIZE RESTORED!', alpha: 1, vy: -1.8, color: '#e879f9' });
+    return;
+  }
   if (birdInflate >= 2) { balloonPop(); return; }  // 3rd hit = pop death
   birdInflate++;
   starChain = 0;  // any hit breaks the star-power chain
