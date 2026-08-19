@@ -36,6 +36,15 @@ const WORLDS = {
     by: 'JOE',
     attract: runAttract,
   },
+  'jimmy-dash': {
+    // Grok Build's from-spec rebuild, installed on /wip for side-by-side testing
+    // (Osimo 2026-08-19). Shares jimmy-run's attract loop — same genre, same hero.
+    ink: '#e8c35a', dim: '#5c4a14', pit: '#140f04', glowsoft: 'rgba(232,195,90,0.22)',
+    genre: 'TEMPLE RUN × GROK BUILD',
+    quote: '"a second Jimmy showed up and started running. nobody asked questions. we were all thinking them."',
+    by: 'JOE',
+    attract: runAttract,
+  },
   'dead-air-dash': {
     ink: '#35e0c8', dim: '#11544b', pit: '#04120f', glowsoft: 'rgba(53,224,200,0.22)',
     genre: 'TEMPLE RUN × DOODLE JUMP',

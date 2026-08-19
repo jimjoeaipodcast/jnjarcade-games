@@ -43,6 +43,20 @@
   ],
   "games": [
     {
+      "id": "jimmy-dash",
+      "name": "JIMMY DASH",
+      "emoji": "\u26a1",
+      "genre": "TEMPLE RUN \u00d7 GROK BUILD",
+      "url": "games/jimmy-dash.html",
+      "ai_file": "games/jimmy-dash.html",
+      "status": "wip",
+      "special": "Grok Build rebuild test \u2014 built from the JIMMY-RUN-SPEC handoff",
+      "note": "Grok Build's from-spec rebuild of Jimmy Run, installed for side-by-side testing. Same 191 voice clips, same art. Compare against JIMMY RUN in the patreon hall.",
+      "ai_improved": true,
+      "ai_improved_date": "2026-08-19",
+      "ready": false
+    },
+    {
       "id": "dead-air-dash",
       "name": "DEAD AIR DASH",
       "emoji": "\ud83d\udce1",
