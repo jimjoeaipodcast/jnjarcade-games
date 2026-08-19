@@ -658,9 +658,14 @@ function dispatch(event, tonesFn, arg) {
     // the ×20 line; lastComboAnnounced resets when the chain breaks)
     if (event === 'stomp' && COMBO_VO[arg] && lastComboAnnounced !== arg) {
       lastComboAnnounced = arg;
-      voicePlay('JOE', COMBO_VO[arg], JOE_GAIN);
+      // 0.5s delay (Osimo 2026-08-19 v4: "clashes with Jimmy counting") — a bounce
+      // on a chute can ALSO be a star-chain beat, and Jimmy's countdown fires
+      // synchronously in the same collision handler; letting Joe land half a
+      // second later keeps both audible instead of talking over each other
+      setTimeout(() => voicePlay('JOE', COMBO_VO[arg], JOE_GAIN), 500);
       return;
     }
+    if (event === 'stomp') { setTimeout(() => joeSay('stomp'), 500); return; }
     joeSay(event);
     return;
   }
@@ -2228,10 +2233,17 @@ function die() {
   }
 
   if (score > 0) {
+    // onClose -> restartToWaiting, NOT showOverlay (Osimo 2026-08-19 v4: "after I
+    // press play again it goes to the play again screen but it needs to simply
+    // start a new game"). ArcadeScores' own SUBMIT SCORE / PLAY AGAIN / ARCADE panel
+    // already showed the score — re-showing flap-fight's native "You scored X
+    // points!" overlay on top of that was a second, redundant PLAY AGAIN prompt
+    // before the player could get back to actually playing. showOverlay() is kept
+    // for the genuine first-launch / instructions path (score === 0 below).
     ArcadeScores.show({
       game: GAME_ID, title: GAME_TITLE, score,
       accent: ACCENT,
-      onClose: showOverlay,
+      onClose: restartToWaiting,
     });
   } else {
     showOverlay();
@@ -2305,12 +2317,16 @@ document.addEventListener('keydown', e => {
 
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
-playBtn.addEventListener('click', () => {
+// shared by playBtn's own click AND by ArcadeScores' onClose (Osimo 2026-08-19 v4)
+// so "play again" always drops straight back into the waiting/insert-coin state —
+// one tap, no second confirmation screen.
+function restartToWaiting() {
   ov.classList.add('hidden');
   if (animId) cancelAnimationFrame(animId);
   initGame();   // enters waiting state — tap again to launch bird
   loop();
-});
+}
+playBtn.addEventListener('click', restartToWaiting);
 
 // Auto-start in waiting state on load
 initGame();
