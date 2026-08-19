@@ -510,8 +510,14 @@ function loadVoicePack() {
 // end-of-game monologue speaks in both sound modes (Osimo 2026-08-18 v6)
 if (sfxMode !== 'mute') loadVoicePack();
 
-function voicePlay(who, text, gain) {
+function voicePlay(who, text, gain, priority) {
   if (!audioCtx || !VO.b64) return;
+  // ACHIEVEMENT PRIORITY (Osimo 2026-08-19: "when they say high score 10000 etc they
+  // supersede other sounds till they say those achievements in full first") — while a
+  // priority line (PB / top scorer / milestone / legend / death) is speaking, ordinary
+  // barks and counts are dropped instead of talking over it. Priority lines themselves
+  // ignore the window (legend is deliberately two lines back-to-back).
+  if (!priority && Date.now() < (VO.priorityUntil || 0)) return;
   const key = djb2vo(who + '|' + text);
   const start = (buf) => {
     try {
@@ -523,6 +529,7 @@ function voicePlay(who, text, gain) {
         if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} }
         VO.jimmySrc = src;
       }
+      if (priority) VO.priorityUntil = Date.now() + buf.duration * 1000 + 150;
       src.start();
     } catch (e) {}
   };
@@ -536,7 +543,7 @@ function voicePlay(who, text, gain) {
     buf => { VO.buffers[key] = buf; start(buf); }, () => {});
 }
 
-function jimmySay(text) { voicePlay('JIMMY', text, JIMMY_GAIN); }
+function jimmySay(text, priority) { voicePlay('JIMMY', text, JIMMY_GAIN, priority); }
 function joeSay(event) {
   const now = Date.now();
   if (now - VO.lastJoeMs < 130) return;   // cap bark rate — flap fires at tap speed
@@ -621,7 +628,7 @@ function deathVoice() {
   const bank = tier[who];
   // end-of-game monologue: Joe at JIMMY's gain (Osimo 2026-08-18 v7) — it's the closing
   // line of the run, not in-play ambience, so both hosts land at equal weight here
-  voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN);
+  voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN, true);
 }
 function dispatch(event, tonesFn, arg) {
   if (sfxMode === 'mute') return;
@@ -638,8 +645,11 @@ function dispatch(event, tonesFn, arg) {
     // (Osimo 2026-08-19: "Jimmy counts Joe comments... but no Joe flap sounds")
     if (event === 'flap' && sfxMode === 'hybrid') { TONES.flap(); return; }
     if (event === 'star')  { jimmySay('Star power!'); return; }
-    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO)); return; }
-    if (event === 'score') return;                 // Osimo 2026-08-18: no bark on pipe pass
+    if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO), true); return; }
+    // pipe pass: the classic rising blip plays in BOTH spoken modes (Osimo 2026-08-19
+    // v3: "missing going through pipe sound") — nobody SPEAKS on a pass (too frequent,
+    // the 2026-08-18 rule stands), but the mechanical tick belongs to the gameplay
+    if (event === 'score') { TONES.score(); return; }
     if (event === 'hit')   { joeSay(arg || 'hitPipe'); return; }
     // combo thresholds: Joe's acknowledgment WINS over the regular stomp bark and
     // bypasses the rate cap — it's the moment, not ambience. ONCE per chain per tier
@@ -883,11 +893,11 @@ function fireMilestone(v) {
                   text: legend ? '🏆 100,000 — LEGEND!' : `🏅 ${v.toLocaleString('en-GB')}!`,
                   alpha: 1.6, vy: -0.9, color: legend ? '#ffd23d' : '#7dffb8' });
   spawnConfetti(legend ? 170 : 34);
-  if (sfxMode === 'voice') {
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') {
     if (legend) {
       // the one moment BOTH hosts speak — Jimmy first, Joe lands after him
-      jimmySay(LEGEND_VO.JIMMY);
-      setTimeout(() => voicePlay('JOE', LEGEND_VO.JOE, JOE_GAIN), 2400);
+      jimmySay(LEGEND_VO.JIMMY, true);
+      setTimeout(() => voicePlay('JOE', LEGEND_VO.JOE, JOE_GAIN, true), 2400);
     } else {
       let who = 'JIMMY';
       try {
@@ -896,7 +906,7 @@ function fireMilestone(v) {
         localStorage.setItem('ff_mile_who', who);
       } catch (e) {}
       const line = (MILESTONE_VO[v] || MILESTONE_BEYOND_VO)[who];
-      voicePlay(who, line, who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN);
+      voicePlay(who, line, who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN, true);
     }
   } else if (sfxMode === 'tones') {
     TONES.best();
@@ -1137,8 +1147,8 @@ function showCallout(kind) {
   // after its classic fanfare (same boom-then-line pattern as the death monologue).
   spawnConfetti(kind === 'top' ? 90 : 50);
   const line = jimmyPick(kind === 'top' ? JIMMY_TOP_VO : JIMMY_PB_VO);
-  if (sfxMode === 'voice') jimmySay(line);
-  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line), 600); }
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(line, true);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(line, true), 600); }
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
@@ -1488,9 +1498,12 @@ function update(dt) {
         lastStarSec = 99;   // re-arm the expiry countdown for this star
         sfx.star();
         floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
-      } else if (sfxMode === 'voice') {
-        // 🎙️ Jimmy counts the chain DOWN toward the star: stomp 1 → "Four!" … stomp 4
+      } else if (sfxMode === 'voice' || sfxMode === 'hybrid') {
+        // Jimmy counts the chain DOWN toward the star: stomp 1 → "Four!" … stomp 4
         // → "One!" (the 5th is "Star power!" above). Chain reset (any hit) re-arms it.
+        // Fires in BOTH spoken modes — the hybrid gate was missed in the 4-way
+        // restructure, which is why "Jimmy was counting" went silent there
+        // (Osimo 2026-08-19 v3).
         jimmySay(['Four!', 'Three!', 'Two!', 'One!'][starChain - 1]);
       }
 
