@@ -302,15 +302,16 @@ function show(opts) {
     input.setAttribute('data-1p-ignore', 'true');   // 1Password
     input.setAttribute('data-bwignore', 'true');    // Bitwarden
     var err = el('div', 'as-err', '');
+    // Three buttons (Osimo 2026-08-19): SUBMIT SCORE / PLAY AGAIN / ARCADE.
+    // PLAY AGAIN = close -> onClose -> the cabinet's own restart (what SKIP used
+    // to do, but says what it does). ARCADE = back to the hall that launched this
+    // cabinet (same returnUrl the score-board exit already uses).
     var submit = el('button', 'as-btn', 'SUBMIT SCORE');
-    // PLAY AGAIN sits between submit and skip (Osimo 2026-08-19). Same action as
-    // SKIP (close -> onClose -> the cabinet's own restart) but says what it does —
-    // "SKIP" reads as skip-submitting, not as the way back into the game.
     var playAgain = el('button', 'as-btn', 'PLAY AGAIN');
-    var skip = el('button', 'as-skip', 'SKIP');
+    var toArcade = el('button', 'as-skip', 'ARCADE');
 
     entry.appendChild(input); entry.appendChild(err);
-    entry.appendChild(submit); entry.appendChild(playAgain); entry.appendChild(skip);
+    entry.appendChild(submit); entry.appendChild(playAgain); entry.appendChild(toArcade);
     screen.appendChild(entry);
     // Prefill from the last cabinet. SELECT rather than just place the caret: the whole
     // value is highlighted, so typing overwrites it instantly for anyone who wants a
@@ -382,7 +383,7 @@ function show(opts) {
     submit.addEventListener('click', doSubmit);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSubmit(); });
     playAgain.addEventListener('click', close);
-    skip.addEventListener('click', close);
+    toArcade.addEventListener('click', function () { window.location.href = returnUrl(); });
   }
 
   /* ── phase 2: the board ── */
