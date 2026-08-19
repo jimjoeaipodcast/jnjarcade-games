@@ -2456,87 +2456,28 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
 }
 
 function pinVadersAttract(ctx, w, h, t, world, s) {
-  if (!s.init) {
-    s.init = true; s.last = t;
-    s.stars = Array.from({ length: 24 }, () => ({
-      x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.2 + 0.3, tw: Math.random() * 6 }));
-    s.gx = w * 0.18; s.dir = 1; s.beat = 0; s.frame = 0;
-    s.alive = Array.from({ length: 3 }, () => Array(4).fill(true));
-    s.ball = { x: w * 0.5, y: h * 0.5, vx: 0.9, vy: -1.2 };
-    s.flipT = 0; s.respawn = 0;
+  // real recorded gameplay, not a hand-drawn mini-scene — same treatment as
+  // onairAttract (Osimo 2026-08-19: "try the same thing with pin-vaders... make sure
+  // it's mid game no intros"). Recorded via render_game_footage.py --hide-overlay
+  // (the game's real attractAI() already self-plays; the start overlay just needed
+  // hiding via DOM, not a real #coinBtn click which would've started an un-piloted
+  // real game instead) then trimmed to skip past the opening serve.
+  if (!s.video) {
+    const v = document.createElement('video');
+    v.src = 'assets/footage/pin-vaders-attract.mp4?v=1';
+    v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+    v.preload = 'auto';
+    v.play().catch(() => {});
+    s.video = v;
   }
-  const dt = Math.min(t - s.last, 32); s.last = t;
-
-  // space backdrop
+  const v = s.video;
   ctx.fillStyle = '#0c0514'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#cfe6ff';
-  for (const st of s.stars) {
-    ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t / 800 + st.tw);
-    ctx.fillRect(st.x, st.y, st.r, st.r);
+  if (v.readyState >= 2 && v.videoWidth) {
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const scale = Math.max(w / vw, h / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
-  ctx.globalAlpha = 1;
-
-  // marching mini invaders
-  s.beat += dt;
-  if (s.beat > 460) {
-    s.beat = 0; s.frame ^= 1;
-    s.gx += 5 * s.dir;
-    if (s.gx < w * 0.08 || s.gx > w * 0.42) s.dir *= -1;
-  }
-  const cw = w * 0.13, rh = h * 0.11;
-  for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 4; c++) {
-      if (!s.alive[r][c]) continue;
-      const ax = s.gx + c * cw, ay = h * 0.12 + r * rh;
-      ctx.fillStyle = ['#9fff8a', '#6ee7ff', '#ffffff'][r];
-      const u = w * 0.008;
-      // tiny crab: body + legs alternate
-      ctx.fillRect(ax - 3 * u, ay - u, 6 * u, 2 * u);
-      ctx.fillRect(ax - 4 * u, ay, 8 * u, u);
-      if (s.frame) { ctx.fillRect(ax - 4 * u, ay + 2 * u, u, u); ctx.fillRect(ax + 3 * u, ay + 2 * u, u, u); }
-      else { ctx.fillRect(ax - 2 * u, ay + 2 * u, u, u); ctx.fillRect(ax + u, ay + 2 * u, u, u); }
-    }
-
-  // ball physics (toy — bounces around, kills an alien on touch)
-  const b = s.ball;
-  b.vy += 0.05; b.x += b.vx * dt * 0.06; b.y += b.vy * dt * 0.06;
-  if (b.x < w * 0.05 || b.x > w * 0.95) b.vx *= -1;
-  if (b.y < h * 0.05) b.vy = Math.abs(b.vy);
-  for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 4; c++) {
-      if (!s.alive[r][c]) continue;
-      const ax = s.gx + c * cw, ay = h * 0.12 + r * rh;
-      if (Math.abs(b.x - ax) < w * 0.04 && Math.abs(b.y - ay) < h * 0.045) {
-        s.alive[r][c] = false; b.vy = 1.4; b.vx = (Math.random() - 0.5) * 2.4;
-        if (s.alive.every(row => row.every(a => !a)))
-          s.alive = Array.from({ length: 3 }, () => Array(4).fill(true));
-      }
-    }
-  // flippers flick the ball back up
-  const fy = h * 0.86;
-  s.flipT = Math.max(0, s.flipT - dt);
-  if (b.y > fy - h * 0.03 && b.vy > 0) { b.vy = -(1.3 + Math.random() * 0.7); s.flipT = 140; }
-  if (b.y > h) { b.x = w * 0.5; b.y = h * 0.4; b.vy = -1; }
-
-  // draw flippers (flick = raised angle)
-  const lift = s.flipT > 0 ? -0.45 : 0.35;
-  ctx.strokeStyle = '#b76bff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.shadowColor = '#b76bff'; ctx.shadowBlur = 8;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.3, fy); ctx.lineTo(w * 0.3 + Math.cos(lift) * w * 0.14, fy + Math.sin(lift) * w * 0.14);
-  ctx.moveTo(w * 0.7, fy); ctx.lineTo(w * 0.7 - Math.cos(lift) * w * 0.14, fy + Math.sin(lift) * w * 0.14);
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // ball
-  ctx.fillStyle = '#f4f7ff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 6;
-  ctx.beginPath(); ctx.arc(b.x, b.y, w * 0.018, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-
-  ctx.textAlign = 'center';
-  ctx.font = 'bold ' + Math.round(w * 0.05) + 'px "Courier New", monospace';
-  ctx.fillStyle = 'rgba(183,107,255,0.55)';
-  ctx.fillText('PIN-VADERS', w / 2, h * 0.97);
 }
 
 document.addEventListener('DOMContentLoaded', init);
