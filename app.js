@@ -368,7 +368,7 @@ function buildCabinet(game) {
     return cab;
   }
   // play=1 skips the game's own start screen; v busts any stale cached copy
-  play.href = game.url + '?play=1&v=34';
+  play.href = game.url + '?play=1&v=35';
   play.textContent = 'INSERT COIN — PLAY FREE';
   play.addEventListener('click', () => {
     // Remember which hall launched this cabinet so the score screen returns the player
