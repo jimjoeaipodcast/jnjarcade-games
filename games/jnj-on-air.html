@@ -435,10 +435,20 @@ const LOOKS = {
   hopmanCab: [['JIMMY', "The hop-man cabinet. And... there's the LOLLIPOP. Stuck to the screen. Above frog height."]],
   wormsCab: [['JIMMY', "Angry Worms. Joe played it twice. The worms won both times."]],
   candyCab: [['JIMMY', "Candy-tris. I got the high score. Joe says the machine was being polite."]],
-  changeMachine: [['JIMMY', "The change machine. I can see the prop room key INSIDE the coin return. It ate it. It full-on ate it."]],
+  // stale-key bug (Osimo 2026-08-19): this used to say the key was still trapped
+  // inside the machine even after it was already fished out and sitting in
+  // inventory. Both this long-press look AND propDoor's below now check
+  // flags.gotKey/propUnlocked instead of always showing the pre-pickup line.
+  changeMachine: () => flags.gotKey
+    ? [['JIMMY', "The change machine. Empty coin return now — I already fished that key out. We've moved past it."]]
+    : [['JIMMY', "The change machine. I can see the prop room key INSIDE the coin return. It ate it. It full-on ate it."]],
   vending: [['JIMMY', "The vending machine. Joe lost a fight with row C last week. Row C kept the flapjack."]],
   cooler: [['JIMMY', "The water cooler. Glug-glug noises included at no extra cost."]],
-  propDoor: [['JIMMY', "The prop room. Locked. The key is currently inside a machine's digestive system."]],
+  propDoor: () => flags.propUnlocked
+    ? [['JIMMY', "The prop room door. Wide open. The change machine and I have no more unfinished business."]]
+    : flags.gotKey
+    ? [['JIMMY', "The prop room. Locked. But I've got the key now — let's go."]]
+    : [['JIMMY', "The prop room. Locked. The key is currently inside a machine's digestive system."]],
   exitP: [['JIMMY', "Back to the corridor."]],
   shelves: [['JIMMY', "Shelves of retired props. Every bad idea we ever had, archived in foam."]],
   trophy: [['JIMMY', "Best podcast trophy. Regional. Category of one. We framed the category."]],
@@ -615,7 +625,9 @@ function interact(hs, item) {
     case 'candyCab':
       say('JIMMY', "One quick game of— no. NO. Focus, Jimmy. Show first, candy later."); sayRun(); return;
     case 'changeMachine':
-      say('JIMMY', "The key is inside the coin return. My fingers do not fit. I've made peace with it. I have NOT made peace with it.");
+      say('JIMMY', flags.gotKey
+        ? "The change machine. We had a whole thing over that key. Water under the bridge."
+        : "The key is inside the coin return. My fingers do not fit. I've made peace with it. I have NOT made peace with it.");
       sayRun(); return;
     case 'vending':
       say('JIMMY', "Row C still holds Joe's flapjack hostage. We do not negotiate with vending machines."); sayRun(); return;
@@ -651,7 +663,11 @@ function interact(hs, item) {
 function lookAt(hs) {
   earnQuip(hs.id, hs.x + hs.w / 2, hs.y);
   if (hs.counter) earnCounter(hs.counter, hs.x + hs.w / 2, hs.y - 10);
-  const lines = LOOKS[hs.id];
+  // a handful of LOOKS entries need to react to pickup/unlock state (the change
+  // machine + prop door shouldn't keep describing a key that's already been taken)
+  // so the table can hold either a plain array or a () => array thunk
+  const entry = LOOKS[hs.id];
+  const lines = typeof entry === 'function' ? entry() : entry;
   if (lines) { lines.forEach(l => say(l[0], l[1])); }
   else say('JIMMY', "Looks exactly like what it is.");
   if (hs.id === 'jimmyChair' && !flags.wrapper) { flags.wrapper = true; saveGame(); }
