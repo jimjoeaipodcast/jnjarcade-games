@@ -85,6 +85,7 @@ const HORIZON = 232;                 // vanishing point y
 const CAM_D   = 1.2;                 // camera depth (fov-ish)
 const LANE_W  = 0.62;                // half-road units between lane centres
 const DRAW_SEGS = 46;                // segments drawn per frame
+const TEX_MAX_N = 30;                // textured-quad strips (near/mid); beyond = flat+fog
 const SEG_LEN = 1;                   // world z units per segment
 function project(laneX, z, elevY) {
   // z in world units ahead of camera (>= 0.12), laneX in lane units (-1,0,1)
@@ -1081,21 +1082,64 @@ function drawCorridor() {
     const cxN = WORLD_W / 2 + scN * ((-playerX * LANE_W) * 190 + corridorShift(zNext));
     const fog = Math.min(0.72, n / DRAW_SEGS * 0.85);
 
-    // wood floor strip (alternating boards, scrolls with travel) — warm studio tones
-    ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.09), fog * 0.8);
-    ctx.beginPath();
-    ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
-    ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
-    ctx.closePath(); ctx.fill();
-
-    // THE RED RUG — a runner carpet down the centre lane, the studio's signature
+    // ── TEMPLE-TEXTURED SURFACES (Jimmy Dash pack, Osimo 2026-08-19: "what about
+    // the entire background corridor") — per-strip textured quads: clip to the
+    // trapezoid, drawImage a world-anchored slice of the texture (v scrolls with
+    // travel). Textured only for near/mid strips (TEX_MAX_N) — beyond that the
+    // strips are a few px tall under heavy fog, flat fills are indistinguishable
+    // and the saved clip ops keep phones at 60fps. Flat fills also remain as the
+    // not-yet-loaded fallback.
+    const texOK = n <= TEX_MAX_N && ART.stone && ART.carpet && ART.water;
     const rugW  = sc * LANE_W * 190 * 0.86;
     const rugWN = scN * LANE_W * 190 * 0.86;
-    ctx.fillStyle = shade(segIdx % 2 ? CP.rug : CP.rugDark, fog * 0.8);
-    ctx.beginPath();
-    ctx.moveTo(cx - rugW / 1.6, y); ctx.lineTo(cx + rugW / 1.6, y);
-    ctx.lineTo(cxN + rugWN / 1.6, yN); ctx.lineTo(cxN - rugWN / 1.6, yN);
-    ctx.closePath(); ctx.fill();
+    const wallH  = sc * 340;
+    const wallHN = scN * 340;
+    const worldZ = zPos + z;
+    const dzSpan = zNext - z;
+
+    if (texOK) {
+      const texQuad = (tex, pxTile, x1, x2, y1, x3, x4, y2, shimmer) => {
+        // clip to the trapezoid (x1,y1)-(x2,y1)-(x3,y2)-(x4,y2), draw the slice
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(x3, y2); ctx.lineTo(x4, y2);
+        ctx.closePath(); ctx.clip();
+        const th = tex.height;
+        let sy = ((worldZ * pxTile) + (shimmer ? (Date.now() * 0.02) % th : 0)) % th;
+        let bandH = Math.min(th - sy, Math.max(8, dzSpan * pxTile));
+        const top = Math.min(y1, y2), bot = Math.max(y1, y2);
+        const left = Math.min(x1, x2, x3, x4), right = Math.max(x1, x2, x3, x4);
+        ctx.drawImage(tex, 0, sy, tex.width, bandH, left, top, right - left, bot - top);
+        ctx.restore();
+      };
+      // water channels — full road width first (shows either side of the path)
+      texQuad(ART.water, 170, cx - halfW, cx + halfW, y, cxN + halfWN, cxN - halfWN, yN, true);
+      // stone walkway ledge under the carpet path
+      const stW = rugW * 1.45, stWN = rugWN * 1.45;
+      texQuad(ART.stone, 200, cx - stW / 1.6, cx + stW / 1.6, y, cxN + stWN / 1.6, cxN - stWN / 1.6, yN, false);
+      // the carpet path itself
+      texQuad(ART.carpet, 220, cx - rugW / 1.6, cx + rugW / 1.6, y, cxN + rugWN / 1.6, cxN - rugWN / 1.6, yN, false);
+      // fog dim over the whole floor strip
+      if (fog > 0.08) {
+        ctx.fillStyle = `rgba(4,2,1,${fog * 0.6})`;
+        ctx.beginPath();
+        ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
+        ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
+        ctx.closePath(); ctx.fill();
+      }
+    } else {
+      // flat fills — far strips + not-yet-loaded fallback
+      ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.09), fog * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
+      ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = shade(segIdx % 2 ? CP.rug : CP.rugDark, fog * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(cx - rugW / 1.6, y); ctx.lineTo(cx + rugW / 1.6, y);
+      ctx.lineTo(cxN + rugWN / 1.6, yN); ctx.lineTo(cxN - rugWN / 1.6, yN);
+      ctx.closePath(); ctx.fill();
+    }
 
     // lane divider dashes — brass, reading the 3 lanes at a glance
     if (segIdx % 2 === 0) {
@@ -1107,18 +1151,44 @@ function drawCorridor() {
       }
     }
 
-    // BRICK walls, converging — mortar bands every other segment
-    const wallH  = sc * 340;
-    const wallHN = scN * 340;
-    ctx.fillStyle = shade(segIdx % 2 ? wallC : lerpCol(wallC, CP.mortar, 0.35), fog * 0.85);
-    ctx.beginPath();  // left wall
-    ctx.moveTo(cx - halfW, y); ctx.lineTo(cx - halfW, y - wallH);
-    ctx.lineTo(cxN - halfWN, yN - wallHN); ctx.lineTo(cxN - halfWN, yN);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();  // right wall
-    ctx.moveTo(cx + halfW, y); ctx.lineTo(cx + halfW, y - wallH);
-    ctx.lineTo(cxN + halfWN, yN - wallHN); ctx.lineTo(cxN + halfWN, yN);
-    ctx.closePath(); ctx.fill();
+    // WALLS, converging — temple stone texture with a light floor-palette tint
+    // (keeps the 8-floor colour progression readable), brick fallback until loaded
+    if (texOK) {
+      const wallQuad = (x1, x2) => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x1, y); ctx.lineTo(x1, y - wallH);
+        ctx.lineTo(x2, yN - wallHN); ctx.lineTo(x2, yN);
+        ctx.closePath(); ctx.clip();
+        // texture runs ALONG the corridor: sample a horizontal band (x) by worldZ,
+        // full texture height mapped up the wall — z-band-stretched-vertically read
+        // as horizontal wood planks instead of stonework
+        const tw = ART.stone.width;
+        const sx = (worldZ * 210) % tw;
+        const bandW = Math.min(tw - sx, Math.max(8, dzSpan * 210));
+        const left = Math.min(x1, x2), right = Math.max(x1, x2);
+        const top = Math.min(y - wallH, yN - wallHN);
+        ctx.drawImage(ART.stone, sx, 0, bandW, ART.stone.height, left, top, right - left, Math.max(y, yN) - top);
+        // darken toward the menu-art's shadowy temple stone (raw texture is bright tan)
+        ctx.fillStyle = `rgba(8,6,4,${Math.min(0.88, fog * 0.55 + 0.38)})`;
+        ctx.fillRect(left, top, right - left, Math.max(y, yN) - top);
+        ctx.fillStyle = wallC + '30';   // floor-palette wash keeps the 8-floor progression
+        ctx.fillRect(left, top, right - left, Math.max(y, yN) - top);
+        ctx.restore();
+      };
+      wallQuad(cx - halfW, cxN - halfWN);
+      wallQuad(cx + halfW, cxN + halfWN);
+    } else {
+      ctx.fillStyle = shade(segIdx % 2 ? wallC : lerpCol(wallC, CP.mortar, 0.35), fog * 0.85);
+      ctx.beginPath();  // left wall
+      ctx.moveTo(cx - halfW, y); ctx.lineTo(cx - halfW, y - wallH);
+      ctx.lineTo(cxN - halfWN, yN - wallHN); ctx.lineTo(cxN - halfWN, yN);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();  // right wall
+      ctx.moveTo(cx + halfW, y); ctx.lineTo(cx + halfW, y - wallH);
+      ctx.lineTo(cxN + halfWN, yN - wallHN); ctx.lineTo(cxN + halfWN, yN);
+      ctx.closePath(); ctx.fill();
+    }
 
     // wall dressing (2000s detail pass):
     // brass sconces with a warm glow halo every 4 segments
@@ -1241,10 +1311,11 @@ function drawCorridor() {
     ctx.moveTo(cx + halfW, y - 2 * sc); ctx.lineTo(cxN + halfWN, yN - 2 * scN);
     ctx.stroke();
 
-    // wood-beam ceiling
+    // ceiling — darkened toward the temple's shadowy vault now the walls are stone
+    // (bright wood beams clashed once the Dash textures landed)
     const ceilY  = y - wallH;
     const ceilYN = yN - wallHN;
-    ctx.fillStyle = shade(segIdx % 3 ? CP.wood : lerpCol(CP.wood, '#000000', 0.25), Math.min(0.85, fog + 0.2));
+    ctx.fillStyle = shade(segIdx % 3 ? lerpCol(CP.wood, '#000000', 0.5) : lerpCol(CP.wood, '#000000', 0.66), Math.min(0.9, fog + 0.25));
     ctx.beginPath();
     ctx.moveTo(cx - halfW, ceilY); ctx.lineTo(cx + halfW, ceilY);
     ctx.lineTo(cxN + halfWN, ceilYN); ctx.lineTo(cxN - halfWN, ceilYN);
@@ -1450,8 +1521,10 @@ const ART_JOE = {};      // runner frames tinted for Joe
                  'jump-1','jump-2','jump-3','jump-4',
                  'slide-1','slide-2','slide-3','slide-4',
                  'coin-1','coin-2','coin-3','coin-4',
-                 'beam','barrier','banner'];
-  for (const n of names) {
+                 'beam','barrier','banner',
+                 'carpet.jpg','stone.jpg','water.jpg'];
+  for (const file of names) {
+    const n = file.replace(/\.jpg$/, '');
     const im = new Image();
     im.onload = () => {
       ART[n] = im;
@@ -1467,7 +1540,7 @@ const ART_JOE = {};      // runner frames tinted for Joe
         } catch (e) { ART_JOE[n] = im; }
       }
     };
-    im.src = 'jimmy-run-art/' + n + '.png?v=1';
+    im.src = 'jimmy-run-art/' + (file.endsWith('.jpg') ? file : file + '.png') + '?v=1';
   }
 })();
 
