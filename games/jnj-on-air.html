@@ -1948,6 +1948,13 @@ window.__onair = {
   interact, lookAt, combineItems, pickCounter, beginGame,
   jumpRoom: (r, s) => { roomId = r; player.x = ROOMS[r].spawns[s] || 300; },
   hotspot: (id) => { for (const r in ROOMS) { const h = ROOMS[r].hotspots.find(h => h.id === id); if (h) return h; } },
+  // world (x,y) -> real screen CSS pixels — lets an external script (recording real
+  // gameplay for the cassette preview / b-roll) click actual hotspots like a player
+  // would, instead of teleporting state directly
+  worldToScreen: (wx, wy) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + (wx * VIEW.scale + VIEW.ox) / DPR, y: r.top + (wy * VIEW.scale + VIEW.oy) / DPR };
+  },
 };
 
 requestAnimationFrame(loop);

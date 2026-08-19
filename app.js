@@ -442,14 +442,18 @@ function startAttract(canvas, world) {
     visible = entries[0].isIntersecting;
     if (visible) {
       resize();
+      if (state.video) state.video.play().catch(() => {});
       if (REDUCED) {
         render(ctx, w, h, 0, world, state); // single static frame
       } else if (!raf) {
         raf = requestAnimationFrame(frame);
       }
-    } else if (raf) {
-      cancelAnimationFrame(raf);
-      raf = null;
+    } else {
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      // a video-backed attract (onairAttract) keeps decoding/playing off-screen
+      // otherwise — canvas-only attract functions have zero cost once raf stops,
+      // this keeps a <video>-backed one matching that
+      if (state.video) state.video.pause();
     }
   }, { threshold: 0.05 });
 
@@ -2150,58 +2154,27 @@ function faceLabAttract(ctx, w, h, t, world, s) {
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
 function onairAttract(ctx, w, h, t, world, s) {
-  // mini studio: brick wall, JIM & JOE screen, two armoured hosts, ON AIR blink
-  ctx.fillStyle = '#5e372a'; ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(40,24,18,0.8)'; ctx.lineWidth = 1;
-  for (let y = 0; y < h; y += 8) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    for (let x = (y / 8) % 2 ? 10 : 0; x < w; x += 20) {
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 8); ctx.stroke();
-    }
+  // real recorded gameplay, not a hand-drawn mini-scene (Osimo 2026-08-19: "record some
+  // actual game play... rather than those moving squares and basic surroundings"). Draws
+  // the current frame of a real playthrough clip each tick, cover-fit to the cassette box
+  // (crops overflow rather than letterboxing, matches CSS background-size:cover). Recorded
+  // via tools/show/record_onair_gameplay.py — genuine hotspot clicks, genuine walking,
+  // genuine dialogue, not scripted-looking.
+  if (!s.video) {
+    const v = document.createElement('video');
+    v.src = 'assets/footage/jnj-on-air-attract.mp4';
+    v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+    v.preload = 'auto';
+    v.play().catch(() => {});
+    s.video = v;
   }
-  // floor
-  ctx.fillStyle = '#3b2b22'; ctx.fillRect(0, h * 0.78, w, h * 0.22);
-  ctx.fillStyle = '#b0475a'; ctx.fillRect(w * 0.2, h * 0.8, w * 0.6, h * 0.1);
-  // screen
-  const sw = w * 0.44, sx = (w - sw) / 2, sy = h * 0.12, sh = h * 0.22;
-  ctx.fillStyle = '#0d0f14'; ctx.fillRect(sx, sy, sw, sh);
-  ctx.strokeStyle = '#2a2e38'; ctx.lineWidth = 2; ctx.strokeRect(sx, sy, sw, sh);
-  ctx.fillStyle = '#e5d9b8'; ctx.font = 'bold ' + Math.max(7, sw * 0.14) + 'px Georgia, serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('JIM & JOE', sx + sw / 2, sy + sh / 2);
-  // ON AIR blink
-  const on = Math.sin(t * 0.004) > 0;
-  ctx.fillStyle = on ? '#ff3b3b' : '#3a1414';
-  ctx.fillRect(w * 0.72, h * 0.06, w * 0.18, h * 0.08);
-  ctx.fillStyle = on ? '#fff' : '#7a4040'; ctx.font = 'bold ' + Math.max(5, w * 0.032) + 'px monospace';
-  ctx.fillText('ON AIR', w * 0.81, h * 0.1);
-  // hosts: Jimmy (white/gold) left walking, Joe (rust) right seated
-  function bot(x, y, sc, colA, colTrim, walk) {
-    const ph = walk ? Math.sin(t * 0.01) : 0;
-    ctx.fillStyle = colA;
-    ctx.fillRect(x - 5 * sc + ph * 2, y - 10 * sc, 4 * sc, 10 * sc);
-    ctx.fillRect(x + 1 * sc - ph * 2, y - 10 * sc, 4 * sc, 10 * sc);
-    ctx.fillRect(x - 7 * sc, y - 24 * sc, 14 * sc, 15 * sc);
-    ctx.fillStyle = colTrim;
-    ctx.fillRect(x - 9 * sc, y - 25 * sc, 5 * sc, 3 * sc);
-    ctx.fillRect(x + 4 * sc, y - 25 * sc, 5 * sc, 3 * sc);
-    ctx.fillStyle = colA; ctx.fillRect(x - 6 * sc, y - 36 * sc, 12 * sc, 12 * sc);
-    ctx.fillStyle = '#0c0e12'; ctx.fillRect(x - 4.5 * sc, y - 34 * sc, 9 * sc, 8 * sc);
-    ctx.fillStyle = '#eef4ff';
-    ctx.fillRect(x - 3 * sc, y - 32 * sc, 2 * sc, 1.2 * sc);
-    ctx.fillRect(x + 1 * sc, y - 32 * sc, 2 * sc, 1.2 * sc);
-    ctx.fillRect(x - 2 * sc, y - 29 * sc, 4 * sc, 1 * sc);
-  }
-  const fy = h * 0.86, sc = Math.max(1.2, h / 110);
-  const jx = w * 0.28 + Math.sin(t * 0.0012) * w * 0.1;
-  bot(jx, fy, sc, '#e8e2d4', '#d4a13c', true);
-  bot(w * 0.72, fy, sc, '#9a6b3c', '#b0764a', false);
-  // speech dots alternating (the banter)
-  const talker = Math.floor(t / 1600) % 2;
-  const bx = talker ? w * 0.72 : jx, dots = Math.floor(t / 300) % 4;
-  ctx.fillStyle = '#fff';
-  for (let i = 0; i < dots; i++) {
-    ctx.beginPath(); ctx.arc(bx + (i - 1) * 5 * sc, fy - 42 * sc, 1.4 * sc, 0, 7); ctx.fill();
+  const v = s.video;
+  ctx.fillStyle = '#160f06'; ctx.fillRect(0, 0, w, h);
+  if (v.readyState >= 2 && v.videoWidth) {
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const scale = Math.max(w / vw, h / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
 }
 
