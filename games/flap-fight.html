@@ -1348,15 +1348,15 @@ function update(dt) {
         vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
         alive: true, phase: Math.random() * Math.PI * 2, fast: false,
       };
-      // BONUS-ROOM SPECIALS (Osimo 2026-08-19): the reward room now mixes in the
-      // real pickups — flashing purple (shrink: stacks super-tiny), steady purple/
-      // yellow (mega: the big high bounce), and — ONLY while the bird is bigger
-      // than it started (inflated) — the flashing deflate chute to fix your size,
-      // after which the purples take you tiny.
+      // BONUS-ROOM SPECIALS (Osimo 2026-08-19, corrected same day): flashing purple
+      // shrink chutes (super tiny — and they deflate one level first when the bird
+      // is inflated, so they ARE the size-fix), steady purple/yellow mega chutes
+      // (the big high bounce). While the bird is BIGGER than it started, extra
+      // shrink chutes appear so the fix is always in reach.
       const r = Math.random();
-      if (r < 0.14) e.shrink = true;
-      else if (r < 0.26) e.mega = true;
-      else if (birdInflate > 0 && r < 0.48) e.special = true;
+      const shrinkChance = birdInflate > 0 ? 0.34 : 0.14;
+      if (r < shrinkChance) e.shrink = true;
+      else if (r < shrinkChance + 0.12) e.mega = true;
       enemies.push(e);
     }
   } else {
@@ -1976,9 +1976,10 @@ function drawEnemy(e) {
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
   const BR = ENEMY_R - 4;    // 10 — body radius
 
-  // special: flash panels yellow↔gold every 280ms (the size-fix chute — Osimo
-  // 2026-08-19 wanted it reading as FLASHING YELLOW). shrink: same flash rate,
-  // purple↔fuchsia. mega: no flash, steady purple — the strongest bonus.
+  // special: flash panels red↔yellow every 280ms — a pure bonus now, no clock, no
+  // punishment for missing it. shrink: same flash rate, purple↔fuchsia. mega: no
+  // flash, steady purple — the strongest bonus of the three (Osimo 2026-08-02;
+  // colours reinstated 2026-08-19 after a brief recolour misread his ask).
   const flash = (special || shrink) && Math.floor(Date.now() / 280) % 2 === 0;
 
   // STRINGS (dome rim → body top)
@@ -2002,8 +2003,8 @@ function drawEnemy(e) {
     : shrink
     ? (flash ? ['#e879f9', '#7e22ce', '#e879f9', '#7e22ce'] : ['#7e22ce', '#e879f9', '#7e22ce', '#e879f9'])
     : flash
-    ? ['#ffe89a', '#ffcf3d', '#ffe89a', '#ffcf3d']   // FLASHING YELLOW (Osimo 2026-08-19:
-    : ['#ffcf3d', '#ffe89a', '#ffcf3d', '#ffe89a'];   // the size-fix chute reads as yellow)
+    ? ['#ffcf3d', '#ff6b4a', '#ffcf3d', '#ff6b4a']   // swapped
+    : ['#ff6b4a', '#ffcf3d', '#ff6b4a', '#ffcf3d'];   // normal
   for (let i = 0; i < 4; i++) {
     const a1 = Math.PI + (i / 4) * Math.PI;
     const a2 = Math.PI + ((i + 1) / 4) * Math.PI;
