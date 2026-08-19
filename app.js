@@ -2162,7 +2162,7 @@ function onairAttract(ctx, w, h, t, world, s) {
   // genuine dialogue, not scripted-looking.
   if (!s.video) {
     const v = document.createElement('video');
-    v.src = 'assets/footage/jnj-on-air-attract.mp4';
+    v.src = 'assets/footage/jnj-on-air-attract.mp4?v=2';   // bump whenever the clip changes
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
     v.play().catch(() => {});
