@@ -20,7 +20,12 @@
   html, body { width: 100%; height: 100dvh; background: #000; overflow: hidden;
                touch-action: none; -webkit-user-select: none; user-select: none; }
   #gameCanvas { display: block; width: 100vw; height: 100dvh; }
-  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 10;
+  #overlay { position: fixed; inset: 0; z-index: 10;
+             /* !important: cabinet.css (the shared cassette chrome, loaded AFTER this
+                inline style) sets its own #overlay radial-gradient background at equal
+                specificity — without this the temple-corridor menu art never paints */
+             background: linear-gradient(rgba(6,3,2,.3), rgba(6,3,2,.55)),
+                         url('jimmy-run-art/menu-bg.jpg?v=1') center/cover no-repeat !important;
              display: flex; flex-direction: column; align-items: center; justify-content: center;
              font-family: 'Courier New', monospace; color: #fff; text-align: center; }
   #overlay.hidden { display: none; }
@@ -1173,6 +1178,14 @@ function drawCorridor() {
         ctx.fillText('JIM & JOE', wx + sw2 / 2, wy + sh2 * 0.6);
       }
     }
+    // hanging red-and-gold banner every 6 segments (right wall — Jimmy Dash art)
+    if (ART.banner && (segIdx + 2) % 6 === 0) {
+      const bw = 14 * sc * 2, bh = bw * (ART.banner.height / ART.banner.width);
+      const wx = cx + halfW - 6 * sc * 2 - bw;
+      ctx.globalAlpha = Math.max(0.25, 1 - fog);
+      ctx.drawImage(ART.banner, wx, y - wallH * 0.78, bw, bh);
+      ctx.globalAlpha = 1;
+    }
     // studio wall clock every 8 segments (right wall, offset from the ON AIR signs)
     if ((segIdx + 3) % 8 === 0) {
       const cr = 7 * sc * 2;
@@ -1290,18 +1303,32 @@ function drawEnt(e) {
   ctx.save();
   ctx.translate(p.x, p.y);
   if (e.kind === 'pop') {
-    ctx.fillStyle = '#ff7bd5';
-    ctx.beginPath(); ctx.arc(0, -10 * u, 5.5 * u, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-0.8 * u, -5 * u, 1.6 * u, 6 * u);
+    // animated gold temple coin (Jimmy Dash art) — 4-frame spin cycle. Falls back
+    // to the drawn lollipop until the frames load.
+    const coin = ART['coin-' + (1 + Math.floor(Date.now() / 130) % 4)];
+    if (coin) {
+      const ds = 15 * u;
+      ctx.drawImage(coin, -ds / 2, -10 * u - ds / 2, ds, ds * (coin.height / coin.width));
+    } else {
+      ctx.fillStyle = '#ff7bd5';
+      ctx.beginPath(); ctx.arc(0, -10 * u, 5.5 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-0.8 * u, -5 * u, 1.6 * u, 6 * u);
+    }
   } else if (e.kind === 'sofa') {
-    ctx.fillStyle = '#8a4a3a';
-    ctx.fillRect(-24 * u, -16 * u, 48 * u, 16 * u);
-    ctx.fillStyle = '#a95a46';
-    ctx.fillRect(-24 * u, -20 * u, 48 * u, 6 * u);
-    ctx.fillStyle = '#6a3a2e';
-    ctx.fillRect(-26 * u, -18 * u, 5 * u, 18 * u);
-    ctx.fillRect(21 * u, -18 * u, 5 * u, 18 * u);
+    // spiked wooden beam (Jimmy Dash art) — a LOW jump-over bar, reads instantly
+    if (ART.beam) {
+      const dw = 56 * u, dh = dw * (ART.beam.height / ART.beam.width);
+      ctx.drawImage(ART.beam, -dw / 2, -dh + 2 * u, dw, dh);
+    } else {
+      ctx.fillStyle = '#8a4a3a';
+      ctx.fillRect(-24 * u, -16 * u, 48 * u, 16 * u);
+      ctx.fillStyle = '#a95a46';
+      ctx.fillRect(-24 * u, -20 * u, 48 * u, 6 * u);
+      ctx.fillStyle = '#6a3a2e';
+      ctx.fillRect(-26 * u, -18 * u, 5 * u, 18 * u);
+      ctx.fillRect(21 * u, -18 * u, 5 * u, 18 * u);
+    }
   } else if (e.kind === 'mic') {
     // LOW-HUNG "ON AIR" SIGN RIG (Osimo v3: old boom mic "doesn't look like anything
     // you can slide under") — truss posts both sides, glowing red sign at HEAD height,
@@ -1335,12 +1362,18 @@ function drawEnt(e) {
       ctx.fillRect((-30 + i * 10) * u, -29 * u, 10 * u, 3.5 * u);
     }
   } else if (e.kind === 'rack') {
-    ctx.fillStyle = '#4a4136';
-    ctx.fillRect(-22 * u, -46 * u, 44 * u, 46 * u);
-    ctx.fillStyle = '#5c5244';
-    for (let i = 0; i < 3; i++) ctx.fillRect(-20 * u, (-40 + i * 14) * u, 40 * u, 3 * u);
-    ctx.fillStyle = '#2e2820';
-    for (let i = 0; i < 6; i++) ctx.fillRect((-17 + i * 6) * u, -37 * u, 4 * u, 9 * u);
+    // gold-trimmed stone block (Jimmy Dash art) — the lane-blocker
+    if (ART.barrier) {
+      const dw = 48 * u, dh = dw * (ART.barrier.height / ART.barrier.width);
+      ctx.drawImage(ART.barrier, -dw / 2, -dh + 2 * u, dw, dh);
+    } else {
+      ctx.fillStyle = '#4a4136';
+      ctx.fillRect(-22 * u, -46 * u, 44 * u, 46 * u);
+      ctx.fillStyle = '#5c5244';
+      for (let i = 0; i < 3; i++) ctx.fillRect(-20 * u, (-40 + i * 14) * u, 40 * u, 3 * u);
+      ctx.fillStyle = '#2e2820';
+      for (let i = 0; i < 6; i++) ctx.fillRect((-17 + i * 6) * u, -37 * u, 4 * u, 9 * u);
+    }
   } else if (e.kind === 'chair') {
     ctx.fillStyle = '#20242c';
     ctx.fillRect(-9 * u, -26 * u, 18 * u, 20 * u);
@@ -1399,6 +1432,45 @@ function aoPool(x, y, rx, ry, alpha) {
 }
 // shared body geometry for BOTH runners — col = { a: base tone, b: shadow tone,
 // trim: gold/bronze accent }. Back view; slide rolls face-up to show the LED face.
+// ══════════════════════════════════════════════════════════════════════════
+// SPRITE ART (Osimo 2026-08-19 — Grok-built "Jimmy Dash" asset pack adapted in:
+// "use its graphics and adapt it to our game... all the new graphics, but with
+// the voices we had"). Pre-rendered frames of the glossy white/gold toy robot
+// (run ×6, jump ×4, slide ×4), animated temple coins, spiked-beam + stone-block
+// obstacles, wall banner, menu backdrop. Loaded lazily from jimmy-run-art/;
+// until each image is ready the existing canvas-drawn art keeps rendering, so
+// a slow connection degrades gracefully instead of showing nothing.
+// Joe variant: same frames, tinted bronze/rust via a one-time offscreen
+// canvas pass (hue-rotate + saturate) — no second sprite set needed.
+// ══════════════════════════════════════════════════════════════════════════
+const ART = {};          // name -> HTMLImageElement (loaded)
+const ART_JOE = {};      // runner frames tinted for Joe
+(function loadArt() {
+  const names = ['run-1','run-2','run-3','run-4','run-5','run-6',
+                 'jump-1','jump-2','jump-3','jump-4',
+                 'slide-1','slide-2','slide-3','slide-4',
+                 'coin-1','coin-2','coin-3','coin-4',
+                 'beam','barrier','banner'];
+  for (const n of names) {
+    const im = new Image();
+    im.onload = () => {
+      ART[n] = im;
+      // pre-tint Joe copies of the runner frames only
+      if (/^(run|jump|slide)-/.test(n)) {
+        try {
+          const c = document.createElement('canvas');
+          c.width = im.width; c.height = im.height;
+          const cx2 = c.getContext('2d');
+          cx2.filter = 'sepia(1) saturate(1.9) hue-rotate(-12deg) brightness(0.78)';
+          cx2.drawImage(im, 0, 0);
+          ART_JOE[n] = c;
+        } catch (e) { ART_JOE[n] = im; }
+      }
+    };
+    im.src = 'jimmy-run-art/' + n + '.png?v=1';
+  }
+})();
+
 function drawRunnerBody(sliding, col) {
   const now = Date.now();
   const OUT = 'rgba(30,24,18,0.55)';
@@ -1567,7 +1639,28 @@ function drawRunner() {
     ctx.beginPath(); ctx.arc(0, -26, 36, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
-  if (activeRunner === 'jimmy') drawRunnerBody(sliding, { a: CP.jimmyA, b: CP.jimmyB, trim: CP.jimmyTrim });
+  // sprite path: pre-rendered Jimmy Dash frames driven by our existing state
+  // (bobPh run cycle, jumpT arc, slideT). Falls back to the canvas-drawn body
+  // until the frame images finish loading.
+  let frameName;
+  if (sliding) {
+    const k = Math.max(0, Math.min(0.999, (SLIDE_TICKS - slideT) / SLIDE_TICKS));
+    frameName = 'slide-' + (1 + Math.floor(k * 4));
+  } else if (jumpT > 0) {
+    const k = Math.max(0, Math.min(0.999, 1 - jumpT / JUMP_TICKS));
+    frameName = 'jump-' + (1 + Math.floor(k * 4));
+  } else {
+    frameName = 'run-' + (1 + Math.floor(bobPh * 1.6) % 6);
+  }
+  const bank = activeRunner === 'jimmy' ? ART : ART_JOE;
+  const frame = bank[frameName];
+  if (frame) {
+    // 256px source -> ~96px tall on screen; feet sit at local y=0 (the frames
+    // carry ~10% transparent padding below the boots, hence the +10 nudge)
+    const dh = sliding ? 62 : 96;
+    const dw = dh * (frame.width / frame.height);
+    ctx.drawImage(frame, -dw / 2, -dh + 10, dw, dh);
+  } else if (activeRunner === 'jimmy') drawRunnerBody(sliding, { a: CP.jimmyA, b: CP.jimmyB, trim: CP.jimmyTrim });
   else drawRunnerBody(sliding, { a: CP.joeA, b: CP.joeB, trim: CP.joeTrim });
   if (rocket) {
     ctx.fillStyle = '#ff9900';
