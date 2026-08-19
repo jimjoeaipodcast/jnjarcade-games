@@ -1139,7 +1139,7 @@ function showCallout(kind) {
 // ─── init ─────────────────────────────────────────────────────────────────────
 function initGame() {
   resize();
-  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R };
+  bird      = { x: Math.round(cw * 0.22), y: Math.round(ch / 2), vy: 0, rot: 0, r: BIRD_R, lastVy: 0 };
   birdInflate       = 0;
   inflateInvincible = 0;
   nextMegaSpawn     = Date.now() + Math.round(rnd(50000, 80000));
@@ -1421,7 +1421,15 @@ function update(dt) {
     const cx = e.x, cy = e.y - CHUTE_OFFSET;
     const dcx = bird.x - cx, dcy = bird.y - cy;
     const chuteDist = Math.sqrt(dcx * dcx + dcy * dcy);
-    if (chuteDist < bird.r + CHUTE_R && bird.vy > -2) {
+    // gate on lastVy (the bird's trajectory as it ENTERED this frame, before any flap
+    // this frame could have fired) rather than the live vy — flap() sets bird.vy
+    // synchronously from the touch handler, outside update(), so a tap that lands the
+    // same instant as chute contact was overwriting a genuine "falling onto it" descent
+    // with FLAP_VY (-7.8) and silently defeating the bounce the player expected
+    // (Osimo 2026-08-19: "misses my touch and I lose a bounce"). Real fall trajectories
+    // don't flip sign frame to frame without a flap in between, so this only changes
+    // behaviour on exactly the frames a flap and a stomp coincide.
+    if (chuteDist < bird.r + CHUTE_R && bird.lastVy > -2) {
       e.alive = false;
       // bonus room: bounces at HALF the usual height (Osimo 2026-08-18) — h ∝ v²,
       // so half height = velocity ÷ √2. Keeps the dense chute field controllable.
@@ -1617,6 +1625,9 @@ function update(dt) {
     lastMilestone = m;
     fireMilestone(m);
   }
+
+  // snapshot for next frame's stomp gate — see the chuteDist check above
+  bird.lastVy = bird.vy;
 }
 
 // ─── draw ────────────────────────────────────────────────────────────────────
@@ -2077,6 +2088,12 @@ function drawBird(x, y, rotDeg) {
 
 // ─── inflate (hit but not dead yet) ──────────────────────────────────────────
 function inflate(cause) {
+  // Recoil pushes AWAY from whichever surface was hit — ceiling knocks the bird DOWN,
+  // everything else (floor/pipe) knocks it UP. A flat -5 (up) on every cause used to
+  // shove a ceiling-hit bird FURTHER into the ceiling, re-triggering the overlap check
+  // every frame it stayed invincible and reading as "stuck at the top for a moment"
+  // (Osimo 2026-08-19).
+  const recoilVy = cause === 'ceiling' ? 5 : -5;
   // SHRINK STACKS ARE ARMOR (Osimo 2026-08-18 v8: hit a pipe while super tiny → it
   // killed him; wanted the hit to cost the shrink, not a life). Any hit while shrunk
   // wipes ALL shrink stacks — bird pops back to its starting size ("you can lose all
@@ -2086,7 +2103,7 @@ function inflate(cause) {
     birdShrink = 0;
     starChain = 0;
     recomputeBirdRadius();
-    bird.vy = -5;
+    bird.vy = recoilVy;
     inflateInvincible = Date.now() + 1000;
     sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
     spawnParticles(bird.x, bird.y, '#e879f9', 10);
@@ -2097,7 +2114,7 @@ function inflate(cause) {
   birdInflate++;
   starChain = 0;  // any hit breaks the star-power chain
   recomputeBirdRadius();
-  bird.vy = -5;
+  bird.vy = recoilVy;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
   sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
   spawnParticles(bird.x, bird.y, '#ffffff', 8);
