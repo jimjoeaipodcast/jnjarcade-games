@@ -1090,43 +1090,57 @@ function drawCorridor() {
     // and the saved clip ops keep phones at 60fps. Flat fills also remain as the
     // not-yet-loaded fallback.
     const texOK = n <= TEX_MAX_N && ART.stone && ART.carpet && ART.water;
-    const rugW  = sc * LANE_W * 190 * 0.86;
-    const rugWN = scN * LANE_W * 190 * 0.86;
+    // carpet spans nearly the whole road when textured (Grok sandbox reference: all 3
+    // lanes run ON the carpet, stone ledges flanking); the old narrow runner stays for
+    // the flat-fill fallback where it was designed around
+    const rugMul = texOK ? 2.55 : 0.86;
+    const rugW  = sc * LANE_W * 190 * rugMul;
+    const rugWN = scN * LANE_W * 190 * rugMul;
     const wallH  = sc * 340;
     const wallHN = scN * 340;
     const worldZ = zPos + z;
     const dzSpan = zNext - z;
 
     if (texOK) {
-      const texQuad = (tex, pxTile, x1, x2, y1, x3, x4, y2, shimmer) => {
-        // clip to the trapezoid (x1,y1)-(x2,y1)-(x3,y2)-(x4,y2), draw the slice
+      // repeating patterns, perspective-scaled per strip via CanvasPattern.setTransform
+      // — tiles BOTH axes (matching the Grok sandbox's dense carpet weave; the earlier
+      // band-slice approach stretched one texture width across the whole road, giving
+      // giant motifs). Pattern transform anchors to road centre + world-z scroll.
+      if (!ART._pats) {
+        ART._pats = {
+          carpet: ctx.createPattern(ART.carpet, 'repeat'),
+          stone: ctx.createPattern(ART.stone, 'repeat'),
+        };
+        ART._patOK = typeof ART._pats.carpet.setTransform === 'function';
+      }
+      const patQuad = (pat, density, x1, x2, y1, x3, x4, y2) => {
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(x3, y2); ctx.lineTo(x4, y2);
         ctx.closePath(); ctx.clip();
-        const th = tex.height;
-        let sy = ((worldZ * pxTile) + (shimmer ? (Date.now() * 0.02) % th : 0)) % th;
-        let bandH = Math.min(th - sy, Math.max(8, dzSpan * pxTile));
+        if (ART._patOK) {
+          const s = Math.max(0.02, sc * density);
+          pat.setTransform(new DOMMatrix()
+            .translate(cx, y)
+            .scale(s)
+            .translate(-256, (-(worldZ * 512) % 512)));
+        }
+        ctx.fillStyle = pat;
         const top = Math.min(y1, y2), bot = Math.max(y1, y2);
         const left = Math.min(x1, x2, x3, x4), right = Math.max(x1, x2, x3, x4);
-        ctx.drawImage(tex, 0, sy, tex.width, bandH, left, top, right - left, bot - top);
+        ctx.fillRect(left, top, right - left, bot - top);
         ctx.restore();
       };
-      // water channels — full road width first (shows either side of the path)
-      texQuad(ART.water, 170, cx - halfW, cx + halfW, y, cxN + halfWN, cxN - halfWN, yN, true);
-      // stone walkway ledge under the carpet path
-      const stW = rugW * 1.45, stWN = rugWN * 1.45;
-      texQuad(ART.stone, 200, cx - stW / 1.6, cx + stW / 1.6, y, cxN + stWN / 1.6, cxN - stWN / 1.6, yN, false);
-      // the carpet path itself
-      texQuad(ART.carpet, 220, cx - rugW / 1.6, cx + rugW / 1.6, y, cxN + rugWN / 1.6, cxN - rugWN / 1.6, yN, false);
-      // fog dim over the whole floor strip
-      if (fog > 0.08) {
-        ctx.fillStyle = `rgba(4,2,1,${fog * 0.6})`;
-        ctx.beginPath();
-        ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
-        ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
-        ctx.closePath(); ctx.fill();
-      }
+      // stone floor across the full road (the ledges showing either side of the carpet)
+      patQuad(ART._pats.stone, 0.55, cx - halfW, cx + halfW, y, cxN + halfWN, cxN - halfWN, yN);
+      // the carpet path — WIDE, all 3 lanes run on it (matches the sandbox reference)
+      patQuad(ART._pats.carpet, 0.4, cx - rugW / 1.6, cx + rugW / 1.6, y, cxN + rugWN / 1.6, cxN - rugWN / 1.6, yN);
+      // fog dim over the whole floor strip — deep temple murk, heavier than the studio was
+      ctx.fillStyle = `rgba(3,1,1,${Math.min(0.92, fog * 0.95 + 0.12)})`;
+      ctx.beginPath();
+      ctx.moveTo(cx - halfW, y); ctx.lineTo(cx + halfW, y);
+      ctx.lineTo(cxN + halfWN, yN); ctx.lineTo(cxN - halfWN, yN);
+      ctx.closePath(); ctx.fill();
     } else {
       // flat fills — far strips + not-yet-loaded fallback
       ctx.fillStyle = shade(segIdx % 2 ? floorC : lerpCol(floorC, '#ffffff', 0.09), fog * 0.8);
@@ -1141,14 +1155,18 @@ function drawCorridor() {
       ctx.closePath(); ctx.fill();
     }
 
-    // lane divider dashes — brass, reading the 3 lanes at a glance
+    // lane divider dashes — brass, reading the 3 lanes at a glance. Faded way down
+    // over the textured carpet (the sandbox reference has invisible lanes; ours stay
+    // as a subtle aid rather than clutter across the pattern)
     if (segIdx % 2 === 0) {
+      ctx.globalAlpha = texOK ? 0.28 : 1;
       ctx.fillStyle = shade(CP.brass, fog * 0.55);
       for (const L of [-0.5, 0.5]) {
         const lx = cx + sc * (L * LANE_W) * 190;
         const dw = Math.max(2, 3.4 * sc);
         ctx.fillRect(lx - dw / 2, Math.min(y, yN), dw, Math.abs(y - yN) * 0.6 + 1);
       }
+      ctx.globalAlpha = 1;
     }
 
     // WALLS, converging — temple stone texture with a light floor-palette tint
@@ -1170,7 +1188,7 @@ function drawCorridor() {
         const top = Math.min(y - wallH, yN - wallHN);
         ctx.drawImage(ART.stone, sx, 0, bandW, ART.stone.height, left, top, right - left, Math.max(y, yN) - top);
         // darken toward the menu-art's shadowy temple stone (raw texture is bright tan)
-        ctx.fillStyle = `rgba(8,6,4,${Math.min(0.88, fog * 0.55 + 0.38)})`;
+        ctx.fillStyle = `rgba(6,4,3,${Math.min(0.93, fog * 0.5 + 0.52)})`;
         ctx.fillRect(left, top, right - left, Math.max(y, yN) - top);
         ctx.fillStyle = wallC + '30';   // floor-palette wash keeps the 8-floor progression
         ctx.fillRect(left, top, right - left, Math.max(y, yN) - top);
@@ -1728,9 +1746,10 @@ function drawRunner() {
   const bank = activeRunner === 'jimmy' ? ART : ART_JOE;
   const frame = bank[frameName];
   if (frame) {
-    // 256px source -> ~96px tall on screen; feet sit at local y=0 (the frames
-    // carry ~10% transparent padding below the boots, hence the +10 nudge)
-    const dh = sliding ? 62 : 96;
+    // 256px source -> ~118px tall on screen (sandbox reference has the robot BIG,
+    // ~20% of screen height); feet sit at local y=0 (the frames carry ~10%
+    // transparent padding below the boots, hence the +10 nudge)
+    const dh = sliding ? 76 : 118;
     const dw = dh * (frame.width / frame.height);
     ctx.drawImage(frame, -dw / 2, -dh + 10, dw, dh);
   } else if (activeRunner === 'jimmy') drawRunnerBody(sliding, { a: CP.jimmyA, b: CP.jimmyB, trim: CP.jimmyTrim });
