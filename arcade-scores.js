@@ -87,6 +87,10 @@ function returnUrl() {
 })();
 
 var NAME_KEY = 'jnj_arcade_name';
+// How long a score POST may stall before we give up and bank it locally instead. Long
+// enough that a merely-slow mobile connection still submits for real, short enough that a
+// dead one doesn't strand the player on a disabled button.
+var SUBMIT_TIMEOUT_MS = 6000;
 function savedName() {
   try { return (localStorage.getItem(NAME_KEY) || '').toUpperCase(); } catch (e) { return ''; }
 }
@@ -161,7 +165,13 @@ var CSS = `
   background: var(--as-accent); border: none; border-radius: 10px;
   padding: 14px 34px 11px; cursor: pointer;
   box-shadow: 0 5px 0 rgba(0,0,0,0.6); -webkit-tap-highlight-color: transparent; }
-.as-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+.as-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+/* An in-flight submit MUST look different from a live button. Osimo 2026-08-21: "had to
+   press submit score 4 times" — doSubmit() disabled the button but changed nothing you
+   could see (no :disabled rule existed at all, and the label stayed "SUBMIT SCORE"), so a
+   slow POST was indistinguishable from a dead button and the only sane reaction was to
+   tap again. Reproduced headlessly: fast API = 1 tap, 4s API = 6 taps, hanging API = never. */
+.as-btn:disabled { opacity: 0.55; cursor: default; box-shadow: 0 5px 0 rgba(0,0,0,0.35); }
 .as-skip { background: none; border: none; color: #b8ad97; font-weight: 700;
   font-size: 13px; letter-spacing: 0.2em; cursor: pointer; padding: 8px; }
 
@@ -361,21 +371,35 @@ function show(opts) {
       var name = input.value.toUpperCase().replace(/[^A-Z0-9 .\-]/g, '').trim();
       if (name.length < 1) { err.textContent = 'ENTER YOUR INITIALS'; return; }
       if (!nameAllowed(name)) { err.textContent = 'NOT ON THIS CABINET. PICK ANOTHER.'; return; }
-      submit.disabled = true; err.textContent = '';
+      // Say it's working. The disabled flag alone is invisible feedback — see the
+      // .as-btn:disabled note in CSS for the bug this caused.
+      submit.disabled = true; submit.textContent = 'SUBMITTING…'; err.textContent = '';
       rememberName(name);      // next cabinet prefills it
+      function rearm() { submit.disabled = false; submit.textContent = 'SUBMIT SCORE'; }
+
+      // Never dead-end on a stalled connection. Without this the promise simply never
+      // settles: the button stays disabled forever and the score is lost with no way back
+      // (reproduced — a hanging /api/scores left it stuck through every retry). On timeout
+      // we take the same path as a failed request: bank the score locally and show the
+      // board, so the run is never thrown away just because the network was down.
+      var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, SUBMIT_TIMEOUT_MS);
 
       fetch('/api/scores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game: game, name: name, score: score }),
+        signal: ctl ? ctl.signal : undefined,
       }).then(function (r) {
         if (r.status === 422) { throw { handled: true, msg: 'NOT ON THIS CABINET. PICK ANOTHER.' }; }
         if (!r.ok) throw new Error('api ' + r.status);
         return r.json();
       }).then(function (data) {
+        clearTimeout(timer);
         renderBoard(data.rank, data.scores, name, false);
       }).catch(function (e) {
-        if (e && e.handled) { err.textContent = e.msg; submit.disabled = false; return; }
+        clearTimeout(timer);
+        if (e && e.handled) { err.textContent = e.msg; rearm(); return; }
         var res = saveLocal(game, { n: name, s: score, t: Date.now() });
         renderBoard(res.rank, res.scores, name, true);
       });

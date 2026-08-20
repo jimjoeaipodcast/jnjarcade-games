@@ -34,7 +34,10 @@ const WORLDS = {
     genre: 'TEMPLE RUN × MINION RUSH',
     quote: '"he ran past the writers room at full sprint. the deadline noticed. deadlines always notice."',
     by: 'JOE',
-    attract: runAttract,
+    // real recorded gameplay — NOT runAttract, which jimmy-dash still uses. The two
+    // cabinets share a genre but not a clip: pointing both at this footage would show
+    // Jimmy Run's playthrough on the Jimmy Dash cassette.
+    attract: jimmyRunAttract,
   },
   'jimmy-dash': {
     // Grok Build's from-spec rebuild, installed on /wip for side-by-side testing
@@ -141,7 +144,9 @@ const WORLDS = {
     genre: 'ANGRY BIRDS × WORMS',
     quote: '"They never shoot back. Some of them land, dig in, and open fire. Jimmy calls that balance. I call it a war crime with a slingshot."',
     by: 'JOE',
-    attract: angryWormsAttract,
+    // real recorded gameplay; the hand-drawn angryWormsAttract below is kept as the
+    // fallback shape for reference and is no longer wired to a cabinet
+    attract: angryWormsVideoAttract,
   },
   'pin-vaders': {
     ink: '#b76bff', dim: '#4a2470', pit: '#0c0514', glowsoft: 'rgba(183,107,255,0.22)',
@@ -2464,6 +2469,48 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
   ctx.fillText('ANGRY WORMS', w/2, h * 0.92);
 }
 
+/* Shared video-backed attract renderer. Three cabinets now show a real recorded
+   playthrough instead of a hand-drawn mini-scene (Osimo: "record some actual game play...
+   rather than those moving squares and basic surroundings"). Draws the clip's current
+   frame onto the cassette canvas each tick, cover-fit — crops overflow rather than
+   letterboxing, matching CSS background-size:cover. The clips are recorded at 960x720
+   because the cassette screen is 4:3 (.cab-attract aspect-ratio: 4/3), so cover-fit has
+   nothing to crop. Playback is paused/resumed by the IntersectionObserver in initAttract. */
+function videoAttract(ctx, w, h, t, s, src, bg) {
+  if (!s.video) {
+    const v = document.createElement('video');
+    v.src = src;                      // bump the ?v= whenever the clip is re-recorded
+    v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+    v.preload = 'auto';
+    v.play().catch(() => {});
+    s.video = v;
+  }
+  const v = s.video;
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  if (v.readyState >= 2 && v.videoWidth) {
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const scale = Math.max(w / vw, h / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  }
+}
+
+/* JIMMY RUN — real run: robot sprites, temple corridor, coins, obstacles, HYPE MODE.
+   Recorded at viewport 800x1400 (the game's world is 400x700 and letterboxes inside any
+   landscape viewport) and cropped to the 4:3 band that holds the runner and the corridor
+   ahead of him, above the game's own canvas-drawn "INSERT COIN" line. */
+function jimmyRunAttract(ctx, w, h, t, world, s) {
+  videoAttract(ctx, w, h, t, s, 'assets/footage/jimmy-run-attract.mp4?v=1', '#140a04');
+}
+
+/* ANGRY WORMS — real shots: catapult, trajectory arc, impact craters, target worms.
+   Landscape world, so it fills a 960x720 viewport with no crop needed. Note this clip is
+   the game's real daylight palette, not the dark/neon house look the DRAWN attract
+   animations follow — that is the cost of showing genuine footage. */
+function angryWormsVideoAttract(ctx, w, h, t, world, s) {
+  videoAttract(ctx, w, h, t, s, 'assets/footage/angry-worms-attract.mp4?v=1', '#100604');
+}
+
 function pinVadersAttract(ctx, w, h, t, world, s) {
   // real recorded gameplay, not a hand-drawn mini-scene — same treatment as
   // onairAttract (Osimo 2026-08-19: "try the same thing with pin-vaders... make sure
@@ -2473,7 +2520,7 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
   // real game instead) then trimmed to skip past the opening serve.
   if (!s.video) {
     const v = document.createElement('video');
-    v.src = 'assets/footage/pin-vaders-attract.mp4?v=1';
+    v.src = 'assets/footage/pin-vaders-attract.mp4?v=2';   // v2 = ball-following camera
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
     v.play().catch(() => {});
