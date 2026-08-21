@@ -251,6 +251,7 @@ function buildLevel(lvl) {
                                    { type: "splitter", count: 1 }, { type: "trooper", count: 1 }];
   else                inventory = [{ type: "red", count: 3 }, { type: "bomber", count: 2 },
                                    { type: "splitter", count: 1 }, { type: "bouncer", count: 1 },
+                                   { type: "cluster", count: 1 },   // this branch is lvl>=5 only
                                    { type: "trooper", count: 2 }];
 
   // Worms mechanic: TNT barrels near the bunkers — chain reactions (L3+ only)
@@ -271,7 +272,13 @@ function buildLevel(lvl) {
   // it) vs 2 in the open. makeWorm tags bunkered=true from buildStructure.
   const openFoes = worms.filter(w => w.team === "enemy" && !w.bunkered).length;
   const bunkFoes = worms.filter(w => w.team === "enemy" && w.bunkered).length;
-  const needed = openFoes * 2 + bunkFoes * 3 + 1;
+  // v4 (Osimo 2026-08-21: "the first ten levels should at least have 2 then 1 more worms
+  // than needed"). The budget above is the MINIMUM that makes a level winnable; it leaves
+  // no room to learn. Early levels now ship with slack on top of it — 2 spare for the
+  // first five, 1 spare through level ten — so a first-timer can waste shots and still
+  // clear. From level 11 the budget is exactly as tight as it was.
+  const slack = lvl <= 5 ? 2 : lvl <= 10 ? 1 : 0;
+  const needed = openFoes * 2 + bunkFoes * 3 + 1 + slack;
   let cap = inventory.reduce((s, i) => s + i.count * (i.type === "trooper" ? 3 : 1), 0);
   while (cap < needed) { inventory[0].count++; cap++; }
   selectedType = 0;
@@ -313,7 +320,14 @@ function buildStructure(x, width, lvl) {
       if (placed >= 6 + lvl * 2) break;
       const roll = Math.random();
       // AB material mix: wood default, stone tanky, ice (lvl 2+) shatters in one hit
-      const btype = roll < 0.3 ? "stone" : (lvl >= 2 && roll < 0.48 ? "ice" : "wood");
+      // GLASS-HEAVY EARLY GAME (Osimo 2026-08-21: glass "more predominant in first ten
+      // levels"). Glass is the forgiving material — one blast wave clears it and it chain-
+      // shatters off its neighbours — so a heavy early mix is what makes levels 1-10 read
+      // as learnable. From level 11 the old stone/wood-led mix returns.
+      const glassy = lvl <= 10;
+      const btype = glassy
+        ? (roll < 0.18 ? "stone" : roll < 0.62 ? "ice" : "wood")
+        : (roll < 0.30 ? "stone" : (lvl >= 2 && roll < 0.48 ? "ice" : "wood"));
       const bhp = btype === "stone" ? 60 : btype === "ice" ? 12 : 30;
       blocks.push({
         x: startX + c * blockW,
@@ -451,10 +465,12 @@ function setupInput() {
       if (p.type === "bomber" && !p.abilityUsed) {
         p.abilityUsed = true;
         explode(p.x, p.y, 80, p.team);
+        if (p.type === "cluster") clusterBurst(p.x, p.y, p.team);
         p.dead = true;
       } else if (p.type === "bouncer" && !p.abilityUsed) {
         p.abilityUsed = true;
         explode(p.x, p.y, 65, p.team);
+        if (p.type === "cluster") clusterBurst(p.x, p.y, p.team);
         p.dead = true;
       } else if (p.type === "splitter" && !p.abilityUsed) {
         p.abilityUsed = true;
@@ -504,14 +520,27 @@ function checkInventoryTap(p) {
 
 function checkMuteTap(p) {
   if (p.x > W - 60 && p.x < W - 10 && p.y > H - 55 && p.y < H - 5) {
-    muted = !muted;
-    localStorage.setItem("aw_muted", muted ? "1" : "0");
+    initAudio();
+    sfxMode = sfxMode === "tones" ? "voice" : sfxMode === "voice" ? "mute" : "tones";
+    muted = sfxMode === "mute";
+    try {
+      localStorage.setItem("aw_sfxMode", sfxMode);
+      localStorage.setItem("aw_muted", muted ? "1" : "0");   // keep the legacy key honest
+    } catch (e) {}
+    if (sfxMode === "voice") loadVoicePack();
     return true;
   }
   return false;
 }
 
-let muted = localStorage.getItem("aw_muted") === "1";
+// SPEAKER CYCLE — strictly LINEAR single tap (flap-fight hard rule 1):
+// 🔊 tones → 🎙️ tones + JnJ commentary → 🔇 mute → 🔊 …
+let sfxMode = (() => {
+  const m = localStorage.getItem("aw_sfxMode");
+  if (m === "tones" || m === "voice" || m === "mute") return m;
+  return localStorage.getItem("aw_muted") === "1" ? "mute" : "tones";   // migrate old flag
+})();
+let muted = sfxMode === "mute";   // playTone() keys off this — kept in sync by the cycle
 let audioCtx = null;
 function initAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }
 function playTone(freq, dur, type, vol, sweepTo) {
@@ -528,6 +557,174 @@ function playTone(freq, dur, type, vol, sweepTo) {
   } catch (e) {}
 }
 function playChord(freqs, dur, type, vol) { freqs.forEach(f => playTone(f, dur, type, vol)); }
+
+// ─── JnJ COMMENTARY (🎙️ speaker-button mode) ────────────────────────────────
+// Same principles as flap-fight's locked sound system (FLAP_FIGHT_BIBLE.md):
+// a strictly LINEAR single-tap speaker cycle, achievement-priority ducking so a
+// record callout is never talked over, and once-per-event gating so a repeated
+// game event cannot repeat the same line into the ground.
+// Lines are guard-scored JnJ canon: Jimmy short + specific (his logged drift is
+// long paragraphs), Joe flat and landing late, aimed at the PLAYER the way
+// flap-fight established.
+const VO_LINES = [
+  // Jimmy — launch
+  ["JIMMY", "Sending him."],
+  ["JIMMY", "This is the one."],
+  ["JIMMY", "Trajectory feels right. Feels. Not is."],
+  ["JIMMY", "He volunteered. I want that on record."],
+  ["JIMMY", "Perfect angle. Perfect. Roughly perfect."],
+  // Joe — launch
+  ["JOE", "Off he goes."],
+  ["JOE", "Airborne. Technically."],
+  ["JOE", "That's a choice."],
+  ["JOE", "I've seen worse. Not many."],
+  // Jimmy — kill
+  ["JIMMY", "Direct hit!"],
+  ["JIMMY", "Got him. Straight through."],
+  ["JIMMY", "That is exactly what I planned. That specific thing."],
+  ["JIMMY", "Oh that's clean. That's genuinely clean."],
+  ["JIMMY", "Right in the middle. I'm taking full credit."],
+  // Joe — kill
+  ["JOE", "Effective."],
+  ["JOE", "That worked. I'm as surprised as you are."],
+  ["JOE", "One down. Adequate."],
+  ["JOE", "Fine. That was a good shot."],
+  ["JOE", "I had a concern about that structure. Apparently justified."],
+  // Jimmy — miss
+  ["JIMMY", "Okay that was a warm-up."],
+  ["JIMMY", "Wind. That was wind."],
+  ["JIMMY", "I misjudged it. Slightly. Considerably."],
+  ["JIMMY", "Nobody saw that. Joe saw that."],
+  ["JIMMY", "That's data. That's useful data."],
+  // Joe — miss
+  ["JOE", "Not ideal."],
+  ["JOE", "You missed the entire hill."],
+  ["JOE", "Interesting."],
+  ["JOE", "That's the ground. You've hit the ground."],
+  ["JOE", "The worm is fine. The worm is completely fine."],
+  // water
+  ["JIMMY", "He can swim. Probably. We have never checked."],
+  ["JOE", "He's swimming. That wasn't the plan."],
+  ["JOE", "Into the water. Right. Continuing."],
+  // survived a hit
+  ["JIMMY", "He's still up. How is he still up?"],
+  ["JOE", "Wounded, not gone. There's a difference."],
+  ["JOE", "You've annoyed him. That's all you've done."],
+  // barrel chain
+  ["JIMMY", "Chain! Chain, chain, chain!"],
+  ["JIMMY", "That's the whole row gone. The whole row."],
+  ["JOE", "The barrels did that. Not you."],
+  ["JOE", "Efficient. Barely yours, but efficient."],
+  // multi-kill
+  ["JIMMY", "Two in one. That's a two for one."],
+  ["JIMMY", "Three. That's three. I need a minute."],
+  ["JOE", "Multiple. Noted."],
+  ["JOE", "That's more than one. I counted."],
+  // level clear
+  ["JIMMY", "Level clear. That's how it's done."],
+  ["JIMMY", "Cleared it. On the shots I had left, which was one."],
+  ["JOE", "Cleared. Eventually."],
+  ["JOE", "You got there. The route was unusual."],
+  ["JOE", "Level complete. I'll allow it."],
+  // last worm
+  ["JIMMY", "Last one. No pressure. Some pressure."],
+  ["JOE", "One left. Make it count, or don't."],
+  // out of ammo / fail
+  ["JIMMY", "Out. We're out. That's on me."],
+  ["JOE", "You've run out of worms. That's a sentence I've now said."],
+  ["JOE", "No ammunition. No worms. No plan."],
+  // game over
+  ["JIMMY", "That's the run. Good run."],
+  ["JIMMY", "I peaked in the middle there."],
+  ["JOE", "That's it. That's the game."],
+  ["JOE", "You did well. Relative to expectations."],
+  // personal best / top
+  ["JIMMY", "New best. That's a record."],
+  ["JIMMY", "Personal best. I'd like it noted."],
+  ["JOE", "That's your best. Genuinely."],
+  ["JOE", "A record. I'm noting it once."],
+  ["JIMMY", "Top of the board."],
+  ["JOE", "Number one. Currently."],
+];
+
+const JIMMY_GAIN = 1.15, JOE_GAIN = 0.95;
+function djb2vo(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+const VO = { b64: null, loading: false, buffers: {}, rot: {}, priorityUntil: 0, jimmySrc: null };
+function loadVoicePack() {
+  if (VO.b64 || VO.loading) return;
+  VO.loading = true;
+  fetch("angry-worms-pack.json?v=1").then(r => r.json())
+    .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
+    .catch(() => { VO.loading = false; });
+}
+function voicePlay(who, text, gain, priority) {
+  if (sfxMode !== "voice" || !audioCtx || !VO.b64) return;
+  // ACHIEVEMENT PRIORITY (flap-fight hard rule 5): while a record/clear line is
+  // speaking, ordinary barks are DROPPED rather than talking over it. Priority
+  // lines themselves ignore the window.
+  if (!priority && Date.now() < VO.priorityUntil) return;
+  const key = djb2vo(who + "|" + text);
+  const start = (buf) => {
+    try {
+      const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
+      src.buffer = buf; g.gain.value = gain;
+      src.connect(g); g.connect(audioCtx.destination);
+      if (who === "JIMMY") { if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} } VO.jimmySrc = src; }
+      if (priority) VO.priorityUntil = Date.now() + buf.duration * 1000 + 150;
+      src.start();
+    } catch (e) {}
+  };
+  const cached = VO.buffers[key];
+  if (cached) { start(cached); return; }
+  const b64 = VO.b64[key];
+  if (!b64) return;
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; start(buf); }, () => {});
+}
+// Rotate within a bank so the same line never fires twice running.
+function say(bank, priority) {
+  if (sfxMode !== "voice" || !bank || !bank.length) return;
+  const k = bank[0][1];
+  let i = Math.floor(Math.random() * bank.length);
+  if (bank.length > 1 && i === VO.rot[k]) i = (i + 1) % bank.length;
+  VO.rot[k] = i;
+  const [who, text] = bank[i];
+  voicePlay(who, text, who === "JIMMY" ? JIMMY_GAIN : JOE_GAIN, !!priority);
+}
+const pick = (a, b) => VO_LINES.slice(a, b);
+const VOB = {
+  launch:   pick(0, 9),   kill:     pick(9, 19),  miss:   pick(19, 29),
+  water:    pick(29, 32), survived: pick(32, 35), chain:  pick(35, 39),
+  multi:    pick(39, 43), clear:    pick(43, 48),  last:  pick(48, 50),
+  outOfAmmo:pick(50, 53), gameOver: pick(53, 57),  best:  pick(57, 61),
+  top:      pick(61, 63),
+};
+
+// Per-shot commentary state. A single fling can kill several worms across a
+// chain reaction, so the line is decided ONCE the dust settles rather than per
+// death — otherwise a 3-kill chain fires three overlapping "one down" barks.
+let shotKills = 0, shotSpoke = false, killLineTimer = null;
+function queueKillLine() {
+  if (killLineTimer) clearTimeout(killLineTimer);
+  killLineTimer = setTimeout(() => {
+    killLineTimer = null;
+    if (shotSpoke) return;
+    shotSpoke = true;
+    say(shotKills >= 2 ? VOB.multi : VOB.kill, shotKills >= 2);
+  }, 700);
+}
+// Called when a shot has fully resolved with nothing killed.
+function shotResolved() {
+  if (shotSpoke || killLineTimer || shotKills > 0) return;
+  shotSpoke = true;
+  const hurt = worms.some(w => w.team === "enemy" && w.alive && w.hp < w.maxHp);
+  say(hurt ? VOB.survived : VOB.miss);
+}
 const sfx = {
   launch:  () => { playTone(180, 0.25, "sawtooth", 0.12, 900); },                              // slingshot whoosh
   wheee:   () => { playTone(500, 0.55, "sine", 0.1, 1100); },                                  // AB flight cry
@@ -543,6 +740,9 @@ const sfx = {
 
 // ====== SLINGSHOT & LOADING ======
 function loadNextWorm() {
+  // Loading the next worm is the moment the PREVIOUS shot is definitively over —
+  // chains, falls and secondary explosions have all had their chance.
+  shotResolved();
   loadedWorm = null;
   if (inventory[selectedType].count <= 0) {
     // Find any with count
@@ -553,6 +753,8 @@ function loadNextWorm() {
       }
     }
   }
+  const ammoLeft = inventory.reduce((t, it) => t + it.count, 0);
+  if (ammoLeft === 1) setTimeout(() => say(VOB.last), 500);
   if (inventory[selectedType].count > 0) {
     loadedWorm = {
       x: SLING_X,
@@ -591,6 +793,8 @@ function fireWorm() {
   loadedWorm = null;
   sfx.launch();
   setTimeout(() => sfx.wheee(), 120);
+  shotKills = 0; shotSpoke = false;   // per-shot commentary bookkeeping
+  say(VOB.launch);
 }
 
 // ====== TROOPER FIRE (deployed worms shoot from where they landed) ======
@@ -653,6 +857,7 @@ function updatePhysics(dt) {
       }
       p.dead = true;
       sfx.splash();
+      if (!shotSpoke) { shotSpoke = true; say(VOB.water); }
     }
     // Terrain collision (armed only after 10 frames — a pulled-back worm sits inside
     // the hillside at launch and used to explode at your feet, Osimo 2026-07-02)
@@ -672,6 +877,7 @@ function updatePhysics(dt) {
       } else {
       // Hit ground
       explode(p.x, groundY, p.type === "trooperShot" ? 38 : 50, p.team);
+      if (p.type === "cluster") clusterBurst(p.x, groundY, p.team);
       p.dead = true;
       }
     }
@@ -717,12 +923,28 @@ function updatePhysics(dt) {
 
   // Update blocks — AB gravity (Osimo 2026-07-03): blocks with nothing under them
   // FALL, shoved blocks slide, towers collapse; a falling block crushes worms.
+  // GRAVITY MUST BE HONEST (Osimo 2026-08-21: "the bricks structures should respect
+  // gravity ... they stay in place, in mid air, fix").
+  //
+  // Two bugs left blocks hanging after a hit:
+  //  1. This predicate counted a FALLING block as support, while the landing code below
+  //     explicitly skips falling blocks — so a stack could rest on something that was
+  //     itself on its way down and simply never fall.
+  //  2. The tolerances were loose enough to be visible: 6px to the ground and 8px to a
+  //     neighbour, which accumulate up a stack into an obvious mid-air gap.
+  // Measured before/after by settling every level 1-10, blowing three holes in each and
+  // re-settling: 8 blocks left floating with a worst gap of 24px.
+  const SUPPORT_GAP = 3;
   function blockSupported(b) {
+    // Terrain sampled at the CENTRE — the same point the landing code uses. Sampling the
+    // corners instead was tried and measured WORSE (8 floating blocks -> ~32): landing on
+    // the highest corner leaves the rest of the block genuinely hanging, which at this art
+    // scale reads as floating. Land and support must agree on ONE sample point.
     const gy = terrainHeightAt(b.x + b.w / 2);
-    if (b.y + b.h >= gy - 6) return true;
+    if (b.y + b.h >= gy - SUPPORT_GAP) return true;
     for (const o of blocks) {
-      if (o === b || o.hp <= 0) continue;
-      if (Math.abs((b.y + b.h) - o.y) < 8 &&
+      if (o === b || o.hp <= 0 || o.falling) continue;   // a falling block supports nothing
+      if (Math.abs((b.y + b.h) - o.y) < SUPPORT_GAP &&
           b.x + b.w > o.x + 6 && b.x < o.x + o.w - 6) return true;
     }
     return false;
@@ -949,6 +1171,7 @@ function explode(x, y, radius, team, skipTeam) {
   // Damage blocks (barrels chain-react — classic Worms). AB physics (Osimo 2026-07-03):
   // ICE shatters instantly, stone/wood take a KNOCKBACK shove and can topple.
   const chain = [];
+  const shockFrom = [];   // solid blocks struck hard enough to shatter glass they touch
   for (const b of blocks) {
     if (b.hp <= 0) continue;
     const cx = b.x + b.w / 2;
@@ -964,6 +1187,12 @@ function explode(x, y, radius, team, skipTeam) {
       b.falling = true;
       b.settled = false;
       b.hp -= dmg;
+      // CHAIN SHATTER (Osimo 2026-08-21: glass panes "shatter on impact just by hitting
+      // any neighbouring stone ones"). A solid block taking a real hit transmits the shock
+      // into the glass touching it — so a stone hit two panes away still clears the wall.
+      // Queued rather than applied inline: mutating hp while iterating `blocks` would let
+      // the shatter cascade jump the blast radius in a single frame.
+      if (b.type !== "ice" && dmg > 8) shockFrom.push(b);
       if (b.hp <= 0) {
         score += 10;
         if (b.type === "ice") {
@@ -985,10 +1214,63 @@ function explode(x, y, radius, team, skipTeam) {
       }
     }
   }
+  // GLASS CHAIN SHATTER — resolved AFTER the blast loop, then propagated pane to pane so
+  // one struck stone clears a whole glass wall rather than only the pane it touches.
+  if (shockFrom.length) {
+    const shattered = new Set();
+    let front = shockFrom;
+    while (front.length) {
+      const next = [];
+      for (const src of front) {
+        for (const g of blocks) {
+          if (g.type !== "ice" || g.hp <= 0 || shattered.has(g)) continue;
+          // touching = overlapping footprints with a small tolerance on each axis
+          const touch = g.x < src.x + src.w + 6 && g.x + g.w > src.x - 6 &&
+                        g.y < src.y + src.h + 6 && g.y + g.h > src.y - 6;
+          if (!touch) continue;
+          shattered.add(g);
+          g.hp = 0;
+          g.settled = true;               // glass leaves no falling husk
+          score += 10;
+          const gx = g.x + g.w / 2, gy2 = g.y + g.h / 2;
+          for (let s2 = 0; s2 < 10; s2++) {
+            particles.push({ x: gx + (Math.random() - 0.5) * g.w, y: gy2 + (Math.random() - 0.5) * g.h,
+              vx: (Math.random() - 0.5) * 5, vy: -1 - Math.random() * 4,
+              life: 26, maxLife: 26, size: 2 + Math.random() * 3,
+              color: "#bfeaff", type: "spark", gravity: 0.3 });
+          }
+          next.push(g);                   // shattering glass shocks the glass IT touches
+        }
+      }
+      front = next;
+    }
+    if (shattered.size) { sfx.splash(); shakeT = Math.max(shakeT, 4); }
+  }
   // Chain reactions fire a beat later so they READ as a chain
   for (let ci = 0; ci < chain.length; ci++) {
     const cpos = chain[ci];
     setTimeout(() => { if (gameState === "playing") { sfx.barrel(); explode(cpos.x, cpos.y, 75, team); } }, 150 + ci * 130);
+  }
+}
+
+// CLUSTER WORM (Osimo 2026-08-21: "after level 5 you also get worms that when they blow up
+// [are] like cluster grenades going off in multiple other places"). The primary blast is
+// smaller than a red's — the payoff is spread, not raw power — and the bomblets land at
+// scattered offsets a beat apart so it READS as a cluster rather than one wide blast.
+// Deliberately reuses the barrel-chain's staggered-setTimeout shape, including its
+// gameState guard: without that, bomblets from the shot that ended a level keep detonating
+// into the next one.
+function clusterBurst(x, y, team) {
+  const n = 4 + Math.floor(Math.random() * 2);          // 4-5 bomblets
+  for (let i = 0; i < n; i++) {
+    const off = (i - (n - 1) / 2) * (46 + Math.random() * 26);
+    const bx = x + off, by = y - 10 - Math.random() * 26;
+    setTimeout(() => {
+      if (gameState !== "playing") return;
+      sfx.boom();
+      explode(bx, terrainHeightAt(bx) < by ? by : terrainHeightAt(bx), 46, team);
+      shakeT = Math.max(shakeT, 7);
+    }, 120 + i * 110);
   }
 }
 
@@ -1017,6 +1299,7 @@ function startDying(w) {
 }
 
 function detonate(w) {
+  if (w.team === "enemy") { shotKills++; queueKillLine(); }
   w.dying = false;
   w.alive = false;
   w.deathTimer = 100;          // no falling corpse — the boom IS the death
@@ -1082,6 +1365,11 @@ function showEndScreen(won) {
   document.getElementById("endScore").textContent = "SCORE " + score;
   if (won) {
     sfx.fanfare();
+    say(VOB.clear, true);
+    try {
+      const best = parseInt(localStorage.getItem("aw_best") || "0", 10);
+      if (score > best) { localStorage.setItem("aw_best", String(score)); setTimeout(() => say(VOB.best, true), 1600); }
+    } catch (e) {}
     const ammoLeft = inventory.reduce((n, it) => n + it.count, 0);
     const starCount = ammoLeft >= 3 ? 3 : ammoLeft >= 1 ? 2 : 1;
     score += starCount * 250;
@@ -1099,6 +1387,7 @@ function showEndScreen(won) {
       }
     }, 2200);
   } else {
+    say(VOB.outOfAmmo, true);
     // straight to the scoreboard on death — no INSERT COIN detour (Osimo 2026-07-03)
     sfx.lose();
     if (window.ArcadeScores) {
@@ -1559,6 +1848,9 @@ function drawWormBody(w) {
     else if (w.type === "bouncer"){ bodyColor = "#8e44e0"; darkColor = "#4a1a80"; bellyColor = "#e2cdf8"; }
     else if (w.type === "trooper"){ bodyColor = w.flashTimer > 0 ? "#fff" : "#e07820";
                                     darkColor = "#7a3c08"; bellyColor = "#fadfc0"; }
+    // cluster needs its own colour or it renders as the splitter's blue and the player
+    // cannot tell the two apart in the tray
+    else if (w.type === "cluster"){ bodyColor = "#39d98a"; darkColor = "#12603c"; bellyColor = "#cdf6e2"; }
     else                         { bodyColor = "#3a8acf"; darkColor = "#1a4a8a"; bellyColor = "#cde7fa"; }
   }
 
@@ -2038,7 +2330,9 @@ function drawHUD() {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    const name = inventory[i].type === "red" ? "RED" : inventory[i].type === "bomber" ? "BOMB" : inventory[i].type === "bouncer" ? "BOUNCE" : inventory[i].type === "trooper" ? "TROOP" : "SPLIT";
+    const name = inventory[i].type === "red" ? "RED" : inventory[i].type === "bomber" ? "BOMB"
+               : inventory[i].type === "bouncer" ? "BOUNCE" : inventory[i].type === "trooper" ? "TROOP"
+               : inventory[i].type === "cluster" ? "CLUSTER" : "SPLIT";
     ctx.fillText(name, sx + 50, sy + 18);
     ctx.font = "14px Bungee, sans-serif";
     ctx.fillStyle = "#ffcc00";
@@ -2055,7 +2349,7 @@ function drawHUD() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
-  ctx.fillText(muted ? "🔇" : "🔊", W - 35, H - 30);
+  ctx.fillText(sfxMode === "mute" ? "\uD83D\uDD07" : sfxMode === "voice" ? "\uD83C\uDF99\uFE0F" : "\uD83D\uDD0A", W - 35, H - 30);
 }
 
 // ====== GAME LOOP ======
