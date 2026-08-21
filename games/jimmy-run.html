@@ -45,7 +45,7 @@
   <h1>JIMMY RUN</h1>
   <p>Jimmy's sprinting the studio corridors and the <b>DEAD AIR</b> is right behind him.<br>
      Swipe ◀ ▶ to change lane · swipe ▲ to jump · swipe ▼ to slide.<br>
-     🛋 sofas — jump · 🚨 low ON AIR rigs — slide under · 🗄 racks — switch lane<br>
+     ⚡ cable ramps — jump · 🚨 low ON AIR rigs — slide under · 🗄 racks — switch lane<br>
      7 perks: 🚀 rocket · 🛡 shield · 🧲 magnet · ☕ double score<br>
      🌟 golden pops · ⏱ slow-mo · 💪 MEGA JIMMY smashes everything<br>
      🎧 grab the tag pickup past Merch Room and Joe takes over the run — tag back anytime.<br>
@@ -99,7 +99,17 @@ function project(laneX, z, elevY) {
 // ── TUNING ───────────────────────────────────────────────────────────────────
 const SPEED0     = 0.052;    // z-units per tick at start
 const SPEED_MAX  = 0.115;
-const SPEED_RAMP = 0.0000045;// per metre
+const SPEED_RAMP = 0.0000065;// per metre (was 0.0000045 — top speed now lands ~9.7km not 14km)
+// WAVE SPACING IS MEASURED IN SECONDS, NOT z (Osimo 2026-08-21: "drastically increase
+// difficulty, objects are too far apart"). The old floor was a fixed 2.6 z, which is not a
+// constant reaction budget: z is distance, so the same gap buys less and less time as speed
+// ramps — measured 1.48s between waves at the start but only 0.42s at top speed. In seconds
+// the invariant is real at every speed, which is what let the early game tighten hard
+// (1.48s -> 0.80s) without the late game tipping into unfair.
+const GAP_START_S  = 0.80;   // seconds between waves at dist 0
+const GAP_MIN_S    = 0.38;   // hard floor at ANY speed — never spawn tighter than this
+const GAP_JITTER_S = 0.16;   // so the cadence doesn't become metronomic
+const GAP_RAMP_M   = 3400;   // metres to reach GAP_MIN_S (was 6800)
 const LANE_LERP  = 0.24;
 const JUMP_TICKS = 40;       // total airtime
 const JUMP_H     = 78;       // apex elevation (world px at player scale)
@@ -604,24 +614,42 @@ fetch('/api/scores?game=' + SLUG).then(r => r.json())
 // kinds: sofa (jump) · mic (slide) · rack (lane-blocker) · chair (crosses lanes)
 //        troll (lane-blocker, mowable) · pop (lollipop) · rocket/shield/magnet
 let nextSpawnZ = 6;    // ABSOLUTE z of the next wave; entities store z RELATIVE to player
+// FAIRNESS STATE for the tightened spacing. A jump locks you out of sliding for JUMP_TICKS
+// and a slide locks you out of jumping for SLIDE_TICKS, but doLane() has no such lock —
+// changing lane always works, mid-air included. So the invariant that keeps this game fair
+// as waves get closer is: a wave that leaves NO free lane must never land while the player
+// could still be locked in a reflex from the wave before it. Only one pattern has no free
+// lane (the ON AIR rig spanning all three), so only that one needs gating.
+const REFLEX_LOCK_S = JUMP_TICKS / 60;   // longest lockout: full jump airtime
+let lastGapS = 99;          // seconds between the previous wave and this one
+let prevWaveReflex = false; // did the previous wave contain a jump/slide requirement?
 function spawnWave() {
   // difficulty ramps across the WHOLE building now (used to saturate by Server Room —
   // Osimo: "more intricate obstacles as levels progress" needed room to keep climbing
   // through the Roof/Above floors too)
-  const d = Math.min(1, dist / 6800);
+  const d = Math.min(1, dist / GAP_RAMP_M);
   const z = nextSpawnZ - zPos;   // convert to relative-ahead at spawn time
   const r = Math.random();
   const lanes = [-1, 0, 1];
   const t2 = floorIdx >= 2, t3 = floorIdx >= 4, t4 = floorIdx >= 6;   // Merch/Server/Roof+
+  // tight = this wave lands while a reflex from the previous one may still be running
+  const tight = lastGapS < REFLEX_LOCK_S && prevWaveReflex;
+  let waveReflex = false;   // set by any pattern that demands a jump or a slide
   if (r < 0.24) {
     // sofa row: 1-2 lanes blocked low — jumpable in-lane
-    const block = d > 0.5 && Math.random() < 0.4 ? 2 : 1;
+    const block = d > 0.25 && Math.random() < 0.5 ? 2 : 1;
     const picked = lanes.sort(() => Math.random() - 0.5).slice(0, block);
     picked.forEach(L => ents.push({ z, lane: L, kind: 'sofa' }));
+    waveReflex = true;
   } else if (r < 0.46) {
-    // boom mic: overhead across 1-3 lanes — slide under
-    const span = Math.random() < 0.5 ? [-1, 0, 1] : [lanes[Math.floor(Math.random() * 3)]];
+    // boom mic: overhead across 1-3 lanes — slide under. The all-lane version is the ONLY
+    // pattern with no free lane, so it is barred when `tight`: landing it on a player who
+    // is still airborne from the previous wave is unduckable and unsteerable, i.e. an
+    // unavoidable hit rather than a hard one. Falls back to a single lane, which is fair.
+    const span = (!tight && Math.random() < 0.5)
+      ? [-1, 0, 1] : [lanes[Math.floor(Math.random() * 3)]];
     span.forEach(L => ents.push({ z, lane: L, kind: 'mic' }));
+    waveReflex = true;
   } else if (r < 0.60) {
     // rack wall: block 2 lanes, ALWAYS leave one open (fairness by construction).
     // Server Room+: the gap DRIFTS as it approaches — same fairness, read continuously.
@@ -647,7 +675,8 @@ function spawnWave() {
     const L = lanes[Math.floor(Math.random() * 3)];
     ents.push({ z, lane: L, kind: 'sofa' });
     ents.push({ z: z + 0.85, lane: L, kind: 'mic' });
-  } else if (t4 && r < 0.94) {
+    waveReflex = true;
+  } else if (t4 && !tight && r < 0.94) {
     // THE GAUNTLET (The Roof+): rack telegraphs the one open lane, an all-lane rig
     // means the slide is safe wherever you are, then a sofa waits in that SAME open
     // lane — a 3-beat read → react → commit chain. Still fair: the open path is
@@ -656,6 +685,7 @@ function spawnWave() {
     lanes.filter(L => L !== open).forEach(L => ents.push({ z, lane: L, kind: 'rack' }));
     lanes.forEach(L => ents.push({ z: z + 0.95, lane: L, kind: 'mic' }));
     ents.push({ z: z + 1.9, lane: open, kind: 'sofa' });
+    waveReflex = true;
   } else {
     // breather: lollipop arc down a lane
     const L = lanes[Math.floor(Math.random() * 3)];
@@ -681,8 +711,13 @@ function spawnWave() {
                 kind: activeRunner === 'jimmy' ? 'tagjoe' : 'tagjimmy' });
     nextTagDist = dist + 900 + Math.random() * 500;
   }
-  // spacing shrinks with difficulty but NEVER below reaction distance (absolute marker)
-  nextSpawnZ = zPos + z + Math.max(2.6, 4.6 - d * 1.7) + Math.random() * 1.4;
+  // Spacing in SECONDS -> z at the CURRENT speed (see GAP_* in TUNING). Converting at
+  // spawn time is the whole point: a wave queued while the world is fast is placed further
+  // away in z so it still arrives GAP seconds later, which a fixed z gap could never do.
+  const gapS = Math.max(GAP_MIN_S, GAP_START_S - d * (GAP_START_S - GAP_MIN_S))
+             + Math.random() * GAP_JITTER_S;
+  nextSpawnZ = zPos + z + gapS * speed * 60;
+  lastGapS = gapS; prevWaveReflex = waveReflex;
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
@@ -697,6 +732,7 @@ function initGame() {
   pbAnnounced = false; topAnnounced = false; callout = null;
   ents = []; parts = []; floats = [];
   nextSpawnZ = 6; stumbleFlash = 0;
+  lastGapS = 99; prevWaveReflex = false;   // don't carry a run's spacing state into the next
   nextIdleMs = Date.now() + 15000 + Math.random() * 12000;
   for (let i = 0; i < 5; i++) spawnWave();
 }
@@ -1316,18 +1352,47 @@ function drawEnt(e) {
       ctx.fillRect(-0.8 * u, -5 * u, 1.6 * u, 6 * u);
     }
   } else if (e.kind === 'sofa') {
-    // spiked wooden beam (Jimmy Dash art) — a LOW jump-over bar, reads instantly
-    if (ART.beam) {
-      const dw = 56 * u, dh = dw * (ART.beam.height / ART.beam.width);
-      ctx.drawImage(ART.beam, -dw / 2, -dh + 2 * u, dw, dh);
-    } else {
-      ctx.fillStyle = '#8a4a3a';
-      ctx.fillRect(-24 * u, -16 * u, 48 * u, 16 * u);
-      ctx.fillStyle = '#a95a46';
-      ctx.fillRect(-24 * u, -20 * u, 48 * u, 6 * u);
-      ctx.fillStyle = '#6a3a2e';
-      ctx.fillRect(-26 * u, -18 * u, 5 * u, 18 * u);
-      ctx.fillRect(21 * u, -18 * u, 5 * u, 18 * u);
+    // CABLE RAMP — the hazard-striped cover that runs over a cable bundle on a studio
+    // floor. Replaces the spiked wooden beam that came in with the Jimmy Dash temple art
+    // (Osimo 2026-08-21: "replace those must jump obstacles with something else studio
+    // related"). Drawn, not a sprite: it has to sit with the drawn studio corridor Osimo
+    // reinstated, and hazard stripes read as "obstacle" at cassette size where a brown
+    // beam just read as floor. Low, wide and flat-topped so it says JUMP, not DODGE —
+    // and visually nothing like the tall stone rack that says SWITCH LANE.
+    {
+      const w2 = 26 * u, hh = 9 * u;      // half-width, height — deliberately low
+      // cables spilling out of each end, so it reads as covering something
+      ctx.strokeStyle = '#141414'; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.lineCap = 'round';
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sgn * w2, -1 * u);
+        ctx.quadraticCurveTo(sgn * (w2 + 7 * u), 1 * u, sgn * (w2 + 3 * u), 3 * u);
+        ctx.stroke();
+      }
+      // ramp body: dark shell with a chamfered top face
+      ctx.fillStyle = '#2b2b2e';
+      ctx.beginPath();
+      ctx.moveTo(-w2, 2 * u); ctx.lineTo(-w2 * 0.78, -hh);
+      ctx.lineTo(w2 * 0.78, -hh); ctx.lineTo(w2, 2 * u);
+      ctx.closePath(); ctx.fill();
+      // hazard chevrons across the top face
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(-w2 * 0.78, -hh); ctx.lineTo(w2 * 0.78, -hh);
+      ctx.lineTo(w2, 2 * u); ctx.lineTo(-w2, 2 * u); ctx.closePath();
+      ctx.clip();
+      const bandW = 7 * u;
+      for (let x = -w2 - hh; x < w2 + hh; x += bandW * 2) {
+        ctx.fillStyle = '#f2c53d';
+        ctx.beginPath();
+        ctx.moveTo(x, 2 * u); ctx.lineTo(x + bandW, 2 * u);
+        ctx.lineTo(x + bandW + hh, -hh); ctx.lineTo(x + hh, -hh);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      // lip highlight so the top edge pops against the rug
+      ctx.fillStyle = '#5a5a60';
+      ctx.fillRect(-w2 * 0.78, -hh, w2 * 1.56, Math.max(1, 1.4 * u));
     }
   } else if (e.kind === 'mic') {
     // LOW-HUNG "ON AIR" SIGN RIG (Osimo v3: old boom mic "doesn't look like anything
