@@ -9,7 +9,7 @@
 <title>ANGRY WORMS</title>
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
-<script src="../arcade-scores.js?v=21"></script>
+<script src="../arcade-scores.js?v=22"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; font-family: 'Bungee', sans-serif; }
@@ -558,172 +558,183 @@ function playTone(freq, dur, type, vol, sweepTo) {
 }
 function playChord(freqs, dur, type, vol) { freqs.forEach(f => playTone(f, dur, type, vol)); }
 
-// ─── JnJ COMMENTARY (🎙️ speaker-button mode) ────────────────────────────────
-// Same principles as flap-fight's locked sound system (FLAP_FIGHT_BIBLE.md):
-// a strictly LINEAR single-tap speaker cycle, achievement-priority ducking so a
-// record callout is never talked over, and once-per-event gating so a repeated
-// game event cannot repeat the same line into the ground.
-// Lines are guard-scored JnJ canon: Jimmy short + specific (his logged drift is
-// long paragraphs), Joe flat and landing late, aimed at the PLAYER the way
-// flap-fight established.
+// ─── JnJ COMMENTARY — EXCHANGES, not narration ──────────────────────────────
+// Osimo 2026-08-21 (v2): "Joe talks over Jimmy a lot, instead of narrating every
+// movement like flap fight, let Joe and Jimmy talk to each other about success and
+// failures make it funny, way more stuff that doesn't sound repetitive."
+//
+// v1 was flap-fight's shape: one bark per event, fired immediately. Two things were
+// wrong with it here. Several events resolve in the same instant (a kill IS also a
+// collapse IS also a glass shatter), so two lines started together and the hosts talked
+// over each other. And a lone bark is narration — the show is a double act, so the unit
+// is an EXCHANGE: one host reacts, the other answers.
+//
+// Every entry below is a two-line exchange. A single speech QUEUE plays them strictly one
+// at a time, chained off each clip's real decoded duration, so overlap is impossible by
+// construction rather than by tuning delays. Joe aims at JIMMY, not at the player — that
+// is his canon (SOUL.md: target Jimmy, not the news).
 const VO_LINES = [
-  // Jimmy — launch
-  ["JIMMY", "Sending him."],
-  ["JIMMY", "This is the one."],
-  ["JIMMY", "Trajectory feels right. Feels. Not is."],
-  ["JIMMY", "He volunteered. I want that on record."],
-  ["JIMMY", "Perfect angle. Perfect. Roughly perfect."],
-  // Joe — launch
-  ["JOE", "Off he goes."],
-  ["JOE", "Airborne. Technically."],
-  ["JOE", "That's a choice."],
-  ["JOE", "I've seen worse. Not many."],
-  // Jimmy — kill
-  ["JIMMY", "Direct hit!"],
-  ["JIMMY", "Got him. Straight through."],
-  ["JIMMY", "That is exactly what I planned. That specific thing."],
-  ["JIMMY", "Oh that's clean. That's genuinely clean."],
-  ["JIMMY", "Right in the middle. I'm taking full credit."],
-  // Joe — kill
-  ["JOE", "Effective."],
-  ["JOE", "That worked. I'm as surprised as you are."],
-  ["JOE", "One down. Adequate."],
-  ["JOE", "Fine. That was a good shot."],
-  ["JOE", "I had a concern about that structure. Apparently justified."],
-  // Jimmy — miss
-  ["JIMMY", "Okay that was a warm-up."],
-  ["JIMMY", "Wind. That was wind."],
-  ["JIMMY", "I misjudged it. Slightly. Considerably."],
-  ["JIMMY", "Nobody saw that. Joe saw that."],
-  ["JIMMY", "That's data. That's useful data."],
-  // Joe — miss
-  ["JOE", "Not ideal."],
-  ["JOE", "You missed the entire hill."],
-  ["JOE", "Interesting."],
-  ["JOE", "That's the ground. You've hit the ground."],
-  ["JOE", "The worm is fine. The worm is completely fine."],
-  // water
-  ["JIMMY", "He can swim. Probably. We have never checked."],
-  ["JOE", "He's swimming. That wasn't the plan."],
-  ["JOE", "Into the water. Right. Continuing."],
-  // survived a hit
-  ["JIMMY", "He's still up. How is he still up?"],
-  ["JOE", "Wounded, not gone. There's a difference."],
-  ["JOE", "You've annoyed him. That's all you've done."],
-  // barrel chain
-  ["JIMMY", "Chain! Chain, chain, chain!"],
-  ["JIMMY", "That's the whole row gone. The whole row."],
-  ["JOE", "The barrels did that. Not you."],
-  ["JOE", "Efficient. Barely yours, but efficient."],
-  // multi-kill
-  ["JIMMY", "Two in one. That's a two for one."],
-  ["JIMMY", "Three. That's three. I need a minute."],
-  ["JOE", "Multiple. Noted."],
-  ["JOE", "That's more than one. I counted."],
-  // level clear
-  ["JIMMY", "Level clear. That's how it's done."],
-  ["JIMMY", "Cleared it. On the shots I had left, which was one."],
-  ["JOE", "Cleared. Eventually."],
-  ["JOE", "You got there. The route was unusual."],
-  ["JOE", "Level complete. I'll allow it."],
-  // last worm
-  ["JIMMY", "Last one. No pressure. Some pressure."],
-  ["JOE", "One left. Make it count, or don't."],
-  // out of ammo / fail
-  ["JIMMY", "Out. We're out. That's on me."],
-  ["JOE", "You've run out of worms. That's a sentence I've now said."],
-  ["JOE", "No ammunition. No worms. No plan."],
-  // game over
-  ["JIMMY", "That's the run. Good run."],
-  ["JIMMY", "I peaked in the middle there."],
-  ["JOE", "That's it. That's the game."],
-  ["JOE", "You did well. Relative to expectations."],
-  // personal best / top
-  ["JIMMY", "New best. That's a record."],
-  ["JIMMY", "Personal best. I'd like it noted."],
-  ["JOE", "That's your best. Genuinely."],
-  ["JOE", "A record. I'm noting it once."],
-  ["JIMMY", "Top of the board."],
-  ["JOE", "Number one. Currently."],
+  // 0-4 BIG — multi-kill
+  [["JIMMY", "Two at once. Did you see that?"], ["JOE", "I saw it. I'm processing it."]],
+  [["JIMMY", "That's a double. That's a genuine double."], ["JOE", "It is. Don't do a speech."]],
+  [["JIMMY", "Both of them. Same shot."], ["JOE", "Beginner's luck, statistically."]],
+  [["JOE", "That was actually good."], ["JIMMY", "Say it again."]],
+  [["JIMMY", "I called that."], ["JOE", "You did not call that."]],
+  // 5-10 KILL
+  [["JIMMY", "Got him."], ["JOE", "Adequate."]],
+  [["JIMMY", "Straight through the middle."], ["JOE", "The middle was quite large."]],
+  [["JOE", "One down."], ["JIMMY", "One down and looking stylish."]],
+  [["JIMMY", "That's how it's done."], ["JOE", "That's how it's occasionally done."]],
+  [["JOE", "Clean."], ["JIMMY", "Thank you. I'll take clean."]],
+  [["JIMMY", "Did you see the angle on that?"], ["JOE", "I saw the result. The angle I'm less sure about."]],
+  // 11-16 MISS
+  [["JIMMY", "Wind."], ["JOE", "There is no wind."]],
+  [["JIMMY", "I meant to do that."], ["JOE", "Nobody has ever meant to do that."]],
+  [["JOE", "You missed."], ["JIMMY", "I'm aware."]],
+  [["JIMMY", "That was a ranging shot."], ["JOE", "That was a wasted worm."]],
+  [["JOE", "Not ideal."], ["JIMMY", "It's fine. It's fine."]],
+  [["JIMMY", "Okay. Adjusting."], ["JOE", "Adjusting from what, exactly?"]],
+  // 17-19 WATER
+  [["JOE", "He's in the water."], ["JIMMY", "He's swimming. He's fine."]],
+  [["JIMMY", "Can worms swim?"], ["JOE", "We're finding out together."]],
+  [["JOE", "That's the sea. You've hit the sea."], ["JIMMY", "Big target though."]],
+  // 20-22 SURVIVED
+  [["JIMMY", "How is he still up?"], ["JOE", "Because you missed the important part."]],
+  [["JOE", "You've annoyed him."], ["JIMMY", "Annoyed is a start."]],
+  [["JIMMY", "He's wobbling."], ["JOE", "He's standing. Wobbling isn't a state."]],
+  // 23-25 TNT CHAIN
+  [["JIMMY", "TNT. That's TNT."], ["JOE", "Yes. I can see the TNT."]],
+  [["JIMMY", "The whole row went."], ["JOE", "The barrel did that. You were nearby."]],
+  [["JOE", "Chain reaction."], ["JIMMY", "That's the good stuff."]],
+  // 26-28 GLASS
+  [["JIMMY", "The glass went everywhere."], ["JOE", "That is what glass does."]],
+  [["JOE", "All of it shattered."], ["JIMMY", "I love this material."]],
+  [["JIMMY", "One hit, whole wall."], ["JOE", "Structurally, that was always going to happen."]],
+  // 29-31 CLUSTER
+  [["JIMMY", "Cluster. Watch this."], ["JOE", "I'm watching. Bracing, but watching."]],
+  [["JOE", "That went off in four places."], ["JIMMY", "Five. It was five."]],
+  [["JIMMY", "Bomblets everywhere."], ["JOE", "A word I hoped never to hear you enjoy."]],
+  // 32-34 COLLAPSE
+  [["JIMMY", "The whole tower came down."], ["JOE", "Gravity came down. You started it."]],
+  [["JOE", "It's collapsing."], ["JIMMY", "That's the plan working."]],
+  [["JIMMY", "Timber!"], ["JOE", "That's for trees. But go on."]],
+  // 35-38 LEVEL CLEAR
+  [["JIMMY", "Level clear."], ["JOE", "Eventually."]],
+  [["JOE", "Cleared. Took a while."], ["JIMMY", "It took the right amount of time."]],
+  [["JIMMY", "Next one. Come on."], ["JOE", "I need a moment."]],
+  [["JOE", "You got there."], ["JIMMY", "I got there with style."]],
+  // 39-40 LAST WORM
+  [["JOE", "One worm left."], ["JIMMY", "That's all I need."]],
+  [["JIMMY", "Last one. No pressure."], ["JOE", "Considerable pressure."]],
+  // 41-43 OUT OF AMMO
+  [["JIMMY", "We're out."], ["JOE", "We are extremely out."]],
+  [["JOE", "No worms left."], ["JIMMY", "That went quickly."]],
+  [["JIMMY", "That's on me."], ["JOE", "It is, yes."]],
+  // 44-45 GAME OVER
+  [["JOE", "That's the run."], ["JIMMY", "Good run though."]],
+  [["JIMMY", "I peaked in the middle."], ["JOE", "You peaked in level two."]],
+  // 46-47 PERSONAL BEST
+  [["JIMMY", "New best."], ["JOE", "Genuinely well done."]],
+  [["JOE", "That's a record."], ["JIMMY", "I'd like that noted."]],
 ];
 
-const JIMMY_GAIN = 1.15, JOE_GAIN = 0.95;
+const VO_EX = {
+  multi:    VO_LINES.slice(0, 5),   kill:     VO_LINES.slice(5, 11),
+  miss:     VO_LINES.slice(11, 17), water:    VO_LINES.slice(17, 20),
+  survived: VO_LINES.slice(20, 23), chain:    VO_LINES.slice(23, 26),
+  glass:    VO_LINES.slice(26, 29), cluster:  VO_LINES.slice(29, 32),
+  collapse: VO_LINES.slice(32, 35), clear:    VO_LINES.slice(35, 39),
+  last:     VO_LINES.slice(39, 41), outOfAmmo:VO_LINES.slice(41, 44),
+  gameOver: VO_LINES.slice(44, 46), best:     VO_LINES.slice(46, 48),
+};
+
+const JIMMY_GAIN = 1.15, JOE_GAIN = 1.0;
 function djb2vo(s) {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
-const VO = { b64: null, loading: false, buffers: {}, rot: {}, priorityUntil: 0, jimmySrc: null };
+const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: false, src: null };
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch("angry-worms-pack.json?v=1").then(r => r.json())
+  fetch("angry-worms-pack.json?v=2").then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
-function voicePlay(who, text, gain, priority) {
-  if (sfxMode !== "voice" || !audioCtx || !VO.b64) return;
-  // ACHIEVEMENT PRIORITY (flap-fight hard rule 5): while a record/clear line is
-  // speaking, ordinary barks are DROPPED rather than talking over it. Priority
-  // lines themselves ignore the window.
-  if (!priority && Date.now() < VO.priorityUntil) return;
+function voBuffer(who, text, cb) {
   const key = djb2vo(who + "|" + text);
-  const start = (buf) => {
+  if (VO.buffers[key]) { cb(VO.buffers[key]); return; }
+  const b64 = VO.b64 && VO.b64[key];
+  if (!b64) { cb(null); return; }
+  try {
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; cb(buf); }, () => cb(null));
+  } catch (e) { cb(null); }
+}
+// ONE voice at a time. The queue is drained off each clip's real decoded duration, so a
+// second line can never start before the first has finished — this is what stopped Joe
+// talking over Jimmy, rather than guessing at fixed delays.
+function drainVo() {
+  if (!VO.queue.length) { VO.busy = false; return; }
+  VO.busy = true;
+  const [who, text] = VO.queue.shift();
+  voBuffer(who, text, buf => {
+    if (!buf) { drainVo(); return; }
     try {
       const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
-      src.buffer = buf; g.gain.value = gain;
+      src.buffer = buf; g.gain.value = who === "JIMMY" ? JIMMY_GAIN : JOE_GAIN;
       src.connect(g); g.connect(audioCtx.destination);
-      if (who === "JIMMY") { if (VO.jimmySrc) { try { VO.jimmySrc.stop(); } catch (e) {} } VO.jimmySrc = src; }
-      if (priority) VO.priorityUntil = Date.now() + buf.duration * 1000 + 150;
+      VO.src = src;
       src.start();
-    } catch (e) {}
-  };
-  const cached = VO.buffers[key];
-  if (cached) { start(cached); return; }
-  const b64 = VO.b64[key];
-  if (!b64) return;
-  const bin = atob(b64), bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  audioCtx.decodeAudioData(bytes.buffer, buf => { VO.buffers[key] = buf; start(buf); }, () => {});
+      // a beat between speakers — an exchange with no gap sounds like one person
+      setTimeout(drainVo, buf.duration * 1000 + 180);
+    } catch (e) { drainVo(); }
+  });
 }
-// Rotate within a bank so the same line never fires twice running.
-function say(bank, priority) {
-  if (sfxMode !== "voice" || !bank || !bank.length) return;
-  const k = bank[0][1];
+// `key` names the bank so the SAME exchange never fires twice running.
+function say(key, priority) {
+  if (sfxMode !== "voice" || !audioCtx) return;
+  const bank = VO_EX[key];
+  if (!bank || !bank.length) return;
+  // An exchange in progress is never interrupted by an ordinary event; only a priority
+  // moment (level clear, personal best, game over) clears the floor.
+  if (VO.busy && !priority) return;
+  if (priority && VO.src) { try { VO.src.stop(); } catch (e) {} }
   let i = Math.floor(Math.random() * bank.length);
-  if (bank.length > 1 && i === VO.rot[k]) i = (i + 1) % bank.length;
-  VO.rot[k] = i;
-  const [who, text] = bank[i];
-  voicePlay(who, text, who === "JIMMY" ? JIMMY_GAIN : JOE_GAIN, !!priority);
+  if (bank.length > 1 && i === VO.last[key]) i = (i + 1) % bank.length;
+  VO.last[key] = i;
+  VO.queue = bank[i].slice();
+  if (!VO.busy || priority) { VO.busy = false; drainVo(); }
 }
-const pick = (a, b) => VO_LINES.slice(a, b);
-const VOB = {
-  launch:   pick(0, 9),   kill:     pick(9, 19),  miss:   pick(19, 29),
-  water:    pick(29, 32), survived: pick(32, 35), chain:  pick(35, 39),
-  multi:    pick(39, 43), clear:    pick(43, 48),  last:  pick(48, 50),
-  outOfAmmo:pick(50, 53), gameOver: pick(53, 57),  best:  pick(57, 61),
-  top:      pick(61, 63),
-};
 
 // Per-shot commentary state. A single fling can kill several worms across a
 // chain reaction, so the line is decided ONCE the dust settles rather than per
 // death — otherwise a 3-kill chain fires three overlapping "one down" barks.
-let shotKills = 0, shotSpoke = false, killLineTimer = null;
+let shotKills = 0, shotSpoke = false, shotGlass = 0, shotCollapse = 0, killLineTimer = null;
 function queueKillLine() {
   if (killLineTimer) clearTimeout(killLineTimer);
   killLineTimer = setTimeout(() => {
     killLineTimer = null;
     if (shotSpoke) return;
     shotSpoke = true;
-    say(shotKills >= 2 ? VOB.multi : VOB.kill, shotKills >= 2);
+    // one line per shot, choosing the most INTERESTING thing that happened — a kill that
+    // was also a glass wall and a collapse should not queue three exchanges
+    if (shotKills >= 2) say("multi", true);
+    else if (shotKills === 1) say("kill");
+    else if (shotGlass >= 3) say("glass");
+    else if (shotCollapse >= 3) say("collapse");
   }, 700);
 }
 // Called when a shot has fully resolved with nothing killed.
 function shotResolved() {
   if (shotSpoke || killLineTimer || shotKills > 0) return;
   shotSpoke = true;
+  if (shotGlass >= 3) { say("glass"); return; }
+  if (shotCollapse >= 3) { say("collapse"); return; }
   const hurt = worms.some(w => w.team === "enemy" && w.alive && w.hp < w.maxHp);
-  say(hurt ? VOB.survived : VOB.miss);
+  say(hurt ? "survived" : "miss");
 }
 const sfx = {
   launch:  () => { playTone(180, 0.25, "sawtooth", 0.12, 900); },                              // slingshot whoosh
@@ -754,7 +765,7 @@ function loadNextWorm() {
     }
   }
   const ammoLeft = inventory.reduce((t, it) => t + it.count, 0);
-  if (ammoLeft === 1) setTimeout(() => say(VOB.last), 500);
+  if (ammoLeft === 1) setTimeout(() => say("last"), 500);
   if (inventory[selectedType].count > 0) {
     loadedWorm = {
       x: SLING_X,
@@ -793,8 +804,7 @@ function fireWorm() {
   loadedWorm = null;
   sfx.launch();
   setTimeout(() => sfx.wheee(), 120);
-  shotKills = 0; shotSpoke = false;   // per-shot commentary bookkeeping
-  say(VOB.launch);
+  shotKills = 0; shotSpoke = false; shotGlass = 0; shotCollapse = 0;
 }
 
 // ====== TROOPER FIRE (deployed worms shoot from where they landed) ======
@@ -857,7 +867,7 @@ function updatePhysics(dt) {
       }
       p.dead = true;
       sfx.splash();
-      if (!shotSpoke) { shotSpoke = true; say(VOB.water); }
+      if (!shotSpoke) { shotSpoke = true; say("water"); }
     }
     // Terrain collision (armed only after 10 frames — a pulled-back worm sits inside
     // the hillside at launch and used to explode at your feet, Osimo 2026-07-02)
@@ -877,7 +887,7 @@ function updatePhysics(dt) {
       } else {
       // Hit ground
       explode(p.x, groundY, p.type === "trooperShot" ? 38 : 50, p.team);
-      if (p.type === "cluster") clusterBurst(p.x, groundY, p.team);
+      if (p.type === "cluster") { clusterBurst(p.x, groundY, p.team); if (!shotSpoke) { shotSpoke = true; say("cluster"); } }
       p.dead = true;
       }
     }
@@ -955,13 +965,62 @@ function updatePhysics(dt) {
     } else if (!b.falling && !blockSupported(b)) {
       b.falling = true;           // tower lost its base — down it comes
       b.settled = false;
+      shotCollapse++;
+    } else if (!b.falling && b.hp > 0) {
+      // TIPPING (Osimo 2026-08-21: "bricks could do with some more tipping over in some
+      // case"). A block can be technically supported and still be unbalanced — resting on
+      // a stump with most of its mass hanging off one side. Real blocks topple; ours sat
+      // there. Find the span that is actually holding it up and, if the centre of mass is
+      // outside that span, apply torque toward the overhang.
+      const cx = b.x + b.w / 2;
+      let lo = Infinity, hi = -Infinity;
+      const gy = terrainHeightAt(cx);
+      if (b.y + b.h >= gy - SUPPORT_GAP) { lo = b.x; hi = b.x + b.w; }
+      for (const o of blocks) {
+        if (o === b || o.hp <= 0 || o.falling) continue;
+        if (Math.abs((b.y + b.h) - o.y) < SUPPORT_GAP &&
+            b.x + b.w > o.x && b.x < o.x + o.w) {
+          lo = Math.min(lo, Math.max(b.x, o.x));
+          hi = Math.max(hi, Math.min(b.x + b.w, o.x + o.w));
+        }
+      }
+      if (lo < hi) {
+        // A block is also unstable when it is BARELY held — resting on a stump far narrower
+        // than itself (Osimo 2026-08-22: "still some structures that should crumble when
+        // there's barely anything holding them"). Centre-of-mass alone misses this: a block
+        // perfectly centred on a 6px nub is balanced on paper and absurd on screen.
+        const held = (hi - lo) / b.w;
+        const margin = 2;
+        if (held < 0.34) {
+          // tip toward whichever side is hanging further out
+          const dir = (cx - (lo + hi) / 2) >= 0 ? 1 : -1;
+          b.av = (b.av || 0) + dir * 0.010 * (1 - held);
+          b.tipping = true;
+          if (Math.abs(b.rot || 0) > 0.30) {
+            b.falling = true; b.settled = false; shotCollapse++;
+            b.vx = (b.vx || 0) + (b.rot > 0 ? 1.1 : -1.1);
+          }
+        } else if (cx < lo - margin || cx > hi + margin) {
+          b.av = (b.av || 0) + (cx > hi ? 0.012 : -0.012);
+          b.tipping = true;
+          if (Math.abs(b.rot || 0) > 0.35) {   // past the point of no return — it goes
+            b.falling = true; b.settled = false; shotCollapse++;
+            b.vx = (b.vx || 0) + (b.rot > 0 ? 1.2 : -1.2);
+          }
+        } else if (b.tipping) {
+          b.av = (b.av || 0) * 0.85;           // rebalanced — settle back down
+          if (Math.abs(b.av) < 0.001) { b.av = 0; b.tipping = false; }
+        }
+      }
+      b.rot = (b.rot || 0) + (b.av || 0);
     }
     if (b.falling) {
       b.vy = (b.vy || 0) + GRAVITY;
       b.y += b.vy;
       b.x += (b.vx || 0);
       b.vx = (b.vx || 0) * 0.98;
-      b.rot += (b.vx || 0) * 0.05;
+      b.av = (b.av || 0) + (b.vx || 0) * 0.004;   // spin builds from the shove
+      b.rot += (b.av || 0) + (b.vx || 0) * 0.03;
       // crush worms under a falling block (AB signature kill)
       if (b.hp > 0 && b.vy > 3) {
         for (const w of worms) {
@@ -988,7 +1047,19 @@ function updatePhysics(dt) {
         b.y = landY - b.h;
         b.vy = 0;
         b.vx = (b.vx || 0) * 0.4;
-        if (Math.abs(b.vx) < 0.4) { b.vx = 0; b.settled = true; b.falling = b.hp <= 0; }
+        b.av = (b.av || 0) * 0.35;
+        if (Math.abs(b.vx) < 0.4) {
+          b.vx = 0; b.settled = true; b.falling = b.hp <= 0;
+          // Settle to a believable resting tilt. Snapping everything past ~50 degrees flat
+          // to exactly 90 made 44% of surviving blocks lie at an identical angle, which
+          // reads as uniform rather than chaotic — only a block genuinely past the tipping
+          // point goes over, and even then with a little variance so no two match.
+          const r = b.rot || 0;
+          b.rot = Math.abs(r) > 1.3
+            ? Math.sign(r) * (Math.PI / 2) * (0.86 + Math.random() * 0.14)
+            : r * 0.7;
+          b.av = 0; b.tipping = false;
+        }
       }
     }
   }
@@ -1229,6 +1300,7 @@ function explode(x, y, radius, team, skipTeam) {
                         g.y < src.y + src.h + 6 && g.y + g.h > src.y - 6;
           if (!touch) continue;
           shattered.add(g);
+          shotGlass++;
           g.hp = 0;
           g.settled = true;               // glass leaves no falling husk
           score += 10;
@@ -1249,7 +1321,8 @@ function explode(x, y, radius, team, skipTeam) {
   // Chain reactions fire a beat later so they READ as a chain
   for (let ci = 0; ci < chain.length; ci++) {
     const cpos = chain[ci];
-    setTimeout(() => { if (gameState === "playing") { sfx.barrel(); explode(cpos.x, cpos.y, 75, team); } }, 150 + ci * 130);
+    setTimeout(() => { if (gameState === "playing") { sfx.barrel(); explode(cpos.x, cpos.y, 75, team);
+      if (ci === 0 && !shotSpoke) { shotSpoke = true; say("chain"); } } }, 150 + ci * 130);
   }
 }
 
@@ -1365,10 +1438,10 @@ function showEndScreen(won) {
   document.getElementById("endScore").textContent = "SCORE " + score;
   if (won) {
     sfx.fanfare();
-    say(VOB.clear, true);
+    say("clear", true);
     try {
       const best = parseInt(localStorage.getItem("aw_best") || "0", 10);
-      if (score > best) { localStorage.setItem("aw_best", String(score)); setTimeout(() => say(VOB.best, true), 1600); }
+      if (score > best) { localStorage.setItem("aw_best", String(score)); setTimeout(() => say("best", true), 2600); }
     } catch (e) {}
     const ammoLeft = inventory.reduce((n, it) => n + it.count, 0);
     const starCount = ammoLeft >= 3 ? 3 : ammoLeft >= 1 ? 2 : 1;
@@ -1387,7 +1460,7 @@ function showEndScreen(won) {
       }
     }, 2200);
   } else {
-    say(VOB.outOfAmmo, true);
+    say("outOfAmmo", true);
     // straight to the scoreboard on death — no INSERT COIN detour (Osimo 2026-07-03)
     sfx.lose();
     if (window.ArcadeScores) {

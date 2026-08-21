@@ -455,7 +455,13 @@ function show(opts) {
     ticker.style.fontSize = '13px';
     screen.appendChild(ticker);
 
-    var left = 3, timer = null, stopped = false;
+    // 15s, not 3 (Osimo 2026-08-22: "after I submit my score, play again should launch the
+    // game again"). A player who has just finished a run AND typed their name is the most
+    // engaged they will ever be, and a 3s countdown was yanking them to the arcade
+    // mid-decision — reading the board at all used up the window, so PLAY AGAIN often
+    // navigated away instead of restarting. The walk-away default is preserved, just at a
+    // length a human can actually read a leaderboard in.
+    var left = 15, timer = null, stopped = false;
     function stopTicker() {
       stopped = true;
       if (timer) { clearTimeout(timer); timer = null; }
@@ -474,8 +480,11 @@ function show(opts) {
       stopTicker(); window.location.href = returnUrl();
     });
     // Reading the board, or reaching for a button, means they are still here.
-    ['touchstart', 'pointerdown'].forEach(function (ev) {
+    // ANY sign of life cancels it outright — including a mouse move or a key, not just a
+    // touch on the panel itself.
+    ['touchstart', 'pointerdown', 'pointermove', 'wheel', 'keydown'].forEach(function (ev) {
       screen.addEventListener(ev, stopTicker, { passive: true });
+      document.addEventListener(ev, stopTicker, { passive: true, once: true });
     });
     list.addEventListener('scroll', stopTicker, { passive: true });
 
