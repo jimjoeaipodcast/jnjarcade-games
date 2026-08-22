@@ -7,41 +7,241 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>CRUSHTRIS</title>
+<!-- CT_SAGA_V3_20260822 — Fluid 9:16 stage (8x15), single-source layout(), candy art + baked wrapper, FX budget + daily determinism fix, canvas boosters -->
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
 <script src="../arcade-scores.js?v=22"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-action:none}
-#wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center}
-#hud{width:100%;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0}
-#hud span{font-family:'Bungee',monospace;font-size:12px;color:#ff69b4;text-shadow:0 0 8px #ff69b4;text-align:center}
-#next-wrap{display:flex;flex-direction:column;align-items:center;gap:2px}
-#next-wrap label{font-family:'Bungee',monospace;font-size:9px;color:#ff69b4;opacity:0.6}
-#next-canvas{border:1px solid rgba(255,105,180,0.4);border-radius:3px;background:#0a0012}
-#c{
-  display:block;image-rendering:pixelated;flex-shrink:0;
-  border:2px solid #ff69b4;
-  box-shadow:0 0 0 1px #7a1a4a, 0 0 18px #ff69b4, 0 0 6px #ff69b4 inset;
-}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#16092e;touch-action:none}
+/* #stage is a FLEX COLUMN. Height + padding + gap are owned by layout() in JS.
+   No box below duplicates any geometry number — single source of truth. */
+#stage{position:absolute;left:0;top:0;width:390px;transform-origin:top left;
+  display:flex;flex-direction:column;overflow:hidden;
+  background:linear-gradient(180deg,#16092e 0%,#1e0f38 100%)}
+#bg{position:absolute;left:0;top:0;pointer-events:none;z-index:0}
+canvas{display:block}
+#topbar{position:relative;z-index:1;flex:0 0 auto;display:flex;min-height:0}
+#logocard{position:relative;flex:0 0 auto;background:#241145;border:2px solid #6b3fb8;
+  border-radius:20px;overflow:hidden}
+#logo{position:absolute;left:0;top:0}
+#hudcol{flex:1 1 auto;display:flex;flex-direction:column;gap:7px;min-width:0;min-height:0}
+#mainrow{position:relative;z-index:1;flex:1 1 auto;display:flex;min-height:0}
+#boardpanel{position:relative;flex:0 0 auto;background:#1c0f36;border:2px solid #7a4fd0;
+  border-radius:18px;padding:4px}
+#c{border-radius:14px}
+#railpanel{flex:0 0 auto;background:#1d1040;border:2px solid #7a4fd0;border-radius:16px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+#nextpan{border-radius:12px}
+#dim{position:absolute;inset:0;border-radius:18px;background:rgba(0,0,0,0.30);display:none;
+  pointer-events:none;z-index:3}
+#bststrip{position:relative;z-index:1;flex:0 0 auto;background:#1d1040;border-radius:18px;
+  display:flex;align-items:center;justify-content:space-around}
+#pillrow{position:relative;z-index:1;flex:0 0 auto;display:flex;align-items:stretch;
+  justify-content:space-between}
+/* card internals are driven by --* vars written by layout() — no fixed px that
+   could desync from the JS-owned card height */
+#hudcol{--lblfs:11px;--valfs:22px;--scfs:26px;--barh:10px;--goalfs:12px;--rbtn:34px}
+/* row flex: label+value stack on the LEFT, the control (star / bar / button)
+   centres across the FULL card height on the right — a 34px button and an 11px
+   label cannot both fit in a stacked 36px card */
+.card{position:relative;flex:1 1 0;min-height:0;overflow:hidden;background:#241542;
+  border:2px solid #7a4fd0;border-radius:14px;padding:0 8px;color:#fff;
+  display:flex;flex-direction:row;align-items:center;gap:7px}
+.cleft{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center}
+#card-level .cleft{flex:0 0 auto}
+.card .lbl{font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+  font-size:var(--lblfs);line-height:calc(var(--lblfs) + 1px);letter-spacing:1px;
+  color:#b9a3e3;font-variant:small-caps;flex:0 0 auto}
+.card .val{font-family:'Bungee','Arial Black',sans-serif;font-size:var(--valfs);
+  line-height:var(--valfs);color:#fff}
+#score-val{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:800;
+  font-size:var(--scfs);line-height:var(--scfs);letter-spacing:0;white-space:nowrap;
+  overflow:hidden;text-overflow:clip}
+#score-star{flex:0 0 auto;width:18px;height:18px}
+#lvl-right{flex:1 1 auto;min-width:0}
+#lvl-bar{width:100%;height:var(--barh);background:#180d33;border-radius:999px;overflow:hidden}
+#lvl-fill{width:0%;height:100%;background:linear-gradient(90deg,#8b45e8,#a86bff);
+  border-radius:999px;transition:width .25s}
+#lvl-goal{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:var(--goalfs);
+  line-height:calc(var(--goalfs) + 1px);color:#fff;text-align:center;margin-top:1px}
+#moves-val{display:inline-block;flex:0 0 auto}
+#moves-val.low{animation:redpulse .7s ease-in-out infinite}
+#moves-val.flash{animation:redflash .35s ease-out 1}
+@keyframes redpulse{0%,100%{color:#fff}50%{color:#ff4444;text-shadow:0 0 10px #ff4444}}
+@keyframes redflash{0%{color:#ff4444;text-shadow:0 0 12px #ff4444;transform:scale(1.25)}100%{color:#fff;transform:scale(1)}}
+#restart-btn{flex:0 0 auto;width:var(--rbtn);height:var(--rbtn);border-radius:50%;
+  border:2px solid rgba(255,255,255,0.35);background:linear-gradient(180deg,#2f7bf5,#1b4fd6);
+  color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+/* drawn circular-arrow — an emoji/text ↻ renders in the platform's own metrics
+   and never centres identically across iOS/Android. SVG is deterministic. */
+#restart-btn svg{width:62%;height:62%;display:block;pointer-events:none}
+.booster{position:relative;flex:0 0 auto;width:56px;height:56px;border-radius:50%;cursor:pointer;
+  border:2px solid #7a4fd0;color:#fff;font-size:22px;text-align:center;
+  display:flex;align-items:center;justify-content:center}
+/* ⛔ CONTRACT: the .booster DIV stays the tap target and the class carrier.
+   updateBoosterUI toggles .cnt/.off/.locked/.aim BY CLASS, the GSAP bounce
+   animates the ELEMENT, boosterTap binds per-element, and pointerDown/pointerUp
+   gate on closest('.ui'). The canvas is ART ONLY: pointer-events:none so every
+   tap resolves to the .booster div exactly as it did with the emoji text node. */
+.booster canvas{width:100%;height:100%;display:block;border-radius:50%;pointer-events:none}
+.booster .cnt{position:absolute;bottom:-2px;right:-6px;min-width:18px;height:18px;border-radius:9px;
+  background:#1a0e30;border:1px solid rgba(255,255,255,.7);
+  color:#fff;font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+  font-weight:bold;font-size:10px;line-height:16px;padding:0 4px;text-align:center}
+.booster.off{filter:grayscale(1);opacity:.45}
+.booster.aim{box-shadow:0 0 0 3px #fff,0 0 18px #fff}
+.booster .lock{position:absolute;inset:0;border-radius:50%;background:rgba(10,0,18,0.6);
+  font-size:18px;display:none;align-items:center;justify-content:center}
+.booster .lock svg{width:46%;height:46%;display:block;pointer-events:none}
+.booster.locked .lock{display:flex}
+#b-hammer{background:radial-gradient(circle at 35% 30%,#c98ef7,#a44df0 60%,#5c2a8a)}
+#b-shuffle{background:radial-gradient(circle at 35% 30%,#8be89c,#3fca55 60%,#1d7a2e)}
+#b-wrap{background:radial-gradient(circle at 35% 30%,#f7ce8e,#f2a935 60%,#9a6414)}
+.pill{flex:0 0 48%;border-radius:999px;cursor:pointer;
+  border:2px solid rgba(255,255,255,0.2);color:#fff;text-align:center;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:14px;
+  letter-spacing:2px;text-transform:uppercase}
+#pill-pause{background:linear-gradient(180deg,#2f7bf5,#1b4fd6)}
+#pill-sound{background:linear-gradient(180deg,#8a4df0,#6a2fd0)}
+/* ⛔ PLATFORM CONSTRAINT, not taste: ❚❚ and 🔊 are rendered by iOS in Apple's
+   OWN glyph colours (the speaker comes out grey/blue) and can NEVER be forced
+   white by `color:`. Both pill glyphs are therefore CSS-drawn shapes. */
+.pill .ptxt{pointer-events:none}
+.ico-pause{display:flex;align-items:center;gap:4px;flex:0 0 auto;pointer-events:none}
+.ico-pause i{display:block;width:5px;height:18px;background:#fff;border-radius:2px}
+.ico-snd{position:relative;display:block;width:22px;height:18px;flex:0 0 auto;pointer-events:none}
+.ico-snd .cone{position:absolute;left:0;top:2px;width:10px;height:14px;background:#fff;
+  clip-path:polygon(0% 28%,38% 28%,100% 0%,100% 100%,38% 72%,0% 72%)}
+/* arc = a circle showing ONLY its right border: the visible sweep is the
+   -45°..+45° quadrant, already centred on the cone's horizontal axis */
+.ico-snd .w1,.ico-snd .w2{position:absolute;border-radius:50%;border:2px solid transparent;
+  border-right-color:#fff}
+.ico-snd .w1{left:7px;top:4px;width:10px;height:10px}
+.ico-snd .w2{left:6px;top:1px;width:16px;height:16px}
+/* the slash must cross the CONE, and a white bar over a white cone is invisible
+   — the dark halo is what makes the muted state readable at 18px */
+.ico-snd .slash{position:absolute;left:0;top:8px;width:22px;height:2.4px;background:#fff;
+  border-radius:2px;transform:rotate(-32deg);display:none;
+  box-shadow:0 0 0 1.6px rgba(20,8,44,0.9)}
+#pill-sound.muted .w1,#pill-sound.muted .w2{display:none}
+#pill-sound.muted .slash{display:block}
+#banner{position:absolute;top:300px;left:50%;transform:translate(-50%,-50%);
+  font-family:'Bungee','Arial Black',sans-serif;text-align:center;pointer-events:none;opacity:0;
+  transition:opacity .25s;z-index:6;white-space:nowrap;text-shadow:0 0 30px currentColor}
+.screen{position:absolute;inset:0;background:rgba(10,0,18,0.92);z-index:8;display:none;
+  flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.screen h2{font-family:'Bungee','Arial Black',sans-serif;color:#ff69b4;font-size:26px;
+  text-shadow:0 0 20px #ff69b4;margin-bottom:10px}
+.screen .msg{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#d8cdf0;
+  font-size:17px;margin-bottom:22px;padding:0 30px;line-height:1.4}
+.bigbtn{font-family:'Bungee','Arial Black',sans-serif;font-size:15px;color:#fff;
+  background:linear-gradient(180deg,#9a6fe0,#7a4fd0);border:2px solid rgba(255,255,255,0.25);
+  border-radius:14px;padding:12px 26px;margin:7px;cursor:pointer;min-width:190px}
+.bigbtn.blue{background:linear-gradient(180deg,#2f9df5,#0066ff)}
+.bigbtn.pink{background:linear-gradient(180deg,#ff69b4,#d0308a)}
+#stars-row{font-size:44px;height:60px;letter-spacing:8px;margin-bottom:6px}
+#stars-row span{opacity:0;display:inline-block;transform:scale(0.3);transition:all .4s}
+#stars-row span.on{opacity:1;transform:scale(1)}
+#hub{position:absolute;inset:0;background:linear-gradient(180deg,#16092e,#1e0f38);z-index:7;
+  display:none;flex-direction:column;align-items:center;padding-top:26px}
+#hub h1{font-family:'Bungee','Arial Black',sans-serif;color:#ff69b4;font-size:24px;
+  text-shadow:0 0 18px #ff69b4;margin-bottom:2px}
+#hub .sub{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#b8a8d8;font-size:13px;
+  letter-spacing:2px;margin-bottom:12px}
+#hub-top{display:flex;gap:12px;margin-bottom:12px}
+.bigtile{width:120px;height:64px;background:#241542;border:2px solid #7a4fd0;border-radius:14px;
+  color:#fff;text-align:center;cursor:pointer;font-family:'Bungee','Arial Black',sans-serif;
+  font-size:12px;padding-top:8px}
+.bigtile .em{font-size:20px;line-height:24px}
+.bigtile.locked{opacity:.4}
+#hub-grid{display:grid;grid-template-columns:repeat(5,64px);gap:12px;justify-content:center}
+.tile{width:64px;height:64px;background:#241542;border:2px solid #7a4fd0;border-radius:12px;
+  color:#fff;font-family:'Bungee','Arial Black',sans-serif;font-size:18px;text-align:center;
+  padding-top:10px;cursor:pointer;position:relative}
+.tile.locked{opacity:.38}
+.tile .pips{position:absolute;bottom:5px;left:0;right:0;font-size:9px;letter-spacing:1px;color:#ffd700}
+#hub-stars{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#ffd700;font-size:14px;
+  letter-spacing:1px;margin:12px 0 6px}
+#theme-row{display:flex;gap:8px}
+.theme-btn{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:12px;color:#fff;
+  background:#241542;border:2px solid #7a4fd0;border-radius:10px;padding:6px 10px;cursor:pointer;
+  letter-spacing:1px}
+.theme-btn.sel{background:#7a4fd0}
+.theme-btn.locked{opacity:.4}
+#toast{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);background:#241542;
+  border:2px solid #ffd700;border-radius:14px;color:#ffd700;padding:10px 18px;z-index:9;
+  font-family:'Bungee','Arial Black',sans-serif;font-size:12px;opacity:0;transition:opacity .3s;
+  pointer-events:none;white-space:nowrap}
+#confirm{z-index:11}
 #coin{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);z-index:10;cursor:pointer}
 #coin h1{font-family:'Bungee',monospace;font-size:30px;letter-spacing:4px;color:#ff69b4;text-shadow:0 0 24px #ff69b4;margin-bottom:8px}
 #coin .sub{font-family:'Bungee',monospace;font-size:13px;color:#cc44ff;opacity:0.8;margin-bottom:24px}
 #coin .ins{font-family:'Bungee',monospace;font-size:14px;color:#ff69b4;animation:blink 1s step-end infinite}
-#banner{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);font-family:'Bungee',monospace;text-align:center;pointer-events:none;opacity:0;transition:opacity 0.25s;z-index:5;white-space:nowrap;text-shadow:0 0 30px currentColor}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="hud">
-    <span id="score-el">SCORE<br>0</span>
-    <div id="next-wrap"><label>NEXT</label><canvas id="next-canvas" width="56" height="56"></canvas></div>
-    <span id="level-el">LVL<br>1</span>
-    <button id="mute" style="background:transparent;border:none;color:#ff69b4;font-size:18px;cursor:pointer;text-shadow:0 0 8px #ff69b4;opacity:0.8;padding:4px;flex-shrink:0">🔊</button>
+<div id="stage">
+  <canvas id="bg"></canvas>
+  <div id="topbar">
+    <div id="logocard"><canvas id="logo"></canvas></div>
+    <div id="hudcol">
+      <div class="card" id="card-score"><div class="cleft"><div class="lbl">Score</div><div class="val" id="score-val">0</div></div><canvas id="score-star"></canvas></div>
+      <div class="card" id="card-level"><div class="cleft"><div class="lbl" id="lvl-lbl">Level</div><div class="val" id="lvl-val">1</div></div><div id="lvl-right"><div id="lvl-bar"><div id="lvl-fill"></div></div><div id="lvl-goal">0 / 0</div></div></div>
+      <div class="card" id="card-moves"><div class="cleft"><div class="lbl" id="moves-lbl">Moves</div><div class="val" id="moves-val">∞</div></div><div id="restart-btn" class="ui"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7.4A7 7 0 1 1 12 5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M11.4 2.2 15.8 5 11.4 7.8Z" fill="#fff"/></svg></div></div>
+    </div>
   </div>
-  <canvas id="c"></canvas>
+  <div id="mainrow">
+    <div id="boardpanel">
+      <canvas id="c"></canvas>
+      <div id="dim"></div>
+    </div>
+    <div id="railpanel"><canvas id="nextpan"></canvas></div>
+  </div>
+  <div id="bststrip" class="ui">
+    <div class="booster ui" id="b-hammer"><canvas width="124" height="124"></canvas><span class="cnt">3</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
+    <div class="booster ui" id="b-shuffle"><canvas width="124" height="124"></canvas><span class="cnt">2</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
+    <div class="booster ui" id="b-wrap"><canvas width="124" height="124"></canvas><span class="cnt">2</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
+  </div>
+  <div id="pillrow">
+    <div class="pill ui" id="pill-pause"><span class="ico-pause"><i></i><i></i></span><span class="ptxt">Pause</span></div>
+    <div class="pill ui" id="pill-sound"><span class="ico-snd"><i class="cone"></i><i class="w1"></i><i class="w2"></i><i class="slash"></i></span><span class="ptxt">Sound</span></div>
+  </div>
   <div id="banner"></div>
+  <div id="hub">
+    <h1>CRUSHTRIS</h1>
+    <div class="sub">CANDY CRUSH × TETRIS — SAGA</div>
+    <div id="hub-top">
+      <div class="bigtile ui" id="tile-daily"><div class="em">🔥</div>DAILY</div>
+      <div class="bigtile ui" id="tile-endless"><div class="em">∞</div>ENDLESS</div>
+    </div>
+    <div id="hub-grid"></div>
+    <div id="hub-stars">★ 0 / 90</div>
+    <div id="theme-row"></div>
+  </div>
+  <div class="screen" id="endscreen">
+    <h2 id="end-title">LEVEL CLEAR</h2>
+    <div id="stars-row"><span>⭐</span><span>⭐</span><span>⭐</span></div>
+    <div class="msg" id="end-msg"></div>
+    <div class="bigbtn blue ui" id="end-next">NEXT LEVEL ▶</div>
+    <div class="bigbtn ui" id="end-map">🗺 MAP</div>
+  </div>
+  <div class="screen" id="pausescreen">
+    <h2>PAUSED</h2>
+    <div class="bigbtn blue ui" id="pause-resume">▶ RESUME</div>
+    <div class="bigbtn ui" id="pause-quit">🗺 QUIT TO MAP</div>
+  </div>
+  <div class="screen" id="confirm">
+    <h2 id="confirm-title">?</h2>
+    <div class="msg" id="confirm-msg"></div>
+    <div class="bigbtn pink ui" id="confirm-yes">YES</div>
+    <div class="bigbtn ui" id="confirm-no">NO</div>
+  </div>
+  <div id="toast"></div>
 </div>
 <div id="coin">
   <h1>CRUSHTRIS</h1>
@@ -50,23 +250,50 @@ html,body{width:100%;height:100dvh;overflow:hidden;background:#0a0012;touch-acti
 </div>
 <script>
 'use strict';
+window.__CRUSHTRIS_BUILD='CT_SAGA_V3_20260822';
 
-const COLS=10,ROWS=20;
-// Change 1: Updated COLORS — 7 colors, added brown
-const COLORS=['#FFD700','#FF8C00','#4CAF50','#8B4513','#1a5ae0','#9020c8','#e01228'];
-// Change 1: Updated CANDY array — 7 entries matching new COLORS
-const CANDY=[
-  {body:'#FFD700',light:'#FFE955',dark:'#806800'},  // yellow
-  {body:'#FF8C00',light:'#FFB344',dark:'#7a4300'},  // orange
-  {body:'#4CAF50',light:'#80e080',dark:'#1a4a1e'},  // green
-  {body:'#8B4513',light:'#c47832',dark:'#4a2008'},  // brown
-  {body:'#1a5ae0',light:'#5599ff',dark:'#081a80'},  // blue
-  {body:'#9020c8',light:'#cc66ff',dark:'#44007a'},  // purple
-  {body:'#e01228',light:'#ff5566',dark:'#7a000e'},  // red
-];
+// ── GEOMETRY HEADER — single source of truth ───────────────────────────────
+// DW is the LOCKED design width. DH is fluid between DH_MIN/DH_MAX so the stage
+// fills any 9:16..9:21 phone edge to edge with zero letterbox.
+// COLS/ROWS stay COMPILE-TIME constants: the logical grid must be byte-identical
+// on every device or the daily challenge is not the same puzzle for two players.
+// CELL/DH/SCALE/FXS are runtime; L is the layout object every box reads from.
+const DW=390, DH_MIN=640, DH_MAX=980, RES=2;
+const COLS=8, ROWS=15;
+let DH=844, CELL=33, SCALE=1, FXS=1;
+const L={};
+const ATTRACT=/[?&]attract=1/.test(location.search);
+
+// ── Themes: 5-color palette tables (art mandate — 5 colors exactly) ────────
+const THEMES={
+  classic:['#b44df5','#f04141','#ff9f2e','#3fca55','#2f9df5'],  // spec hexes, 5 that map
+  pastel:['#c9a0f5','#f5a3a3','#f7d59b','#a8e6b3','#a3cef5'],
+  neon:['#c026ff','#ff2d55','#ffd60a','#39ff14','#00c8ff'],
+  retro:['#9d2bd6','#d63333','#d6c72b','#33d65e','#2b7fd6']
+};
+const THEME_UNLOCK={classic:0,pastel:25,neon:50,retro:80};
+function shade(hex,amt){ // amt -1..1: negative darkens, positive lightens toward white
+  const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255,b=n&255;
+  if(amt>=0){r+= (255-r)*amt;g+=(255-g)*amt;b+=(255-b)*amt;}
+  else{r*=1+amt;g*=1+amt;b*=1+amt;}
+  return '#'+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+}
+let COLORS=THEMES.classic.slice();
+let CANDY=COLORS.map(c=>({body:c,light:shade(c,0.45),dark:shade(c,-0.5)}));
+function applyTheme(name){
+  if(!THEMES[name])name='classic';
+  COLORS=THEMES[name].slice();
+  CANDY=COLORS.map(c=>({body:c,light:shade(c,0.45),dark:shade(c,-0.5)}));
+  SAVE.theme=name;persist();
+  spriteCache.clear();
+  warmGlowSprites();   // the 5 candy colours changed — rebake their glow bitmaps
+  // booster icon art is repainted here (boot + every theme switch) and NOWHERE
+  // else — never in a frame. try//catch guards the TDZ if applyTheme ever moves
+  // above the `const boosterEls` declaration.
+  try{paintBoosterIcons();}catch(e){}
+}
 const N='NORMAL',SH='STRIPED_H',SV='STRIPED_V',WR='WRAPPED',CB='COLOUR_BOMB',FISH='FISH';
-// CC swap state
-let ccSel=null;  // {r,c} of currently selected candy for CC swap mode
+let ccSel=null;
 const PIECES=[
   [[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]]],
   [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
@@ -77,33 +304,360 @@ const PIECES=[
   [[[0,0,1],[1,1,1]],[[1,0],[1,0],[1,1]],[[1,1,1],[1,0,0]],[[1,1],[0,1],[0,1]]],
 ];
 
-const wrap=document.getElementById('wrap');
+// ── Persistence: crushtris_saga (meta only — no mid-level board saves) ─────
+let SAVE={unlocked:1,stars:Array(30).fill(0),boosters:{hammer:3,shuffle:2,wrap:2},
+  theme:'classic',daily:{date:'',cleared:'',streak:0}};
+try{
+  const raw=localStorage.getItem('crushtris_saga');
+  if(raw){const p=JSON.parse(raw);
+    if(p&&typeof p==='object'){
+      SAVE.unlocked=Math.max(1,Math.min(31,p.unlocked|0||1));
+      if(Array.isArray(p.stars))SAVE.stars=Array.from({length:30},(_,i)=>Math.max(0,Math.min(3,p.stars[i]|0)));
+      if(p.boosters)SAVE.boosters={hammer:p.boosters.hammer|0,shuffle:p.boosters.shuffle|0,wrap:p.boosters.wrap|0};
+      if(typeof p.theme==='string')SAVE.theme=p.theme;
+      if(p.daily)SAVE.daily={date:''+(p.daily.date||''),cleared:''+(p.daily.cleared||''),streak:p.daily.streak|0};
+    }
+  }
+}catch(e){}
+function persist(){try{localStorage.setItem('crushtris_saga',JSON.stringify(SAVE))}catch(e){}}
+const totalStars=()=>SAVE.stars.reduce((a,b)=>a+b,0);
+
+// ── Seeded PRNG (Daily) — randomness never decides winnability ─────────────
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function dailySeed(){
+  const d=new Date();
+  const s=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
+  let h=s^0x9E3779B9;h=Math.imul(h^h>>>16,0x45d9f3b);h=Math.imul(h^h>>>16,0x45d9f3b);
+  return (h^h>>>16)>>>0;
+}
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function yesterdayStr(){const d=new Date(Date.now()-864e5);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+let drng=Math.random;
+const rand=()=>mode==='daily'?drng():Math.random();
+
+// ── Stage scaling — width-LOCKED to DW, height FLUID between DH_MIN/DH_MAX ──
+const stage=document.getElementById('stage');
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const ncanvas=document.getElementById('next-canvas');
-const nctx=ncanvas.getContext('2d');
-const scoreEl=document.getElementById('score-el');
-const levelEl=document.getElementById('level-el');
+const npan=document.getElementById('nextpan');
+const nctx=npan.getContext('2d');
+const bgCanvas=document.getElementById('bg');
 const bannerEl=document.getElementById('banner');
-let CELL=32;
+const dimEl=document.getElementById('dim');
+const topbarEl=document.getElementById('topbar');
+const logocardEl=document.getElementById('logocard');
+const logoCv=document.getElementById('logo');
+const hudcolEl=document.getElementById('hudcol');
+const mainrowEl=document.getElementById('mainrow');
+const boardpanelEl=document.getElementById('boardpanel');
+const railpanelEl=document.getElementById('railpanel');
+const bststripEl=document.getElementById('bststrip');
+const pillrowEl=document.getElementById('pillrow');
+const starCv=document.getElementById('score-star');
 
-function resize(){
-  const h=wrap.clientHeight-56,w=wrap.clientWidth;
-  CELL=Math.max(16,Math.min(Math.floor(h/ROWS),Math.floor((w-8)/COLS)));
-  canvas.width=CELL*COLS;canvas.height=CELL*ROWS;
-  spriteCache.clear();
+function safeTop(){return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat'))||0}
+function safeBot(){return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab'))||0}
+
+// ── layout() — the ONE function that owns every pixel ───────────────────────
+// Everything downstream (canvas backing stores, panel boxes, booster sizes) reads
+// from L. The vertical stack is forced to sum to EXACTLY DH: whatever height the
+// integer CELL leaves over is redistributed into topH / bstH / padB, which is what
+// permanently kills the dead band instead of fixing it on one canvas.
+function layout(){
+  const k=Math.max(0,Math.min(1,(DH-690)/180));   // 0 on an SE, 1 on a modern phone
+  L.M=Math.round(8+4*k);
+  L.gut=8;
+  L.padT=Math.round(8+4*k)+safeTop();
+  L.padB=Math.round(8+4*k)+safeBot();
+  L.topH=Math.round(118+24*k);
+  L.bstH=Math.round(68+14*k);
+  L.pillH=Math.round(44+6*k);
+  const g=Math.round(6+4*k);
+  L.g=g;
+
+  // Vertical band left for the main row (board + rail), 3 inter-row gaps
+  let band=DH-(L.padT+L.topH+g+g+L.bstH+g+L.pillH+L.padB);
+
+  // Cell: the smaller of the width-bound and the height-bound cell
+  const innerW=DW-2*L.M;
+  const cellW=Math.floor((innerW-L.gut-76-12)/COLS);
+  const cellH=Math.floor((band-12)/ROWS);
+  CELL=Math.max(18,Math.min(cellW,cellH));
+  FXS=CELL/33;
+
+  // Redistribute the vertical residue so the stack sums to EXACTLY DH
+  let slack=Math.max(0,band-(ROWS*CELL+12));
+  const a=Math.min(20,slack*0.35), b=Math.min(16,slack*0.30);
+  L.topH+=a; L.bstH+=b; L.padB+=slack-a-b;
+
+  // Width residue: a height-bound short phone widens the margin instead of
+  // leaving a hole beside the board
+  L.boardW=COLS*CELL+12;
+  L.railW=Math.max(76,Math.min(104,innerW-L.gut-L.boardW));
+  L.M+=Math.round((innerW-L.gut-L.boardW-L.railW)/2);
+
+  L.boardH=ROWS*CELL+12;
+  L.mainH=L.boardH;
+  L.mainY=L.padT+L.topH+g;
+  L.boardX=L.M;
+  L.railX=L.M+L.boardW+L.gut;
+  L.bstY=L.mainY+L.mainH+g;
+  L.bstD=Math.max(40,Math.min(62,Math.round(L.bstH)-16));
+  L.pillY=L.bstY+L.bstH+g;
+  const innerW2=DW-2*L.M;
+  L.pillW=Math.round((innerW2-L.gut)/2);
+  L.logoW=Math.round((innerW2-L.gut)*0.422);   // 42.2% logo / 57.8% HUD column
+  L.hudW=innerW2-L.gut-L.logoW;
+  L.cardH=(L.topH-14)/3;                        // 3 cards, 7px gaps
+  // card internals derive from the card's INNER height (cardH minus its 2px
+  // borders). The left column is label-over-value; the right control centres
+  // across the full inner height, so it is bounded by `inner`, not by `room`.
+  const ch=L.cardH, inner=ch-4;
+  L.lblFs =Math.max(9, Math.min(11,Math.round(ch*0.26)));
+  const room=Math.max(10,inner-(L.lblFs+1));
+  L.scFs  =Math.max(14,Math.min(26,Math.floor(room)));
+  L.valFs =Math.max(13,Math.min(22,Math.floor(room)));
+  L.barH  =Math.max(6, Math.min(10,Math.round(inner*0.26)));
+  L.goalFs=Math.max(9, Math.min(12,Math.round(inner*0.30)));
+  L.rbtn  =Math.max(24,Math.min(34,Math.floor(inner)));
+  L.starS =Math.max(11,Math.min(18,Math.floor(inner*0.50)));
+
+  // ── Push L onto the DOM ──────────────────────────────────────────────────
+  stage.style.height=DH+'px';
+  stage.style.padding=L.padT+'px '+L.M+'px '+L.padB+'px';
+  stage.style.gap=g+'px';
+  topbarEl.style.height=L.topH+'px';
+  topbarEl.style.gap=L.gut+'px';
+  logocardEl.style.width=L.logoW+'px';
+  const hs=hudcolEl.style;
+  hs.setProperty('--lblfs',L.lblFs+'px');
+  hs.setProperty('--scfs',L.scFs+'px');
+  hs.setProperty('--valfs',L.valFs+'px');
+  hs.setProperty('--barh',L.barH+'px');
+  hs.setProperty('--goalfs',L.goalFs+'px');
+  hs.setProperty('--rbtn',L.rbtn+'px');
+  mainrowEl.style.gap=L.gut+'px';
+  boardpanelEl.style.width=L.boardW+'px';
+  railpanelEl.style.width=L.railW+'px';
+  bststripEl.style.height=L.bstH+'px';
+  pillrowEl.style.height=L.pillH+'px';
+  pillrowEl.style.gap=L.gut+'px';
+  for(const el of bststripEl.children){el.style.width=L.bstD+'px';el.style.height=L.bstD+'px';}
+
+  // ── Canvas backing stores. The .width= assignment RESETS the 2D context, so
+  //    it is guarded behind an actual change — iOS fires resize continuously
+  //    while the URL bar animates. ──────────────────────────────────────────
+  const bw=COLS*CELL, bh=ROWS*CELL;
+  if(canvas.width!==bw*RES){canvas.width=bw*RES;canvas.height=bh*RES;}
+  canvas.style.width=bw+'px';canvas.style.height=bh+'px';
+
+  const nw=Math.max(40,L.railW-8), nh=Math.max(40,Math.round(L.mainH)-8);
+  if(npan.width!==nw*RES||npan.height!==nh*RES){npan.width=nw*RES;npan.height=nh*RES;}
+  npan.style.width=nw+'px';npan.style.height=nh+'px';
+
+  if(bgCanvas.width!==DW||bgCanvas.height!==DH){bgCanvas.width=DW;bgCanvas.height=DH;}
+  bgCanvas.style.width=DW+'px';bgCanvas.style.height=DH+'px';
+
+  // Everything static that depends on CELL is rebaked HERE, once — never in a frame.
+  buildBoardBase();
+  buildJellyTile();
+  paintLogo();
+
+  drawScoreStar();
 }
 
-let board,piece,nextPiece,score,level,linesCleared,gameOver,cascading;
+// ── Logo card art — painted ONCE at boot and once per size change ──────────
+// ⛔ THIS PALETTE IS FIXED AND MUST NOT READ FROM COLORS. It contains cyan
+// (#35d6e8) and pink (#ff6bc4) that exist in NO theme; sourcing it from COLORS
+// would recolour the logo every time the player switches theme.
+const LOGO_WORD='CrushTris';
+const LOGO_COLS=['#f04141','#ff9f2e','#ffd23d','#3fca55','#2f9df5',
+                 '#b44df5','#ff6bc4','#35d6e8','#f04141'];
+const LOGO_BEANS=[[0.13,0.19,0.075,-0.55,'#3fca55'],
+                  [0.88,0.17,0.068, 0.70,'#ff6bc4'],
+                  [0.85,0.83,0.078,-0.30,'#ffd23d']];
+function paintLogo(){
+  if(!logoCv)return;
+  const w=Math.max(24,Math.round((L.logoW||140)-4));
+  const h=Math.max(24,Math.round((L.topH||120)-4));
+  if(logoCv.width!==w*RES||logoCv.height!==h*RES){logoCv.width=w*RES;logoCv.height=h*RES;}
+  logoCv.style.width=w+'px';logoCv.style.height=h+'px';
+  const g=logoCv.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
+  g.clearRect(0,0,w,h);
+
+  // 1. purple paint-splash blob — irregular 9-point closed bezier, ~86% of card width
+  const cx=w/2,cy=h*0.50,rx=w*0.43,ry=h*0.40,NP=9;
+  const wob=[1.00,0.80,1.14,0.86,1.06,0.76,1.16,0.90,0.98];
+  g.save();g.globalAlpha=0.55;g.fillStyle='#4a1f8a';
+  g.beginPath();
+  for(let i=0;i<=NP;i++){
+    const a=(i/NP)*Math.PI*2,k=wob[i%NP];
+    const px=cx+Math.cos(a)*rx*k,py=cy+Math.sin(a)*ry*k;
+    if(i===0){g.moveTo(px,py);continue;}
+    const pa=((i-1)/NP)*Math.PI*2,pk=wob[(i-1)%NP];
+    const ma=(pa+a)/2,mk=(pk+k)/2*1.20;
+    g.quadraticCurveTo(cx+Math.cos(ma)*rx*mk,cy+Math.sin(ma)*ry*mk,px,py);
+  }
+  g.closePath();g.fill();g.restore();
+
+  // 2. bubble lettering on a slight upward arc, per-letter fill + dark outline + gloss
+  let fs=Math.max(8,Math.min(Math.round(h*0.36),Math.round(w*0.22)));
+  let widths=[],total=0;
+  const measure=()=>{
+    g.font='700 '+fs+'px Bungee,"Arial Black",sans-serif';
+    widths=[];total=0;
+    for(const chr of LOGO_WORD){const m=g.measureText(chr).width;widths.push(m);total+=m;}
+    total+=fs*0.02*(LOGO_WORD.length-1);
+  };
+  measure();
+  for(let pass=0;pass<3&&total>w*0.88;pass++){
+    fs=Math.max(7,Math.floor(fs*(w*0.88)/total));
+    measure();
+  }
+  const track=fs*0.02, Rarc=Math.max(w*1.5,1);
+  g.save();
+  g.translate(w/2,h*0.60+Rarc);      // arc centre BELOW the word => middle rides highest
+  g.textAlign='center';g.textBaseline='alphabetic';
+  g.lineJoin='round';g.miterLimit=2;
+  let ang=-total/(2*Rarc);
+  for(let i=0;i<LOGO_WORD.length;i++){
+    const aw=widths[i]+track;
+    g.save();
+    g.rotate(ang+aw/(2*Rarc));
+    g.translate(0,-Rarc);
+    g.lineWidth=3;g.strokeStyle='#1a0a2e';g.strokeText(LOGO_WORD[i],0,0);
+    g.fillStyle=LOGO_COLS[i];g.fillText(LOGO_WORD[i],0,0);
+    g.save();                          // white gloss cap on the upper third
+    g.beginPath();g.rect(-aw,-fs*0.76,aw*2,fs*0.26);g.clip();
+    g.fillStyle='rgba(255,255,255,0.60)';g.fillText(LOGO_WORD[i],0,0);
+    g.restore();
+    g.restore();
+    ang+=aw/Rarc;
+  }
+  g.restore();
+
+  // 3. three jelly beans tucked into the card corners
+  for(const[fx,fy,fr,rot,col]of LOGO_BEANS){
+    const bx=fx*w,by=fy*h,br=Math.max(3,fr*w);
+    g.save();g.translate(bx,by);g.rotate(rot);
+    const rg=g.createRadialGradient(-br*0.30,-br*0.30,br*0.08,0,0,br*1.15);
+    rg.addColorStop(0,shade(col,0.50));rg.addColorStop(0.55,col);rg.addColorStop(1,shade(col,-0.45));
+    g.fillStyle=rg;g.beginPath();g.ellipse(0,0,br,br*0.66,0,0,Math.PI*2);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1;g.stroke();
+    g.fillStyle='rgba(255,255,255,0.90)';
+    g.beginPath();g.ellipse(-br*0.30,-br*0.26,br*0.20,br*0.12,-0.5,0,Math.PI*2);g.fill();
+    g.restore();
+  }
+}
+// Bungee arrives from cabinet.css asynchronously; the boot paint can land on the
+// fallback face. One repaint when the fonts settle — never a per-frame repaint.
+if(document.fonts&&document.fonts.ready)
+  document.fonts.ready.then(()=>{try{paintLogo();}catch(e){}});
+
+// gold 5-point star, drawn — lives at the SCORE card's right edge beside the value
+function drawScoreStar(){
+  if(!starCv)return;
+  const s=L.starS||18;
+  if(starCv.width!==s*RES){starCv.width=starCv.height=s*RES;}
+  starCv.style.width=starCv.style.height=s+'px';
+  const g=starCv.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
+  g.clearRect(0,0,s,s);
+  const cx=s/2,cy=s/2,R=s*0.46,r=R*0.42;
+  g.beginPath();
+  for(let i=0;i<10;i++){
+    const rr=i%2?r:R,ang=-Math.PI/2+i*Math.PI/5;
+    const x=cx+Math.cos(ang)*rr,y=cy+Math.sin(ang)*rr;
+    if(i)g.lineTo(x,y);else g.moveTo(x,y);
+  }
+  g.closePath();
+  const grd=g.createLinearGradient(0,0,0,s);
+  grd.addColorStop(0,'#ffe27a');grd.addColorStop(1,'#f0a800');
+  g.fillStyle=grd;g.fill();
+  g.strokeStyle='rgba(90,50,0,0.55)';g.lineWidth=1;g.stroke();
+}
+
+let layoutDone=false;
+function resize(){
+  const vw=Math.round(innerWidth), vh=Math.round(innerHeight);
+  let s=vw/DW, dh=vh/s;
+  if(dh<DH_MIN){s=vh/DH_MIN;dh=DH_MIN;}
+  else if(dh>DH_MAX){s=vh/DH_MAX;dh=DH_MAX;}
+  dh=Math.round(dh);
+  const cellWas=CELL;
+  if(layoutDone && dh===DH && Math.abs(s-SCALE)<0.002) return;
+  DH=dh; SCALE=s; layoutDone=true;
+  stage.style.height=DH+'px';
+  // translate survives ONLY so the clamped tablet/landscape case pillarboxes
+  // centred; on any 9:16..9:21 phone both offsets are exactly 0
+  stage.style.transform='translate('+((vw-DW*s)/2)+'px,'+((vh-dh*s)/2)+'px) scale('+s+')';
+  layout();
+  if(CELL!==cellWas){spriteCache.clear();}
+  paintBG();
+  // the rail is NOT redrawn by the frame loop (only drawBoard is), so a resize
+  // that rewrote npan's backing store would otherwise leave it blank until the
+  // next lock/cascade
+  drawNext();
+}
+function paintBG(){
+  const g=bgCanvas.getContext('2d');
+  const grd=g.createLinearGradient(0,0,0,DH);
+  grd.addColorStop(0,'#16092e');grd.addColorStop(1,'#1e0f38');
+  g.fillStyle=grd;g.fillRect(0,0,DW,DH);
+  // Static bokeh — drawn once, never per frame. Positions are FRACTIONS of DW/DH
+  // (the old 390/844 literals do not survive a fluid stage). Alpha raised to
+  // .10-.16: at 5-10% the field was genuinely imperceptible on a phone.
+  // Weighting: 4 circles lower-left, 4 upper-right, per spec.
+  const bok=[
+    [0.10,0.63,46,.14],[0.05,0.79,34,.16],[0.23,0.88,52,.12],[0.16,0.71,24,.15],
+    [0.86,0.09,58,.13],[0.94,0.22,38,.15],[0.72,0.05,30,.12],[0.90,0.34,26,.11]
+  ];
+  for(const[fx,fy,r,a]of bok){
+    const x=fx*DW, yy=fy*DH;
+    const rg=g.createRadialGradient(x,yy,0,x,yy,r);
+    rg.addColorStop(0,'rgba(180,140,255,'+a+')');rg.addColorStop(1,'rgba(180,140,255,0)');
+    g.fillStyle=rg;g.beginPath();g.arc(x,yy,r,0,Math.PI*2);g.fill();
+  }
+}
+
+// ── Core state ──────────────────────────────────────────────────────────────
+let board,piece,score,level,linesCleared,gameOver,cascading;
 let dropInterval,lastDrop,lockR,lockC,comboCount,bannerTO,animId;
 let particles=[],rings=[],sweeps=[],flashRows=[];
 let wasRotated=false,lastClearPowerful=false,backToBack=false;
+let mode='endless';          // 'saga' | 'endless' | 'daily'
+let Lnum=0;                  // saga level number (1-30), 0 = endless/daily
+let movesLeft=Infinity;
+let goalType=null,goalTarget=0;
+let jelly=[],jellyTotal=0,jellyLeft=0;
+let levelEnding=false;       // input frozen during sugar crush / celebration
+let sessionScore=0;          // cumulative saga session score (submits on quit/top-out)
+let targeting=null;          // 'hammer' | 'wrap' | null
+let paused=false;
+let onSettleCb=null;         // one-shot callback at cascade settle (sugar crush shots)
+let shakeT=0,shakeAmp=0,shakeDur=1;
+let nextQueue=[];            // 3 upcoming pieces
+let bag=[];
+let lastTs=0;
+const lvlMult=()=>mode==='endless'?level:1;
 
 const ck=(r,c)=>r*COLS+c;
 const emptyBoard=()=>Array.from({length:ROWS},()=>Array(COLS).fill(null));
-const randCol=()=>Math.floor(Math.random()*COLORS.length);
+const emptyJelly=()=>Array.from({length:ROWS},()=>Array(COLS).fill(false));
+const randCol=()=>Math.floor(rand()*COLORS.length);
 const mkCol=sh=>sh.map(row=>row.map(v=>v?randCol():-1));
 const pshape=p=>PIECES[p.type][p.rot];
+
+// ── 7-bag randomizer (kills piece droughts — winnability house rule) ───────
+function drawFromBag(){
+  if(!bag.length){
+    bag=[0,1,2,3,4,5,6];
+    for(let i=bag.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[bag[i],bag[j]]=[bag[j],bag[i]];}
+  }
+  return bag.pop();
+}
 
 function pCells(p){
   const sh=pshape(p),out=[];
@@ -127,6 +681,7 @@ function mkPiece(type){
 function recolor(p,newRot){
   // every PIECES rot state is the previous one turned 90° CW, so rotate the
   // colour matrix the same way — each candy keeps its colour through the turn
+  // (LOAD-BEARING: 4× rotation === identity)
   const oc=p.colors,oR=oc.length,oC=oc[0].length;
   return Array.from({length:oC},(_,r)=>Array.from({length:oR},(_,c)=>oc[oR-1-c][r]));
 }
@@ -154,31 +709,51 @@ function gravity(b){
 // ── Perfect clear ──────────────────────────────────────────────────────────
 function isPerfectClear(){return board.every(row=>row.every(c=>c===null));}
 
-// ── Line clear — returns count, FX added but rows NOT removed yet ──────────
+// ── Jelly (glazed cells — positional; ANY removal path clears the glaze) ──
+function clearJellyAt(r,c){
+  if(jelly[r]&&jelly[r][c]){
+    jelly[r][c]=false;jellyLeft=Math.max(0,jellyLeft-1);
+    sfx.jelly();
+    const x=(c+.5)*CELL,y=(r+.5)*CELL;
+    for(let i=0;i<6;i++){
+      const a=(i/6)*Math.PI*2;
+      particles.push({x,y,vx:Math.cos(a)*1.8*FXS,vy:Math.sin(a)*1.8*FXS-1*FXS,life:.9,color:'#8fe9ff',sz:2.4*FXS,kind:'star'});
+    }
+    capFX();
+  }
+}
+
+// ── Line clear — returns rows, FX added but rows NOT removed yet ──────────
 function markFullLines(){
   const rows=[];
+  // same >15-cell budget as removeSet — a 4-row clear is 32 cells of addPop
+  let full=0;for(let r=0;r<ROWS;r++)if(board[r].every(c=>c!==null))full++;
+  fxLean=full*COLS>15;
   for(let r=ROWS-1;r>=0;r--){
     if(board[r].every(c=>c!==null)){
       rows.push(r);
       const born=performance.now();
       flashRows.push({row:r,born});
-      // Line sweep FX
       sweeps.push({dir:'line',y:r*CELL,color:'#ffffff',born,dur:380});
       for(let c=0;c<COLS;c++)if(board[r][c]){
         addPop(c,r,board[r][c].color>=0?COLORS[board[r][c].color]:'#fff');
       }
     }
   }
+  fxLean=false;
+  capFX();
   return rows;
 }
 function removeMarkedLines(rows){
-  // remove descending so indices stay valid
   const desc=[...rows].sort((a,b)=>b-a);
-  for(const r of desc){board.splice(r,1);board.unshift(Array(COLS).fill(null));}
+  for(const r of desc){
+    for(let c=0;c<COLS;c++)clearJellyAt(r,c);   // line clear removes glaze on that row
+    board.splice(r,1);board.unshift(Array(COLS).fill(null));
+  }
   flashRows=[];
 }
 
-// ── Match detection ────────────────────────────────────────────────────────
+// ── Match detection (PRESERVED ENGINE) ─────────────────────────────────────
 function findMatches(){
   const hR=[],vR=[];
   for(let r=0;r<ROWS;r++){
@@ -204,7 +779,7 @@ function findMatches(){
     }
   }
 
-  // Change 6: Fish 2×2 detection — scan for 2×2 same-color normal blocks
+  // Fish 2×2 detection — 2×2 same-color normal blocks
   const fish2x2=[];
   for(let r=0;r<ROWS-1;r++){
     for(let c=0;c<COLS-1;c++){
@@ -217,15 +792,11 @@ function findMatches(){
 
   if(!hR.length&&!vR.length&&!fish2x2.length)return null;
 
-  // Change 8: Per-run scoring
   let matchScore=0;
   for(const run of hR)matchScore+=([0,0,0,100,200,500][Math.min(run.len,5)]||500);
   for(const run of vR)matchScore+=([0,0,0,100,200,500][Math.min(run.len,5)]||500);
-  // fish2x2 bonus
   for(const f of fish2x2)matchScore+=150;
 
-  // CC rules: 4-match → striped perpendicular to the match, 5+ straight → colour
-  // bomb, L/T intersection → wrapped, 2×2 square → fish (CC Soda)
   const hSet=new Set(),toRemove=new Set(),toCreate=[];
   for(const run of hR){
     for(let c=run.c;c<=run.end;c++){hSet.add(ck(run.r,c));toRemove.add(ck(run.r,c));}
@@ -259,11 +830,8 @@ function findMatches(){
   return{toRemove:exp,toCreate,count:toRemove.size,matchScore};
 }
 
-// ── Special expansion — iterative so chains fire in one pass ───────────────
+// ── Special expansion — iterative combo table (PRESERVED ENGINE) ───────────
 function expandSpecials(toRemove,swapColor=null){
-  // swapColor: colour of the normal candy a colour bomb was smashed into —
-  // CC clears that colour, not the most common one
-  // Detect combo when ≥2 specials in the initial match set
   const initSpecials=[];
   for(const key of toRemove){
     const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];
@@ -283,11 +851,9 @@ function expandSpecials(toRemove,swapColor=null){
   };
 
   if(bombs.length>=2){
-    // CB+CB → full board wipe
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)exp.add(ck(r,c));
     showBanner('💥 MEGA BLAST!','#ff44ff',28);
   } else if(bombs.length===1&&stripes.length>=1){
-    // CB+Striped → all candies of the striped candy's colour become striped + fire
     const stripe=stripes[0];
     const tc=stripe.color>=0?stripe.color:mostCommonColor();
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
@@ -300,7 +866,6 @@ function expandSpecials(toRemove,swapColor=null){
     }
     showBanner('⚡ COLOR LASER!','#ffdd00',26);
   } else if(bombs.length===1&&wraps.length>=1){
-    // CB+Wrapped → 3×3 blast on every candy of the wrapped candy's colour
     const tc=wraps[0].color>=0?wraps[0].color:mostCommonColor();
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
       if(board[r][c]&&board[r][c].color===tc){
@@ -312,7 +877,6 @@ function expandSpecials(toRemove,swapColor=null){
     }
     showBanner('🌀 CANDY STORM!','#cc44ff',26);
   } else if(stripes.length>=1&&wraps.length>=1){
-    // Striped+Wrapped → 3 rows + 3 columns wide cross
     const s=stripes[0];
     for(let dr=-1;dr<=1;dr++){
       const r2=s.r+dr;if(r2>=0&&r2<ROWS)for(let cc=0;cc<COLS;cc++)exp.add(ck(r2,cc));
@@ -322,14 +886,12 @@ function expandSpecials(toRemove,swapColor=null){
     }
     showBanner('✚ SUGAR CROSS!','#ff8800',24);
   } else if(stripes.length>=2){
-    // Striped+Striped → row AND column from each
     for(const s of stripes){
       for(let cc=0;cc<COLS;cc++)exp.add(ck(s.r,cc));
       for(let rr=0;rr<ROWS;rr++)exp.add(ck(rr,s.c));
     }
     showBanner('✦ DOUBLE STRIPE!','#ff69b4',24);
   } else if(wraps.length>=2){
-    // Wrapped+Wrapped → giant 5×5 blast around each
     for(const w of wraps){
       for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){
         const nr=w.r+dr,nc=w.c+dc;
@@ -338,7 +900,6 @@ function expandSpecials(toRemove,swapColor=null){
     }
     showBanner('💣 MEGA WRAP!','#cc44ff',26);
   } else {
-    // Single special expansion — also iterative so chained specials fire
     let prev=0;
     while(exp.size>prev){
       prev=exp.size;
@@ -353,17 +914,15 @@ function expandSpecials(toRemove,swapColor=null){
             if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)exp.add(ck(nr,nc));
           }
         } else if(cell.type===CB){
-          // swapColor = the candy the bomb was smashed into; else most common
           const tc=swapColor!==null?swapColor:mostCommonColor();
           for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
             if(board[rr][cc]&&board[rr][cc].color===tc)exp.add(ck(rr,cc));
-        // Change 7: FISH expansion — 3 random non-null cells
         } else if(cell.type===FISH){
           const occupied=[];
           for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
             if(board[rr][cc]&&!exp.has(ck(rr,cc)))occupied.push(ck(rr,cc));
           for(let i=0;i<3&&occupied.length;i++){
-            const idx=Math.floor(Math.random()*occupied.length);
+            const idx=Math.floor(rand()*occupied.length);
             exp.add(occupied[idx]);occupied.splice(idx,1);
           }
           showBanner('🐟 FISH ATTACK!','#00ddff',24);
@@ -376,20 +935,56 @@ function expandSpecials(toRemove,swapColor=null){
 
 // ── Banner ─────────────────────────────────────────────────────────────────
 function showBanner(txt,col,sz){
+  if(ATTRACT)return;
   clearTimeout(bannerTO);
   bannerEl.textContent=txt;bannerEl.style.color=col;
   bannerEl.style.fontSize=(sz||22)+'px';bannerEl.style.opacity='1';
   bannerTO=setTimeout(()=>{bannerEl.style.opacity='0';},1100);
 }
 
-// ── Effects ────────────────────────────────────────────────────────────────
+// ── Effects — rainbow starburst house style ────────────────────────────────
+// ⛔ DETERMINISM LAW: every rand() below is now Math.random(). rand() routes to the
+// SEEDED daily PRNG when mode==='daily'; purely VISUAL particles were advancing that
+// stream, so two players who cleared differently drew a different 7-bag sequence and
+// different FISH targets from move 1 onward — "the daily gave me different pieces
+// than my mate", no stack trace, no failing test. seedBoard runs before any FX can
+// fire so the daily BOARD was always safe; it was everything after move 1 that drifted.
+// NEVER reintroduce rand() into an FX emitter, and never change per-cell emission
+// counts (below) without checking this rule first.
+const MAX_PARTICLES=280, MAX_RINGS=30;
+let fxLean=false;   // set by removeSet for mega blasts — see the budget note there
+function capFX(){
+  if(particles.length>MAX_PARTICLES)particles.splice(0,particles.length-MAX_PARTICLES);
+  if(rings.length>MAX_RINGS)rings.splice(0,rings.length-MAX_RINGS);
+}
 function addPop(gc,gr,col){
   const x=(gc+.5)*CELL,y=(gr+.5)*CELL;
   rings.push({x,y,r:0,maxR:CELL*.9,color:col,life:1,lw:2,fast:true});
-  for(let i=0;i<8;i++){
-    const a=(i/8)*Math.PI*2;
-    particles.push({x,y,vx:Math.cos(a)*2.6,vy:Math.sin(a)*2.6-.6,life:1,color:col,sz:Math.max(1.5,CELL*.07)});
+  // FX BUDGET: a mega blast used to emit 2000+ particles in ONE synchronous call.
+  // Above 15 cells each cell drops to 2 stars + 1 dot.
+  const nDot=fxLean?1:5, nStar=fxLean?2:6;
+  // white/gold sparkle core
+  for(let i=0;i<nDot;i++){
+    const a=Math.random()*Math.PI*2,sp=(.8+Math.random()*1.6)*FXS;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-.8*FXS,life:.7,
+      color:i%2?'#ffffff':'#ffd700',sz:1.8*FXS,kind:'dot'});
   }
+  // radiating 4-point candy-color stars
+  for(let i=0;i<nStar;i++){
+    const a=(i/nStar)*Math.PI*2;
+    particles.push({x,y,vx:Math.cos(a)*2.6*FXS,vy:Math.sin(a)*2.6*FXS-.6*FXS,life:1,color:col,
+      sz:Math.max(2,CELL*.10),kind:'star',rot:Math.random()*Math.PI});
+  }
+  capFX();
+}
+function addJellyFliers(gc,gr,col,n){
+  const x=(gc+.5)*CELL,y=(gr+.5)*CELL;
+  if(fxLean)n=Math.min(n,1);
+  for(let i=0;i<n;i++){
+    particles.push({x,y,vx:(Math.random()-.5)*5*FXS,vy:(-2-Math.random()*2.5)*FXS,life:1.4,
+      color:col,sz:CELL*.32,kind:'jelly',rot:Math.random()*Math.PI,vr:(Math.random()-.5)*.3});
+  }
+  capFX();
 }
 function addStripedFX(gc,gr,type,col){
   const x=(gc+.5)*CELL,y=(gr+.5)*CELL;
@@ -397,53 +992,49 @@ function addStripedFX(gc,gr,type,col){
     ?{dir:'h',rowY:gr*CELL,color:col,born:performance.now(),dur:330}
     :{dir:'v',colX:gc*CELL,color:col,born:performance.now(),dur:330});
   rings.push({x,y,r:0,maxR:CELL*1.4,color:'#ffffff',life:1,lw:3,fast:true});
+  addJellyFliers(gc,gr,col,2);
+  capFX();
 }
 function addWrappedFX(gc,gr,col){
   const x=(gc+.5)*CELL,y=(gr+.5)*CELL;
   rings.push({x,y,r:0,maxR:CELL*2.5,color:col,life:1,lw:5,fast:true});
   rings.push({x,y,r:0,maxR:CELL*1.6,color:'#fff',life:1,lw:3,fast:true});
-  for(let i=0;i<22;i++){
-    const a=(i/22)*Math.PI*2,sp=2+Math.random()*5;
-    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.5,life:1.3,color:col,sz:Math.max(2,CELL*.09)});
+  const nW=fxLean?6:16;
+  for(let i=0;i<nW;i++){
+    const a=(i/nW)*Math.PI*2,sp=(2+Math.random()*5)*FXS;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.5*FXS,life:1.3,
+      color:i%2?col:'#ffd700',sz:Math.max(2,CELL*.09),kind:i%3?'star':'dot',rot:Math.random()*Math.PI});
   }
+  addJellyFliers(gc,gr,col,3);
+  capFX();
 }
 function addBombFX(gc,gr){
   const x=(gc+.5)*CELL,y=(gr+.5)*CELL;
-  rings.push({x,y,r:0,maxR:Math.max(canvas.width,canvas.height)*1.3,color:'rainbow',life:1,lw:5,fast:false});
-  for(let i=0;i<32;i++){
-    const a=Math.random()*Math.PI*2,sp=2+Math.random()*7,col=COLORS[i%COLORS.length];
-    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,life:1.6,color:col,sz:Math.max(2,CELL*.1)});
+  rings.push({x,y,r:0,maxR:Math.max(COLS*CELL,ROWS*CELL)*1.3,color:'rainbow',life:1,lw:5,fast:false});
+  const nB=fxLean?12:32;
+  for(let i=0;i<nB;i++){
+    const a=Math.random()*Math.PI*2,sp=(2+Math.random()*7)*FXS,col=COLORS[i%COLORS.length];
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2*FXS,life:1.6,color:col,
+      sz:Math.max(2,CELL*.1),kind:i%2?'star':'dot',rot:Math.random()*Math.PI});
   }
+  addJellyFliers(gc,gr,'#ffffff',3);
+  capFX();
 }
+function shake(frames,amp){shakeT=frames;shakeDur=frames;shakeAmp=amp;}
 
-// ── Lock ───────────────────────────────────────────────────────────────────
-function lockPiece(){
-  const isSpin=checkTSpin();
-  const cells=pCells(piece);
-  lockR=0;lockC=piece.c+Math.floor(pshape(piece)[0].length/2);
-  for(const{r,c,col}of cells){board[r][c]={color:col,type:N};if(r>lockR)lockR=r;}
-  piece=null;comboCount=0;wasRotated=false;cascading=true;
-  sfx.place();
-
-  if(isSpin){
-    const isB2B=backToBack&&lastClearPowerful;
-    showBanner(isB2B?'🔥 BACK-TO-BACK T-SPIN!':'🌀 T-SPIN!',isB2B?'#ff44ff':'#cc44ff',isB2B?26:28);
-    score+=(isB2B?1200:400)*level;
-    lastClearPowerful=true;backToBack=isB2B;
-  }
-
-  setTimeout(()=>cascade(0,false),80);
-}
-
-// ── Audio (Web Audio API) — reinstated 2026-07-02 from the GLM zai build ───
-const muteBtn=document.getElementById('mute');
+// ── Audio — pure WebAudio, lazy unlock, silent in attract ──────────────────
 let audioCtx=null,muted=false;
 try{muted=localStorage.getItem('crushtris_mute')==='1'}catch(e){}
-function updateMuteUI(){muteBtn.textContent=muted?'🔇':'🔊'}
+const soundPill=document.getElementById('pill-sound');
+// ⛔ was `soundPill.textContent = emoji + ' Sound'` — that WIPES every child of
+// the pill. The drawn speaker glyph lives in those children, so the mute state
+// is now a CLASS toggle and the DOM is never rebuilt.
+function updateMuteUI(){soundPill.classList.toggle('muted',muted);}
 updateMuteUI();
-function initAudio(){if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}}
+function initAudio(){if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});}
 function playTone(freq,dur,type='sine',vol=0.15,sweepTo=null){
-  if(muted||!audioCtx)return;
+  if(muted||!audioCtx||ATTRACT)return;
   try{
     const o=audioCtx.createOscillator(),g=audioCtx.createGain();
     o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);
@@ -467,25 +1058,66 @@ const sfx={
   combo:()=>playChord([523,659,784,1047,1319],0.3,'triangle',0.12),
   tetris:()=>playChord([523,659,784,1047],0.4,'sine',0.15),
   levelup:()=>playChord([392,523,659,784],0.35,'triangle',0.14),
-  gameover:()=>{playTone(440,0.5,'sawtooth',0.2,110);setTimeout(()=>playTone(220,0.8,'sawtooth',0.2,55),200)}
+  gameover:()=>{playTone(440,0.5,'sawtooth',0.2,110);setTimeout(()=>playTone(220,0.8,'sawtooth',0.2,55),200)},
+  // CT_SAGA_V2 additions
+  thud:()=>playTone(110,0.2,'sine',0.22,30),                                  // booster thud 110→30Hz
+  tick:()=>playTone(1400,0.04,'square',0.06),                                 // low-moves tick
+  jelly:()=>playTone(980,0.09,'sine',0.10,1400),                              // jelly pop
+  riser:()=>{for(let i=0;i<8;i++)setTimeout(()=>playTone(300+i*140,0.12,'triangle',0.12),i*70)}, // sugar crush riser
+  fanfare:()=>playChord([523,659,784,1047],0.4,'triangle',0.16),              // C5+E5+G5+C6
+  star1:()=>playTone(1047,0.25,'triangle',0.14),                              // 1-star ding
+  star2:()=>{playTone(659,0.15,'triangle',0.13);setTimeout(()=>playTone(880,0.15,'triangle',0.13),140);setTimeout(()=>playTone(1175,0.22,'triangle',0.13),280)}, // ascending arpeggio
+  star3:()=>{playChord([523,659,784,1047],0.35,'triangle',0.15);setTimeout(()=>playChord([659,784,988,1319],0.45,'triangle',0.15),260)}, // full fanfare
+  fail:()=>{playTone(392,0.3,'sawtooth',0.16,330);setTimeout(()=>playTone(330,0.5,'sawtooth',0.16,220),260)} // wah
 };
-muteBtn.addEventListener('click',e=>{
+document.addEventListener('touchstart',initAudio,{once:true,passive:true});
+document.addEventListener('pointerdown',initAudio,{once:true});
+document.addEventListener('keydown',initAudio,{once:true});
+soundPill.addEventListener('click',e=>{
   e.stopPropagation();initAudio();
   muted=!muted;try{localStorage.setItem('crushtris_mute',muted?'1':'0')}catch(e){}
   updateMuteUI();
 });
-document.addEventListener('touchstart',initAudio,{once:true,passive:true});
-document.addEventListener('keydown',initAudio,{once:true});
 
-// ── Unified cascade — line clear + CC matches at every pass ───────────────
+// ── Move economy ────────────────────────────────────────────────────────────
+const movesValEl=document.getElementById('moves-val');
+function useMove(){
+  if(mode==='endless')return;
+  movesLeft=Math.max(0,movesLeft-1);
+  movesValEl.classList.remove('flash');void movesValEl.offsetWidth;
+  movesValEl.classList.add('flash');
+  if(movesLeft<=5){movesValEl.classList.add('low');sfx.tick();}
+  updateHUD();
+}
+
+// ── Lock ───────────────────────────────────────────────────────────────────
+function lockPiece(){
+  const isSpin=checkTSpin();
+  const cells=pCells(piece);
+  lockR=0;lockC=piece.c+Math.floor(pshape(piece)[0].length/2);
+  for(const{r,c,col}of cells){board[r][c]={color:col,type:N};if(r>lockR)lockR=r;}
+  piece=null;comboCount=0;wasRotated=false;cascading=true;
+  sfx.place();
+  useMove();   // 1 move per piece lock (saga/daily)
+
+  if(isSpin){
+    const isB2B=backToBack&&lastClearPowerful;
+    showBanner(isB2B?'🔥 BACK-TO-BACK T-SPIN!':'🌀 T-SPIN!',isB2B?'#ff44ff':'#cc44ff',isB2B?26:28);
+    score+=(isB2B?1200:400)*lvlMult();
+    lastClearPowerful=true;backToBack=isB2B;
+  }
+
+  setTimeout(()=>cascade(0,false),80);
+}
+
+// ── Unified cascade — line clears + CC matches at every pass ───────────────
 function cascade(depth,afterLineClear){
-  // Step 1: Tetris line clears (checked every pass — gravity can fill new lines)
   if(!afterLineClear){
     const rows=markFullLines();
     if(rows.length>0){
       const lc=rows.length;
       const base=[0,100,300,500,800][Math.min(lc,4)];
-      let bonus=base*level;
+      let bonus=base*lvlMult();
       const isPowerful=lc===4;
 
       if(lc===4){
@@ -508,19 +1140,19 @@ function cascade(depth,afterLineClear){
       if(lc<4)sfx.match();
       score+=bonus;
       linesCleared+=lc;
-      const prevLevel=level;
-      level=Math.floor(linesCleared/10)+1;
-      // Faster ramp (Osimo 2026-07-02): 850ms start, −12%/level, 70ms floor
-      // (was 1000ms / −5% — levels barely felt different)
-      dropInterval=Math.max(70,Math.round(850*Math.pow(0.88,level-1)));
-      if(level>prevLevel){showBanner('⬆ LEVEL '+level+'!','#ff69b4',36);sfx.levelup();}
+      if(mode==='endless'){
+        const prevLevel=level;
+        level=Math.floor(linesCleared/10)+1;
+        dropInterval=Math.max(70,Math.round(850*Math.pow(0.88,level-1)));
+        if(level>prevLevel){showBanner('⬆ LEVEL '+level+'!','#ff69b4',36);sfx.levelup();}
+      }
       updateHUD();
 
-      // Flash the rows for 240ms, THEN remove them and continue cascade
+      // CT_SAGA_V2 retiming: flash 280ms (was 240) so eyes can track the collapse
       setTimeout(()=>{
         removeMarkedLines(rows);
-        cascade(depth,false);   // re-check for more lines before CC
-      },240);
+        cascade(depth,false);
+      },280);
       return;
     }
   }
@@ -528,76 +1160,119 @@ function cascade(depth,afterLineClear){
   // Step 2: Candy Crush match detection
   const res=findMatches();
   if(!res){
-    if(isPerfectClear()){score+=3000*level;showBanner('✨ PERFECT CLEAR!','#ffffff',30);}
+    if(isPerfectClear()&&mode==='endless'){score+=3000*lvlMult();showBanner('✨ PERFECT CLEAR!','#ffffff',30);}
     cascading=false;
-    // A swap can fire mid-fall — resume the active piece, don't replace it
-    if(piece)lastDrop=performance.now();else spawnNext();
+    settleDone();
     return;
   }
 
-  // Change 8: Use per-run matchScore instead of flat count*30
-  score+=(res.matchScore||res.count*30)*level+(comboCount>0?comboCount*60*level:0);
+  // CHAIN MULTIPLIER: cascade depth >=2 → matchScore × min(3, 1+0.25×depth)
+  let ms=res.matchScore||res.count*30;
+  if(depth>=2){
+    ms=Math.round(ms*Math.min(3,1+0.25*depth));
+    showBanner('CHAIN ×'+depth+'!','#ffdd00',24);
+  }
+  score+=ms*lvlMult()+(comboCount>0?comboCount*60*lvlMult():0);
   comboCount++;
-  if(comboCount>=3){showBanner(comboCount+'× COMBO!','#ffdd00',24);sfx.combo();}
-  else if(comboCount===2){showBanner('2× COMBO!','#ff9900',22);sfx.cascade();}
+  if(comboCount>=3)sfx.combo();
+  else if(comboCount===2)sfx.cascade();
   else sfx.match();
 
   removeSet(res.toRemove);
   for(const{r,c,cell}of res.toCreate)if(!board[r][c])board[r][c]=cell;
   gravity(board);
   updateHUD();
-  // After gravity, go back to step 1 to catch newly filled lines
-  setTimeout(()=>cascade(depth+1,false),Math.max(120,290-depth*22));
+  // CT_SAGA_V2 retiming: floor raised to 160ms (was 120/70) — trackable collapses
+  setTimeout(()=>cascade(depth+1,false),Math.max(160,300-depth*18));
 }
 
-// ── Remove a set of cells with the right FX per candy type ────────────────
+// ── Settle handler — goal-met + out-of-moves ONLY evaluated here ───────────
+function settleDone(){
+  updateHUD();
+  if(onSettleCb){const cb=onSettleCb;onSettleCb=null;cb();return;}
+  if(mode!=='endless'&&!levelEnding){
+    if(goalMet()){startLevelClear();return;}
+    if(movesLeft<=0&&!piece){levelFail(false);return;}
+  }
+  if(piece)lastDrop=performance.now();else spawnNext();
+}
+function goalMet(){
+  if(goalType==='SCORE')return score>=goalTarget;
+  if(goalType==='JELLY')return jellyLeft<=0;
+  if(goalType==='LINES')return linesCleared>=goalTarget;
+  return false;
+}
+
+// ── Remove a set of cells with per-type FX; ANY removal clears jelly ───────
 function removeSet(keys){
   const heard={};
+  let popped=0;
+  // FX BUDGET (pairs with the determinism law in the emitters above): a >15-cell
+  // clear emits lean FX. Changing these counts changes NOTHING in the game stream
+  // because no emitter calls rand() any more — that pairing is why the two edits
+  // shipped together.
+  const nKeys=(keys&&keys.size!==undefined)?keys.size:(keys?keys.length:0);
+  fxLean=nKeys>15;
   for(const key of keys){
     const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];if(!cell)continue;
     const col=cell.color>=0?COLORS[cell.color]:'#fff';
-    if(cell.type===N)addPop(c,r,col);
+    if(cell.type===N){addPop(c,r,col);popped++;}
     else if(cell.type===SH||cell.type===SV){addStripedFX(c,r,cell.type,col);heard.striped=1;}
     else if(cell.type===WR){addWrappedFX(c,r,col);heard.wrapped=1;}
     else if(cell.type===CB){addBombFX(c,r);heard.bomb=1;}
     else if(cell.type===FISH){addWrappedFX(c,r,'#00ddff');heard.wrapped=1;}
     board[r][c]=null;
+    clearJellyAt(r,c);
   }
-  // one sound per special TYPE per removal, not per cell
+  if(popped>=4){ // big clears get loose flying jellies
+    const any=[...keys][0],r=Math.floor(any/COLS),c=any%COLS;
+    addJellyFliers(c,r,COLORS[Math.floor(Math.random()*COLORS.length)],2);
+  }
   if(heard.bomb)sfx.bomb();else if(heard.wrapped)sfx.wrapped();else if(heard.striped)sfx.striped();
+  fxLean=false;
+  capFX();
 }
 
-// ── Fire specials directly (swap smash) — no colour match needed ──────────
+// ── Fire specials directly (swap smash / hammer) ───────────────────────────
 function activateSpecials(keys,swapColor){
   const exp=expandSpecials(new Set(keys),swapColor);
-  score+=exp.size*30*level;
+  score+=exp.size*30*lvlMult();
   removeSet(exp);
   gravity(board);
   updateHUD();
   setTimeout(()=>cascade(0,false),200);
 }
 
-// ── Spawn ──────────────────────────────────────────────────────────────────
+// ── Spawn — 3-piece queue fed by the 7-bag ─────────────────────────────────
+function refillQueue(){while(nextQueue.length<3)nextQueue.push(mkPiece(drawFromBag()));}
 function spawnNext(){
-  if(gameOver)return;
-  piece=nextPiece;
-  nextPiece=mkPiece(Math.floor(Math.random()*PIECES.length));
+  if(gameOver||levelEnding)return;
+  refillQueue();
+  piece=nextQueue.shift();
+  refillQueue();
   drawNext();
   if(!valid(piece,board)){
-    gameOver=true;cancelAnimationFrame(animId);sfx.gameover();
-    setTimeout(()=>ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score,accent:'#ff69b4',onClose:()=>resetGame()}),600);
+    gameOver=true;
+    if(ATTRACT){ // attract: silent reset, never show game-over UI
+      setTimeout(()=>{if(ATTRACT)startEndless();},800);
+      return;
+    }
+    sfx.gameover();
+    if(mode==='endless'){
+      cancelAnimationFrame(animId);
+      setTimeout(()=>ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score,
+        accent:'#ff69b4',onClose:()=>showHub()}),600);
+    } else {
+      levelFail(true); // saga/daily top-out
+    }
     return;
   }
   lastDrop=performance.now();updateHUD();
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────
-const SWIPE=18;let tStart=null,holding=false;
+const SWIPE=16;let tStart=null,holding=false,startedOnBoard=false;
 
-// CC smash: tap a settled SPECIAL candy to select it (gold glow), tap an
-// adjacent candy to smash them together. Special+special fires the CC combo
-// (stripe+stripe, wrap+wrap, bomb+anything…); special+normal fires the special
-// (colour bomb clears the colour it was smashed into).
 function ccSwapAttempt(r1,c1,r2,c2){
   if(r2<0||r2>=ROWS||c2<0||c2>=COLS)return;
   const a=board[r1][c1],b=board[r2][c2];
@@ -609,63 +1284,95 @@ function ccSwapAttempt(r1,c1,r2,c2){
     else if(b.type===CB&&a.type===N)swapColor=a.color;
     ccSel=null;cascading=true;
     lockR=r1;lockC=c1;
+    useMove();   // successful CC swap costs 1 move
     activateSpecials([ck(r1,c1),ck(r2,c2)],swapColor);
   } else if(findMatches()){
     ccSel=null;cascading=true;
     lockR=r1;lockC=c1;
+    useMove();   // successful CC swap costs 1 move
     setTimeout(()=>cascade(0,false),80);
   } else {
-    // Not valid — swap back
     board[r1][c1]=a;board[r2][c2]=b;
   }
 }
 
-document.addEventListener('touchstart',e=>{
-  if(gameOver)return;
-  tStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
-  holding=true;
-},{passive:true});
+function boardCellFromClient(cx,cy){
+  const rect=canvas.getBoundingClientRect();
+  if(cx<rect.left||cx>=rect.right||cy<rect.top||cy>=rect.bottom)return null;
+  const c=Math.floor((cx-rect.left)/rect.width*COLS);
+  const r=Math.floor((cy-rect.top)/rect.height*ROWS);
+  if(r<0||r>=ROWS||c<0||c>=COLS)return null;
+  return{r,c};
+}
+function inBoard(cx,cy){return boardCellFromClient(cx,cy)!==null;}
 
-document.addEventListener('touchend',e=>{
+function pointerDown(cx,cy,target){
+  if(!board||gameOver||paused||levelEnding)return;
+  if(target&&target.closest&&target.closest('.ui,.screen,#hub'))return;
+  tStart={x:cx,y:cy};
+  startedOnBoard=inBoard(cx,cy);
+  holding=startedOnBoard;   // hold-to-drop only when the touch started on the board
+}
+function pointerUp(cx,cy,target){
   holding=false;
-  if(!tStart||gameOver)return;
-  const dx=e.changedTouches[0].clientX-tStart.x,dy=e.changedTouches[0].clientY-tStart.y;
+  if(!tStart)return;
+  const st=tStart;tStart=null;
+  if(!board||gameOver||paused||levelEnding)return;
+  if(target&&target.closest&&target.closest('.ui,.screen,#hub'))return;
+  const dx=cx-st.x,dy=cy-st.y;
   const isTap=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
-  tStart=null;
 
-  // CC smash mode: tap a settled SPECIAL candy to select it; tap an adjacent
-  // candy to smash. Taps on normal candies fall through to rotate, so the
-  // Tetris tap-to-rotate control always works.
-  if(isTap&&!cascading){
-    const rect=canvas.getBoundingClientRect();
-    const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
-    const cx=Math.floor((e.changedTouches[0].clientX-rect.left)*scaleX/CELL);
-    const cy=Math.floor((e.changedTouches[0].clientY-rect.top)*scaleY/CELL);
-    const inb=cx>=0&&cx<COLS&&cy>=0&&cy<ROWS;
-    const cell=inb?board[cy][cx]:null;
-    const isSettled=!!cell&&(!piece||!pCells(piece).some(p=>p.r===cy&&p.c===cx));
-    if(isSettled&&ccSel&&Math.abs(ccSel.r-cy)+Math.abs(ccSel.c-cx)===1){
-      ccSwapAttempt(ccSel.r,ccSel.c,cy,cx);
-      return;
+  // Booster targeting mode: next tap fires (inside board) or cancels (outside)
+  if(targeting){
+    if(isTap){
+      const cell=boardCellFromClient(cx,cy);
+      if(cell)fireTargetedBooster(cell.r,cell.c);
+      else cancelTargeting();
     }
-    if(isSettled&&cell.type!==N){
-      if(ccSel&&ccSel.r===cy&&ccSel.c===cx)ccSel=null;
-      else ccSel={r:cy,c:cx};
-      return;
+    return;
+  }
+
+  // CC smash: tap a settled SPECIAL to select, adjacent tap to smash
+  if(isTap&&!cascading){
+    const cellPos=boardCellFromClient(cx,cy);
+    if(cellPos){
+      const{r:cyc,c:cxc}=cellPos;
+      const cell=board[cyc][cxc];
+      const isSettled=!!cell&&(!piece||!pCells(piece).some(p=>p.r===cyc&&p.c===cxc));
+      if(isSettled&&ccSel&&Math.abs(ccSel.r-cyc)+Math.abs(ccSel.c-cxc)===1){
+        ccSwapAttempt(ccSel.r,ccSel.c,cyc,cxc);
+        return;
+      }
+      if(isSettled&&cell.type!==N){
+        if(ccSel&&ccSel.r===cyc&&ccSel.c===cxc)ccSel=null;
+        else ccSel={r:cyc,c:cxc};
+        return;
+      }
     }
     ccSel=null;
   } else {
     ccSel=null;
   }
 
-  // Tetromino controls (only when piece is active and not cascading)
-  if(cascading||!piece)return;
+  // Tetromino controls — swipes only count if they started over the board
+  if(cascading||!piece||!startedOnBoard)return;
   if(isTap){rotate();return;}
   if(Math.abs(dx)>Math.abs(dy)){const d=dx>0?1:-1;if(valid(piece,board,0,d)){piece.c+=d;sfx.move();}}
   else{if(dy>0)hardDrop();else rotate();}
+}
+
+document.addEventListener('touchstart',e=>{
+  pointerDown(e.touches[0].clientX,e.touches[0].clientY,e.target);
 },{passive:true});
+document.addEventListener('touchend',e=>{
+  pointerUp(e.changedTouches[0].clientX,e.changedTouches[0].clientY,e.target);
+},{passive:true});
+let mouseActive=false;
+document.addEventListener('mousedown',e=>{mouseActive=true;pointerDown(e.clientX,e.clientY,e.target);});
+document.addEventListener('mouseup',e=>{if(mouseActive){mouseActive=false;pointerUp(e.clientX,e.clientY,e.target);}});
+
 document.addEventListener('keydown',e=>{
-  if(gameOver||cascading||!piece)return;
+  if(gameOver||cascading||paused||levelEnding||!piece)return;
   if(e.key==='ArrowLeft'&&valid(piece,board,0,-1)){piece.c--;sfx.move();e.preventDefault();}
   if(e.key==='ArrowRight'&&valid(piece,board,0,1)){piece.c++;sfx.move();e.preventDefault();}
   if(e.key==='ArrowDown'){if(valid(piece,board,1))piece.r++;else lockPiece();e.preventDefault();}
@@ -684,43 +1391,249 @@ function rotate(){
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
-// ── Candy Crush-style sprites, cached per colour/type/size ─────────────────
+// ── BOOSTERS — earn-only economy, zero IAP ─────────────────────────────────
+const boosterEls={hammer:document.getElementById('b-hammer'),
+  shuffle:document.getElementById('b-shuffle'),wrap:document.getElementById('b-wrap')};
+function updateBoosterUI(){
+  for(const k of ['hammer','shuffle','wrap']){
+    const el=boosterEls[k];
+    el.querySelector('.cnt').textContent=SAVE.boosters[k];
+    el.classList.toggle('off',SAVE.boosters[k]<=0&&mode!=='daily');
+    el.classList.toggle('locked',mode==='daily');
+    el.classList.toggle('aim',targeting===k||(k==='wrap'&&targeting==='wrap'));
+  }
+}
+function cancelTargeting(){targeting=null;dimEl.style.display='none';updateBoosterUI();}
+function boosterTap(kind){
+  if(gameOver||paused||levelEnding)return;
+  if(mode==='daily'){showToast('🔒 Boosters locked in Daily');return;}
+  if(targeting===kind){cancelTargeting();return;}  // tap again = cancel
+  if(SAVE.boosters[kind]<=0){showToast('No '+kind+'s left — clear levels to earn more');return;}
+  if(cascading){return;}
+  try{gsap.to(boosterEls[kind],{scale:0.92,duration:0.08,yoyo:true,repeat:1,onComplete:()=>gsap.set(boosterEls[kind],{scale:1})});}catch(e){}
+  if(kind==='shuffle'){
+    // CANDY SHUFFLE — instant: re-roll every settled NORMAL candy's color
+    SAVE.boosters.shuffle--;persist();updateBoosterUI();
+    sfx.thud();shake(2,4);
+    const activeCells=piece?pCells(piece).map(p=>ck(p.r,p.c)):[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const cell=board[r][c];
+      if(cell&&cell.type===N&&cell.color>=0&&!activeCells.includes(ck(r,c)))
+        cell.color=randCol();
+    }
+    cascading=true;
+    setTimeout(()=>cascade(0,false),150);  // shuffle-created matches fire for free
+    return;
+  }
+  targeting=kind;                          // hammer / wrap → targeting mode
+  dimEl.style.display='block';
+  updateBoosterUI();
+}
+function fireTargetedBooster(r,c){
+  const kind=targeting;
+  cancelTargeting();
+  if(!board[r][c]&&kind==='hammer')return;               // hammer needs a candy
+  if(piece&&pCells(piece).some(p=>p.r===r&&p.c===c))return; // settled cells only
+  SAVE.boosters[kind]--;persist();updateBoosterUI();
+  sfx.thud();shake(2,4);
+  cascading=true;ccSel=null;
+  lockR=r;lockC=c;
+  if(kind==='hammer'){
+    const cell=board[r][c];
+    if(cell.type!==N){
+      activateSpecials([ck(r,c)],null);   // special candy FIRES
+    } else {
+      removeSet(new Set([ck(r,c)]));      // normal candy pops (jelly clears inside)
+      gravity(board);
+      setTimeout(()=>cascade(0,false),150);
+    }
+  } else { // wrap: 3×3 wrapped explosion routed through expandSpecials pipeline
+    addWrappedFX(c,r,'#f2a935');sfx.wrapped();
+    const keys=[];
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc])keys.push(ck(nr,nc));
+    }
+    if(keys.length){
+      const exp=expandSpecials(new Set(keys),null);  // caught specials chain-fire
+      score+=exp.size*30*lvlMult();
+      removeSet(exp);
+    }
+    gravity(board);
+    setTimeout(()=>cascade(0,false),200);
+  }
+}
+for(const k of ['hammer','shuffle','wrap']){
+  const el=boosterEls[k];
+  const h=e=>{e.stopPropagation();e.preventDefault();initAudio();boosterTap(k);};
+  el.addEventListener('touchend',h,{passive:false});
+  el.addEventListener('click',e=>{e.stopPropagation();boosterTap(k);});
+  el.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+}
+
+// ── BOOSTER ICON ART — painted into the per-button canvas ONCE at boot and
+//    once per applyTheme. NEVER per frame: the backing store is a fixed 124²
+//    and CSS scales it to whatever L.bstD layout() picked, so a resize needs
+//    no repaint either. ───────────────────────────────────────────────────
+const BOOSTER_RING={
+  hammer :['#e6bcff','#a44df0','#5c2a8a'],
+  shuffle:['#b6f3c2','#3fca55','#1d7a2e'],
+  wrap   :['#ffe3ac','#f2a935','#9a6414']
+};
+function bRR(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.quadraticCurveTo(x+w,y,x+w,y+r);
+  g.lineTo(x+w,y+h-r);g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  g.lineTo(x+r,y+h);g.quadraticCurveTo(x,y+h,x,y+h-r);
+  g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);
+  g.closePath();
+}
+// 1 — LOLLIPOP: white disc + purple archimedean swirl + straight stick.
+// The stick points STRAIGHT DOWN, not down-right: .cnt now sits bottom-right,
+// and a diagonal stick collided with the count badge.
+function drawLollyIcon(g,cx,cy,R){
+  const dy=cy-R*0.20, r=R*0.74;
+  g.save();
+  g.lineCap='round';
+  g.strokeStyle='#f3e6ff';g.lineWidth=R*0.15;
+  g.beginPath();g.moveTo(cx,dy);g.lineTo(cx,cy+R*0.90);g.stroke();
+  g.fillStyle='#ffffff';g.beginPath();g.arc(cx,dy,r,0,Math.PI*2);g.fill();
+  // swirl turn-spacing (0.86r/2.7 = 0.32r) must exceed the stroke width or the
+  // disc fills solid purple and stops reading as a swirl
+  g.strokeStyle='#a44df0';g.lineWidth=r*0.16;g.lineJoin='round';
+  g.beginPath();
+  const steps=170,turns=2.7;
+  for(let i=0;i<=steps;i++){
+    const t=i/steps,ang=t*turns*Math.PI*2,rad=t*r*0.86;
+    const x=cx+Math.cos(ang)*rad,y=dy+Math.sin(ang)*rad;
+    if(i)g.lineTo(x,y);else g.moveTo(x,y);
+  }
+  g.stroke();
+  g.fillStyle='rgba(255,255,255,0.6)';
+  g.beginPath();g.ellipse(cx-r*0.36,dy-r*0.42,r*0.26,r*0.13,-0.6,0,Math.PI*2);g.fill();
+  g.restore();
+}
+// 2 — JELLYBEAN: green rotated ellipse + white specular
+function drawBeanIcon(g,cx,cy,R){
+  g.save();
+  g.translate(cx,cy);g.rotate(-0.62);
+  const grd=g.createLinearGradient(-R*0.8,-R*0.5,R*0.8,R*0.5);
+  grd.addColorStop(0,'#a6f0b4');grd.addColorStop(0.48,'#3fca55');grd.addColorStop(1,'#1a7a2c');
+  g.fillStyle=grd;
+  g.beginPath();g.ellipse(0,0,R*0.84,R*0.50,0,0,Math.PI*2);g.fill();
+  g.strokeStyle='rgba(8,48,18,0.45)';g.lineWidth=R*0.07;g.stroke();
+  g.fillStyle='rgba(255,255,255,0.85)';
+  g.beginPath();g.ellipse(-R*0.30,-R*0.18,R*0.26,R*0.11,-0.25,0,Math.PI*2);g.fill();
+  g.restore();
+}
+// 3 — WRAPPED CANDY: orange rounded square + two triangular twist ends.
+// The ends are ORANGE and short. First pass drew them dark brown and full
+// height, which read as two black wings eating the button, not as wrapper.
+function drawWrapIcon(g,cx,cy,R){
+  g.save();
+  // ends stop at 0.84R, NOT at the inner circle's edge: an orange tip touching
+  // the gold ring has zero separation and the whole icon reads as a bowtie
+  // fused to the button rim.
+  const w=R*0.86,h=R*0.86,rr=R*0.24,hw=w/2;
+  const eg=g.createLinearGradient(0,cy-R*0.28,0,cy+R*0.28);
+  eg.addColorStop(0,'#ffbe63');eg.addColorStop(1,'#c97f10');
+  g.fillStyle=eg;
+  g.beginPath();g.moveTo(cx-hw*0.86,cy);g.lineTo(cx-R*0.84,cy-R*0.28);g.lineTo(cx-R*0.84,cy+R*0.28);g.closePath();g.fill();
+  g.beginPath();g.moveTo(cx+hw*0.86,cy);g.lineTo(cx+R*0.84,cy-R*0.28);g.lineTo(cx+R*0.84,cy+R*0.28);g.closePath();g.fill();
+  const grd=g.createLinearGradient(cx-hw,cy-h/2,cx+hw,cy+h/2);
+  grd.addColorStop(0,'#ffcd80');grd.addColorStop(0.5,'#ff9f2e');grd.addColorStop(1,'#c96a00');
+  g.fillStyle=grd;bRR(g,cx-hw,cy-h/2,w,h,rr);g.fill();
+  g.strokeStyle='rgba(88,44,0,0.5)';g.lineWidth=R*0.07;g.stroke();
+  g.fillStyle='rgba(255,255,255,0.5)';
+  g.beginPath();g.ellipse(cx-w*0.19,cy-h*0.24,w*0.20,h*0.10,-0.5,0,Math.PI*2);g.fill();
+  g.restore();
+}
+const BOOSTER_ICON={hammer:drawLollyIcon,shuffle:drawBeanIcon,wrap:drawWrapIcon};
+function paintBoosterIcons(){
+  for(const k of ['hammer','shuffle','wrap']){
+    const el=boosterEls[k];if(!el)continue;
+    const cv=el.querySelector('canvas');if(!cv)continue;
+    const g=cv.getContext('2d');if(!g)continue;
+    const S=cv.width,cx=S/2,cy=S/2;
+    g.setTransform(1,0,0,1,0,0);
+    g.clearRect(0,0,S,S);
+    const c=BOOSTER_RING[k];
+    const rg=g.createRadialGradient(cx-S*0.16,cy-S*0.20,S*0.04,cx,cy,S*0.50);
+    rg.addColorStop(0,c[0]);rg.addColorStop(0.60,c[1]);rg.addColorStop(1,c[2]);
+    g.fillStyle=rg;g.beginPath();g.arc(cx,cy,S*0.5,0,Math.PI*2);g.fill();
+    g.fillStyle='#16092e';g.beginPath();g.arc(cx,cy,S*0.365,0,Math.PI*2);g.fill();
+    BOOSTER_ICON[k](g,cx,cy,S*0.365);   // R = the dark inner circle's radius
+  }
+}
+
+// ── ART SYSTEM — glossy kawaii jellies, pre-rendered once per combo ────────
 const spriteCache=new Map();
 function candySprite(colorIdx,type,sz){
-  const key=colorIdx+'|'+type+'|'+sz;
+  const key=SAVE.theme+'|'+colorIdx+'|'+type+'|'+sz;
   let s=spriteCache.get(key);
   if(!s){
-    s=document.createElement('canvas');s.width=s.height=sz;
-    renderCandySprite(s.getContext('2d'),colorIdx,type,sz);
+    s=document.createElement('canvas');s.width=s.height=Math.max(4,Math.round(sz*RES));
+    renderCandySprite(s.getContext('2d'),colorIdx,type,s.width);
     spriteCache.set(key,s);
   }
   return s;
 }
 
+// ── Static board underlay, pre-rendered once per CELL change ──────────────
+// The panel fill + every grid line + the inner border used to be 25 separate draw
+// calls EVERY frame. They are static for the whole life of a CELL value, so they
+// are baked into one bitmap and blitted as drawBoard's first call: 25 -> 1.
+const boardBase=document.createElement('canvas');
+function buildBoardBase(){
+  const w=COLS*CELL,h=ROWS*CELL;
+  if(w<4||h<4)return;
+  boardBase.width=w*RES;boardBase.height=h*RES;
+  const g=boardBase.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
+  g.clearRect(0,0,w,h);
+  g.fillStyle='#1c0f36';g.fillRect(0,0,w,h);
+  // Faint violet grid — .05 alpha was literally invisible; #2a1a4e @ 1px reads
+  g.strokeStyle='#2a1a4e';g.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){g.beginPath();g.moveTo(0,r*CELL);g.lineTo(w,r*CELL);g.stroke();}
+  for(let c=0;c<=COLS;c++){g.beginPath();g.moveTo(c*CELL,0);g.lineTo(c*CELL,h);g.stroke();}
+  // inner border — seats the play area inside the panel's 2px violet frame
+  g.strokeStyle='rgba(122,79,208,0.45)';g.lineWidth=1;
+  g.strokeRect(0.5,0.5,w-1,h-1);
+}
+
+// ── Jelly glaze tile, pre-rendered once per CELL change ───────────────────
+// Was a createLinearGradient PER GLAZED CELL PER FRAME (40 jellied cells = 40
+// gradient objects x 60fps of garbage). Both alphas are baked into the tile, so
+// the frame loop blits it at globalAlpha 1.
+const jellyTile=document.createElement('canvas');
+function buildJellyTile(){
+  const s=Math.max(4,Math.round(CELL));
+  jellyTile.width=jellyTile.height=s*RES;
+  const g=jellyTile.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
+  g.clearRect(0,0,s,s);
+  g.globalAlpha=0.35;
+  const gg=g.createLinearGradient(0,0,s,s);
+  gg.addColorStop(0,'#8fe9ff');gg.addColorStop(1,'#ff9ade');
+  g.fillStyle=gg;
+  g.beginPath();
+  if(g.roundRect)g.roundRect(1,1,s-2,s-2,5);else g.rect(1,1,s-2,s-2);
+  g.fill();
+  g.globalAlpha=0.55;
+  g.strokeStyle='#aef3ff';g.lineWidth=1;
+  g.beginPath();
+  if(g.roundRect)g.roundRect(1.5,1.5,s-3,s-3,5);else g.rect(1.5,1.5,s-3,s-3);
+  g.stroke();
+  g.globalAlpha=1;
+}
+
+// drawCandy is now ONE drawImage (+ the CB pulse ring, which is time-varying and
+// therefore cannot be cached). The translucent wrapper moved INTO renderCandySprite
+// so it is baked into the cached bitmap — see paintWrapper() below.
 function drawCandy(c2d,x,y,sz,colorIdx,type){
   const s=Math.round(sz);if(s<4)return;
-  if(colorIdx>=0&&type!==CB){
-    // translucent square wrapper behind the candy — keeps the tetromino silhouette
-    // readable (Osimo 2026-07-02: do NOT remove; shape recognition depends on it)
-    const b=Math.max(2,Math.round(sz*.11)),bv=Math.max(1,b*.65),rad=Math.max(2,sz*0.15);
-    const C=CANDY[colorIdx];
-    const wrapA=c2d.globalAlpha;c2d.globalAlpha=wrapA*0.42;
-    c2d.fillStyle=C.dark;c2d.fillRect(x+.5,y+.5,sz-1,sz-1);
-    c2d.save();c2d.beginPath();
-    if(c2d.roundRect){c2d.roundRect(x+b,y+b,sz-b*2,sz-b*2,rad);}
-    else{const rx=x+b,ry=y+b,rw=sz-b*2,rh=sz-b*2;c2d.moveTo(rx+rad,ry);c2d.lineTo(rx+rw-rad,ry);c2d.arc(rx+rw-rad,ry+rad,rad,-Math.PI/2,0);c2d.lineTo(rx+rw,ry+rh-rad);c2d.arc(rx+rw-rad,ry+rh-rad,rad,0,Math.PI/2);c2d.lineTo(rx+rad,ry+rh);c2d.arc(rx+rad,ry+rh-rad,rad,Math.PI/2,Math.PI);c2d.lineTo(rx,ry+rad);c2d.arc(rx+rad,ry+rad,rad,Math.PI,-Math.PI/2);c2d.closePath();}
-    c2d.clip();
-    const grd=c2d.createLinearGradient(x+b,y+b,x+sz-b,y+sz-b);
-    grd.addColorStop(0,C.light);grd.addColorStop(.45,C.body);grd.addColorStop(1,C.dark);
-    c2d.fillStyle=grd;c2d.fillRect(x+b,y+b,sz-b*2,sz-b*2);
-    c2d.fillStyle='rgba(255,255,255,0.32)';c2d.fillRect(x+b,y+b,sz-b*2,bv);c2d.fillRect(x+b,y+b+bv,bv,sz-b*2-bv);
-    c2d.fillStyle='rgba(0,0,0,0.28)';c2d.fillRect(x+b,y+sz-b-bv,sz-b*2,bv);c2d.fillRect(x+sz-b-bv,y+b,bv,sz-b*2-bv);
-    c2d.restore();
-    c2d.globalAlpha=wrapA;
-  }
-  c2d.drawImage(candySprite(colorIdx,type,s),x,y);
+  c2d.drawImage(candySprite(colorIdx,type,s),x,y,s,s);
   if(type===CB){
-    // live pulsing aura so the bomb reads as "smash me"
     const ga=c2d.globalAlpha,t=0.5+0.5*Math.sin(performance.now()/300);
     c2d.globalAlpha=ga*(0.25+0.35*t);
     c2d.strokeStyle='#ff44ff';c2d.lineWidth=2;
@@ -729,69 +1642,71 @@ function drawCandy(c2d,x,y,sz,colorIdx,type){
   }
 }
 
-// One distinct CC candy silhouette per colour:
-// 0 yellow teardrop · 1 orange lozenge · 2 green chiclet · 3 brown bonbon
-// 4 blue sphere · 5 purple flower · 6 red jelly bean
-function bodyPath(idx,cx,cy,R){
-  const p=new Path2D();
-  if(idx===0){
-    p.moveTo(cx,cy-R*1.02);
-    p.bezierCurveTo(cx+R*0.92,cy-R*0.12,cx+R*0.85,cy+R*0.78,cx,cy+R*0.78);
-    p.bezierCurveTo(cx-R*0.85,cy+R*0.78,cx-R*0.92,cy-R*0.12,cx,cy-R*1.02);
-  }else if(idx===1){
-    p.ellipse(cx,cy,R,R*0.70,0,0,Math.PI*2);
-  }else if(idx===2){
-    const h=R*0.88,rad=R*0.42,x0=cx-h,y0=cy-h,w=h*2;
-    p.moveTo(x0+rad,y0);
-    p.arcTo(x0+w,y0,x0+w,y0+w,rad);
-    p.arcTo(x0+w,y0+w,x0,y0+w,rad);
-    p.arcTo(x0,y0+w,x0,y0,rad);
-    p.arcTo(x0,y0,x0+w,y0,rad);
-    p.closePath();
-  }else if(idx===3){
-    p.arc(cx,cy,R*0.92,0,Math.PI*2);
-  }else if(idx===4){
-    p.arc(cx,cy,R*0.95,0,Math.PI*2);
-  }else if(idx===5){
-    for(let i=0;i<6;i++){
-      const a=i*Math.PI/3-Math.PI/2;
-      const lx=cx+Math.cos(a)*R*0.52,ly=cy+Math.sin(a)*R*0.52;
-      p.moveTo(lx+R*0.48,ly);p.arc(lx,ly,R*0.48,0,Math.PI*2);
-    }
-    p.moveTo(cx+R*0.5,cy);p.arc(cx,cy,R*0.5,0,Math.PI*2);
+// Per-color kawaii face micro-variants — color-blind recognition aid
+// (replaces the old 7-silhouette system: eye spacing / mouth shape differ per color)
+// INDEX ORDER IS THE PALETTE ORDER (THEMES.classic): 0 purple, 1 red, 2 ORANGE,
+// 3 green, 4 blue. There is no yellow in the 5-wide palette — do not "fix" index 2
+// back to yellow; the comment used to say yellow and the colour has been orange
+// since the palette went 5-wide.
+const FACES=[
+  {ex:0.26,ey:0.10,er:1.00,mouth:'smile'},   // 0 purple: wide-set eyes, gentle smile
+  {ex:0.20,ey:0.08,er:1.15,mouth:'open'},    // 1 red: close big eyes, open laughing mouth
+  {ex:0.30,ey:0.12,er:0.85,mouth:'o'},       // 2 orange: far-set small eyes, surprised o
+  {ex:0.24,ey:0.08,er:1.00,mouth:'happy'},   // 3 green: closed happy arc eyes + smile
+  {ex:0.22,ey:0.14,er:1.05,mouth:'flat'}     // 4 blue: low eyes, cool flat smile
+];
+function jellyBodyPath(g,cx,cy,h,rad){
+  g.beginPath();
+  if(g.roundRect)g.roundRect(cx-h,cy-h,h*2,h*2,rad);
+  else{const x0=cx-h,y0=cy-h,w=h*2;
+    g.moveTo(x0+rad,y0);g.arcTo(x0+w,y0,x0+w,y0+w,rad);g.arcTo(x0+w,y0+w,x0,y0+w,rad);
+    g.arcTo(x0,y0+w,x0,y0,rad);g.arcTo(x0,y0,x0+w,y0,rad);g.closePath();}
+}
+function drawFace(g,idx,cx,cy,R){
+  const f=FACES[idx%FACES.length];
+  const ex=R*f.ex,ey=cy-R*f.ey*0.5+R*0.02,ew=R*0.11*f.er,eh=R*0.16*f.er;
+  g.fillStyle='#3a2410';
+  if(f.mouth==='happy'){ // closed happy eyes: arcs
+    g.strokeStyle='#3a2410';g.lineWidth=Math.max(1,R*0.07);g.lineCap='round';
+    g.beginPath();g.arc(cx-ex,ey,ew*1.4,Math.PI*1.15,Math.PI*1.85);g.stroke();
+    g.beginPath();g.arc(cx+ex,ey,ew*1.4,Math.PI*1.15,Math.PI*1.85);g.stroke();
   }else{
-    p.ellipse(cx,cy,R,R*0.62,-0.5,0,Math.PI*2);
+    g.beginPath();g.ellipse(cx-ex,ey,ew,eh,0,0,Math.PI*2);g.fill();
+    g.beginPath();g.ellipse(cx+ex,ey,ew,eh,0,0,Math.PI*2);g.fill();
+    g.fillStyle='rgba(255,255,255,0.85)';
+    g.beginPath();g.arc(cx-ex-ew*0.3,ey-eh*0.35,ew*0.3,0,Math.PI*2);g.fill();
+    g.beginPath();g.arc(cx+ex-ew*0.3,ey-eh*0.35,ew*0.3,0,Math.PI*2);g.fill();
   }
-  return p;
+  const my=cy+R*0.28;
+  g.strokeStyle='#3a2410';g.lineWidth=Math.max(1,R*0.07);g.lineCap='round';
+  if(f.mouth==='smile'){g.beginPath();g.arc(cx,my-R*0.10,R*0.20,0.35,Math.PI-0.35);g.stroke();}
+  else if(f.mouth==='open'){g.fillStyle='#3a2410';g.beginPath();g.arc(cx,my-R*0.04,R*0.14,0,Math.PI);g.closePath();g.fill();}
+  else if(f.mouth==='o'){g.beginPath();g.arc(cx,my-R*0.02,R*0.09,0,Math.PI*2);g.stroke();}
+  else if(f.mouth==='happy'){g.beginPath();g.arc(cx,my-R*0.12,R*0.24,0.30,Math.PI-0.30);g.stroke();}
+  else{g.beginPath();g.moveTo(cx-R*0.14,my);g.quadraticCurveTo(cx,my+R*0.07,cx+R*0.14,my);g.stroke();}
 }
-
-function renderBody(g,idx,cx,cy,R,C){
-  const path=bodyPath(idx,cx,cy,R);
-  const grd=g.createRadialGradient(cx-R*0.35,cy-R*0.4,R*0.08,cx,cy,R*1.2);
-  grd.addColorStop(0,C.light);grd.addColorStop(0.55,C.body);grd.addColorStop(1,C.dark);
-  g.fillStyle=grd;g.fill(path);
-  g.lineWidth=Math.max(1,R*0.07);g.strokeStyle='rgba(0,0,0,0.28)';g.stroke(path);
-  if(idx===1){
-    g.save();g.clip(path);
-    g.fillStyle='rgba(255,255,255,0.20)';g.fillRect(cx-R*1.2,cy-R*0.15,R*2.4,R*0.30);
-    g.restore();
-  }
-  if(idx===3){
-    g.strokeStyle='rgba(255,236,200,0.45)';g.lineWidth=Math.max(1,R*0.12);
-    g.beginPath();g.arc(cx,cy,R*0.45,0.3,2.4);g.stroke();
-    g.beginPath();g.arc(cx,cy,R*0.18,2.8,5.4);g.stroke();
-  }
-  g.save();g.clip(path);
-  g.fillStyle='rgba(255,255,255,0.30)';
-  g.beginPath();g.ellipse(cx-R*0.32,cy-R*0.4,R*0.44,R*0.22,-0.5,0,Math.PI*2);g.fill();
-  g.fillStyle='rgba(255,255,255,0.8)';
-  g.beginPath();g.ellipse(cx-R*0.3,cy-R*0.44,R*0.13,R*0.07,-0.5,0,Math.PI*2);g.fill();
+function renderJellyBody(g,idx,cx,cy,R,C,withFace){
+  const h=R*0.92,rad=R*0.44;
+  // radial light→body→dark gradient fill
+  jellyBodyPath(g,cx,cy,h,rad);
+  const grd=g.createRadialGradient(cx-R*0.32,cy-R*0.40,R*0.08,cx,cy,R*1.35);
+  grd.addColorStop(0,C.light);grd.addColorStop(0.5,C.body);grd.addColorStop(1,C.dark);
+  g.fillStyle=grd;g.fill();
+  g.lineWidth=Math.max(1,R*0.06);g.strokeStyle='rgba(0,0,0,0.30)';g.stroke();
+  // darker shade at the bottom
+  g.save();jellyBodyPath(g,cx,cy,h,rad);g.clip();
+  g.fillStyle='rgba(0,0,0,0.18)';
+  g.beginPath();g.ellipse(cx,cy+h*1.05,h*1.2,h*0.55,0,0,Math.PI*2);g.fill();
+  // white gloss highlight sweeping the top edge
+  g.fillStyle='rgba(255,255,255,0.40)';
+  g.beginPath();g.ellipse(cx,cy-h*0.72,h*0.82,h*0.30,0,0,Math.PI*2);g.fill();
+  g.fillStyle='rgba(255,255,255,0.85)';
+  g.beginPath();g.ellipse(cx-h*0.48,cy-h*0.52,h*0.16,h*0.09,-0.6,0,Math.PI*2);g.fill();
   g.restore();
-  return path;
+  if(withFace)drawFace(g,idx,cx,cy,R);
 }
-
 function drawWrapper(g,cx,cy,sz,C){
-  // sweet-wrapper square with pinched sides behind the candy
+  // foil wrapper square with pinched sides behind the candy
   const h=sz*0.47;
   const grd=g.createLinearGradient(cx-h,cy-h,cx+h,cy+h);
   grd.addColorStop(0,C.light);grd.addColorStop(1,C.dark);
@@ -806,8 +1721,8 @@ function drawWrapper(g,cx,cy,sz,C){
   g.strokeStyle='rgba(255,255,255,0.5)';g.lineWidth=Math.max(1,sz*0.03);g.stroke();
   g.restore();
 }
-
 function drawFish(g,cx,cy,sz,C){
+  // swedish-fish ellipse + tail, dot eye
   const R=sz*0.40,p=new Path2D();
   p.ellipse(cx-R*0.15,cy,R*0.72,R*0.48,0,0,Math.PI*2);
   p.moveTo(cx+R*0.42,cy);
@@ -825,8 +1740,8 @@ function drawFish(g,cx,cy,sz,C){
   g.beginPath();g.ellipse(cx-R*0.2,cy-R*0.28,R*0.5,R*0.16,-0.15,0,Math.PI*2);g.fill();
   g.restore();
 }
-
 function drawBombSprite(g,cx,cy,sz){
+  // dark chocolate sphere + candy-color accents (no wrapper — as today)
   const R=sz*0.42;
   g.fillStyle='rgba(0,0,0,0.25)';
   g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
@@ -842,24 +1757,45 @@ function drawBombSprite(g,cx,cy,sz){
   g.fillStyle='rgba(255,255,255,0.35)';
   g.beginPath();g.ellipse(cx-R*0.35,cy-R*0.42,R*0.34,R*0.18,-0.5,0,Math.PI*2);g.fill();
 }
-
+// Translucent square wrapper behind the candy — keeps the tetromino silhouette
+// readable. Osimo 2026-07-02: baked into the sprite — do NOT remove; shape
+// recognition depends on it. (It used to be painted live in drawCandy every frame;
+// it is PRE-BAKED here, not removed. Source-over is associative, so wrapper-then-
+// candy inside the sprite composites identically over any backdrop.)
+function paintWrapper(g,idx,sz){
+  const b=Math.max(2,Math.round(sz*.11)),bv=Math.max(1,b*.65),rad=Math.max(2,sz*0.15);
+  const C=CANDY[idx];
+  const wrapA=g.globalAlpha;g.globalAlpha=wrapA*0.42;
+  g.fillStyle=C.dark;g.fillRect(.5,.5,sz-1,sz-1);
+  g.save();g.beginPath();
+  if(g.roundRect){g.roundRect(b,b,sz-b*2,sz-b*2,rad);}
+  else{const rx=b,ry=b,rw=sz-b*2,rh=sz-b*2;g.moveTo(rx+rad,ry);g.lineTo(rx+rw-rad,ry);g.arc(rx+rw-rad,ry+rad,rad,-Math.PI/2,0);g.lineTo(rx+rw,ry+rh-rad);g.arc(rx+rw-rad,ry+rh-rad,rad,0,Math.PI/2);g.lineTo(rx+rad,ry+rh);g.arc(rx+rad,ry+rh-rad,rad,Math.PI/2,Math.PI);g.lineTo(rx,ry+rad);g.arc(rx+rad,ry+rad,rad,Math.PI,-Math.PI/2);g.closePath();}
+  g.clip();
+  const grd=g.createLinearGradient(b,b,sz-b,sz-b);
+  grd.addColorStop(0,C.light);grd.addColorStop(.45,C.body);grd.addColorStop(1,C.dark);
+  g.fillStyle=grd;g.fillRect(b,b,sz-b*2,sz-b*2);
+  g.fillStyle='rgba(255,255,255,0.32)';g.fillRect(b,b,sz-b*2,bv);g.fillRect(b,b+bv,bv,sz-b*2-bv);
+  g.fillStyle='rgba(0,0,0,0.28)';g.fillRect(b,sz-b-bv,sz-b*2,bv);g.fillRect(sz-b-bv,b,bv,sz-b*2-bv);
+  g.restore();
+  g.globalAlpha=wrapA;
+}
 function renderCandySprite(g,idx,type,sz){
   const cx=sz/2,cy=sz/2,R=sz*0.40;
   if(idx<0||type===CB){drawBombSprite(g,cx,cy,sz);return;}
+  paintWrapper(g,idx,sz);   // FIRST — everything below composites on top of it
   const C=CANDY[idx];
   g.fillStyle='rgba(0,0,0,0.25)';
   g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
   if(type===FISH){drawFish(g,cx,cy,sz,C);return;}
   if(type===WR){
     drawWrapper(g,cx,cy,sz,C);
-    renderBody(g,idx,cx,cy,R*0.74,C);
+    renderJellyBody(g,idx,cx,cy,R*0.74,C,true);  // jelly at 0.74 scale, face kept
     return;
   }
-  const path=renderBody(g,idx,cx,cy,R,C);
+  renderJellyBody(g,idx,cx,cy,R,C,type===N);
   if(type===SH||type===SV){
-    // CC striped candy: three bold white stripes across the body,
-    // stripe direction = blast direction
-    g.save();g.clip(path);
+    // 3 bold white stripes clipped to the jelly body, direction = blast direction
+    g.save();jellyBodyPath(g,cx,cy,R*0.92,R*0.44);g.clip();
     g.fillStyle='rgba(255,255,255,0.85)';
     const w=R*0.26;
     for(const off of[-R*0.55,0,R*0.55]){
@@ -871,67 +1807,133 @@ function renderCandySprite(g,idx,type,sz){
 }
 
 // ── Effects rendering ──────────────────────────────────────────────────────
+function drawStar(g,x,y,r,rot,col){
+  g.save();g.translate(x,y);g.rotate(rot);
+  g.fillStyle=col;
+  g.beginPath();
+  for(let i=0;i<8;i++){
+    const rr=i%2?r*0.38:r,a=i*Math.PI/4;
+    if(i===0)g.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);
+    else g.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+  }
+  g.closePath();g.fill();
+  g.restore();
+}
+
+// ── Pre-rendered particle GLOW sprites ────────────────────────────────────
+// shadowBlur forces a full-canvas state flush per draw. At 2000 particles that
+// alone killed the frame. The glow is baked into ~14 tiny bitmaps ONCE (5 candy
+// colours + white + gold, star and dot variants) and blitted with zero shadow
+// state; star rotation still happens live via a transform, which is free.
+const glowCache=new Map();
+const GREF=32, GR0=GREF*0.35, GLOW_K=GREF/GR0;   // GLOW_K maps p.sz -> blit half-size
+function glowSprite(color,kind){
+  const key=kind+'|'+color;
+  let s=glowCache.get(key);
+  if(s)return s;
+  s=document.createElement('canvas');
+  s.width=s.height=Math.round(GREF*2*RES);
+  const g=s.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
+  g.shadowColor=color;g.shadowBlur=GR0*1.5;
+  g.fillStyle=color;
+  if(kind==='star')drawStar(g,GREF,GREF,GR0,0,color);
+  else{g.beginPath();g.arc(GREF,GREF,GR0,0,Math.PI*2);g.fill();}
+  g.shadowBlur=0;
+  glowCache.set(key,s);
+  return s;
+}
+function warmGlowSprites(){
+  for(const col of COLORS.concat(['#ffffff','#ffd700','#8fe9ff','#00ddff','#f2a935']))
+    for(const k of['star','dot'])glowSprite(col,k);
+}
 function drawEffects(){
   const now=performance.now();
   for(let i=rings.length-1;i>=0;i--){
     const rg=rings[i];rg.life-=rg.fast?.07:.04;rg.r=(1-rg.life)*rg.maxR;
     if(rg.life<=0){rings.splice(i,1);continue;}
     ctx.globalAlpha=rg.life*.8;
-    if(rg.color==='rainbow'){COLORS.forEach((col,j)=>{ctx.beginPath();ctx.arc(rg.x,rg.y,rg.r,(j/6)*Math.PI*2,((j+1)/6)*Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=rg.lw;ctx.stroke();});}
+    if(rg.color==='rainbow'){COLORS.forEach((col,j)=>{ctx.beginPath();ctx.arc(rg.x,rg.y,rg.r,(j/COLORS.length)*Math.PI*2,((j+1)/COLORS.length)*Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=rg.lw;ctx.stroke();});}
     else{ctx.beginPath();ctx.arc(rg.x,rg.y,rg.r,0,Math.PI*2);ctx.strokeStyle=rg.color;ctx.lineWidth=rg.lw;ctx.stroke();}
   }
   ctx.globalAlpha=1;
+  const W=COLS*CELL,H=ROWS*CELL;
   for(let i=sweeps.length-1;i>=0;i--){
     const sw=sweeps[i],p=(now-sw.born)/sw.dur;
     if(p>=1.3){sweeps.splice(i,1);continue;}
     const alpha=Math.min(1,p<.5?p*2:2-p*2)*.9;
     ctx.globalAlpha=alpha;
     if(sw.dir==='line'){
-      // Bright white line-clear flash
-      ctx.fillStyle='rgba(255,255,255,.95)';ctx.fillRect(0,sw.y,canvas.width,CELL);
+      ctx.fillStyle='rgba(255,255,255,.95)';ctx.fillRect(0,sw.y,W,CELL);
       ctx.shadowColor='#ffffff';ctx.shadowBlur=20;
       ctx.strokeStyle='#ff69b4';ctx.lineWidth=2;
-      ctx.beginPath();ctx.moveTo(0,sw.y+1);ctx.lineTo(canvas.width,sw.y+1);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(0,sw.y+CELL-1);ctx.lineTo(canvas.width,sw.y+CELL-1);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,sw.y+1);ctx.lineTo(W,sw.y+1);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,sw.y+CELL-1);ctx.lineTo(W,sw.y+CELL-1);ctx.stroke();
       ctx.shadowBlur=0;
     }else if(sw.dir==='h'){
-      ctx.fillStyle=sw.color+'33';ctx.fillRect(0,sw.rowY,canvas.width,CELL);
-      const half=canvas.width/2,spread=p*(half+CELL*2),bw=CELL*.6;
+      ctx.fillStyle=sw.color+'33';ctx.fillRect(0,sw.rowY,W,CELL);
+      const half=W/2,spread=p*(half+CELL*2),bw=CELL*.6;
       ctx.fillStyle=sw.color+'cc';ctx.fillRect(half-spread-bw/2,sw.rowY,bw,CELL);ctx.fillRect(half+spread-bw/2,sw.rowY,bw,CELL);
       ctx.fillStyle='#ffffffcc';ctx.fillRect(half-spread-bw*.2,sw.rowY,bw*.4,CELL);ctx.fillRect(half+spread-bw*.2,sw.rowY,bw*.4,CELL);
     }else if(sw.dir==='v'){
-      ctx.fillStyle=sw.color+'33';ctx.fillRect(sw.colX,0,CELL,canvas.height);
-      const half=canvas.height/2,spread=p*(half+CELL*2),bh=CELL*.6;
+      ctx.fillStyle=sw.color+'33';ctx.fillRect(sw.colX,0,CELL,H);
+      const half=H/2,spread=p*(half+CELL*2),bh=CELL*.6;
       ctx.fillStyle=sw.color+'cc';ctx.fillRect(sw.colX,half-spread-bh/2,CELL,bh);ctx.fillRect(sw.colX,half+spread-bh/2,CELL,bh);
       ctx.fillStyle='#ffffffcc';ctx.fillRect(sw.colX,half-spread-bh*.2,CELL,bh*.4);ctx.fillRect(sw.colX,half+spread-bh*.2,CELL,bh*.4);
     }
     ctx.globalAlpha=1;
   }
   for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.life-=.038;
+    const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.1*FXS;p.life-=.038;
+    if(p.rot!==undefined)p.rot+=(p.vr||0.12);
     if(p.life<=0){particles.splice(i,1);continue;}
-    ctx.globalAlpha=Math.min(1,p.life);ctx.shadowColor=p.color;ctx.shadowBlur=4;
-    ctx.beginPath();ctx.arc(p.x,p.y,p.sz,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.shadowBlur=0;
+    ctx.globalAlpha=Math.min(1,p.life);
+    if(p.kind==='star'){
+      const spr=glowSprite(p.color,'star'),hs=p.sz*GLOW_K;
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot||0);
+      ctx.drawImage(spr,-hs,-hs,hs*2,hs*2);
+      ctx.restore();
+    }else if(p.kind==='jelly'){
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot||0);
+      ctx.fillStyle=p.color;
+      const h=p.sz;
+      if(ctx.roundRect){ctx.beginPath();ctx.roundRect(-h/2,-h/2,h,h,h*0.3);ctx.fill();}
+      else ctx.fillRect(-h/2,-h/2,h,h);
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.beginPath();ctx.ellipse(-h*0.12,-h*0.2,h*0.28,h*0.12,-0.4,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }else{
+      const spr=glowSprite(p.color,'dot'),hs=p.sz*GLOW_K;
+      ctx.drawImage(spr,p.x-hs,p.y-hs,hs*2,hs*2);
+    }
   }
   ctx.globalAlpha=1;
 }
 
 // ── Draw board ─────────────────────────────────────────────────────────────
 function drawBoard(){
-  ctx.fillStyle='#0a0012';ctx.fillRect(0,0,canvas.width,canvas.height);
+  let sx=0,sy=0;
+  if(shakeT>0){
+    const k=shakeAmp*(shakeT/shakeDur);
+    sx=(Math.random()-.5)*2*k;sy=(Math.random()-.5)*2*k;
+  }
+  ctx.setTransform(RES,0,0,RES,sx*RES,sy*RES);
+  ctx.clearRect(-20,-20,COLS*CELL+40,ROWS*CELL+40);
+  // ONE blit replaces the panel fill + 25 grid strokes + inner border (see buildBoardBase)
+  ctx.drawImage(boardBase,0,0,COLS*CELL,ROWS*CELL);
 
-  // Subtle grid
-  ctx.strokeStyle='rgba(255,105,180,.05)';ctx.lineWidth=.5;
-  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(canvas.width,r*CELL);ctx.stroke();}
-  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,canvas.height);ctx.stroke();}
+  // Jelly glaze underlay — translucent cyan-pink sheen, ONE pre-baked tile
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(jelly[r]&&jelly[r][c])ctx.drawImage(jellyTile,c*CELL,r*CELL,CELL,CELL);
+  }
 
-  // Flash rows that are about to be cleared (bright white overlay)
+  // Flash rows about to clear
   const now=performance.now();
   for(const fr of flashRows){
-    const age=now-fr.born,frac=age/240;
+    const age=now-fr.born,frac=age/280;
     ctx.globalAlpha=0.7+0.3*Math.sin(frac*Math.PI*6);
     ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillRect(0,fr.row*CELL,canvas.width,CELL);
+    ctx.fillRect(0,fr.row*CELL,COLS*CELL,CELL);
   }
   ctx.globalAlpha=1;
 
@@ -946,64 +1948,699 @@ function drawBoard(){
     ctx.shadowBlur=0;
   }
 
+  // Targeting cursor pulse (hammer / wrapped blast)
+  if(targeting){
+    const t=0.5+0.5*Math.sin(now/180);
+    ctx.globalAlpha=0.5+0.4*t;
+    ctx.strokeStyle=targeting==='hammer'?'#a44df0':'#f2a935';
+    ctx.lineWidth=3;
+    ctx.setLineDash([6,5]);
+    ctx.strokeRect(3,3,COLS*CELL-6,ROWS*CELL-6);
+    ctx.setLineDash([]);
+    ctx.globalAlpha=1;
+  }
+
   if(piece&&!cascading){
+    const sh=pshape(piece);
+    const gRad=CELL*0.26;
+    const rr=(g2,x,y,w,rad)=>{g2.beginPath();
+      if(g2.roundRect)g2.roundRect(x,y,w,w,rad);else g2.rect(x,y,w,w);};
+
+    // Ghost landing row — a stroked OUTLINE, not a ghosted copy of the sprite.
+    // The old .13-alpha drawCandy paid the full sprite + wrapper cost for a
+    // decoration; a stroke is cheaper and matches the mockup.
     let gr=piece.r;while(valid({...piece,r:gr+1},board))gr++;
     if(gr>piece.r){
-      const sh=pshape(piece);ctx.globalAlpha=.13;
-      for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)
-        if(sh[r][c])drawCandy(ctx,(piece.c+c)*CELL,(gr+r)*CELL,CELL,piece.colors[r][c],N);
-      ctx.globalAlpha=1;
+      ctx.save();
+      ctx.globalAlpha=.35;ctx.lineWidth=2;
+      for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)if(sh[r][c]){
+        const ci=piece.colors[r][c];
+        ctx.strokeStyle=(ci>=0&&CANDY[ci])?CANDY[ci].light:'#ffffff';
+        rr(ctx,(piece.c+c)*CELL+3,(gr+r)*CELL+3,CELL-6,gRad);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    const sh=pshape(piece);
+
+    // Active-piece glow — dominant colour, ONE shadow-state flush per frame over
+    // <=4 cells. This is an ADDITION BENEATH the wrapper, never a replacement for
+    // it: the wrapper is what makes four candies read as ONE tetromino. Do not look
+    // at these two and conclude they are the same effect.
+    // (Unrelated to the per-PARTICLE shadowBlur that was removed — that was 2000
+    //  full-canvas flushes per frame; this is one.)
+    const tally={};let dom=-1,domN=0;
+    for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)if(sh[r][c]){
+      const ci=piece.colors[r][c];if(ci<0)continue;
+      tally[ci]=(tally[ci]||0)+1;
+      if(tally[ci]>domN){domN=tally[ci];dom=ci;}
+    }
+    if(dom>=0&&CANDY[dom]){
+      ctx.save();
+      ctx.shadowColor=CANDY[dom].body;ctx.shadowBlur=CELL*0.55;
+      ctx.globalAlpha=0.30;ctx.fillStyle=CANDY[dom].body;
+      for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)if(sh[r][c]){
+        rr(ctx,(piece.c+c)*CELL+2,(piece.r+r)*CELL+2,CELL-4,gRad);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)
       if(sh[r][c])drawCandy(ctx,(piece.c+c)*CELL,(piece.r+r)*CELL,CELL,piece.colors[r][c],N);
   }
   drawEffects();
 }
 
+// ── NEXT rail: 3-slot preview + chain indicator (rail-relative, fully fluid) ─
+// The GOAL readout that used to live down here is GONE — goal text now lives
+// beneath the LEVEL progress bar (#lvl-goal), written by updateHUD().
 function drawNext(){
-  nctx.fillStyle='#0a0012';nctx.fillRect(0,0,ncanvas.width,ncanvas.height);
-  if(!nextPiece)return;
-  const sh=pshape(nextPiece),rows=sh.length,cols=sh[0].length;
-  const nc=Math.floor(Math.min(ncanvas.width/cols,ncanvas.height/rows)*.82);
-  const ox=(ncanvas.width-cols*nc)/2,oy=(ncanvas.height-rows*nc)/2;
-  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
-    if(sh[r][c])drawCandy(nctx,ox+c*nc,oy+r*nc,nc,nextPiece.colors[r][c],N);
-}
-function updateHUD(){
-  scoreEl.innerHTML='SCORE<br>'+score.toLocaleString('en-GB');
-  levelEl.innerHTML='LVL<br>'+level;
+  const RW=npan.width/RES, RH=npan.height/RES;
+  nctx.setTransform(RES,0,0,RES,0,0);
+  nctx.clearRect(0,0,RW,RH);
+  nctx.fillStyle='#1d1040';nctx.fillRect(0,0,RW,RH);
+  nctx.fillStyle='#b9a3e3';
+  nctx.font='10px Bungee,"Arial Black",sans-serif';
+  nctx.textAlign='center';
+  nctx.fillText('NEXT',RW/2,20);
+  const sh0=Math.max(72,Math.min(116,(RH-26-40)/3));
+  const gp=(RH-26-3*sh0)/4;
+  for(let s=0;s<3;s++){
+    const y0=26+gp+s*(sh0+gp), x0=4, w=RW-8;
+    nctx.fillStyle='rgba(255,255,255,0.04)';
+    nctx.strokeStyle='rgba(122,79,208,0.35)';nctx.lineWidth=1;
+    nctx.beginPath();
+    if(nctx.roundRect)nctx.roundRect(x0,y0,w,sh0,10);else nctx.rect(x0,y0,w,sh0);
+    nctx.fill();nctx.stroke();
+    const p=nextQueue[s];
+    if(!p)continue;
+    const sh=pshape(p),rows=sh.length,cols=sh[0].length;
+    // constrain by sub-card WIDTH as well as height — the rail is only ~68px
+    // wide, so a 4-wide I-piece sized off the sub-card height alone overflows it
+    const mini=Math.min(22,Math.floor(Math.min((w-8)/cols,(sh0-8)/rows)));
+    if(mini<4)continue;
+    const ox=x0+(w-cols*mini)/2,oy=y0+(sh0-rows*mini)/2;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+      if(sh[r][c])drawCandy(nctx,ox+c*mini,oy+r*mini,mini,p.colors[r][c],N);
+  }
+  if(cascading&&comboCount>=2){
+    nctx.fillStyle='#ffdd00';
+    nctx.font='13px Bungee,"Arial Black",sans-serif';
+    nctx.fillText('CHAIN ×'+comboCount,RW/2,RH-16);
+  }
 }
 
-// ── Game loop ──────────────────────────────────────────────────────────────
+// ── HUD ────────────────────────────────────────────────────────────────────
+const scoreValEl=document.getElementById('score-val');
+const lvlLblEl=document.getElementById('lvl-lbl');
+const lvlValEl=document.getElementById('lvl-val');
+const lvlFillEl=document.getElementById('lvl-fill');
+const lvlGoalEl=document.getElementById('lvl-goal');
+function goalProgress(){
+  if(goalType==='SCORE')return[Math.min(score,goalTarget),goalTarget];
+  if(goalType==='JELLY')return[jellyTotal-jellyLeft,jellyTotal];
+  if(goalType==='LINES')return[Math.min(linesCleared,goalTarget),goalTarget];
+  return[0,1];
+}
+function updateHUD(){
+  scoreValEl.textContent=score.toLocaleString('en-GB');
+  // #lvl-goal is now the ONLY goal readout (the NEXT-rail block was deleted),
+  // so every goalType branch must write it — endless included.
+  if(mode==='endless'){
+    lvlLblEl.textContent='Level';
+    lvlValEl.textContent=level;
+    lvlFillEl.style.width=Math.min(100,(linesCleared%10)*10)+'%';
+    lvlGoalEl.textContent='∞  '+linesCleared+' lines';
+    movesValEl.textContent='∞';
+    movesValEl.classList.remove('low');
+  }else{
+    lvlLblEl.textContent=mode==='daily'?'Daily':'Level';
+    lvlValEl.textContent=mode==='daily'?'🔥':Lnum;
+    const[got,tot]=goalProgress();
+    lvlFillEl.style.width=Math.min(100,Math.round(got/Math.max(1,tot)*100))+'%';
+    if(goalType==='SCORE')
+      lvlGoalEl.textContent=got.toLocaleString('en-GB')+' / '+tot.toLocaleString('en-GB');
+    else if(goalType==='JELLY')
+      lvlGoalEl.textContent='🫧 '+got+' / '+tot;
+    else if(goalType==='LINES')
+      lvlGoalEl.textContent='☰ '+got+' / '+tot;
+    else
+      lvlGoalEl.textContent=got.toLocaleString('en-GB')+' / '+tot.toLocaleString('en-GB');
+    movesValEl.textContent=movesLeft;
+    movesValEl.classList.toggle('low',movesLeft<=5);
+  }
+  drawNext();
+}
+
+// ── SAGA LEVELS — 30 hand-tuned move-limited levels (hard-coded, no editor) ─
+// g:goal · t:target · m:moves · par:scorePar(L) · rows:seed rows · j:jelly count
+//
+// ⛔ RE-DERIVED FOR THE 8×15 BOARD (was 10×20). The old table was tuned against
+//    200 cells; this board holds 120 (−40%), and the three goal types do NOT all
+//    move the same way, which is why the old numbers could not simply carry over:
+//
+//    SCORE — scales DOWN. Scoring is driven by 3-runs, and a row now offers 6
+//      horizontal 3-run start positions (COLS−2) instead of 8, on 40% less area.
+//      par(L) = 400+350L+18L²  →  240+210L+11L²  (the old curve × 0.6, the exact
+//      area ratio). SCORE levels keep t == par, as before.
+//    LINES — scales UP. A line is 8 cells, not 10, so each line is 20% cheaper.
+//      Budget per level = 4·moves (piece cells) + rows·(COLS−2) (seeded cells;
+//      the wells stay empty). Every rung's pressure ratio target·COLS/budget is
+//      held at or BELOW the old 10-col ratio — see the per-row comments.
+//      NOTE the old comments computed seeded cells as rows·COLS; that ignored
+//      the wells seedBoard() always carves. They are corrected here.
+//    JELLY — scales DOWN. Seeded candy cells = rows·(COLS−2); on 8 columns the
+//      old counts glazed 73–83% of them, which leaves almost no un-jellied cell
+//      to cascade through. Every JELLY rung is now ≤70% seeded density.
+const LEVELS=[
+  {g:'SCORE',t:461,  m:25,par:461,  rows:0,j:0},  // L1  (t/par was 768)
+  {g:'SCORE',t:704,  m:25,par:704,  rows:0,j:0},  // L2  (was 1172)
+  {g:'JELLY',t:10,   m:25,par:969,  rows:3,j:10}, // L3  10/18=56% (par was 1612)
+  {g:'SCORE',t:1256, m:25,par:1256, rows:0,j:0},  // L4  (was 2088)
+  {g:'LINES',t:6,    m:25,par:1565, rows:0,j:0},  // L5  48/100=48% (t was 5; par 2600)
+  {g:'JELLY',t:12,   m:25,par:1896, rows:3,j:12}, // L6  12/18=67% (par was 3148)
+  {g:'SCORE',t:2249, m:25,par:2249, rows:0,j:0},  // L7  (was 3732)
+  {g:'SCORE',t:2624, m:25,par:2624, rows:0,j:0},  // L8  (was 4352)
+  {g:'JELLY',t:14,   m:25,par:3021, rows:4,j:14}, // L9  14/24=58% (rows was 3 → 78%; par 5008)
+  {g:'LINES',t:7,    m:25,par:3440, rows:0,j:0},  // L10 56/100=56% (t was 6; par 5700)
+  {g:'SCORE',t:3881, m:23,par:3881, rows:0,j:0},  // L11 (was 6428)
+  {g:'JELLY',t:16,   m:23,par:4344, rows:4,j:16}, // L12 16/24=67% (par was 7192)
+  {g:'SCORE',t:4829, m:23,par:4829, rows:0,j:0},  // L13 (was 7992)
+  {g:'SCORE',t:5336, m:23,par:5336, rows:0,j:0},  // L14 (was 8828)
+  {g:'LINES',t:8,    m:23,par:5865, rows:2,j:0},  // L15 64/(92+12)=62% (t was 7; par 9700)
+  {g:'SCORE',t:6416, m:23,par:6416, rows:0,j:0},  // L16 (was 10608)
+  {g:'SCORE',t:6989, m:23,par:6989, rows:0,j:0},  // L17 (was 11552)
+  {g:'JELLY',t:18,   m:23,par:7584, rows:5,j:18}, // L18 18/30=60% (t/j were 20, rows 4 → 83%; par 12532)
+  {g:'SCORE',t:8201, m:23,par:8201, rows:0,j:0},  // L19 (was 13548)
+  {g:'LINES',t:9,    m:23,par:8840, rows:3,j:0},  // L20 72/(92+18)=65% (t was 8; par 14600)
+  {g:'JELLY',t:20,   m:21,par:9501, rows:5,j:20}, // L21 20/30=67% (t/j were 22 → 73%; par 15688)
+  {g:'SCORE',t:10184,m:21,par:10184,rows:0,j:0},  // L22 (was 16812)
+  {g:'SCORE',t:10889,m:21,par:10889,rows:0,j:0},  // L23 (was 17972)
+  {g:'JELLY',t:21,   m:21,par:11616,rows:5,j:21}, // L24 21/30=70% (t/j were 24 → 80%; par 19168)
+  {g:'LINES',t:10,   m:21,par:12365,rows:5,j:0},  // L25 80/(84+30)=70% (t was 9; par 20400)
+  {g:'SCORE',t:13136,m:21,par:13136,rows:0,j:0},  // L26 (was 21668)
+  {g:'JELLY',t:24,   m:21,par:13929,rows:6,j:24}, // L27 24/36=67% (rows was 5 → 80%; par 22972)
+  {g:'SCORE',t:14744,m:21,par:14744,rows:0,j:0},  // L28 (was 24312)
+  {g:'SCORE',t:15581,m:21,par:15581,rows:0,j:0},  // L29 (was 25688)
+  {g:'LINES',t:11,   m:21,par:16440,rows:6,j:0},  // L30 88/(84+36)=73% finale (t was 10; par 27100)
+];
+
+// Seed generator — re-rolls until zero pre-existing 3-runs AND zero 2×2 squares
+// (a 2×2 would instantly spawn a fish: randomness must never fire before move 1)
+function boardHasInstantMatch(b){
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS-2;c++){
+    const a=b[r][c];
+    if(a&&b[r][c+1]&&b[r][c+2]&&a.color===b[r][c+1].color&&a.color===b[r][c+2].color)return true;
+  }
+  for(let c=0;c<COLS;c++)for(let r=0;r<ROWS-2;r++){
+    const a=b[r][c];
+    if(a&&b[r+1][c]&&b[r+2][c]&&a.color===b[r+1][c].color&&a.color===b[r+2][c].color)return true;
+  }
+  for(let r=0;r<ROWS-1;r++)for(let c=0;c<COLS-1;c++){
+    const a=b[r][c];
+    if(a&&b[r][c+1]&&b[r+1][c]&&b[r+1][c+1]&&
+       a.color===b[r][c+1].color&&a.color===b[r+1][c].color&&a.color===b[r+1][c+1].color)return true;
+  }
+  return false;
+}
+function seedBoard(rows,jellyCount){
+  if(rows<=0)return;
+  // Empty "well" column(s) run the full height of the seeded region so NO seeded
+  // row is ever complete at level start (a full row would instantly line-clear on
+  // the first piece lock and wipe the jellies — caught in playtest). LINES levels
+  // get ONE 1-wide well (classic Tetris shaft: each seeded row completes for one
+  // cell — that IS the level's line budget); JELLY levels get two wells.
+  const wells=new Set();
+  const well1=Math.floor(rand()*COLS);
+  wells.add(well1);
+  if(goalType!=='LINES')wells.add((well1+3+Math.floor(rand()*4))%COLS);
+  // constructive no-instant-match fill: each cell picks a color that cannot form
+  // a 3-run (left/up pairs) or a 2×2 square — zero re-rolls, PRNG-order stable
+  const pickSafe=(r,c)=>{
+    const banned=new Set();
+    const L1=c>=1?board[r][c-1]:null,L2=c>=2?board[r][c-2]:null;
+    if(L1&&L2&&L1.color===L2.color)banned.add(L1.color);
+    const U1=r>=1?board[r-1][c]:null,U2=r>=2?board[r-2][c]:null;
+    if(U1&&U2&&U1.color===U2.color)banned.add(U1.color);
+    const D=r>=1&&c>=1?board[r-1][c-1]:null;
+    if(L1&&U1&&D&&L1.color===U1.color&&U1.color===D.color)banned.add(L1.color);
+    let col=Math.floor(rand()*COLORS.length);
+    while(banned.has(col))col=(col+1)%COLORS.length;
+    return col;
+  };
+  for(let r=ROWS-rows;r<ROWS;r++)
+    for(let c=0;c<COLS;c++)
+      board[r][c]=wells.has(c)?null:{color:pickSafe(r,c),type:N};
+  if(jellyCount>0){
+    const cells=[];
+    for(let r=ROWS-rows;r<ROWS;r++)for(let c=0;c<COLS;c++)
+      if(board[r][c])cells.push([r,c]);   // glaze only cells that hold a candy
+    for(let i=cells.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]];}
+    const n=Math.min(jellyCount,cells.length);
+    for(let i=0;i<n;i++){
+      const[r,c]=cells[i];jelly[r][c]=true;
+    }
+    jellyTotal=n;jellyLeft=n;
+  }
+}
+
+// ── Run setup ───────────────────────────────────────────────────────────────
+function coreReset(){
+  board=emptyBoard();jelly=emptyJelly();jellyTotal=0;jellyLeft=0;
+  piece=null;score=0;linesCleared=0;
+  gameOver=false;cascading=false;levelEnding=false;paused=false;
+  lastDrop=performance.now();
+  // lockC seeds findMatches' striped placement on the first cascade of a level —
+  // it must be the board midpoint, not the old hardcoded 10-wide 4
+  lockR=ROWS-1;lockC=(COLS>>1)-1;comboCount=0;particles=[];rings=[];sweeps=[];flashRows=[];
+  wasRotated=false;lastClearPowerful=false;backToBack=false;
+  ccSel=null;onSettleCb=null;shakeT=0;
+  nextQueue=[];bag=[];
+  cancelTargeting();
+  bannerEl.style.opacity='0';
+  hideScreens();
+  cancelAnimationFrame(animId);
+}
+function hideScreens(){
+  document.getElementById('endscreen').style.display='none';
+  document.getElementById('pausescreen').style.display='none';
+  document.getElementById('confirm').style.display='none';
+  document.getElementById('hub').style.display='none';
+}
+function startLevel(L){
+  mode='saga';Lnum=L;
+  const cfg=LEVELS[L-1];
+  coreReset();
+  level=1;dropInterval=850;
+  movesLeft=cfg.m;goalType=cfg.g;goalTarget=cfg.t;
+  seedBoard(cfg.rows,cfg.j);
+  movesValEl.classList.remove('low');
+  updateBoosterUI();
+  spawnNext();updateHUD();
+  animId=requestAnimationFrame(loop);
+}
+function startEndless(){
+  mode='endless';Lnum=0;
+  coreReset();
+  level=1;dropInterval=850;movesLeft=Infinity;goalType=null;goalTarget=0;
+  updateBoosterUI();
+  spawnNext();updateHUD();
+  animId=requestAnimationFrame(loop);
+}
+function startDaily(){
+  mode='daily';Lnum=0;
+  drng=mulberry32(dailySeed());   // identical board for everyone, every attempt
+  coreReset();
+  level=1;dropInterval=850;
+  movesLeft=20;goalType='JELLY';goalTarget=12;
+  seedBoard(3,12);
+  goalTarget=jellyTotal;
+  movesValEl.classList.remove('low');
+  updateBoosterUI();
+  spawnNext();updateHUD();
+  animId=requestAnimationFrame(loop);
+}
+function resetGame(){
+  // entry point kept for ArcadeScores onClose compatibility / attract restarts
+  if(mode==='saga'&&Lnum>0)startLevel(Lnum);
+  else if(mode==='daily')startDaily();
+  else startEndless();
+}
+
+// ── SUGAR CRUSH finale + Level Clear celebration ───────────────────────────
+function startLevelClear(){
+  levelEnding=true;piece=null;holding=false;cancelTargeting();
+  const Lmult=mode==='daily'?1:Math.max(1,Lnum);
+  const leftover=(movesLeft===Infinity)?0:movesLeft;
+  if(leftover>0){
+    showBanner('🍬 SUGAR CRUSH!','#ff69b4',30);
+    sfx.riser();
+    score+=60*Lmult*leftover;    // ALL leftover moves pay out, past the 8-stripe cap
+    movesLeft=0;updateHUD();
+    // convert min(leftover,8) random settled normals to striped SH/SV alternating
+    const normals=[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+      if(board[r][c]&&board[r][c].type===N&&board[r][c].color>=0)normals.push(ck(r,c));
+    for(let i=normals.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[normals[i],normals[j]]=[normals[j],normals[i]];}
+    const picks=normals.slice(0,Math.min(leftover,8));
+    picks.forEach((key,i)=>{
+      const r=Math.floor(key/COLS),c=key%COLS;
+      board[r][c]={color:board[r][c].color,type:i%2?SV:SH};
+    });
+    let i=0;
+    const fireNext=()=>{
+      while(i<picks.length){
+        const key=picks[i++];
+        const r=Math.floor(key/COLS),c=key%COLS,cell=board[r][c];
+        if(!cell||cell.type===N)continue;   // consumed by an earlier cascade
+        cascading=true;
+        const exp=expandSpecials(new Set([key]),null);
+        removeSet(exp);
+        gravity(board);
+        updateHUD();
+        onSettleCb=()=>setTimeout(fireNext,250);
+        setTimeout(()=>cascade(0,false),100);
+        return;
+      }
+      setTimeout(celebrate,400);
+    };
+    setTimeout(fireNext,700);
+  } else {
+    setTimeout(celebrate,300);
+  }
+}
+function celebrate(){
+  // dopamine anchor: shake 12f amp8 + 32-particle board burst + fanfare + banner
+  shake(12,8);
+  for(let i=0;i<32;i++){
+    particles.push({x:Math.random()*COLS*CELL,y:Math.random()*ROWS*CELL,
+      vx:(Math.random()-.5)*5*FXS,vy:(-1-Math.random()*4)*FXS,life:1.2+Math.random()*.4,
+      color:COLORS[i%COLORS.length],sz:(3+Math.random()*4)*FXS,
+      kind:i%2?'star':'jelly',rot:Math.random()*Math.PI,vr:(Math.random()-.5)*.3});
+  }
+  capFX();
+  sfx.fanfare();
+  showBanner('LEVEL CLEAR!','#ffd700',30);
+
+  // stars vs 1.5×/2× scorePar
+  // daily par rides the same 8×15 rescale as the saga table (was 6000 on 10×20)
+  const par=mode==='daily'?3600:LEVELS[Lnum-1].par;
+  let stars=1;
+  if(score>=1.5*par)stars=2;
+  if(score>=2*par)stars=3;
+
+  sessionScore+=score;
+  let toast='';
+  if(mode==='daily'){
+    const today=todayStr();
+    if(SAVE.daily.cleared!==today){
+      SAVE.daily.streak=(SAVE.daily.date===yesterdayStr()||SAVE.daily.date===today)?SAVE.daily.streak+1:1;
+      SAVE.daily.cleared=today;SAVE.daily.date=today;
+      SAVE.boosters.hammer++;toast='🍭 +1 Hammer · 🔥 Streak '+SAVE.daily.streak;
+    }
+  }else{
+    const prev=SAVE.stars[Lnum-1]||0;
+    if(prev===0){ // first-clear booster, type rotates by level%3
+      const kind=['hammer','shuffle','wrap'][Lnum%3];
+      SAVE.boosters[kind]++;
+      toast='+1 '+(kind==='hammer'?'🍭 Hammer':kind==='shuffle'?'🫘 Shuffle':'🍬 Wrapped');
+    }
+    if(stars===3&&prev<3){SAVE.boosters.hammer++;toast+=(toast?' · ':'')+'⭐⭐⭐ +1 Hammer';}
+    SAVE.stars[Lnum-1]=Math.max(prev,stars);
+    SAVE.unlocked=Math.max(SAVE.unlocked,Math.min(31,Lnum+1));
+  }
+  persist();updateBoosterUI();
+
+  setTimeout(()=>{
+    const es=document.getElementById('endscreen');
+    document.getElementById('end-title').textContent=mode==='daily'?'DAILY CLEAR!':'LEVEL '+Lnum+' CLEAR';
+    document.getElementById('end-msg').textContent='Score '+score.toLocaleString('en-GB')+' — par '+par.toLocaleString('en-GB');
+    const spans=document.querySelectorAll('#stars-row span');
+    spans.forEach(s=>s.classList.remove('on'));
+    es.style.display='flex';
+    document.getElementById('end-next').style.display=(mode==='saga'&&Lnum<30)?'block':'none';
+    for(let i=0;i<stars;i++)setTimeout(()=>spans[i].classList.add('on'),400+i*400);
+    setTimeout(()=>{stars===3?sfx.star3():stars===2?sfx.star2():sfx.star1();},400+stars*400);
+    if(toast)setTimeout(()=>showToast(toast),1200);
+  },900);
+}
+
+// ── Fail flow — free instant retry, unlimited ──────────────────────────────
+function levelFail(topout){
+  levelEnding=true;piece=null;holding=false;cancelTargeting();
+  sessionScore+=score;
+  sfx.fail();
+  showBanner(topout?'TOPPED OUT!':'OUT OF MOVES!','#ff4444',26);
+  setTimeout(()=>{
+    tapConfirm('LEVEL FAILED',
+      (topout?'The board topped out. ':'No moves left. ')+'Retry is free — unlimited attempts.',
+      '↻ RETRY','🗺 MAP',
+      ()=>{mode==='daily'?startDaily():startLevel(Lnum);},
+      ()=>{quitToHub();});
+  },900);
+}
+function quitToHub(){
+  // session cumulative score submits on quit/top-out — no run is wasted
+  const s=sessionScore;sessionScore=0;
+  if(s>0&&!ATTRACT){
+    ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score:s,accent:'#ff69b4',
+      onClose:()=>showHub()});   // onClose → hub DIRECTLY, never a second recap
+  }else showHub();
+}
+
+// ── tapConfirm — house rule: zero browser dialogs ──────────────────────────
+let confirmYesCb=null,confirmNoCb=null;
+function tapConfirm(title,msg,yesLabel,noLabel,onYes,onNo){
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-msg').textContent=msg;
+  document.getElementById('confirm-yes').textContent=yesLabel||'YES';
+  document.getElementById('confirm-no').textContent=noLabel||'NO';
+  confirmYesCb=onYes;confirmNoCb=onNo;
+  document.getElementById('confirm').style.display='flex';
+}
+document.getElementById('confirm-yes').addEventListener('click',e=>{
+  e.stopPropagation();document.getElementById('confirm').style.display='none';
+  const cb=confirmYesCb;confirmYesCb=confirmNoCb=null;if(cb)cb();
+});
+document.getElementById('confirm-no').addEventListener('click',e=>{
+  e.stopPropagation();document.getElementById('confirm').style.display='none';
+  const cb=confirmNoCb;confirmYesCb=confirmNoCb=null;if(cb)cb();
+});
+
+let toastTO=null;
+function showToast(txt){
+  const t=document.getElementById('toast');
+  t.textContent=txt;t.style.opacity='1';
+  clearTimeout(toastTO);
+  toastTO=setTimeout(()=>{t.style.opacity='0';},2600);
+}
+
+// ── Restart + pause pills ──────────────────────────────────────────────────
+document.getElementById('restart-btn').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(levelEnding||document.getElementById('hub').style.display==='flex')return;
+  tapConfirm('RESTART','Restart level?','YES','NO',()=>{
+    if(mode==='saga')startLevel(Lnum);
+    else if(mode==='daily')startDaily();
+    else startEndless();
+  },null);
+});
+document.getElementById('pill-pause').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(gameOver||levelEnding)return;
+  paused=true;
+  document.getElementById('pausescreen').style.display='flex';
+});
+// Feel pass — the boosters already bounce (gsap in boosterTap); the two pills
+// were the only chrome that answered a tap with nothing. 60ms scale(0.94)
+// press, same yoyo shape as the booster bounce so the row reads as one system.
+for(const pid of ['pill-pause','pill-sound']){
+  const pel=document.getElementById(pid);
+  if(!pel)continue;
+  pel.addEventListener('pointerdown',()=>{
+    try{gsap.to(pel,{scale:0.94,duration:0.06,yoyo:true,repeat:1,
+      onComplete:()=>gsap.set(pel,{scale:1})});}catch(e){}
+  });
+}
+document.getElementById('pause-resume').addEventListener('click',e=>{
+  e.stopPropagation();
+  document.getElementById('pausescreen').style.display='none';
+  paused=false;lastDrop=performance.now();
+});
+document.getElementById('pause-quit').addEventListener('click',e=>{
+  e.stopPropagation();
+  document.getElementById('pausescreen').style.display='none';
+  paused=false;
+  if(mode==='endless'&&score>0){
+    gameOver=true;cancelAnimationFrame(animId);
+    ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score,accent:'#ff69b4',
+      onClose:()=>showHub()});
+  }else{
+    sessionScore+=score;
+    quitToHub();
+  }
+});
+document.getElementById('end-next').addEventListener('click',e=>{
+  e.stopPropagation();startLevel(Math.min(30,Lnum+1));
+});
+document.getElementById('end-map').addEventListener('click',e=>{
+  e.stopPropagation();quitToHub();
+});
+
+// ── LEVEL SELECT HUB ───────────────────────────────────────────────────────
+function showHub(){
+  gameOver=true;cancelAnimationFrame(animId);
+  hideScreens();cancelTargeting();
+  const hub=document.getElementById('hub');
+  hub.style.display='flex';
+  // top tiles
+  const daily=document.getElementById('tile-daily');
+  const clearedToday=SAVE.daily.cleared===todayStr();
+  daily.innerHTML='<div class="em">🔥'+(SAVE.daily.streak>0?'<span style="font-size:12px">×'+SAVE.daily.streak+'</span>':'')+'</div>DAILY'+(clearedToday?' ✓':'');
+  const endless=document.getElementById('tile-endless');
+  const endlessOpen=SAVE.unlocked>30;
+  endless.classList.toggle('locked',!endlessOpen);
+  endless.innerHTML='<div class="em">'+(endlessOpen?'∞':'🔒')+'</div>ENDLESS';
+  // level grid
+  const grid=document.getElementById('hub-grid');
+  grid.innerHTML='';
+  for(let L=1;L<=30;L++){
+    const tile=document.createElement('div');
+    tile.className='tile ui';
+    const locked=L>SAVE.unlocked;
+    if(locked)tile.classList.add('locked');
+    const st=SAVE.stars[L-1]||0;
+    tile.innerHTML=(locked?'🔒':L)+'<div class="pips">'+'★'.repeat(st)+'<span style="opacity:.25">'+'★'.repeat(3-st)+'</span></div>';
+    if(!locked)tile.addEventListener('click',ev=>{ev.stopPropagation();hub.style.display='none';startLevel(L);});
+    grid.appendChild(tile);
+  }
+  document.getElementById('hub-stars').textContent='★ '+totalStars()+' / 90';
+  // theme row
+  const tr=document.getElementById('theme-row');
+  tr.innerHTML='';
+  for(const name of Object.keys(THEMES)){
+    const b=document.createElement('div');
+    b.className='theme-btn ui'+(SAVE.theme===name?' sel':'');
+    const need=THEME_UNLOCK[name];
+    const open=totalStars()>=need;
+    if(!open)b.classList.add('locked');
+    b.textContent=(name==='classic'?'KAWAII':name.toUpperCase())+(open?'':' 🔒'+need+'★');
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      if(!open){showToast('Unlocks at '+need+' total stars');return;}
+      applyTheme(name);showHub();
+    });
+    tr.appendChild(b);
+  }
+}
+document.getElementById('tile-daily').addEventListener('click',e=>{
+  e.stopPropagation();document.getElementById('hub').style.display='none';startDaily();
+});
+document.getElementById('tile-endless').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(SAVE.unlocked<=30){showToast('Clear Level 30 to unlock Endless');return;}
+  document.getElementById('hub').style.display='none';startEndless();
+});
+
+// ── Attract AI — competent self-play, silent, no game-over UI ──────────────
+let attractPlan=null,lastAI=0;
+function evalDrop(type,rot,c){
+  const sh=PIECES[type][rot];
+  const p2={type,rot,r:0,c,colors:null};
+  if(!validShape(sh,0,c))return null;
+  let r=0;
+  while(validShape(sh,r+1,c))r++;
+  // temp occupancy
+  const occ=board.map(row=>row.map(x=>!!x));
+  for(let rr=0;rr<sh.length;rr++)for(let cc=0;cc<sh[rr].length;cc++)
+    if(sh[rr][cc])occ[r+rr][c+cc]=true;
+  let lines=0;
+  for(let rr=0;rr<ROWS;rr++)if(occ[rr].every(v=>v))lines++;
+  let agg=0,holes=0,bump=0,prevH=-1;
+  for(let cc=0;cc<COLS;cc++){
+    let h=0,seen=false;
+    for(let rr=0;rr<ROWS;rr++){
+      if(occ[rr][cc]){if(!seen){h=ROWS-rr;seen=true;}}
+      else if(seen)holes++;
+    }
+    agg+=h;
+    if(prevH>=0)bump+=Math.abs(h-prevH);
+    prevH=h;
+  }
+  return holes*8+agg*1+bump*0.7-lines*45;
+}
+function validShape(sh,r,c){
+  for(let rr=0;rr<sh.length;rr++)for(let cc=0;cc<sh[rr].length;cc++){
+    if(!sh[rr][cc])continue;
+    const br=r+rr,bc=c+cc;
+    if(br<0||br>=ROWS||bc<0||bc>=COLS||board[br][bc])return false;
+  }
+  return true;
+}
+function computeAttractPlan(){
+  let best=null,bestCost=Infinity;
+  for(let rot=0;rot<4;rot++){
+    for(let c=-2;c<COLS;c++){
+      const cost=evalDrop(piece.type,rot,c);
+      if(cost!==null&&cost<bestCost){bestCost=cost;best={rot,c};}
+    }
+  }
+  attractPlan=best;
+}
+function attractStep(ts){
+  if(!piece||cascading)return;
+  if(ts-lastAI<110)return;
+  lastAI=ts;
+  if(!attractPlan){computeAttractPlan();return;}
+  if(piece.rot!==attractPlan.rot){rotate();return;}
+  if(piece.c<attractPlan.c){if(valid(piece,board,0,1))piece.c++;return;}
+  if(piece.c>attractPlan.c){if(valid(piece,board,0,-1))piece.c--;return;}
+  attractPlan=null;
+  hardDrop();
+}
+
+// ── Game loop — dt-clamped ─────────────────────────────────────────────────
 function loop(ts){
   if(gameOver)return;
   animId=requestAnimationFrame(loop);
-  if(piece&&!cascading){
+  const dt=Math.min(32,ts-(lastTs||ts));lastTs=ts;
+  if(shakeT>0)shakeT=Math.max(0,shakeT-dt/16.67);
+  if(paused){lastDrop=ts;drawBoard();return;}
+  if(ATTRACT)attractStep(ts);
+  if(piece&&!cascading&&!levelEnding){
     if(ts-lastDrop>=(holding?Math.max(40,dropInterval/3):dropInterval)){
       lastDrop=ts;
       if(valid(piece,board,1)){piece.r++;wasRotated=false;}
       else{lockPiece();return;}
     }
   }
-  drawBoard();updateHUD();
+  drawBoard();
 }
 
-function resetGame(){
-  board=emptyBoard();piece=null;score=0;level=1;linesCleared=0;
-  gameOver=false;cascading=false;dropInterval=850;lastDrop=performance.now();
-  lockR=ROWS-1;lockC=4;comboCount=0;particles=[];rings=[];sweeps=[];flashRows=[];
-  wasRotated=false;lastClearPowerful=false;backToBack=false;
-  bannerEl.style.opacity='0';cancelAnimationFrame(animId);
-  nextPiece=mkPiece(Math.floor(Math.random()*PIECES.length));
-  spawnNext();animId=requestAnimationFrame(loop);
-}
-
+// ── Boot ───────────────────────────────────────────────────────────────────
 const coin=document.getElementById('coin');let started=false;
-function start(){if(started)return;started=true;coin.style.display='none';resize();window.addEventListener('resize',resize);resetGame();}
+function start(){
+  if(started)return;started=true;
+  coin.style.display='none';
+  resize();
+  showHub();
+}
 coin.addEventListener('click',start);
 coin.addEventListener('touchend',e=>{e.preventDefault();start();},{passive:false});
+// ONE listener pair, rAF-coalesced. Never register a resize listener inside
+// coreReset/startLevel/resetGame — flapfight shipped a listener leak that caused
+// progressive iPhone slow-mo.
+let rzRAF=0;
+function onResize(){
+  if(rzRAF)return;
+  rzRAF=requestAnimationFrame(()=>{rzRAF=0;resize();});
+}
+addEventListener('resize',onResize);
+addEventListener('orientationchange',onResize);
+applyTheme(SAVE.theme);
 resize();
+if(ATTRACT){
+  // attract mode bypasses coin + hub entirely and self-plays Endless, silent
+  coin.style.display='none';started=true;
+  startEndless();
+}
+
+// QA hooks (playtest-by-evaluate)
+window.__ct={
+  get board(){return board;},get jelly(){return jelly;},get score(){return score;},
+  get movesLeft(){return movesLeft;},get mode(){return mode;},get Lnum(){return Lnum;},
+  get goalType(){return goalType;},get goalTarget(){return goalTarget;},
+  get jellyLeft(){return jellyLeft;},get cascading(){return cascading;},
+  get piece(){return piece;},get save(){return SAVE;},
+  // geometry hooks — stage verification is scriptable, not eyeballed
+  get L(){return L;},get CELL(){return CELL;},get DH(){return DH;},
+  get SCALE(){return SCALE;},get COLS(){return COLS;},get ROWS(){return ROWS;},
+  get FXS(){return FXS;},
+  boardHasInstantMatch,seedBoard,
+  LEVELS,startLevel,startEndless,startDaily,showHub,goalMet,recolor,mkPiece,
+  set movesLeft(v){movesLeft=v;},set score(v){score=v;updateHUD();},
+  set jellyLeft(v){jellyLeft=v;updateHUD();}
+};
 </script>
 </body>
 </html>
