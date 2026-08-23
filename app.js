@@ -1903,7 +1903,7 @@ function candyTrisAttract(ctx, w, h, t, world, s) {
   // TIME via tools/show/cameras/candy-tris-follow.js overriding #stage's own CSS transform
   // — see that file for the full technique. Recorded via render_game_footage.py
   // --viewport 480x360 --out-size 960x720 (the cassette's native 4:3, no crop needed).
-  videoAttract(ctx, w, h, t, s, 'assets/footage/candy-tris-attract.mp4?v=1', '#16092e');
+  videoAttract(ctx, w, h, t, s, 'assets/footage/candy-tris-attract.mp4?v=2', '#16092e');
 }
 
 /* FACE LAB attract — a Jimmy face being live-edited: cursor roams, toggles dots,
