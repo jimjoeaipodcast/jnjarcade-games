@@ -1895,135 +1895,15 @@ async function init() {
    thing (Osimo 2026-07-02): candy tetrominoes with translucent square wrappers fall
    onto a stack, full rows flash + clear, stack resets when it tops out. */
 function candyTrisAttract(ctx, w, h, t, world, s) {
-  const COLS = 8;
-  const CELL = Math.max(8, Math.floor(w / COLS));
-  const ROWS = Math.floor(h * 0.86 / CELL);
-  const OX = Math.floor((w - COLS * CELL) / 2);
-  // real game palette (body/light/dark per colour — matches candy-tris.html CANDY[])
-  const PAL = [
-    ['#FFD700','#FFE955','#806800'], ['#FF8C00','#FFB344','#7a4300'],
-    ['#4CAF50','#80e080','#1a4a1e'], ['#1a5ae0','#5599ff','#081a80'],
-    ['#9020c8','#cc66ff','#44007a'], ['#e01228','#ff5566','#7a000e'],
-  ];
-  const SHAPES = [
-    [[0,0],[1,0],[2,0],[3,0]],      // I
-    [[0,0],[1,0],[0,1],[1,1]],      // O
-    [[0,0],[1,0],[2,0],[1,1]],      // T
-    [[0,0],[0,1],[1,1],[2,1]],      // J
-    [[1,0],[2,0],[0,1],[1,1]],      // S
-  ];
-  function newPiece() {
-    const cells = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-    const maxC = Math.max(...cells.map(p => p[0]));
-    return {
-      cells,
-      col: Math.floor(Math.random() * (COLS - maxC - 1)),
-      row: -2,
-      colors: cells.map(() => Math.floor(Math.random() * PAL.length)),
-    };
-  }
-  if (!s.init || s.cell !== CELL || s.rows !== ROWS) {
-    s.init = true; s.cell = CELL; s.rows = ROWS; s.last = t; s.drop = 0;
-    s.board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
-    // pre-seed a partial stack so it reads as mid-game instantly
-    for (let r = ROWS - 3; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++)
-        if (Math.random() < 0.62) s.board[r][c] = Math.floor(Math.random() * PAL.length);
-    s.piece = newPiece(); s.flash = null; s.flashT = 0; s.sparks = [];
-  }
-  const dt = Math.min(t - s.last, 48); s.last = t;
-
-  // ── tick: gravity every 260ms ──
-  s.drop += dt;
-  if (s.flash) {
-    s.flashT += dt;
-    if (s.flashT > 320) {                    // remove flashed rows, drop stack
-      for (const fr of s.flash) { s.board.splice(fr, 1); s.board.unshift(Array(COLS).fill(null)); }
-      s.flash = null;
-    }
-  } else if (s.drop > 260) {
-    s.drop = 0;
-    const p = s.piece;
-    const collides = (dr) => p.cells.some(([dx,dy]) => {
-      const r = p.row + dy + dr, c = p.col + dx;
-      return r >= ROWS || (r >= 0 && s.board[r][c] !== null);
-    });
-    if (!collides(1)) { p.row++; }
-    else {
-      // lock
-      p.cells.forEach(([dx,dy],i) => {
-        const r = p.row + dy, c = p.col + dx;
-        if (r >= 0 && r < ROWS) s.board[r][c] = p.colors[i];
-      });
-      // full rows → flash + sparkle
-      const full = [];
-      for (let r = 0; r < ROWS; r++) if (s.board[r].every(v => v !== null)) full.push(r);
-      if (full.length) {
-        s.flash = full; s.flashT = 0;
-        for (const fr of full) for (let c = 0; c < COLS; c++)
-          s.sparks.push({x: OX + c*CELL + CELL/2, y: fr*CELL + CELL/2,
-                         vx: (Math.random()-0.5)*2.2, vy: -Math.random()*2 - 0.5,
-                         life: 500, color: PAL[s.board[fr][c] ?? 0][1]});
-      }
-      // top-out → fresh board
-      if (s.board[1].some(v => v !== null)) {
-        s.board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
-      }
-      s.piece = newPiece();
-    }
-  }
-
-  // ── draw ──
-  ctx.fillStyle = '#0a0012'; ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(255,105,180,0.08)'; ctx.lineWidth = 0.5;
-  for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(OX+c*CELL,0); ctx.lineTo(OX+c*CELL,ROWS*CELL); ctx.stroke(); }
-  for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(OX,r*CELL); ctx.lineTo(OX+COLS*CELL,r*CELL); ctx.stroke(); }
-
-  // one candy cell — translucent square wrapper + glossy candy, echoing the game
-  function drawCell(x, y, ci, bright) {
-    const [body, light, dark] = PAL[ci];
-    ctx.globalAlpha = bright ? 0.9 : 0.42;
-    ctx.fillStyle = dark; ctx.fillRect(x+0.5, y+0.5, CELL-1, CELL-1);
-    const b = Math.max(1, CELL*0.12);
-    ctx.fillStyle = body; ctx.fillRect(x+b, y+b, CELL-b*2, CELL-b*2);
-    ctx.globalAlpha = 1;
-    const r = CELL*0.32, cx = x+CELL/2, cy = y+CELL/2;
-    const g = ctx.createRadialGradient(cx-r*0.35, cy-r*0.35, r*0.1, cx, cy, r);
-    g.addColorStop(0, light); g.addColorStop(0.55, body); g.addColorStop(1, dark);
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fillStyle = g; ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx-r*0.3, cy-r*0.4, r*0.3, r*0.16, -0.5, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
-  }
-
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++) {
-      if (s.board[r][c] === null) continue;
-      if (s.flash && s.flash.includes(r)) {
-        ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5*Math.sin(s.flashT/40)})`;
-        ctx.fillRect(OX + c*CELL, r*CELL, CELL-1, CELL-1);
-      } else drawCell(OX + c*CELL, r*CELL, s.board[r][c], false);
-    }
-  // falling piece — brighter than the stack so the eye tracks it
-  for (let i = 0; i < s.piece.cells.length; i++) {
-    const [dx,dy] = s.piece.cells[i];
-    const r = s.piece.row + dy, c = s.piece.col + dx;
-    if (r >= 0) drawCell(OX + c*CELL, r*CELL, s.piece.colors[i], true);
-  }
-  // sparks
-  s.sparks = s.sparks.filter(sp => (sp.life -= dt) > 0);
-  for (const sp of s.sparks) {
-    sp.x += sp.vx; sp.y += sp.vy; sp.vy += 0.06;
-    ctx.globalAlpha = Math.max(0, sp.life / 500);
-    ctx.fillStyle = sp.color;
-    ctx.fillRect(sp.x, sp.y, 2, 2);
-  }
-  ctx.globalAlpha = 1;
-
-  // Genre label
-  ctx.font = `bold ${Math.max(9, Math.floor(w * 0.055))}px 'Bungee',sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255,105,180,0.55)';
-  ctx.fillText('CRUSHTRIS', w/2, h * 0.94);
+  // real recorded gameplay, not a hand-drawn mini-scene — same treatment as jimmy-run/
+  // angry-worms/pin-vaders (Osimo 2026-08-23: "creating the cassette for the game with
+  // real game footage, and for portrait games, follow the subject... for crushtris where
+  // it follows the falling pieces"). CrushTris has no internal canvas camera (the whole
+  // board already fits one phone screen), so the falling-piece follow happens at RECORD
+  // TIME via tools/show/cameras/candy-tris-follow.js overriding #stage's own CSS transform
+  // — see that file for the full technique. Recorded via render_game_footage.py
+  // --viewport 480x360 --out-size 960x720 (the cassette's native 4:3, no crop needed).
+  videoAttract(ctx, w, h, t, s, 'assets/footage/candy-tris-attract.mp4?v=1', '#16092e');
 }
 
 /* FACE LAB attract — a Jimmy face being live-edited: cursor roams, toggles dots,

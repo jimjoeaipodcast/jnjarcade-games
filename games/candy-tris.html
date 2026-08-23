@@ -104,7 +104,8 @@ canvas{display:block}
   border:2px solid rgba(255,255,255,0.2);color:#fff;text-align:center;
   display:flex;align-items:center;justify-content:center;gap:8px;
   font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:14px;
-  letter-spacing:2px;text-transform:uppercase}
+  letter-spacing:2px;text-transform:uppercase;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #pill-pause{background:linear-gradient(180deg,#2f7bf5,#1b4fd6)}
 #pill-sound{background:linear-gradient(180deg,#8a4df0,#6a2fd0)}
 /* ⛔ PLATFORM CONSTRAINT, not taste: ❚❚ and 🔊 are rendered by iOS in Apple's
@@ -129,6 +130,23 @@ canvas{display:block}
   box-shadow:0 0 0 1.6px rgba(20,8,44,0.9)}
 #pill-sound.muted .w1,#pill-sound.muted .w2{display:none}
 #pill-sound.muted .slash{display:block}
+/* long-press MUSIC VOLUME panel — same card language as the HUD cards
+   (dark #241542 panel, violet border, #180d33 rail + lvl-fill gradient) */
+#volpanel{position:absolute;z-index:6;display:none;background:#241542;
+  border:2px solid #7a4fd0;border-radius:14px;padding:7px 12px 10px;
+  box-shadow:0 8px 22px rgba(0,0,0,0.5);touch-action:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#volpanel .vlbl{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:10px;
+  letter-spacing:1px;color:#b9a3e3;font-variant:small-caps;text-align:center;
+  margin-bottom:4px;pointer-events:none}
+#voltrack{position:relative;height:24px;touch-action:none;cursor:pointer}
+#voltrack .rail{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  height:8px;background:#180d33;border-radius:999px;overflow:hidden;pointer-events:none}
+#volfill{position:absolute;left:0;top:0;bottom:0;width:35%;
+  background:linear-gradient(90deg,#8b45e8,#a86bff);border-radius:999px}
+#volthumb{position:absolute;top:50%;left:35%;width:18px;height:18px;border-radius:50%;
+  background:#fff;border:2px solid #7a4fd0;transform:translate(-50%,-50%);
+  box-shadow:0 0 10px rgba(168,107,255,0.7);pointer-events:none}
 #banner{position:absolute;top:300px;left:50%;transform:translate(-50%,-50%);
   font-family:'Bungee','Arial Black',sans-serif;text-align:center;pointer-events:none;opacity:0;
   transition:opacity .25s;z-index:6;white-space:nowrap;text-shadow:0 0 30px currentColor}
@@ -212,6 +230,7 @@ canvas{display:block}
     <div class="pill ui" id="pill-sound"><span class="ico-snd"><i class="cone"></i><i class="w1"></i><i class="w2"></i><i class="slash"></i></span><span class="ptxt">Sound</span></div>
   </div>
   <div id="banner"></div>
+  <div id="volpanel" class="ui"><div class="vlbl">Music Volume</div><div id="voltrack"><div class="rail"><div id="volfill"></div></div><div id="volthumb"></div></div></div>
   <div id="hub">
     <h1>CRUSHTRIS</h1>
     <div class="sub">CANDY CRUSH × TETRIS — SAGA</div>
@@ -471,12 +490,20 @@ function layout(){
 // ⛔ THIS PALETTE IS FIXED AND MUST NOT READ FROM COLORS. It contains cyan
 // (#35d6e8) and pink (#ff6bc4) that exist in NO theme; sourcing it from COLORS
 // would recolour the logo every time the player switches theme.
-const LOGO_WORD='CrushTris';
+const LOGO_LINES=['CRUSH','TRIS'];   // stacked bubble title — CRUSH over TRIS
 const LOGO_COLS=['#f04141','#ff9f2e','#ffd23d','#3fca55','#2f9df5',
                  '#b44df5','#ff6bc4','#35d6e8','#f04141'];
-const LOGO_BEANS=[[0.13,0.19,0.075,-0.55,'#3fca55'],
-                  [0.88,0.17,0.068, 0.70,'#ff6bc4'],
-                  [0.85,0.83,0.078,-0.30,'#ffd23d']];
+// three kawaii sweets tucked into the card corners — drawn with the SAME
+// glossy-jelly recipe as the gameplay candies (renderJellyBody: round body,
+// radial gloss, kawaii face). [fx,fy,fr,rot,colour,faceIdx] — colours FIXED,
+// never theme-sourced (see the palette law above).
+const LOGO_SWEETS=[[0.12,0.15,0.100,-0.35,'#3fca55',3],
+                   [0.88,0.14,0.092, 0.42,'#ff6bc4',1],
+                   [0.87,0.85,0.105,-0.22,'#ffd23d',0]];
+// tiny 4-point sparkle glints scattered around the title [fx,fy,fr,colour]
+const LOGO_SPARKS=[[0.24,0.28,0.030,'#ffffff'],[0.79,0.24,0.022,'#ffd23d'],
+                   [0.10,0.60,0.020,'#ffd23d'],[0.91,0.58,0.026,'#ffffff'],
+                   [0.50,0.08,0.018,'#ffffff'],[0.16,0.88,0.022,'#ff6bc4']];
 function paintLogo(){
   if(!logoCv)return;
   const w=Math.max(24,Math.round((L.logoW||140)-4));
@@ -487,9 +514,10 @@ function paintLogo(){
   g.setTransform(RES,0,0,RES,0,0);
   g.clearRect(0,0,w,h);
 
-  // 1. purple paint-splash blob — irregular 9-point closed bezier, ~86% of card width
-  const cx=w/2,cy=h*0.50,rx=w*0.43,ry=h*0.40,NP=9;
-  const wob=[1.00,0.80,1.14,0.86,1.06,0.76,1.16,0.90,0.98];
+  // 1. purple paint-splash blob — same 9-point closed bezier, wobble SOFTENED to
+  //    roughly half its old amplitude so the splash reads as a puffy rounded cloud
+  const cx=w/2,cy=h*0.50,rx=w*0.445,ry=h*0.42,NP=9;
+  const wob=[1.00,0.90,1.07,0.93,1.03,0.88,1.08,0.95,0.99];
   g.save();g.globalAlpha=0.55;g.fillStyle='#4a1f8a';
   g.beginPath();
   for(let i=0;i<=NP;i++){
@@ -502,52 +530,75 @@ function paintLogo(){
   }
   g.closePath();g.fill();g.restore();
 
-  // 2. bubble lettering on a slight upward arc, per-letter fill + dark outline + gloss
-  let fs=Math.max(8,Math.min(Math.round(h*0.36),Math.round(w*0.22)));
-  let widths=[],total=0;
+  // 2. TWO stacked bubble lines — CRUSH over TRIS. Two short lines buy vertical
+  //    room, so the type runs MUCH bigger than the old single-line fit. Per-letter
+  //    colour + thick soft dark outline + gloss cap + a tiny alternating tilt/bob
+  //    (the tilt/bob is what makes it read "sticker-cute" instead of typeset).
+  let fs=Math.max(8,Math.round(h*0.30));
+  const lineW=[0,0],lineWidths=[[],[]];
   const measure=()=>{
     g.font='700 '+fs+'px Bungee,"Arial Black",sans-serif';
-    widths=[];total=0;
-    for(const chr of LOGO_WORD){const m=g.measureText(chr).width;widths.push(m);total+=m;}
-    total+=fs*0.02*(LOGO_WORD.length-1);
+    for(let li=0;li<2;li++){
+      const word=LOGO_LINES[li],ws=[];let tot=0;
+      for(const chr of word){const m=g.measureText(chr).width;ws.push(m);tot+=m;}
+      tot+=fs*0.03*(word.length-1);
+      lineWidths[li]=ws;lineW[li]=tot;
+    }
   };
   measure();
-  for(let pass=0;pass<3&&total>w*0.88;pass++){
-    fs=Math.max(7,Math.floor(fs*(w*0.88)/total));
+  for(let pass=0;pass<4&&Math.max(lineW[0],lineW[1])>w*0.86;pass++){
+    fs=Math.max(7,Math.floor(fs*(w*0.86)/Math.max(lineW[0],lineW[1])));
     measure();
   }
-  const track=fs*0.02, Rarc=Math.max(w*1.5,1);
-  g.save();
-  g.translate(w/2,h*0.60+Rarc);      // arc centre BELOW the word => middle rides highest
-  g.textAlign='center';g.textBaseline='alphabetic';
-  g.lineJoin='round';g.miterLimit=2;
-  let ang=-total/(2*Rarc);
-  for(let i=0;i<LOGO_WORD.length;i++){
-    const aw=widths[i]+track;
+  const track=fs*0.03, Rarc=Math.max(w*1.6,1);
+  const outlineW=Math.max(3,fs*0.14);
+  const y1=h*0.42, y2=y1+fs*1.06;    // stacked baselines, tight for all-caps Bungee
+  let gi=0;                          // global letter index into LOGO_COLS
+  for(let li=0;li<2;li++){
+    const word=LOGO_LINES[li],ws=lineWidths[li],total=lineW[li];
     g.save();
-    g.rotate(ang+aw/(2*Rarc));
-    g.translate(0,-Rarc);
-    g.lineWidth=3;g.strokeStyle='#1a0a2e';g.strokeText(LOGO_WORD[i],0,0);
-    g.fillStyle=LOGO_COLS[i];g.fillText(LOGO_WORD[i],0,0);
-    g.save();                          // white gloss cap on the upper third
-    g.beginPath();g.rect(-aw,-fs*0.76,aw*2,fs*0.26);g.clip();
-    g.fillStyle='rgba(255,255,255,0.60)';g.fillText(LOGO_WORD[i],0,0);
+    g.translate(w/2,(li?y2:y1)+Rarc); // arc centre BELOW the word => middle rides highest
+    g.textAlign='center';g.textBaseline='alphabetic';
+    g.lineJoin='round';g.miterLimit=2;
+    let ang=-total/(2*Rarc);
+    for(let i=0;i<word.length;i++){
+      const aw=ws[i]+track;
+      g.save();
+      g.rotate(ang+aw/(2*Rarc));
+      g.translate(0,-Rarc);
+      g.rotate((i%2?1:-1)*0.045);          // alternating micro-tilt
+      g.translate(0,(i%2?1:-1)*fs*0.035);  // gentle per-letter bob
+      g.lineWidth=outlineW;g.strokeStyle='#1a0a2e';g.strokeText(word[i],0,0);
+      g.fillStyle=LOGO_COLS[gi%LOGO_COLS.length];g.fillText(word[i],0,0);
+      g.save();                            // white gloss cap on the upper third
+      g.beginPath();g.rect(-aw,-fs*0.78,aw*2,fs*0.28);g.clip();
+      g.fillStyle='rgba(255,255,255,0.60)';g.fillText(word[i],0,0);
+      g.restore();
+      g.restore();
+      ang+=aw/Rarc;gi++;
+    }
     g.restore();
-    g.restore();
-    ang+=aw/Rarc;
   }
-  g.restore();
 
-  // 3. three jelly beans tucked into the card corners
-  for(const[fx,fy,fr,rot,col]of LOGO_BEANS){
-    const bx=fx*w,by=fy*h,br=Math.max(3,fr*w);
+  // 2b. sparkle glints — classic 4-point concave-diamond twinkles
+  for(const[fx,fy,fr,scol]of LOGO_SPARKS){
+    const sx=fx*w,sy=fy*h,sr=Math.max(2,fr*w);
+    g.save();g.globalAlpha=0.9;g.fillStyle=scol;
+    g.beginPath();
+    g.moveTo(sx,sy-sr);g.quadraticCurveTo(sx,sy,sx+sr,sy);
+    g.quadraticCurveTo(sx,sy,sx,sy+sr);g.quadraticCurveTo(sx,sy,sx-sr,sy);
+    g.quadraticCurveTo(sx,sy,sx,sy-sr);
+    g.closePath();g.fill();g.restore();
+  }
+
+  // 3. three kawaii sweets tucked into the card corners — the gameplay candies'
+  //    own glossy-jelly body + face (renderJellyBody), so the banner sweets match
+  //    the candies falling in the board. Colours are the FIXED logo palette.
+  for(const[fx,fy,fr,rot,col,face]of LOGO_SWEETS){
+    const bx=fx*w,by=fy*h,br=Math.max(5,fr*w);
+    const C={body:col,light:shade(col,0.45),dark:shade(col,-0.5)};
     g.save();g.translate(bx,by);g.rotate(rot);
-    const rg=g.createRadialGradient(-br*0.30,-br*0.30,br*0.08,0,0,br*1.15);
-    rg.addColorStop(0,shade(col,0.50));rg.addColorStop(0.55,col);rg.addColorStop(1,shade(col,-0.45));
-    g.fillStyle=rg;g.beginPath();g.ellipse(0,0,br,br*0.66,0,0,Math.PI*2);g.fill();
-    g.strokeStyle='rgba(0,0,0,0.28)';g.lineWidth=1;g.stroke();
-    g.fillStyle='rgba(255,255,255,0.90)';
-    g.beginPath();g.ellipse(-br*0.30,-br*0.26,br*0.20,br*0.12,-0.5,0,Math.PI*2);g.fill();
+    renderJellyBody(g,face,0,0,br,C,true);
     g.restore();
   }
 }
@@ -1022,17 +1073,87 @@ function addBombFX(gc,gr){
 }
 function shake(frames,amp){shakeT=frames;shakeDur=frames;shakeAmp=amp;}
 
-// ── Audio — pure WebAudio, lazy unlock, silent in attract ──────────────────
+// ── Audio — WebAudio SFX + fetched looped jingles, lazy unlock, silent in attract ──
+// The SOUND pill is a 4-state TAP-CYCLE: 8-bit → music box → retro wave → mute.
+// Modes 0-2 pick a looped background jingle; mode 3 mutes music AND sfx (exactly
+// what the old boolean mute did to sfx). Long-press the pill → music volume slider.
 let audioCtx=null,muted=false;
 try{muted=localStorage.getItem('crushtris_mute')==='1'}catch(e){}
+const MUSIC_TRACKS=[
+  {label:'8-Bit',     file:'../assets/audio/candy-tris/jingle-8bit-town.mp3'},
+  {label:'Music Box', file:'../assets/audio/candy-tris/jingle-music-box.mp3'},
+  {label:'Retro Wave',file:'../assets/audio/candy-tris/jingle-retro-wave.mp3'}
+];
+const MUSIC_DEFAULT_VOL=0.35;    // quiet backing bed — the tracks are NOT pre-attenuated
+let soundMode=muted?3:0;         // 0-2 = jingle index, 3 = mute (legacy-key fallback above)
+let musicVol=MUSIC_DEFAULT_VOL;
+try{
+  const sm=localStorage.getItem('crushtris_sound_mode');
+  if(sm!==null)soundMode=Math.max(0,Math.min(3,sm|0));
+  const sv=parseFloat(localStorage.getItem('crushtris_music_vol'));
+  if(!isNaN(sv))musicVol=Math.max(0,Math.min(1,sv));
+}catch(e){}
+muted=soundMode===3;
+let lastMusicIdx=soundMode<3?soundMode:0;   // what a long-press un-mutes back into
+let musicGain=null,musicSrc=null,musicTrackIdx=-1;
+const musicBuffers=[null,null,null],musicLoading=[false,false,false];
+function persistSound(){
+  try{
+    localStorage.setItem('crushtris_sound_mode',String(soundMode));
+    localStorage.setItem('crushtris_mute',soundMode===3?'1':'0');   // legacy key stays in sync
+  }catch(e){}
+}
+function stopMusic(){
+  if(musicSrc){try{musicSrc.stop()}catch(e){}try{musicSrc.disconnect()}catch(e){}musicSrc=null;}
+  musicTrackIdx=-1;
+}
+function setMusicVol(v){
+  musicVol=Math.max(0,Math.min(1,v));
+  if(musicGain&&audioCtx)musicGain.gain.setValueAtTime(musicVol,audioCtx.currentTime);
+}
+// lazy fetch + decode, ONE fetch per track ever — decoded buffers are cached.
+// Mirrors the angry-worms pack convention (relative path + ?v= cache-bust).
+function loadMusic(idx,cb){
+  if(musicBuffers[idx]){if(cb)cb(musicBuffers[idx]);return;}
+  if(musicLoading[idx])return;   // fetch in flight — its cb re-reads soundMode on arrival
+  musicLoading[idx]=true;
+  fetch(MUSIC_TRACKS[idx].file+'?v=1')
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer()})
+    .then(ab=>new Promise((res,rej)=>audioCtx.decodeAudioData(ab,res,rej)))
+    .then(buf=>{musicBuffers[idx]=buf;musicLoading[idx]=false;if(cb)cb(buf)})
+    .catch(()=>{musicLoading[idx]=false});   // offline/decode fail → next cycle retries
+}
+function syncMusic(){
+  if(ATTRACT){stopMusic();return;}          // attract stays SILENT — anatomy hard rule
+  if(soundMode>2){stopMusic();return;}
+  if(!audioCtx)return;                      // starts on the same first-gesture unlock as sfx
+  const idx=soundMode;
+  if(musicSrc&&musicTrackIdx===idx)return;  // already looping this track
+  stopMusic();
+  loadMusic(idx,buf=>{
+    if(soundMode!==idx||ATTRACT||!audioCtx||musicSrc)return;  // player cycled on meanwhile
+    if(!musicGain){musicGain=audioCtx.createGain();musicGain.connect(audioCtx.destination);}
+    musicGain.gain.setValueAtTime(musicVol,audioCtx.currentTime);
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf;src.loop=true;
+    src.connect(musicGain);   // music has its OWN gain — sfx keep their per-tone gains
+    try{src.start()}catch(e){}
+    musicSrc=src;musicTrackIdx=idx;
+  });
+}
 const soundPill=document.getElementById('pill-sound');
+const soundPillTxt=soundPill.querySelector('.ptxt');
 // ⛔ was `soundPill.textContent = emoji + ' Sound'` — that WIPES every child of
-// the pill. The drawn speaker glyph lives in those children, so the mute state
-// is now a CLASS toggle and the DOM is never rebuilt.
-function updateMuteUI(){soundPill.classList.toggle('muted',muted);}
+// the pill. The drawn speaker glyph lives in those children, so the state is a
+// CLASS toggle + a .ptxt label swap and the icon DOM is never rebuilt.
+function updateMuteUI(){
+  soundPill.classList.toggle('muted',soundMode===3);
+  if(soundPillTxt)soundPillTxt.textContent=soundMode===3?'Muted':MUSIC_TRACKS[soundMode].label;
+}
 updateMuteUI();
 function initAudio(){if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}
-  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});}
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+  syncMusic();}   // the persisted jingle rides the SAME unlock — never a 2nd unlock path
 function playTone(freq,dur,type='sine',vol=0.15,sweepTo=null){
   if(muted||!audioCtx||ATTRACT)return;
   try{
@@ -1073,11 +1194,103 @@ const sfx={
 document.addEventListener('touchstart',initAudio,{once:true,passive:true});
 document.addEventListener('pointerdown',initAudio,{once:true});
 document.addEventListener('keydown',initAudio,{once:true});
+// SOUND pill TAP = cycle 8-bit → music box → retro wave → mute → back to 8-bit.
+// (a completed long-press swallows the trailing click — see lpFired below)
 soundPill.addEventListener('click',e=>{
-  e.stopPropagation();initAudio();
-  muted=!muted;try{localStorage.setItem('crushtris_mute',muted?'1':'0')}catch(e){}
-  updateMuteUI();
+  e.stopPropagation();
+  if(lpFired){lpFired=false;return;}
+  if(ATTRACT)return;
+  initAudio();
+  soundMode=(soundMode+1)%4;
+  if(soundMode<3)lastMusicIdx=soundMode;
+  muted=soundMode===3;
+  persistSound();updateMuteUI();syncMusic();
+  if(soundMode===3)hideVolSlider();
+  else if(volPanel.style.display==='block')volTouchTimer();
 });
+
+// ── Long-press on the SOUND pill → music volume slider ─────────────────────
+// pointerdown starts a 500ms timer; moving past the house deadzone (SWIPE, the
+// same 16px constant board input uses) or lifting early cancels it. A fired
+// long-press sets lpFired so the tap-cycle above never double-fires.
+const volPanel=document.getElementById('volpanel');
+const volFill=document.getElementById('volfill');
+const volThumb=document.getElementById('volthumb');
+const volTrack=document.getElementById('voltrack');
+const LP_MS=500;
+let lpTimer=null,lpStart=null,lpFired=false;
+let volHideTO=null,volDragging=false;
+function volPaint(){
+  const pc=Math.round(musicVol*100)+'%';
+  volFill.style.width=pc;volThumb.style.left=pc;
+}
+function volTouchTimer(){clearTimeout(volHideTO);volHideTO=setTimeout(hideVolSlider,3000);}
+function hideVolSlider(){
+  clearTimeout(volHideTO);volHideTO=null;volDragging=false;
+  volPanel.style.display='none';
+}
+function openVolSlider(){
+  if(ATTRACT)return;
+  initAudio();
+  if(soundMode===3){   // muted: resume the last jingle so the slider is audible
+    soundMode=lastMusicIdx;muted=false;
+    persistSound();updateMuteUI();
+  }
+  syncMusic();
+  const W=soundPill.offsetWidth||170;
+  volPanel.style.width=W+'px';
+  // stage-local position: .pill sits in #pillrow (position:relative), which sits in #stage
+  volPanel.style.left=(pillrowEl.offsetLeft+soundPill.offsetLeft)+'px';
+  volPanel.style.display='block';
+  const ph=volPanel.offsetHeight||52;
+  volPanel.style.top=Math.max(4,pillrowEl.offsetTop+soundPill.offsetTop-ph-8)+'px';
+  volPaint();
+  try{gsap.fromTo(volPanel,{scale:0.85,opacity:0},{scale:1,opacity:1,duration:0.16});}catch(e){}
+  volTouchTimer();
+}
+soundPill.addEventListener('pointerdown',e=>{
+  if(ATTRACT)return;
+  lpFired=false;lpStart={x:e.clientX,y:e.clientY};
+  try{soundPill.setPointerCapture(e.pointerId)}catch(err){}  // deadzone tracks off-pill drags too
+  clearTimeout(lpTimer);
+  lpTimer=setTimeout(()=>{lpTimer=null;lpFired=true;openVolSlider();},LP_MS);
+});
+soundPill.addEventListener('pointermove',e=>{
+  if(!lpStart)return;
+  if(Math.abs(e.clientX-lpStart.x)>=SWIPE||Math.abs(e.clientY-lpStart.y)>=SWIPE){
+    clearTimeout(lpTimer);lpTimer=null;lpStart=null;   // moved: it's a swipe, not a hold
+  }
+});
+soundPill.addEventListener('pointerup',()=>{clearTimeout(lpTimer);lpTimer=null;lpStart=null;});
+soundPill.addEventListener('pointercancel',()=>{clearTimeout(lpTimer);lpTimer=null;lpStart=null;lpFired=false;});
+function volFromClient(cx){
+  const r=volTrack.getBoundingClientRect();
+  setMusicVol((cx-r.left)/Math.max(1,r.width));   // rect is post-scale — clientX maps 1:1
+  volPaint();volTouchTimer();
+}
+volTrack.addEventListener('pointerdown',e=>{
+  e.stopPropagation();
+  volDragging=true;
+  try{volTrack.setPointerCapture(e.pointerId)}catch(err){}
+  volFromClient(e.clientX);
+});
+volTrack.addEventListener('pointermove',e=>{if(volDragging)volFromClient(e.clientX);});
+function volRelease(){
+  if(!volDragging)return;
+  volDragging=false;
+  try{localStorage.setItem('crushtris_music_vol',String(Math.round(musicVol*1000)/1000))}catch(e){}
+  volTouchTimer();
+}
+volTrack.addEventListener('pointerup',volRelease);
+volTrack.addEventListener('pointercancel',volRelease);
+volPanel.addEventListener('pointerdown',e=>{e.stopPropagation();volTouchTimer();});
+// tap anywhere OUTSIDE the panel (and off the pill) hides it instantly
+document.addEventListener('pointerdown',e=>{
+  if(volPanel.style.display!=='block')return;
+  const t=e.target;
+  if(t&&t.closest&&(t.closest('#volpanel')||t.closest('#pill-sound')))return;
+  hideVolSlider();
+},true);
 
 // ── Move economy ────────────────────────────────────────────────────────────
 const movesValEl=document.getElementById('moves-val');
@@ -2632,6 +2845,10 @@ window.__ct={
   get goalType(){return goalType;},get goalTarget(){return goalTarget;},
   get jellyLeft(){return jellyLeft;},get cascading(){return cascading;},
   get piece(){return piece;},get save(){return SAVE;},
+  // sound/music hooks — 4-state pill + jingle engine (playtest-by-evaluate)
+  get soundMode(){return soundMode;},get musicVol(){return musicVol;},
+  get musicPlaying(){return !!musicSrc;},get musicTrackIdx(){return musicTrackIdx;},
+  get muted(){return muted;},syncMusic,setMusicVol,openVolSlider,hideVolSlider,
   // geometry hooks — stage verification is scriptable, not eyeballed
   get L(){return L;},get CELL(){return CELL;},get DH(){return DH;},
   get SCALE(){return SCALE;},get COLS(){return COLS;},get ROWS(){return ROWS;},
