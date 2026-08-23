@@ -9,6 +9,11 @@
 <title>CRUSHTRIS</title>
 <!-- CT_SAGA_V3_20260822 — Fluid 9:16 stage (8x15), single-source layout(), candy art + baked wrapper, FX budget + daily determinism fix, canvas boosters -->
 <!-- CT_SAGA_V3_1_20260823 — controls pass (Osimo live-play): tap=rotate / swipe-up=cycleColors split, TAP_MAX_MS hold-release rotate fix, first-run HOW TO PLAY gate + hub ❓ -->
+<!-- CT_SAGA_V3_2_20260824 — Osimo live-play round 2: HOW TO PLAY strictly first-run (hub ❓ removed, button always starts), endless levels by POINTS (endlessLevelUp on every score gain), leaderboard endless-only (quitToHub mode gate) -->
+<!-- CT_SAGA_V3_3_20260824 — real-device rotate fix: board touch listeners were {passive:true},
+     so a real tap ALSO fired a phantom mousedown/mouseup shortly after (browser touch-
+     compat behaviour), double-firing rotate() per tap (180° not 90°) -->
+
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
 <script src="../arcade-scores.js?v=22"></script>
@@ -216,12 +221,6 @@ canvas{display:block}
   padding-left:16px;border-left:2px solid #7a4fd0}
 #howto li b{color:#a86bff}
 #howto .ht-foot{font-size:12px;color:#7c8489;margin:14px 0 18px;letter-spacing:.05em}
-/* permanent ❓ back to the rules — hub corner, theme-btn/card language */
-#hub-help{position:absolute;top:24px;right:14px;width:34px;height:34px;border-radius:50%;
-  background:#241542;border:2px solid #7a4fd0;color:#b9a3e3;cursor:pointer;
-  font-family:'Bungee','Arial Black',sans-serif;font-size:15px;
-  display:flex;align-items:center;justify-content:center;
-  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 </style>
 </head>
 <body>
@@ -254,7 +253,6 @@ canvas{display:block}
   <div id="banner"></div>
   <div id="volpanel" class="ui"><div class="vlbl">Music Volume</div><div id="voltrack"><div class="rail"><div id="volfill"></div></div><div id="volthumb"></div></div></div>
   <div id="hub">
-    <div id="hub-help" class="ui">?</div>
     <h1>CRUSHTRIS</h1>
     <div class="sub">CANDY CRUSH × TETRIS — SAGA</div>
     <div id="hub-top">
@@ -304,7 +302,7 @@ canvas{display:block}
 </div>
 <script>
 'use strict';
-window.__CRUSHTRIS_BUILD='CT_SAGA_V3_1_20260823';
+window.__CRUSHTRIS_BUILD='CT_SAGA_V3_3_20260824';
 
 // ── GEOMETRY HEADER — single source of truth ───────────────────────────────
 // DW is the LOCKED design width. DH is fluid between DH_MIN/DH_MAX so the stage
@@ -719,7 +717,7 @@ let movesLeft=Infinity;
 let goalType=null,goalTarget=0;
 let jelly=[],jellyTotal=0,jellyLeft=0;
 let levelEnding=false;       // input frozen during sugar crush / celebration
-let sessionScore=0;          // cumulative saga session score (submits on quit/top-out)
+let sessionScore=0;          // cumulative saga/daily session score — display only, NEVER submitted (leaderboard is endless-only)
 let targeting=null;          // 'hammer' | 'wrap' | null
 let paused=false;
 let onSettleCb=null;         // one-shot callback at cascade settle (sugar crush shots)
@@ -728,6 +726,26 @@ let nextQueue=[];            // 3 upcoming pieces
 let bag=[];
 let lastTs=0;
 const lvlMult=()=>mode==='endless'?level:1;
+
+// ── Endless speed-up — driven by POINTS, not lines (Osimo live-play v3.1) ──
+// One level per POINTS_PER_LEVEL of score. The constant anchors to the OLD
+// 10-lines-per-level pacing: 3 attract-AI endless runs at level 1 measured
+// 118/164/175 pts per cleared line (avg ~152 → ~1,520 pts per 10 lines) —
+// that AI never matches candies on purpose, so it is the FLOOR. A human adds
+// deliberate 3-runs/combos/chains on top (+60-100%), landing ~2,400-3,000
+// per old-level-up. 2500 sits in that band: no level-up off a few matches
+// (~300-800 pts), no multi-5-minute drought either.
+// Recomputed after EVERY endless score gain (line clear, match cascade,
+// T-spin, perfect clear, special/booster activation): a match-driven crossing
+// levels up immediately, it never waits for the next line clear.
+const POINTS_PER_LEVEL=2500;
+function endlessLevelUp(){
+  if(mode!=='endless')return;
+  const prevLevel=level;
+  level=Math.floor(score/POINTS_PER_LEVEL)+1;
+  dropInterval=Math.max(70,Math.round(850*Math.pow(0.88,level-1)));
+  if(level>prevLevel){showBanner('⬆ LEVEL '+level+'!','#ff69b4',36);sfx.levelup();}
+}
 
 const ck=(r,c)=>r*COLS+c;
 const emptyBoard=()=>Array.from({length:ROWS},()=>Array(COLS).fill(null));
@@ -1352,6 +1370,7 @@ function lockPiece(){
     const isB2B=backToBack&&lastClearPowerful;
     showBanner(isB2B?'🔥 BACK-TO-BACK T-SPIN!':'🌀 T-SPIN!',isB2B?'#ff44ff':'#cc44ff',isB2B?26:28);
     score+=(isB2B?1200:400)*lvlMult();
+    endlessLevelUp();
     lastClearPowerful=true;backToBack=isB2B;
   }
 
@@ -1388,12 +1407,7 @@ function cascade(depth,afterLineClear){
       if(lc<4)sfx.match();
       score+=bonus;
       linesCleared+=lc;
-      if(mode==='endless'){
-        const prevLevel=level;
-        level=Math.floor(linesCleared/10)+1;
-        dropInterval=Math.max(70,Math.round(850*Math.pow(0.88,level-1)));
-        if(level>prevLevel){showBanner('⬆ LEVEL '+level+'!','#ff69b4',36);sfx.levelup();}
-      }
+      endlessLevelUp();
       updateHUD();
 
       // CT_SAGA_V2 retiming: flash 280ms (was 240) so eyes can track the collapse
@@ -1408,7 +1422,7 @@ function cascade(depth,afterLineClear){
   // Step 2: Candy Crush match detection
   const res=findMatches();
   if(!res){
-    if(isPerfectClear()&&mode==='endless'){score+=3000*lvlMult();showBanner('✨ PERFECT CLEAR!','#ffffff',30);}
+    if(isPerfectClear()&&mode==='endless'){score+=3000*lvlMult();endlessLevelUp();showBanner('✨ PERFECT CLEAR!','#ffffff',30);}
     cascading=false;
     settleDone();
     return;
@@ -1421,6 +1435,7 @@ function cascade(depth,afterLineClear){
     showBanner('CHAIN ×'+depth+'!','#ffdd00',24);
   }
   score+=ms*lvlMult()+(comboCount>0?comboCount*60*lvlMult():0);
+  endlessLevelUp();
   comboCount++;
   if(comboCount>=3)sfx.combo();
   else if(comboCount===2)sfx.cascade();
@@ -1485,6 +1500,7 @@ function removeSet(keys){
 function activateSpecials(keys,swapColor){
   const exp=expandSpecials(new Set(keys),swapColor);
   score+=exp.size*30*lvlMult();
+  endlessLevelUp();
   removeSet(exp);
   gravity(board);
   updateHUD();
@@ -1619,12 +1635,26 @@ function pointerUp(cx,cy,target){
   else{if(dy>0)hardDrop();else cycleColors(piece);}
 }
 
+// {passive:true} let a real touch ALSO fire a synthesized mousedown/mouseup shortly after
+// (standard browser touch-compatibility behaviour) — and this file listens for mouse events
+// too, for desktop. Every real tap on a phone was firing pointerDown/pointerUp TWICE: once
+// from touch, once from the phantom mouse pair. rotate() twice = 180° per tap, not 90° — the
+// exact "press = doesn't rotate / press again" glitch Osimo hit live. {passive:false} +
+// preventDefault() on the touch event is what suppresses the phantom mouse pair at the
+// source (already the correct pattern elsewhere in this file — see the coin button and the
+// booster/tile handler below — and in angry-worms/astro-hop/bomb-garden/bomb-lemmings).
+// Skip preventDefault over .ui/.screen/#hub — those rely on their OWN click listeners, and
+// suppressing the phantom click there would break them, not fix anything.
 document.addEventListener('touchstart',e=>{
-  pointerDown(e.touches[0].clientX,e.touches[0].clientY,e.target);
-},{passive:true});
+  const t=e.target;
+  if(!(t&&t.closest&&t.closest('.ui,.screen,#hub')))e.preventDefault();
+  pointerDown(e.touches[0].clientX,e.touches[0].clientY,t);
+},{passive:false});
 document.addEventListener('touchend',e=>{
-  pointerUp(e.changedTouches[0].clientX,e.changedTouches[0].clientY,e.target);
-},{passive:true});
+  const t=e.target;
+  if(!(t&&t.closest&&t.closest('.ui,.screen,#hub')))e.preventDefault();
+  pointerUp(e.changedTouches[0].clientX,e.changedTouches[0].clientY,t);
+},{passive:false});
 let mouseActive=false;
 document.addEventListener('mousedown',e=>{mouseActive=true;pointerDown(e.clientX,e.clientY,e.target);});
 document.addEventListener('mouseup',e=>{if(mouseActive){mouseActive=false;pointerUp(e.clientX,e.clientY,e.target);}});
@@ -1731,6 +1761,7 @@ function fireTargetedBooster(r,c){
     if(keys.length){
       const exp=expandSpecials(new Set(keys),null);  // caught specials chain-fire
       score+=exp.size*30*lvlMult();
+      endlessLevelUp();
       removeSet(exp);
     }
     gravity(board);
@@ -2343,7 +2374,9 @@ function updateHUD(){
   if(mode==='endless'){
     lvlLblEl.textContent='Level';
     lvlValEl.textContent=level;
-    lvlFillEl.style.width=Math.min(100,(linesCleared%10)*10)+'%';
+    // level is POINTS-driven (endlessLevelUp) — the bar shows progress through
+    // the current POINTS_PER_LEVEL band, never the old lines%10
+    lvlFillEl.style.width=Math.min(100,Math.round(score%POINTS_PER_LEVEL/POINTS_PER_LEVEL*100))+'%';
     lvlGoalEl.textContent='∞  '+linesCleared+' lines';
     movesValEl.textContent='∞';
     movesValEl.classList.remove('low');
@@ -2654,9 +2687,11 @@ function levelFail(topout){
   },900);
 }
 function quitToHub(){
-  // session cumulative score submits on quit/top-out — no run is wasted
+  // LEADERBOARD IS ENDLESS-ONLY (Osimo live-play v3.1): sessionScore accumulates
+  // across saga/daily runs too, and those scores must NEVER reach the shared
+  // board — a saga quit lands back on the hub with no score popup.
   const s=sessionScore;sessionScore=0;
-  if(s>0&&!ATTRACT){
+  if(s>0&&!ATTRACT&&mode==='endless'){
     ArcadeScores.show({game:'candy-tris',title:'CRUSHTRIS',score:s,accent:'#ff69b4',
       onClose:()=>showHub()});   // onClose → hub DIRECTLY, never a second recap
   }else showHub();
@@ -2788,23 +2823,22 @@ function showHub(){
   }
 }
 // ── First-run HOW TO PLAY gate — jnj-on-air pattern (Osimo 2026-08-23) ─────
-// Gates ONLY the 3 hub entry tiles a first-time player uses (level / daily /
-// endless). Attract stays silent (anatomy rule), and retry / next-level /
-// resume / restart paths stay ungated — an informed player is never
-// re-interrupted mid-session. onStart=null → "← BACK" (opened via the hub ❓).
+// STRICTLY first-play-only (Osimo live-play v3.1: "only appear the first time
+// they play it"). Gates ONLY the 3 hub entry tiles (level / daily / endless);
+// its single button always STARTS the gated game — there is no reopen path and
+// no dead-end "back" (the hub ❓ that reopened it was removed with this rule).
+// Attract stays silent (anatomy rule), and retry / next-level / resume /
+// restart paths stay ungated — an informed player is never re-interrupted.
 const HOWTO_KEY='crushtris_howto_v1';
 function seenHowTo(){try{return !!localStorage.getItem(HOWTO_KEY);}catch(e){return true;}}
 function markHowTo(){try{localStorage.setItem(HOWTO_KEY,'1');}catch(e){}}
 function showHowTo(onStart){
   const ht=document.getElementById('howto'),go=document.getElementById('htGo');
-  go.textContent=onStart?'🪙 GOT IT — START':'← BACK';
+  go.textContent='🪙 GOT IT — START';
   ht.classList.remove('hidden');
   go.onclick=()=>{markHowTo();ht.classList.add('hidden');if(onStart)onStart();};
 }
 function gatedStart(fn){if(!seenHowTo()){showHowTo(fn);return;}fn();}
-document.getElementById('hub-help').addEventListener('click',e=>{
-  e.stopPropagation();showHowTo(null);
-});
 document.getElementById('tile-daily').addEventListener('click',e=>{
   e.stopPropagation();document.getElementById('hub').style.display='none';gatedStart(()=>startDaily());
 });
@@ -2924,6 +2958,9 @@ window.__ct={
   get goalType(){return goalType;},get goalTarget(){return goalTarget;},
   get jellyLeft(){return jellyLeft;},get cascading(){return cascading;},
   get piece(){return piece;},get save(){return SAVE;},
+  // endless pacing hooks — level is POINTS-driven (endlessLevelUp)
+  get level(){return level;},get linesCleared(){return linesCleared;},
+  get dropInterval(){return dropInterval;},get POINTS_PER_LEVEL(){return POINTS_PER_LEVEL;},
   // sound/music hooks — 4-state pill + jingle engine (playtest-by-evaluate)
   get soundMode(){return soundMode;},get musicVol(){return musicVol;},
   get musicPlaying(){return !!musicSrc;},get musicTrackIdx(){return musicTrackIdx;},
