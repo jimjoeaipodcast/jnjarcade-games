@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>CRUSHTRIS</title>
 <!-- CT_SAGA_V3_20260822 — Fluid 9:16 stage (8x15), single-source layout(), candy art + baked wrapper, FX budget + daily determinism fix, canvas boosters -->
+<!-- CT_SAGA_V3_1_20260823 — controls pass (Osimo live-play): tap=rotate / swipe-up=cycleColors split, TAP_MAX_MS hold-release rotate fix, first-run HOW TO PLAY gate + hub ❓ -->
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
 <script src="../arcade-scores.js?v=22"></script>
@@ -200,6 +201,27 @@ canvas{display:block}
 #coin .sub{font-family:'Bungee',monospace;font-size:13px;color:#cc44ff;opacity:0.8;margin-bottom:24px}
 #coin .ins{font-family:'Bungee',monospace;font-size:14px;color:#ff69b4;animation:blink 1s step-end infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+/* First-run HOW TO PLAY panel — jnj-on-air pattern, CrushTris violet ink.
+   Lives OUTSIDE #stage (body child, like #coin): inside the scaled stage,
+   position:fixed would track the transform instead of the real viewport. */
+#howto{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:11;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#fff;text-align:center;
+  padding:20px;overflow-y:auto}
+#howto.hidden{display:none}
+#howto h2{font-family:'Bungee','Arial Black',sans-serif;font-size:26px;letter-spacing:.06em;
+  color:#8b45e8;text-shadow:0 0 20px #8b45e8;margin-bottom:16px}
+#howto ul{list-style:none;max-width:520px;text-align:left}
+#howto li{font-size:15px;line-height:1.65;color:#cbd2d6;margin:0 0 10px;
+  padding-left:16px;border-left:2px solid #7a4fd0}
+#howto li b{color:#a86bff}
+#howto .ht-foot{font-size:12px;color:#7c8489;margin:14px 0 18px;letter-spacing:.05em}
+/* permanent ❓ back to the rules — hub corner, theme-btn/card language */
+#hub-help{position:absolute;top:24px;right:14px;width:34px;height:34px;border-radius:50%;
+  background:#241542;border:2px solid #7a4fd0;color:#b9a3e3;cursor:pointer;
+  font-family:'Bungee','Arial Black',sans-serif;font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 </style>
 </head>
 <body>
@@ -232,6 +254,7 @@ canvas{display:block}
   <div id="banner"></div>
   <div id="volpanel" class="ui"><div class="vlbl">Music Volume</div><div id="voltrack"><div class="rail"><div id="volfill"></div></div><div id="volthumb"></div></div></div>
   <div id="hub">
+    <div id="hub-help" class="ui">?</div>
     <h1>CRUSHTRIS</h1>
     <div class="sub">CANDY CRUSH × TETRIS — SAGA</div>
     <div id="hub-top">
@@ -267,9 +290,21 @@ canvas{display:block}
   <div class="sub">CANDY CRUSH × TETRIS</div>
   <div class="ins">TAP TO INSERT COIN</div>
 </div>
+<div id="howto" class="hidden ui">
+  <h2>HOW TO PLAY</h2>
+  <ul>
+    <li><b>Tap</b> the board — rotate the piece.</li>
+    <li><b>Swipe up</b> — cycle the piece's candy colours.</li>
+    <li><b>Swipe left/right</b> — move the piece.</li>
+    <li><b>Swipe down</b> — drop instantly.</li>
+    <li><b>Hold</b> — fall faster while you hold.</li>
+  </ul>
+  <p class="ht-foot">Match candies. Clear lines. Crush it.</p>
+  <button id="htGo" class="bigbtn ui">🪙 GOT IT — START</button>
+</div>
 <script>
 'use strict';
-window.__CRUSHTRIS_BUILD='CT_SAGA_V3_20260822';
+window.__CRUSHTRIS_BUILD='CT_SAGA_V3_1_20260823';
 
 // ── GEOMETRY HEADER — single source of truth ───────────────────────────────
 // DW is the LOCKED design width. DH is fluid between DH_MIN/DH_MAX so the stage
@@ -1484,7 +1519,10 @@ function spawnNext(){
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────
-const SWIPE=16;let tStart=null,holding=false,startedOnBoard=false;
+// TAP_MAX_MS: a tap is short AND stationary. Distance alone let a released
+// hold-to-drop-faster (finger down a while, barely moved) fire rotate() on
+// lift — Osimo 2026-08-23: "upon releasing my finger don't rotate it 90".
+const SWIPE=16,TAP_MAX_MS=260;let tStart=null,holding=false,startedOnBoard=false;
 
 function ccSwapAttempt(r1,c1,r2,c2){
   if(r2<0||r2>=ROWS||c2<0||c2>=COLS)return;
@@ -1522,7 +1560,7 @@ function inBoard(cx,cy){return boardCellFromClient(cx,cy)!==null;}
 function pointerDown(cx,cy,target){
   if(!board||gameOver||paused||levelEnding)return;
   if(target&&target.closest&&target.closest('.ui,.screen,#hub'))return;
-  tStart={x:cx,y:cy};
+  tStart={x:cx,y:cy,t:performance.now()};
   startedOnBoard=inBoard(cx,cy);
   holding=startedOnBoard;   // hold-to-drop only when the touch started on the board
 }
@@ -1533,7 +1571,11 @@ function pointerUp(cx,cy,target){
   if(!board||gameOver||paused||levelEnding)return;
   if(target&&target.closest&&target.closest('.ui,.screen,#hub'))return;
   const dx=cx-st.x,dy=cy-st.y;
-  const isTap=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
+  // still = never left the deadzone; isTap = still AND quick. A long still touch
+  // (a released speed-hold) must satisfy NEITHER the tap branches NOR the swipe
+  // branches — it just ends: orientation kept, normal-speed falling resumes.
+  const still=Math.abs(dx)<SWIPE&&Math.abs(dy)<SWIPE;
+  const isTap=still&&(performance.now()-st.t)<TAP_MAX_MS;
 
   // Booster targeting mode: next tap fires (inside board) or cancels (outside)
   if(targeting){
@@ -1567,11 +1609,14 @@ function pointerUp(cx,cy,target){
     ccSel=null;
   }
 
-  // Tetromino controls — swipes only count if they started over the board
+  // Tetromino controls — swipes only count if they started over the board.
+  // TAP rotates; SWIPE UP is a DIFFERENT action (cycle candy colours) — the two
+  // used to both call rotate(), so "a mixture of things" happened per gesture.
   if(cascading||!piece||!startedOnBoard)return;
   if(isTap){rotate();return;}
+  if(still)return;   // held-then-released, no movement: keep orientation, do nothing
   if(Math.abs(dx)>Math.abs(dy)){const d=dx>0?1:-1;if(valid(piece,board,0,d)){piece.c+=d;sfx.move();}}
-  else{if(dy>0)hardDrop();else rotate();}
+  else{if(dy>0)hardDrop();else cycleColors(piece);}
 }
 
 document.addEventListener('touchstart',e=>{
@@ -1601,6 +1646,22 @@ function rotate(){
       wasRotated=true;sfx.rotate();return;
     }
   }
+}
+// Swipe-up: cycle the piece's candy COLOURS through its own filled cells.
+// Shape and rotation stay untouched — this never calls rotate()/recolor(),
+// it is a separate mechanic (tap = geometric rotate, swipe-up = colour cycle).
+// Row-major scan over the CURRENT rot's shape mask; empty slots stay -1.
+// LOAD-BEARING (mirrors recolor's 4×-identity law): K filled cells ⇒ K
+// consecutive calls return p.colors to byte-identical identity.
+function cycleColors(p){
+  if(!p)return;
+  const sh=pshape(p),pos=[],vals=[];
+  for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)
+    if(sh[r][c]){pos.push([r,c]);vals.push(p.colors[r][c]);}
+  if(vals.length<2)return;
+  vals.unshift(vals.pop());   // rotate the collected list by one position
+  for(let i=0;i<pos.length;i++)p.colors[pos[i][0]][pos[i][1]]=vals[i];
+  sfx.rotate();   // shares the tap-rotate cue — no dedicated colour-cycle sfx exists
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
@@ -2704,7 +2765,7 @@ function showHub(){
     if(locked)tile.classList.add('locked');
     const st=SAVE.stars[L-1]||0;
     tile.innerHTML=(locked?'🔒':L)+'<div class="pips">'+'★'.repeat(st)+'<span style="opacity:.25">'+'★'.repeat(3-st)+'</span></div>';
-    if(!locked)tile.addEventListener('click',ev=>{ev.stopPropagation();hub.style.display='none';startLevel(L);});
+    if(!locked)tile.addEventListener('click',ev=>{ev.stopPropagation();hub.style.display='none';gatedStart(()=>startLevel(L));});
     grid.appendChild(tile);
   }
   document.getElementById('hub-stars').textContent='★ '+totalStars()+' / 90';
@@ -2726,13 +2787,31 @@ function showHub(){
     tr.appendChild(b);
   }
 }
+// ── First-run HOW TO PLAY gate — jnj-on-air pattern (Osimo 2026-08-23) ─────
+// Gates ONLY the 3 hub entry tiles a first-time player uses (level / daily /
+// endless). Attract stays silent (anatomy rule), and retry / next-level /
+// resume / restart paths stay ungated — an informed player is never
+// re-interrupted mid-session. onStart=null → "← BACK" (opened via the hub ❓).
+const HOWTO_KEY='crushtris_howto_v1';
+function seenHowTo(){try{return !!localStorage.getItem(HOWTO_KEY);}catch(e){return true;}}
+function markHowTo(){try{localStorage.setItem(HOWTO_KEY,'1');}catch(e){}}
+function showHowTo(onStart){
+  const ht=document.getElementById('howto'),go=document.getElementById('htGo');
+  go.textContent=onStart?'🪙 GOT IT — START':'← BACK';
+  ht.classList.remove('hidden');
+  go.onclick=()=>{markHowTo();ht.classList.add('hidden');if(onStart)onStart();};
+}
+function gatedStart(fn){if(!seenHowTo()){showHowTo(fn);return;}fn();}
+document.getElementById('hub-help').addEventListener('click',e=>{
+  e.stopPropagation();showHowTo(null);
+});
 document.getElementById('tile-daily').addEventListener('click',e=>{
-  e.stopPropagation();document.getElementById('hub').style.display='none';startDaily();
+  e.stopPropagation();document.getElementById('hub').style.display='none';gatedStart(()=>startDaily());
 });
 document.getElementById('tile-endless').addEventListener('click',e=>{
   e.stopPropagation();
   if(SAVE.unlocked<=30){showToast('Clear Level 30 to unlock Endless');return;}
-  document.getElementById('hub').style.display='none';startEndless();
+  document.getElementById('hub').style.display='none';gatedStart(()=>startEndless());
 });
 
 // ── Attract AI — competent self-play, silent, no game-over UI ──────────────
@@ -2854,7 +2933,7 @@ window.__ct={
   get SCALE(){return SCALE;},get COLS(){return COLS;},get ROWS(){return ROWS;},
   get FXS(){return FXS;},
   boardHasInstantMatch,seedBoard,
-  LEVELS,startLevel,startEndless,startDaily,showHub,goalMet,recolor,mkPiece,
+  LEVELS,startLevel,startEndless,startDaily,showHub,goalMet,recolor,mkPiece,cycleColors,
   set movesLeft(v){movesLeft=v;},set score(v){score=v;updateHUD();},
   set jellyLeft(v){jellyLeft=v;updateHUD();}
 };
