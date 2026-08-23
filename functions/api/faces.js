@@ -24,7 +24,11 @@ function nameOK(s) {
   return !BLOCKLIST.some(b => flat.includes(b));
 }
 function cleanText(raw, max) {
-  return String(raw || '').replace(/[^\w .\-'!?]/g, '').trim().slice(0, max);
+  // '@' is allowed because the Face Lab asks for "YOUR NAME/HANDLE" (Osimo 2026-08-23) —
+  // without it a submitted @handle was silently saved with the @ stripped, i.e. we invited
+  // a handle and then quietly mangled it. Harmless for the blocklist: nameOK() reduces to
+  // A-Z before matching, so punctuation can neither evade nor trip it.
+  return String(raw || '').replace(/[^\w@ .\-'!?]/g, '').trim().slice(0, max);
 }
 
 async function listFaces(env, status) {

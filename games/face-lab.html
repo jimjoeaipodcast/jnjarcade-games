@@ -67,7 +67,7 @@ a.back { position:fixed; top:10px; left:12px; color:#456; font-size:11px; text-d
     <button class="tbtn" onclick="resetFace()">RESET</button>
     <button class="tbtn" onclick="clearFace()">CLEAR</button>
     <input id="exprName" maxlength="28" placeholder="EXPRESSION NAME">
-    <input id="author" maxlength="16" placeholder="YOUR NAME">
+    <input id="author" maxlength="16" placeholder="YOUR NAME/HANDLE">
     <button class="tbtn primary" onclick="submitFace()">SUBMIT</button>
   </div>
   <div id="msg"></div>
@@ -281,7 +281,7 @@ function submitFace() {
   const author = document.getElementById('author').value.trim();
   const msg = document.getElementById('msg');
   if (name.length < 2)  { msg.textContent = 'NAME THE EXPRESSION'; return; }
-  if (author.length < 2) { msg.textContent = 'ADD YOUR NAME'; return; }
+  if (author.length < 2) { msg.textContent = 'ADD YOUR NAME/HANDLE'; return; }
   if (lit.size < 8)      { msg.textContent = 'DRAW SOMETHING FIRST'; return; }
   sending = true; msg.textContent = 'SENDING…'; msg.style.color = '#7ee0ff';
   const dots = [...lit].map(k => [Math.floor(k / GRID), k % GRID]);
