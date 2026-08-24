@@ -92,7 +92,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V3_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V4_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -2987,7 +2987,12 @@ function hudLayout() {
   const windW = 170, windH = 46, windY = 8;
   const windX = pauseX - btnR - 10 - windW;
   const pillX = 8, pillY = 8, pillH = 48;
-  const pillW = Math.max(240, windX - 18 - pillX);
+  // Capped at 380: uncapped this stretched to windX (1024px on a 1400-wide landscape
+  // viewport with only 1 inventory type unlocked at level 1) leaving a huge dead navy gap
+  // between the score text and the right-anchored portrait strip — Osimo caught this live,
+  // 2026-08-24. 380 gives the score/ticker-chips/3-icon-strip room without stretching to
+  // fill whatever's left before the wind pill.
+  const pillW = Math.min(380, Math.max(240, windX - 18 - pillX));
   const vis = Math.min(4, inventory.length);
   const slotR = 39, slotGap = 90, slotY = H - 62, slotX0 = 70;
   return { btnR: btnR, btnY: btnY, gearX: gearX, sndX: sndX, pauseX: pauseX,
