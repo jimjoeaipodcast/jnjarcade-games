@@ -92,7 +92,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V2_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V3_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -260,25 +260,66 @@ function drawBlockTile(g, type, tw, th) {
     else g.rect(1.5, 1.5, tw - 3, th - 3);
   };
   if (type === "barrel") {
-    // Worms TNT barrel — mockup palette: bright orange-red body, brown plank trim
-    g.fillStyle = "#e8541e"; g.strokeStyle = "#6b4028"; g.lineWidth = 3;
+    // TNT crate — mockup-corrected: wood-toned body (#9B6B3C family), red paper label
+    // WRAP on the middle third only (not the whole body), dark metal corner bands, and
+    // a bundled-dynamite graphic on the top face. All baked here once — zero per-frame.
+    const wg = g.createLinearGradient(0, 0, 0, th);
+    wg.addColorStop(0, "#A87848");
+    wg.addColorStop(0.5, "#9B6B3C");
+    wg.addColorStop(1, "#82562E");
+    g.fillStyle = wg; g.strokeStyle = "#6b4028"; g.lineWidth = 3;
     path(); g.fill(); g.stroke();
-    g.strokeStyle = "#5a3020"; g.lineWidth = 2;
+    // vertical plank seams on the crate body
+    g.strokeStyle = "rgba(74,46,16,0.5)"; g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(2, th * 0.25); g.lineTo(tw - 2, th * 0.25);
-    g.moveTo(2, th * 0.75); g.lineTo(tw - 2, th * 0.75);
+    g.moveTo(tw * 0.35, 3); g.lineTo(tw * 0.35, th - 3);
+    g.moveTo(tw * 0.65, 3); g.lineTo(tw * 0.65, th - 3);
     g.stroke();
-    // white TNT lettering (pre-existing) + NEW black outline pass behind it
+    // top-face dynamite bundle — 3 short vertical sticks with lighter caps
+    for (const dx of [tw * 0.35, tw * 0.5, tw * 0.65]) {
+      g.fillStyle = "#C23B2B";
+      g.fillRect(dx - 2, 4, 4, 8);
+      g.fillStyle = "#E05545";
+      g.beginPath(); g.ellipse(dx, 4, 2, 1.2, 0, 0, Math.PI * 2); g.fill();
+    }
+    // thin coiled fuse rising off the middle stick
+    g.strokeStyle = "#3A2A1A"; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(tw * 0.5, 3.5);
+    g.quadraticCurveTo(tw * 0.56, 1, tw * 0.62, 2.5);
+    g.quadraticCurveTo(tw * 0.66, 3.5, tw * 0.7, 2);
+    g.stroke();
+    // red paper label wrap — middle third, with darker fold lines top/bottom
+    g.fillStyle = "#E8541E";
+    g.fillRect(2, th * 0.38, tw - 4, th * 0.28);
+    g.strokeStyle = "#B03A10"; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(2, th * 0.38); g.lineTo(tw - 2, th * 0.38);
+    g.moveTo(2, th * 0.66); g.lineTo(tw - 2, th * 0.66);
+    g.stroke();
+    // white TNT lettering + black outline pass (kept from V2, now on the label band)
     g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.textBaseline = "alphabetic";
     g.strokeStyle = "#000"; g.lineWidth = 2.5; g.lineJoin = "round";
     g.strokeText("TNT", tw / 2, th * 0.58);
     g.fillStyle = "#fff";
     g.fillText("TNT", tw / 2, th * 0.58);
+    // dark metal corner bands, tiny top-edge glint on the upper pair
+    g.fillStyle = "#3A3A3A";
+    g.fillRect(2, 2, 6, 4); g.fillRect(tw - 8, 2, 6, 4);
+    g.fillRect(2, th - 6, 6, 4); g.fillRect(tw - 8, th - 6, 6, 4);
+    g.fillStyle = "rgba(255,255,255,0.15)";
+    g.fillRect(2, 2, 6, 1); g.fillRect(tw - 8, 2, 6, 1);
     return;
   }
   if (type === "wood") { g.fillStyle = "#8b6030"; g.strokeStyle = "#5a3a1a"; }
   else if (type === "ice") { g.fillStyle = "rgba(168,224,240,0.65)"; g.strokeStyle = "#6bb8d0"; }
-  else { g.fillStyle = "#b8bcc4"; g.strokeStyle = "#8a8e96"; }
+  else {
+    // stone — full-block DIAGONAL gradient (baked once here, blitted per-frame)
+    const sg = g.createLinearGradient(0, 0, tw, th);
+    sg.addColorStop(0, "#C4C8D0");
+    sg.addColorStop(1, "#9498A0");
+    g.fillStyle = sg; g.strokeStyle = "#8a8e96";
+  }
   g.lineWidth = 3;
   path(); g.fill(); g.stroke();
   // bevel: light top, dark bottom (geometry unchanged from the live-draw version)
@@ -287,12 +328,29 @@ function drawBlockTile(g, type, tw, th) {
   g.fillStyle = "rgba(0,0,0,0.18)";
   g.fillRect(3, th - Math.max(2, th * 0.16) - 2, tw - 6, Math.max(2, th * 0.16));
   if (type === "wood") {
-    // grain lines kept, darkened slightly for legibility on the deeper brown
-    g.strokeStyle = "rgba(74,46,16,0.6)"; g.lineWidth = 1.5;
-    g.beginPath();
-    g.moveTo(6, th * 0.4); g.lineTo(tw - 6, th * 0.4);
-    g.moveTo(6, th * 0.68); g.lineTo(tw * 0.6, th * 0.68);
-    g.stroke();
+    // grain — 4 lines at varied depths, alternating opacity 0.4-0.7 for an organic
+    // striped-beam read (mockup shows clearly banded planks, not 2 faint scratches)
+    const grains = [
+      [0.26, 0.55, 6, tw - 8],
+      [0.44, 0.4, 9, tw - 5],
+      [0.62, 0.7, 5, tw - 10],
+      [0.8, 0.45, 8, tw * 0.7]
+    ];
+    for (const gr of grains) {
+      g.strokeStyle = "rgba(74,46,16," + gr[1] + ")"; g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(gr[2], th * gr[0]); g.lineTo(gr[3], th * gr[0]);
+      g.stroke();
+    }
+    // end-grain rings at both cut ends — this tile is a horizontal beam (tw > th)
+    if (tw > th) {
+      g.strokeStyle = "rgba(74,46,16,0.5)"; g.lineWidth = 1;
+      for (const ex of [5, tw - 5]) {
+        for (let er = 2; er <= 6; er += 2) {
+          g.beginPath(); g.arc(ex, th * 0.5, er, 0, Math.PI * 2); g.stroke();
+        }
+      }
+    }
   } else if (type === "ice") {
     // gloss widened from a thin scratch into a soft translucent BAND — reads as a streak
     g.save();
@@ -309,6 +367,25 @@ function drawBlockTile(g, type, tw, th) {
     g.fillStyle = "rgba(90,94,102,0.7)";
     g.beginPath(); g.arc(7, 7, 2, 0, Math.PI * 2); g.fill();
     g.beginPath(); g.arc(tw - 7, 7, 2, 0, Math.PI * 2); g.fill();
+    // mortar seam lines — subdivide the block into 3 sub-rectangles (subtle, 1px)
+    g.strokeStyle = "#7A7E86"; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(tw * 0.34, 3); g.lineTo(tw * 0.34, th - 3);
+    g.moveTo(tw * 0.67, 3); g.lineTo(tw * 0.67, th - 3);
+    g.stroke();
+    // moss tufts on the top edge — 2 clusters of short curved green blades. Baked into
+    // the shared tile (per-instance open-air detection would need a drawBlocks edit,
+    // which the spec restricts to shadows only); on stacked blocks the tufts read as
+    // moss growing along each course line, matching the mockup's mossy brickwork.
+    g.strokeStyle = "#6B9C3F"; g.lineWidth = 1.5; g.lineCap = "round";
+    for (const mx of [tw * 0.28, tw * 0.72]) {
+      g.beginPath();
+      g.moveTo(mx - 2, 6); g.quadraticCurveTo(mx - 3, 2.5, mx - 4.5, 1.5);
+      g.moveTo(mx, 6); g.quadraticCurveTo(mx, 1.5, mx + 1, 0.5);
+      g.moveTo(mx + 2, 6); g.quadraticCurveTo(mx + 3.5, 3, mx + 4.5, 2);
+      g.stroke();
+    }
+    g.lineCap = "butt";
   }
 }
 
@@ -339,6 +416,26 @@ function buildSprites() {
     g.restore();
     ctx = old;
     SPRITES.icons[t] = c;
+  }
+  // Soft drop-shadow sprite (AW_MOCKUP_V3) — the crater recipe's radial-gradient-for-
+  // soft-edge technique (GAME_BIBLE: "radial gradient = soft edge"), baked ONCE so the
+  // per-frame shadows under worms / TNT barrels / the slingshot base are plain
+  // drawImage blits with zero gradient math in the draw loops.
+  {
+    const c = document.createElement("canvas");
+    c.width = 64; c.height = 32;
+    const g = c.getContext("2d");
+    g.save();
+    g.translate(32, 16);
+    g.scale(1, 0.5);
+    const sg = g.createRadialGradient(0, 0, 0, 0, 0, 32);
+    sg.addColorStop(0, "rgba(0,0,0,0.28)");
+    sg.addColorStop(0.65, "rgba(0,0,0,0.16)");
+    sg.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = sg;
+    g.beginPath(); g.arc(0, 0, 32, 0, Math.PI * 2); g.fill();
+    g.restore();
+    SPRITES.shadow = c;
   }
 }
 
@@ -1916,11 +2013,10 @@ function render() {
 }
 
 function drawSky() {
-  // Bright Angry-Birds daytime — azure fading to a warm horizon
+  // Bright Angry-Birds daytime — mockup-exact 2-stop blend, no mid-stop kink
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  grad.addColorStop(0, "#4fb8e8");
-  grad.addColorStop(0.55, "#8fd4ee");
-  grad.addColorStop(1, "#cfeefb");
+  grad.addColorStop(0, "#4FA8D8");
+  grad.addColorStop(1, "#8ED4F0");
   ctx.fillStyle = grad;
   ctx.fillRect(camera.x - 10, 0, VIEW.w + 20, GROUND_Y + 140);
 
@@ -1975,18 +2071,32 @@ function drawSky() {
 function drawStars() { /* retired — daytime sky (Osimo 2026-07-02: AB look) */ }
 
 function drawClouds() {
-  // Chunky flat AB clouds — pure white blobs, no outline
+  // Volumetric AB clouds — 3 passes over the SAME puff geometry (no outline anywhere):
+  // 1) oversized low-alpha halo = soft rim falloff, 2) light-gray undershadow offset
+  // down 4px = bottom volume, 3) white body on top. 8 clouds × 3 passes = trivial cost.
+  const puffs = (c, s, dy) => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y + dy, c.r * s, 0, Math.PI * 2);
+    ctx.arc(c.x + c.r * 0.85, c.y + c.r * 0.15 + dy, c.r * 0.75 * s, 0, Math.PI * 2);
+    ctx.arc(c.x - c.r * 0.85, c.y + c.r * 0.15 + dy, c.r * 0.75 * s, 0, Math.PI * 2);
+    ctx.arc(c.x + c.r * 0.35, c.y - c.r * 0.45 + dy, c.r * 0.65 * s, 0, Math.PI * 2);
+    ctx.arc(c.x - c.r * 0.4, c.y - c.r * 0.35 + dy, c.r * 0.55 * s, 0, Math.PI * 2);
+    ctx.fill();
+  };
   for (const c of clouds) {
     c.x += c.s;
     if (c.x > WORLD_W + 50) c.x = -50;
+    // soft rim halo
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    puffs(c, 1.14, 0);
+    ctx.fillRect(c.x - c.r * 1.5, c.y, c.r * 3.0, c.r * 0.62);
+    // undershadow — drawn behind the white puffs, peeks out along the bottom ~30%
+    ctx.fillStyle = "#E5EDF3";
+    puffs(c, 1.05, 4);
+    ctx.fillRect(c.x - c.r * 1.45, c.y + 4, c.r * 2.9, c.r * 0.55);
+    // white body
     ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-    ctx.arc(c.x + c.r * 0.85, c.y + c.r * 0.15, c.r * 0.75, 0, Math.PI * 2);
-    ctx.arc(c.x - c.r * 0.85, c.y + c.r * 0.15, c.r * 0.75, 0, Math.PI * 2);
-    ctx.arc(c.x + c.r * 0.35, c.y - c.r * 0.45, c.r * 0.65, 0, Math.PI * 2);
-    ctx.arc(c.x - c.r * 0.4, c.y - c.r * 0.35, c.r * 0.55, 0, Math.PI * 2);
-    ctx.fill();
+    puffs(c, 1, 0);
     // flat base
     ctx.fillRect(c.x - c.r * 1.4, c.y, c.r * 2.8, c.r * 0.55);
   }
@@ -2021,8 +2131,18 @@ function drawSea(t) {
 }
 
 function drawTerrain() {
-  // Grass top — bright Worms green
-  ctx.fillStyle = "#5bd431";
+  // Bounding-box precompute — gradient anchors track the ACTUAL ridge height so
+  // tall hills don't clamp the blend (one min/max pass over the array we already walk)
+  let terrainYMin = Infinity, terrainYMax = -Infinity;
+  for (const t of terrain) {
+    if (t.y < terrainYMin) terrainYMin = t.y;
+    if (t.y > terrainYMax) terrainYMax = t.y;
+  }
+  // Grass — ridge-to-shadow gradient (mockup: #7CC142 top ridge → #4F9530 underside)
+  const grassGrad = ctx.createLinearGradient(0, terrainYMin, 0, terrainYMin + 15);
+  grassGrad.addColorStop(0, "#7CC142");
+  grassGrad.addColorStop(1, "#4F9530");
+  ctx.fillStyle = grassGrad;
   ctx.strokeStyle = "#1a4a0a";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -2034,8 +2154,8 @@ function drawTerrain() {
   ctx.closePath();
   ctx.fill();
 
-  // Grass strip highlight
-  ctx.fillStyle = "#82f05a";
+  // Grass strip highlight — same ridge-anchored gradient (one createLinearGradient, reused)
+  ctx.fillStyle = grassGrad;
   ctx.beginPath();
   for (let i = 0; i < terrain.length; i++) {
     const t = terrain[i];
@@ -2064,9 +2184,24 @@ function drawTerrain() {
     const fs = fseed % 3 ? 2 : 3;
     ctx.fillRect(t.x + (fseed % 9) - 4, t.y - 3, fs, fs);
   }
+  // dark blade/tick marks hatched along the ridge line (deterministic seed — no flicker)
+  ctx.strokeStyle = "#2E5A1C"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 8; i < terrain.length - 8; i += 3) {   // points are 4px apart → 12px stride
+    const t = terrain[i];
+    const tseed = (i * 2654435761) % 97;
+    const th2 = tseed % 3 ? 2 : 3;                 // 2-3px tall
+    const tox = (tseed % 7) - 3;                   // small jitter so the hatch isn't a comb
+    ctx.moveTo(t.x + tox, t.y + 1);
+    ctx.lineTo(t.x + tox, t.y + 1 + th2);
+  }
+  ctx.stroke();
 
-  // Soil layer
-  ctx.fillStyle = "#8b5a2a";
+  // Soil layer — top-lit dirt gradient (mockup: #A66B3F → #7A4A26)
+  const dirtGrad = ctx.createLinearGradient(0, terrainYMin + 20, 0, GROUND_Y + 220);
+  dirtGrad.addColorStop(0, "#A66B3F");
+  dirtGrad.addColorStop(1, "#7A4A26");
+  ctx.fillStyle = dirtGrad;
   ctx.beginPath();
   ctx.moveTo(-TERRAIN_PAD, GROUND_Y + 220);
   for (const t of terrain) ctx.lineTo(t.x, t.y + 20);
@@ -2074,10 +2209,14 @@ function drawTerrain() {
   ctx.closePath();
   ctx.fill();
 
-  // Soil to rock gradient
-  const rg = ctx.createLinearGradient(0, GROUND_Y + 100, 0, WORLD_H);
-  rg.addColorStop(0, "#8b5a2a");
-  rg.addColorStop(0.3, "#5a3a1a");
+  // Soil to rock gradient — this fill covers the soil band above, so its top stops
+  // carry the SAME dirt gradient (#A66B3F → #7A4A26) before darkening into rock
+  const rgTop = terrainYMin + 20;
+  const rg = ctx.createLinearGradient(0, rgTop, 0, WORLD_H);
+  const fRock = Math.min(0.9, Math.max(0.1, (GROUND_Y + 100 - rgTop) / (WORLD_H - rgTop)));
+  rg.addColorStop(0, "#A66B3F");
+  rg.addColorStop(fRock, "#7A4A26");
+  rg.addColorStop(fRock + (1 - fRock) * 0.3, "#5a3a1a");
   rg.addColorStop(1, "#2a1a0a");
   ctx.fillStyle = rg;
   ctx.beginPath();
@@ -2093,6 +2232,17 @@ function drawTerrain() {
     const seed = (i * 2654435761) % 97;
     ctx.fillRect(t.x + (seed % 30), t.y + 28 + (seed % 46), 3, 3);
     ctx.fillRect(t.x + ((seed * 7) % 34), t.y + 60 + ((seed * 3) % 38), 4, 3);
+  }
+  // pebble dots — deliberately different stride/modulo phase (i+=17, %89) so the
+  // scatter never stacks 1:1 on the square speckles above
+  ctx.fillStyle = "#5C3A1E";
+  for (let i = 0; i < terrain.length; i += 17) {
+    const t = terrain[i];
+    const pseed = (i * 2654435761) % 89;
+    const pr = pseed % 3 ? 1.5 : 2;
+    ctx.beginPath();
+    ctx.arc(t.x + (pseed % 38), t.y + 34 + (pseed % 52), pr, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Top outline
@@ -2117,6 +2267,12 @@ function drawBlocks() {
       // spark lit, until its staggered explosion fires (render-only telegraph)
       if (b.type === "barrel" && b.fuseT > 0) { b.fuseT--; drawBarrelFuse(b); }
       continue;
+    }
+    // TNT drop shadow (AW_MOCKUP_V3) — baked soft-shadow blit under SETTLED barrels
+    // only (falling/tumbling barrels cast none), drawn in world space BEFORE the
+    // rotated tile blit so a tipped barrel never rotates its own ground shadow.
+    if (b.type === "barrel" && b.settled && SPRITES.shadow) {
+      ctx.drawImage(SPRITES.shadow, b.x - b.w * 0.18, b.y + b.h - 3, b.w * 1.36, 10);
     }
     ctx.save();
     if (b.rot) {
@@ -2184,8 +2340,18 @@ function drawBarrelFuse(b) {
 }
 
 function drawWorms() {
+  const sh = SPRITES.shadow;
   for (const w of worms) {
     if (!w.alive && w.deathTimer > 100) continue;
+    // Soft contact shadow (AW_MOCKUP_V3) — baked radial-gradient sprite blitted at the
+    // foot line. Worms rest at (support − radius), on terrain AND on block tops alike,
+    // so foot = w.y + w.radius; +4px drop per the mockup spec. Dying/dead worms skip it
+    // (they rotate + alpha-fade — a crisp ground shadow under a tumbling corpse reads
+    // wrong). drawImage blit only: zero per-frame gradient math.
+    if (w.alive && !w.dying && sh) {
+      const swd = w.radius * 3.1, shh = swd * 0.3;
+      ctx.drawImage(sh, w.x - swd / 2, w.y + w.radius - shh / 2 + 4, swd, shh);
+    }
     ctx.save();
     if (!w.alive) {
       ctx.translate(w.x, w.y);
@@ -2250,13 +2416,21 @@ function drawWormBody(w) {
 
   const hx = x + 7 * S * F, hy = y - 2 + wiggle;
 
-  // Glossy white highlight — top-left of the head (mockup recipe). Lives in this shared
-  // function so it appears on the loaded worm, in-flight projectiles, HP-bar'd worms,
-  // death-fade corpses AND every ammo-tray/carousel icon automatically.
-  ctx.fillStyle = "rgba(255,255,255,0.35)";
-  ctx.beginPath();
-  ctx.ellipse(hx - 6 * S * F, hy - 8 * S, 4 * S, 2.6 * S, -0.5 * F, 0, Math.PI * 2);
-  ctx.fill();
+  // Glossy specular highlight — top-left of the head (mockup recipe). AW_MOCKUP_V3:
+  // upgraded from a flat 0.35-alpha ellipse to a radial-gradient falloff (full strength
+  // at centre fading to 0 at the rim — no hard edge). Lives in this shared function so
+  // it appears on the loaded worm, in-flight projectiles, HP-bar'd worms, death-fade
+  // corpses AND every ammo-tray/carousel icon automatically (icons bake it in).
+  ctx.save();
+  ctx.translate(hx - 6 * S * F, hy - 8 * S);
+  ctx.rotate(-0.5 * F);
+  ctx.scale(1, 0.62);
+  const spec = ctx.createRadialGradient(0, 0, 0, 0, 0, 5.5 * S);
+  spec.addColorStop(0, "rgba(255,255,255,0.5)");
+  spec.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = spec;
+  ctx.beginPath(); ctx.arc(0, 0, 5.5 * S, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
   // Eyes — big whites
   ctx.fillStyle = "#fff";
@@ -2361,6 +2535,9 @@ function drawSlingshot() {
   // low pulls used to bury the worm in the hill and it exploded at your feet)
   const gy = terrainHeightAt(sx);
   const platY = SLING_Y + 70;          // deck the slingshot stands on
+  // Base drop shadow (AW_MOCKUP_V3) — baked soft radial-gradient sprite under the
+  // tower footing on the hillside (crater soft-edge technique, blit only)
+  if (SPRITES.shadow) ctx.drawImage(SPRITES.shadow, sx - 46, gy - 1, 92, 14);
   ctx.strokeStyle = "#4a2808";
   ctx.lineWidth = 7;
   ctx.beginPath();
@@ -2390,6 +2567,13 @@ function drawSlingshot() {
   ctx.strokeRect(sx - 8, sy - 20, 16, 40);
   ctx.fillStyle = "#9a7040";
   ctx.fillRect(sx - 6, sy - 19, 4, 38);
+  // trunk wood-grain streaks (AW_MOCKUP_V3) — dark lines along the long axis
+  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(sx + 1, sy - 17); ctx.lineTo(sx + 1, sy + 17);
+  ctx.moveTo(sx + 5, sy - 13); ctx.lineTo(sx + 5, sy + 18);
+  ctx.stroke();
+  ctx.strokeStyle = "#4a2808";       // restore outline colour for the fork strokeRects
   ctx.fillStyle = "#7a5230";
   // Left fork
   ctx.save();
@@ -2399,6 +2583,13 @@ function drawSlingshot() {
   ctx.strokeRect(-7, -63, 14, 68);
   ctx.fillStyle = "#9a7040";
   ctx.fillRect(-5, -62, 4, 66);
+  // fork wood-grain streaks (AW_MOCKUP_V3) — follow the post's long axis
+  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(1, -59); ctx.lineTo(1, 3);
+  ctx.moveTo(4, -52); ctx.lineTo(4, 4);
+  ctx.moveTo(-2, -46); ctx.lineTo(-2, 2);
+  ctx.stroke();
   ctx.restore();
   // Right fork
   ctx.save();
@@ -2409,39 +2600,73 @@ function drawSlingshot() {
   ctx.strokeRect(-7, -63, 14, 68);
   ctx.fillStyle = "#9a7040";
   ctx.fillRect(-5, -62, 4, 66);
+  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(1, -59); ctx.lineTo(1, 3);
+  ctx.moveTo(4, -52); ctx.lineTo(4, 4);
+  ctx.moveTo(-2, -46); ctx.lineTo(-2, 2);
+  ctx.stroke();
   ctx.restore();
 
   // Fork tips (band anchors — SLING_Y is the launch anchor between them)
   const leftTip = { x: sx - 24, y: sy - 82 };
   const rightTip = { x: sx + 24, y: sy - 82 };
 
-  // Elastic band
+  // Twine lash-wraps (AW_MOCKUP_V3) — short diagonal hatch strokes at the two points
+  // where the elastic anchors to the fork tips. Axis vectors are the ±0.4-rad fork
+  // rotations applied to (0,−1): left = (−0.389,−0.921), right = (0.389,−0.921).
+  ctx.strokeStyle = "#3A2A1A"; ctx.lineWidth = 2; ctx.lineCap = "round";
+  ctx.beginPath();
+  for (const wd of [{ t: leftTip, dx: -0.389, dy: -0.921 },
+                    { t: rightTip, dx: 0.389, dy: -0.921 }]) {
+    const px2 = -wd.dy, py2 = wd.dx;                 // perpendicular across the post
+    for (let k = 0; k < 4; k++) {
+      const d = 3 + k * 4.5;                          // step down the post from the tip
+      const cxx = wd.t.x - wd.dx * d, cyy = wd.t.y - wd.dy * d;
+      ctx.moveTo(cxx - px2 * 7 + wd.dx * 2, cyy - py2 * 7 + wd.dy * 2);
+      ctx.lineTo(cxx + px2 * 7 - wd.dx * 2, cyy + py2 * 7 - wd.dy * 2);
+    }
+  }
+  ctx.stroke();
+  ctx.lineCap = "butt";
+
+  // Tapered rubber strand (AW_MOCKUP_V3): filled quad + round end caps — thicker at the
+  // fork anchor, thinner toward the pouch — plus a thin white gloss stripe offset toward
+  // the top edge for the rubber sheen. (The FRONT strand lives in drawLoadedWorm, which
+  // is off-limits this pass — it keeps its original flat stroke and is deliberately the
+  // darker #a02818 layer, so the mismatch is invisible.)
+  function strand(x1, y1, x2, y2, hw1, hw2, color) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * hw1, y1 + ny * hw1);
+    ctx.lineTo(x2 + nx * hw2, y2 + ny * hw2);
+    ctx.lineTo(x2 - nx * hw2, y2 - ny * hw2);
+    ctx.lineTo(x1 - nx * hw1, y1 - ny * hw1);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x1, y1, hw1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x2, y2, hw2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = Math.max(1, hw2 * 0.7);
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * hw1 * 0.45, y1 + ny * hw1 * 0.45);
+    ctx.lineTo(x2 + nx * hw2 * 0.45, y2 + ny * hw2 * 0.45);
+    ctx.stroke();
+  }
+
+  // Elastic band (same endpoints/anchors as always — only the strand rendering changed)
   if (loadedWorm && aiming && dragCurrent) {
-    // Stretched - back band
-    ctx.strokeStyle = "#c0392b";
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(leftTip.x, leftTip.y);
-    ctx.lineTo(loadedWorm.x, loadedWorm.y);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(rightTip.x, rightTip.y);
-    ctx.lineTo(loadedWorm.x, loadedWorm.y);
-    ctx.stroke();
+    // Stretched - back band (was flat lineWidth-7 strokes → tapered glossy strands)
+    strand(leftTip.x, leftTip.y, loadedWorm.x, loadedWorm.y, 4, 2.4, "#c0392b");
+    strand(rightTip.x, rightTip.y, loadedWorm.x, loadedWorm.y, 4, 2.4, "#c0392b");
     // Front band (drawn after worm)
   } else if (loadedWorm) {
     // Relaxed band — two strands converging on the launch anchor (SLING_X/SLING_Y, NOT
     // loadedWorm.x/y: drawSlingshot runs before drawLoadedWorm resets those this frame)
-    ctx.strokeStyle = "#c0392b";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(leftTip.x, leftTip.y);
-    ctx.lineTo(SLING_X, SLING_Y);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(rightTip.x, rightTip.y);
-    ctx.lineTo(SLING_X, SLING_Y);
-    ctx.stroke();
+    strand(leftTip.x, leftTip.y, SLING_X, SLING_Y, 3.5, 2.2, "#c0392b");
+    strand(rightTip.x, rightTip.y, SLING_X, SLING_Y, 3.5, 2.2, "#c0392b");
   }
 
   // Store tips for later
@@ -2676,32 +2901,64 @@ function pillPath(x, y, pw, ph, r) {
 }
 
 function drawNavyPill(x, y, pw, ph, r) {
-  ctx.fillStyle = HUD_NAVY_FILL;
+  // Glass-pill recipe (AW_MOCKUP_V3): flat HUD_NAVY_FILL → vertical gradient
+  // #223655 → #101B30 at the same 0.92 alpha, so the glassy translucency is kept.
+  const g = ctx.createLinearGradient(0, y, 0, y + ph);
+  g.addColorStop(0, "rgba(34,54,85,0.92)");    // #223655
+  g.addColorStop(1, "rgba(16,27,48,0.92)");    // #101B30
+  ctx.fillStyle = g;
   pillPath(x, y, pw, ph, r); ctx.fill();
   ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 2;
   pillPath(x, y, pw, ph, r); ctx.stroke();
-  // subtle lighter top-edge highlight
-  ctx.strokeStyle = "rgba(90,140,190,0.45)"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(x + r, y + 2.5); ctx.lineTo(x + pw - r, y + 2.5); ctx.stroke();
+  // glossy ~10%-white band hugging the top inner edge
+  ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x + r, y + 3.5); ctx.lineTo(x + pw - r, y + 3.5); ctx.stroke();
+  // original subtle blue edge-light kept beneath it
+  ctx.strokeStyle = "rgba(90,140,190,0.35)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + r, y + 1.5); ctx.lineTo(x + pw - r, y + 1.5); ctx.stroke();
 }
 
 function drawStarIcon(cx, cy, r, color) {
-  ctx.fillStyle = color;
+  // 2-tone bevelled star (AW_MOCKUP_V3): light #F9D878 top-left facet, dark #C9962E
+  // bottom-right facet split along the anti-diagonal, instead of the old flat gold
+  // fill. `color` survives as the thin rim stroke so the caller's gold identity shows.
+  const path = () => {
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const rr = k % 2 === 0 ? r : r * 0.45;
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      if (k === 0) ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      else ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+  };
+  ctx.save();
+  path(); ctx.clip();
+  ctx.fillStyle = "#F9D878";
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.fillStyle = "#C9962E";
   ctx.beginPath();
-  for (let k = 0; k < 10; k++) {
-    const rr = k % 2 === 0 ? r : r * 0.45;
-    const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
-    if (k === 0) ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-    else ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-  }
+  ctx.moveTo(cx + r * 1.4, cy - r * 1.4);
+  ctx.lineTo(cx + r * 1.4, cy + r * 1.4);
+  ctx.lineTo(cx - r * 1.4, cy + r * 1.4);
   ctx.closePath(); ctx.fill();
+  ctx.restore();
+  path();
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 function drawHudButton(cx, cy, r, kind) {
-  ctx.fillStyle = "rgba(22,40,60,0.90)";
+  // same glass gradient as drawNavyPill (AW_MOCKUP_V3) + a top inner gloss arc
+  const g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+  g.addColorStop(0, "rgba(34,54,85,0.92)");    // #223655
+  g.addColorStop(1, "rgba(16,27,48,0.92)");    // #101B30
+  ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r - 3.5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
   if (kind === "pause") {
     ctx.fillStyle = "#fff";
     ctx.fillRect(cx - 7, cy - 8, 5, 16);
@@ -2849,7 +3106,12 @@ function drawHUD() {
       const sel = idx === selectedType;
       ctx.save();
       ctx.globalAlpha = 1;   // backing plate is ALWAYS solid — armed/unarmed is a ring/glow distinction only, never a hole in the HUD panel
-      ctx.fillStyle = HUD_NAVY_FILL;
+      // slot backing matches the glass-pill gradient (AW_MOCKUP_V3) — 4 tiny
+      // createLinearGradient calls per frame, trivial
+      const sg2 = ctx.createLinearGradient(0, cy - L.slotR, 0, cy + L.slotR);
+      sg2.addColorStop(0, "rgba(34,54,85,0.92)");
+      sg2.addColorStop(1, "rgba(16,27,48,0.92)");
+      ctx.fillStyle = sg2;
       ctx.beginPath(); ctx.arc(cx, cy, L.slotR, 0, Math.PI * 2); ctx.fill();
       if (sel) { ctx.shadowColor = tc.body; ctx.shadowBlur = 14; }   // glow ONLY when armed
       ctx.strokeStyle = tc.body;
