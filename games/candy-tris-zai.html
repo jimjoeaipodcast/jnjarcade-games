@@ -1284,12 +1284,12 @@ function ccSwapAttempt(r1,c1,r2,c2){
     else if(b.type===CB&&a.type===N)swapColor=a.color;
     ccSel=null;cascading=true;
     lockR=r1;lockC=c1;
-    useMove();   // successful CC swap costs 1 move
+    // no useMove() here: activating an already-earned special (wrapped/bomb/striped/fish) is free
     activateSpecials([ck(r1,c1),ck(r2,c2)],swapColor);
   } else if(findMatches()){
     ccSel=null;cascading=true;
     lockR=r1;lockC=c1;
-    useMove();   // successful CC swap costs 1 move
+    useMove();   // plain candy swap creating a fresh match costs 1 move, same as a piece lock
     setTimeout(()=>cascade(0,false),80);
   } else {
     board[r1][c1]=a;board[r2][c2]=b;
