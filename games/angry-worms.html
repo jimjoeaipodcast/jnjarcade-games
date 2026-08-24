@@ -40,6 +40,22 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 }
 @keyframes blink { 50% { opacity: 0.25; } }
 #overlay .hint { margin-top: 26px; font-size: 11px; color: #555; letter-spacing: 2px; }
+/* iPhone Safari has NO Fullscreen API (Android does) — Add to Home Screen is the only real
+   fullscreen path on iOS; shown only on iOS-and-not-already-standalone. Ported from
+   flap-fight.html's proven fix (Osimo 2026-08-02) — same platform constraint, same pattern,
+   never applied to this game (Osimo 2026-08-24: "doesn't really go full screen in landscape
+   leaves black bar on the top" — that bar is the iOS status bar, which only a real
+   installed-standalone app can render behind). */
+.ios-hint {
+  margin-top: 18px; max-width: 300px; font-size: 11.5px; line-height: 1.5;
+  color: #ffb3ab; background: rgba(232,48,42,0.08);
+  border: 1px solid rgba(232,48,42,0.3); border-radius: 10px; padding: 8px 11px;
+}
+.ios-hint b { color: #fff; }
+.ios-hint-warn { color: #fcd34d; background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.35); }
+.ios-hint-warn b { color: #fbbf24; }
+.ios-hint-warn .ios-share { fill: #fbbf24; }
+.ios-share { width: 13px; height: 13px; vertical-align: -2px; fill: #fff; }
 
 #rotate {
   position: fixed; inset: 0; z-index: 100;
@@ -76,6 +92,23 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
   <h2>ANGRY BIRDS &times; WORMS</h2>
   <button id="coinBtn">TAP TO INSERT COIN</button>
   <div class="hint">DRAG TO AIM &middot; RELEASE TO FIRE &middot; TAP MID-FLIGHT FOR ABILITY</div>
+  <div class="ios-hint" id="iosHint" hidden>
+    <b>iPhone fullscreen:</b> tap
+    <svg class="ios-share" viewBox="0 0 24 24" aria-label="Share" role="img">
+      <path d="M12 3l4 4h-3v9h-2V7H8l4-4z"/>
+      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7h-2v7H7v-7H5z"/>
+    </svg>
+    Share &rarr; <b>Add to Home Screen</b>, then open it from your home screen &mdash; no browser bars.
+  </div>
+  <div class="ios-hint ios-hint-warn" id="inAppHint" hidden>
+    <b>&#9888;&#65039; You're in an in-app browser</b> (opened from another app). Installing from
+    here can't go fullscreen. Tap the <b>compass</b>
+    <svg class="ios-share" viewBox="0 0 24 24" aria-label="Safari" role="img">
+      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
+      <path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8 4.8-2.2z"/>
+    </svg>
+    (or &bull;&bull;&bull; &rarr; <b>Open in Safari</b>), then Share &rarr; <b>Add to Home Screen</b>.
+  </div>
 </div>
 
 <div id="rotate">
@@ -92,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V4_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V5_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -1870,14 +1903,36 @@ function resetGame() {
 }
 
 // ====== COIN / START ======
+// iOS detection incl. iPadOS 13+, which reports itself as MacIntel with touch points.
+// Same platform-fact + fallback shape as flap-fight.html (Osimo 2026-08-02): iPhone Safari
+// exposes NO fullscreen API at all, so requestFullscreen/webkitRequestFullscreen are both
+// undefined and any tryFullscreen() call silently no-ops — Add to Home Screen (standalone)
+// is the only real fullscreen path on iOS, surfaced via #iosHint/#inAppHint instead of
+// failing quietly.
+const IS_IOS = /iphone|ipod|ipad/i.test(navigator.userAgent) ||
+               (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = window.navigator.standalone === true ||
+                      window.matchMedia("(display-mode: standalone)").matches ||
+                      window.matchMedia("(display-mode: fullscreen)").matches;
+const _AW_UA = navigator.userAgent || "";
+const IS_INAPP_BROWSER = IS_IOS && (
+  /FBAN|FBAV|Instagram|Line\/|Twitter|LinkedInApp|Snapchat|Telegram/i.test(_AW_UA) ||
+  (/AppleWebKit/i.test(_AW_UA) && !/Safari\//i.test(_AW_UA))
+);
+if (IS_IOS && !IS_STANDALONE) {
+  const _awHint = document.getElementById(IS_INAPP_BROWSER ? "inAppHint" : "iosHint");
+  if (_awHint) _awHint.hidden = false;
+}
+
 function insertCoin() {
   const overlay = document.getElementById("overlay");
   overlay.classList.add("hidden");
-  // Try fullscreen
+  // Try fullscreen — webkitRequestFullscreen fallback matches flap-fight/astro-hop/etc,
+  // though per the IS_IOS block above this is still always a no-op on real iOS Safari.
   try {
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch (e) {}
   startGame();
 }
