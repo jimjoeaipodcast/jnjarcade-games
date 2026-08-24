@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JnJ Arcade">
+<meta name="theme-color" content="#16120c">
 <title>THE ARCADE — JnJ Arcade</title>
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -13,6 +15,13 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
+<!-- manifest was index.html-only (Osimo 2026-08-24: fullscreen doesn't carry from a
+     Patreon-page install into the rest of the site) — the manifest is what actually
+     declares display:fullscreen + scope:"/" (2026-08-18 note in manifest.json itself:
+     "an absent scope lets Chrome treat in-site navigations as out-of-app") and the
+     512x512 maskable icon iOS prefers over the plain 180x180 apple-touch-icon. Any page
+     that can be the FIRST one added to the home screen needs this link, not just index. -->
+<link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="cabinet.css?v=34">
 <link rel="stylesheet" href="style.css?v=33">
 <style>
@@ -74,5 +83,10 @@
   <script src="arcade-scores.js?v=22"></script>
   <script src="vendor/gsap.min.js"></script>
   <script src="app.js?v=arcade68de"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }
+  </script>
 </body>
 </html>
