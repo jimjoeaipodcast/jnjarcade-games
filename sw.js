@@ -1,9 +1,10 @@
 /* JnJ Arcade — minimal service worker for PWA installability */
-const CACHE = 'jnj-v3';   // bumped 2026-08-18: forces activate() to delete every older cache on installed PWAs
+const CACHE = 'jnj-v4';   // bumped 2026-08-24: added patreon-manifest.json to precache
 const PRECACHE = [
   '/assets/icons/jnj-logo-192.png',
   '/assets/icons/jnj-logo-512.png',
-  '/manifest.json'
+  '/manifest.json',
+  '/patreon-manifest.json'
 ];
 
 self.addEventListener('install', e => {

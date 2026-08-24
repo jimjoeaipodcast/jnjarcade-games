@@ -1,0 +1,30 @@
+{
+  "name": "JnJ Patreon",
+  "short_name": "JnJ Patreon",
+  "description": "Jimmy & Joe AI Podcast — Patreon Arcade, every cabinet unlocked",
+  "start_url": "/patreon",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#16120c",
+  "theme_color": "#16120c",
+  "icons": [
+    {
+      "src": "assets/icons/jnj-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icons/jnj-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "scope": "/",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "_why_a_second_manifest": "Osimo 2026-08-24: installed from /patreon-arcade, the Chrome install prompt read name 'JnJ Arcade' (the shared manifest.json's name) and start_url '/' launched him into the free main arcade with Patreon games showing as locked teasers instead of back into the Patreon experience he installed from. manifest.json's start_url is hardcoded '/' — every page that links it always launches there regardless of which page triggered the install.",
+  "_why_scope_stays_broad": "The prior /lock-in rule (feedback_ios_standalone_needs_meta_every_page addendum) says a per-page/second manifest can make iOS/Chrome treat that page as a DIFFERENT app than the one currently installed, ejecting the user to a browser view on navigation. That failure was traced to a NARROW/implicit scope on the second manifest (flap-fight.webmanifest, reverted). This manifest deliberately keeps scope:\"/\" identical to manifest.json's — same site-wide territory, only start_url and name differ — so navigating from an installed Patreon icon into any game (which lives outside both /patreon and /patreon-arcade, at /games/*) stays recognized as the same in-scope app rather than kicking out to a browser view. Verified live via serviceWorker registration + manifest fetch checks; genuine install-and-launch behavior on a real device could not be verified from here."
+}

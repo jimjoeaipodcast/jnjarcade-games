@@ -50,7 +50,7 @@ function row(k, v, cls) {
   d.innerHTML = '<div class="k">' + k + '</div><div class="v ' + (cls || '') + '">' + v + '</div>';
   out.appendChild(d);
 }
-row('BUILD', '2026-08-18 · check v1', 'ok');
+row('BUILD', '2026-08-24 · check v2 (added display-mode + fullscreen-API rows)', 'ok');
 row('TIME', new Date().toString());
 row('BROWSER', navigator.userAgent);
 
@@ -81,6 +81,23 @@ if ('serviceWorker' in navigator) {
 if (window.caches && caches.keys) {
   caches.keys().then(function (k) { row('CACHES', k.length ? k.join(', ') : 'none', k.length ? 'warn' : 'ok'); });
 }
+
+/* PWA/fullscreen diagnostics added 2026-08-24 — Osimo hit two rounds of "installed the
+   wrong app" and "go fullscreen does nothing" on /patreon specifically, and every fix had
+   to be verified live from his real device because none of it is testable from a headless
+   browser here (real install/launch behavior, real user-gesture trust). This is exactly
+   the class of problem /check exists for — report the raw state instead of guessing. */
+row('DISPLAY MODE', window.matchMedia('(display-mode: standalone)').matches ? 'STANDALONE (installed app)'
+    : window.matchMedia('(display-mode: fullscreen)').matches ? 'FULLSCREEN (installed app)'
+    : 'browser tab (not installed, or opened as one)', 'ok');
+row('FULLSCREEN API', document.fullscreenEnabled
+    ? (document.fullscreenElement ? 'enabled, ACTIVE right now' : 'enabled, not active') : 'NOT AVAILABLE on this browser/context', document.fullscreenEnabled ? 'ok' : 'bad');
+/* NOT checking the active manifest here on purpose: this page deliberately has no
+   <link rel="manifest"> of its own (dependency-free by design, see file header), and
+   there is no reliable cross-page API to ask "which of the site's several manifests
+   governs the CURRENT standalone session" from a page that doesn't declare one itself —
+   getInstalledRelatedApps() doesn't cover this. To check which manifest a specific page
+   resolves, fetch that page's own <link rel="manifest"> directly, not from here. */
 
 /* Fetch the live arcade HTML and report whether it is the CURRENT build — this is what
    proves "your phone is on an old copy" instead of me asserting it. */

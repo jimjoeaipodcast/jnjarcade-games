@@ -20,8 +20,15 @@
      looking shrunk vs the regular arcade's). The manifest is what actually declares
      display:fullscreen + scope:"/" and the 512x512 maskable icon — without it here,
      installing FROM this page has none of that, only the bare apple-mobile-web-app-
-     capable fallback (basic standalone, no fullscreen override, plain 180x180 icon). -->
-<link rel="manifest" href="manifest.json">
+     capable fallback (basic standalone, no fullscreen override, plain 180x180 icon).
+     FOLLOW-UP same day: first fix pointed here at the SHARED manifest.json, whose
+     start_url:"/" then launched an install-from-here icon into the free main arcade
+     (Patreon games showing as locked teasers) instead of back into Patreon — Osimo's own
+     screenshot showed the Chrome install prompt reading "JnJ Arcade" from /patreon-arcade.
+     Points at patreon-manifest.json instead now — same scope:"/" (the hard-won rule: a
+     second manifest is safe only if its scope matches the main one), different
+     start_url/name so the icon launches back into Patreon, not the free arcade. -->
+<link rel="manifest" href="patreon-manifest.json">
 <link rel="stylesheet" href="cabinet.css?v=34">
 <link rel="stylesheet" href="style.css?v=33">
 <style>
@@ -164,9 +171,18 @@
        the paywall game cassettes and move the actual games in there"). This page is
        a hub now: three cassettes, nothing locked. -->
 
-  <button id="fsBtn" hidden></button>
-  <button id="a2hsBtn" hidden></button>
-  <div id="a2hsSheet" hidden></div>
+  <!-- fsBtn/a2hsBtn/a2hsSheet stubs REMOVED here (Osimo 2026-08-24: "pressing go full screen
+       does nothing" on /patreon specifically, no other page). Leftover template scaffolding
+       duplicating the real, styled, wired versions already above (line ~74-78) — patreon.html
+       was the only page with 2 elements sharing each of those 3 ids. getElementById() returns
+       the first match deterministically, so the real button WAS what app.js bound its click
+       listener to (confirmed live: a real click genuinely invoked requestFullscreen(), it just
+       failed on Chromium's automated-gesture-trust check, not a page bug) — but the duplicate
+       IDs are still invalid HTML and a real landmine: Playwright's OWN tooling refused to
+       click `#fsBtn` outright ("strict mode violation: resolved to 2 elements"), so any other
+       ID-based lookup anywhere is one refactor away from silently grabbing the wrong (dead,
+       empty, hidden-forever) element instead of the real one. Deleted rather than left as
+       latent risk. toast (not duplicated) kept. -->
   <div id="toast"></div>
 
   <p class="hall-empty hall-thanks">A BIG MASSIVE THANK YOU TO EVERY ONE OF YOU.<br>YOU ARE WHY THIS EXISTS.<br>&mdash; OSIMO, JIMMY &amp; JOE</p>
