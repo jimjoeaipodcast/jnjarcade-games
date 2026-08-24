@@ -13,6 +13,11 @@
 <!-- CT_SAGA_V3_3_20260824 — real-device rotate fix: board touch listeners were {passive:true},
      so a real tap ALSO fired a phantom mousedown/mouseup shortly after (browser touch-
      compat behaviour), double-firing rotate() per tap (180° not 90°) -->
+<!-- CT_SAGA_V3_4_20260824 — Osimo live-play round 3: standard Tetris LOCK DELAY (500ms).
+     A grounded piece no longer sticks on the next drop tick — it rests LOCK_DELAY_MS,
+     and every successful shift/rotate/colour-cycle while grounded (player, keyboard or
+     attract AI) restarts the window via armLockDelay(). hardDrop stays INSTANT.
+     Pause + mid-piece cascades freeze the timer exactly like they freeze lastDrop. -->
 
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
@@ -302,7 +307,7 @@ canvas{display:block}
 </div>
 <script>
 'use strict';
-window.__CRUSHTRIS_BUILD='CT_SAGA_V3_3_20260824';
+window.__CRUSHTRIS_BUILD='CT_SAGA_V3_4_20260824';
 
 // ── GEOMETRY HEADER — single source of truth ───────────────────────────────
 // DW is the LOCKED design width. DH is fluid between DH_MIN/DH_MAX so the stage
@@ -709,6 +714,13 @@ function paintBG(){
 // ── Core state ──────────────────────────────────────────────────────────────
 let board,piece,score,level,linesCleared,gameOver,cascading;
 let dropInterval,lastDrop,lockR,lockC,comboCount,bannerTO,animId;
+// ── Lock delay (Osimo live-play 2026-08-24: "when an object touches another you
+// still have half a second to move it") — a grounded piece rests LOCK_DELAY_MS
+// before lockPiece(); any successful move/rotate/colour-cycle while grounded
+// restarts the window (armLockDelay). Clock is performance.now() everywhere so
+// pointerUp/attractStep (no loop ts) share the same timeline as the loop.
+let grounded=false,groundedSince=0;
+const LOCK_DELAY_MS=500;
 let particles=[],rings=[],sweeps=[],flashRows=[];
 let wasRotated=false,lastClearPowerful=false,backToBack=false;
 let mode='endless';          // 'saga' | 'endless' | 'daily'
@@ -1358,6 +1370,7 @@ function useMove(){
 
 // ── Lock ───────────────────────────────────────────────────────────────────
 function lockPiece(){
+  grounded=false;   // fresh lock-delay state for the next piece (hardDrop path included)
   const isSpin=checkTSpin();
   const cells=pCells(piece);
   lockR=0;lockC=piece.c+Math.floor(pshape(piece)[0].length/2);
@@ -1457,7 +1470,8 @@ function settleDone(){
     if(goalMet()){startLevelClear();return;}
     if(movesLeft<=0&&!piece){levelFail(false);return;}
   }
-  if(piece)lastDrop=performance.now();else spawnNext();
+  if(piece){lastDrop=performance.now();if(grounded)groundedSince=performance.now();}
+  else spawnNext();
 }
 function goalMet(){
   if(goalType==='SCORE')return score>=goalTarget;
@@ -1631,7 +1645,7 @@ function pointerUp(cx,cy,target){
   if(cascading||!piece||!startedOnBoard)return;
   if(isTap){rotate();return;}
   if(still)return;   // held-then-released, no movement: keep orientation, do nothing
-  if(Math.abs(dx)>Math.abs(dy)){const d=dx>0?1:-1;if(valid(piece,board,0,d)){piece.c+=d;sfx.move();}}
+  if(Math.abs(dx)>Math.abs(dy)){const d=dx>0?1:-1;if(valid(piece,board,0,d)){piece.c+=d;sfx.move();armLockDelay();}}
   else{if(dy>0)hardDrop();else cycleColors(piece);}
 }
 
@@ -1661,19 +1675,26 @@ document.addEventListener('mouseup',e=>{if(mouseActive){mouseActive=false;pointe
 
 document.addEventListener('keydown',e=>{
   if(gameOver||cascading||paused||levelEnding||!piece)return;
-  if(e.key==='ArrowLeft'&&valid(piece,board,0,-1)){piece.c--;sfx.move();e.preventDefault();}
-  if(e.key==='ArrowRight'&&valid(piece,board,0,1)){piece.c++;sfx.move();e.preventDefault();}
+  if(e.key==='ArrowLeft'&&valid(piece,board,0,-1)){piece.c--;sfx.move();armLockDelay();e.preventDefault();}
+  if(e.key==='ArrowRight'&&valid(piece,board,0,1)){piece.c++;sfx.move();armLockDelay();e.preventDefault();}
   if(e.key==='ArrowDown'){if(valid(piece,board,1))piece.r++;else lockPiece();e.preventDefault();}
   if(e.key==='ArrowUp'||e.key===' '){rotate();e.preventDefault();}
   if(e.key.toLowerCase()==='z')hardDrop();
 });
+// armLockDelay — call after ANY successful action on the piece (shift / rotate /
+// colour-cycle, player or attract AI). Only matters if the piece is grounded
+// AFTER the move: restarts the LOCK_DELAY_MS window. A move that frees the piece
+// to fall again is handled by the loop clearing `grounded` on its next frame.
+function armLockDelay(){
+  if(piece&&!valid(piece,board,1)){grounded=true;groundedSince=performance.now();}
+}
 function rotate(){
   if(!piece)return;
   const nr=(piece.rot+1)%4;
   for(const[dr,dc]of[[0,0],[0,-1],[0,1],[0,-2],[0,2],[-1,0]]){
     if(valid(piece,board,dr,dc,nr)){
       piece.colors=recolor(piece,nr);piece.rot=nr;piece.r+=dr;piece.c+=dc;
-      wasRotated=true;sfx.rotate();return;
+      wasRotated=true;sfx.rotate();armLockDelay();return;
     }
   }
 }
@@ -1692,6 +1713,7 @@ function cycleColors(p){
   vals.unshift(vals.pop());   // rotate the collected list by one position
   for(let i=0;i<pos.length;i++)p.colors[pos[i][0]][pos[i][1]]=vals[i];
   sfx.rotate();   // shares the tap-rotate cue — no dedicated colour-cycle sfx exists
+  armLockDelay();
 }
 function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
@@ -2899,8 +2921,8 @@ function attractStep(ts){
   lastAI=ts;
   if(!attractPlan){computeAttractPlan();return;}
   if(piece.rot!==attractPlan.rot){rotate();return;}
-  if(piece.c<attractPlan.c){if(valid(piece,board,0,1))piece.c++;return;}
-  if(piece.c>attractPlan.c){if(valid(piece,board,0,-1))piece.c--;return;}
+  if(piece.c<attractPlan.c){if(valid(piece,board,0,1)){piece.c++;armLockDelay();}return;}
+  if(piece.c>attractPlan.c){if(valid(piece,board,0,-1)){piece.c--;armLockDelay();}return;}
   attractPlan=null;
   hardDrop();
 }
@@ -2911,14 +2933,20 @@ function loop(ts){
   animId=requestAnimationFrame(loop);
   const dt=Math.min(32,ts-(lastTs||ts));lastTs=ts;
   if(shakeT>0)shakeT=Math.max(0,shakeT-dt/16.67);
-  if(paused){lastDrop=ts;drawBoard();return;}
+  if(paused){lastDrop=ts;if(grounded)groundedSince=performance.now();drawBoard();return;}
   if(ATTRACT)attractStep(ts);
   if(piece&&!cascading&&!levelEnding){
-    if(ts-lastDrop>=(holding?Math.max(40,dropInterval/3):dropInterval)){
-      lastDrop=ts;
-      if(valid(piece,board,1)){piece.r++;wasRotated=false;}
-      else{lockPiece();return;}
+    if(valid(piece,board,1)){
+      grounded=false;   // airborne again (spawn, or slid/rotated off a ledge)
+      if(ts-lastDrop>=(holding?Math.max(40,dropInterval/3):dropInterval)){
+        lastDrop=ts;piece.r++;wasRotated=false;
+      }
+    }else if(!grounded){
+      grounded=true;groundedSince=performance.now();   // touchdown — grace starts
+    }else if(performance.now()-groundedSince>=LOCK_DELAY_MS){
+      lockPiece();return;
     }
+    // grounded + inside the window: do nothing — piece stays put, stays interactive
   }
   drawBoard();
 }
@@ -2961,6 +2989,9 @@ window.__ct={
   // endless pacing hooks — level is POINTS-driven (endlessLevelUp)
   get level(){return level;},get linesCleared(){return linesCleared;},
   get dropInterval(){return dropInterval;},get POINTS_PER_LEVEL(){return POINTS_PER_LEVEL;},
+  // lock-delay hooks — grounded flag + timer origin (playtest-by-evaluate)
+  get grounded(){return grounded;},get groundedSince(){return groundedSince;},
+  get LOCK_DELAY_MS(){return LOCK_DELAY_MS;},
   // sound/music hooks — 4-state pill + jingle engine (playtest-by-evaluate)
   get soundMode(){return soundMode;},get musicVol(){return musicVol;},
   get musicPlaying(){return !!musicSrc;},get musicTrackIdx(){return musicTrackIdx;},
