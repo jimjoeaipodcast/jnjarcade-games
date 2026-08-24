@@ -2388,7 +2388,7 @@ function jimmyRunAttract(ctx, w, h, t, world, s) {
    the game's real daylight palette, not the dark/neon house look the DRAWN attract
    animations follow — that is the cost of showing genuine footage. */
 function angryWormsVideoAttract(ctx, w, h, t, world, s) {
-  videoAttract(ctx, w, h, t, s, 'assets/footage/angry-worms-attract.mp4?v=1', '#100604');
+  videoAttract(ctx, w, h, t, s, 'assets/footage/angry-worms-attract.mp4?v=2', '#100604');
 }
 
 function pinVadersAttract(ctx, w, h, t, world, s) {

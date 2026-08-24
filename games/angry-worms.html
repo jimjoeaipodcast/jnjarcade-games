@@ -92,6 +92,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V2_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -104,6 +105,29 @@ const SLING_Y = GROUND_Y - 250;  // launch anchor — top of the watchtower turr
 const WATER_Y = 695;   // Worms-style sea — anything below this drowns
 const TERRAIN_PAD = 260;  // terrain continues past the world edges — wide viewports
                           // used to show the ground ending in mid-air (Osimo 2026-07-03)
+
+// ====== SHARED TYPE COLOURS (single source of truth) ======
+// LOCKED per-type identity: these six existing worm-body hex pairs ARE the ammo-ring/glow
+// palette — drawWormBody and the ammo carousel both read from here, no duplicated literals.
+// cluster keeps its own green, deliberately distinct from bomber's yellow AND splitter's
+// blue so the tray stays legible (original drawWormBody comment preserved in spirit here).
+const TYPE_COLOR = {
+  red:      { body: "#e8302a", dark: "#8a1a16", belly: "#f6d7b0" },
+  bomber:   { body: "#ffcc00", dark: "#8a6a00", belly: "#fff3c0" },
+  bouncer:  { body: "#8e44e0", dark: "#4a1a80", belly: "#e2cdf8" },
+  trooper:  { body: "#e07820", dark: "#7a3c08", belly: "#fadfc0" },
+  cluster:  { body: "#39d98a", dark: "#12603c", belly: "#cdf6e2" },
+  splitter: { body: "#3a8acf", dark: "#1a4a8a", belly: "#cde7fa" }
+};
+// Cosmetic 3-way enemy palette (paletteSeed set once in makeWorm) — purely decorative,
+// enemy "type" is NOT a mechanic in this codebase and this must never pretend to be one.
+const ENEMY_PALETTES = [
+  { body: "#6fce4a", dark: "#2a7a1a", belly: "#c9edb0" },   // classic green
+  { body: "#9a5cc8", dark: "#7a3ca8", belly: "#e6d2f4" },   // purple
+  { body: "#4a9de8", dark: "#2a6dc0", belly: "#cfe6fa" }    // blue
+];
+const HUD_NAVY = "#16283c";
+const HUD_NAVY_FILL = "rgba(22,40,60,0.90)";
 
 // ====== STATE ======
 let canvas, ctx;
@@ -138,6 +162,18 @@ let terrain = [];
 let gravestones = [];
 
 let shakeT = 0;   // screenshake frames (violent detonations, AB block slams)
+
+// HUD re-skin state (AW_MOCKUP_V1) — display/UI only, zero physics coupling
+let paused = false;
+let settingsOpen = false;
+let ammoScrollOffset = 0;          // carousel window start (only matters when >4 types)
+let scoreEvents = [];              // {label, amount, t} — fading breakdown chips by the score
+let frameCount = 0;
+let slowMoT = 0;                   // frames of half-rate physics remaining
+let slowMoEnabled = (() => { try { return localStorage.getItem("aw_slowmo") === "1"; } catch (e) { return false; } })();
+let aimTaught = (() => { try { return localStorage.getItem("aw_aimTaught") === "1"; } catch (e) { return false; } })();
+let playStartT = 0;
+
 let attractTimer = 0;
 let attractPhase = 0;
 let attractProj = null;
@@ -151,6 +187,7 @@ function init() {
   resize();
   window.addEventListener("resize", resize);
   setupInput();
+  buildSprites();
   generateStars();
   generateClouds();
   buildLevel(1);
@@ -209,6 +246,102 @@ function generateClouds() {
   }
 }
 
+// ====== PRE-RENDERED SPRITES (built once at init — per-frame loop only blits) ======
+// Block material tiles at 2x resolution, plus the six ammo-tray worm portraits rendered
+// through the SHARED drawWormBody() so any recipe change (e.g. the gloss highlight)
+// automatically appears in the tray and the top-bar strip too.
+const SPRITES = { icons: {}, blocks: {} };
+
+function drawBlockTile(g, type, tw, th) {
+  const rr = 5;
+  const path = () => {
+    g.beginPath();
+    if (g.roundRect) g.roundRect(1.5, 1.5, tw - 3, th - 3, rr);
+    else g.rect(1.5, 1.5, tw - 3, th - 3);
+  };
+  if (type === "barrel") {
+    // Worms TNT barrel — mockup palette: bright orange-red body, brown plank trim
+    g.fillStyle = "#e8541e"; g.strokeStyle = "#6b4028"; g.lineWidth = 3;
+    path(); g.fill(); g.stroke();
+    g.strokeStyle = "#5a3020"; g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(2, th * 0.25); g.lineTo(tw - 2, th * 0.25);
+    g.moveTo(2, th * 0.75); g.lineTo(tw - 2, th * 0.75);
+    g.stroke();
+    // white TNT lettering (pre-existing) + NEW black outline pass behind it
+    g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+    g.strokeStyle = "#000"; g.lineWidth = 2.5; g.lineJoin = "round";
+    g.strokeText("TNT", tw / 2, th * 0.58);
+    g.fillStyle = "#fff";
+    g.fillText("TNT", tw / 2, th * 0.58);
+    return;
+  }
+  if (type === "wood") { g.fillStyle = "#8b6030"; g.strokeStyle = "#5a3a1a"; }
+  else if (type === "ice") { g.fillStyle = "rgba(168,224,240,0.65)"; g.strokeStyle = "#6bb8d0"; }
+  else { g.fillStyle = "#b8bcc4"; g.strokeStyle = "#8a8e96"; }
+  g.lineWidth = 3;
+  path(); g.fill(); g.stroke();
+  // bevel: light top, dark bottom (geometry unchanged from the live-draw version)
+  g.fillStyle = "rgba(255,255,255,0.30)";
+  g.fillRect(3, 2, tw - 6, Math.max(2, th * 0.18));
+  g.fillStyle = "rgba(0,0,0,0.18)";
+  g.fillRect(3, th - Math.max(2, th * 0.16) - 2, tw - 6, Math.max(2, th * 0.16));
+  if (type === "wood") {
+    // grain lines kept, darkened slightly for legibility on the deeper brown
+    g.strokeStyle = "rgba(74,46,16,0.6)"; g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(6, th * 0.4); g.lineTo(tw - 6, th * 0.4);
+    g.moveTo(6, th * 0.68); g.lineTo(tw * 0.6, th * 0.68);
+    g.stroke();
+  } else if (type === "ice") {
+    // gloss widened from a thin scratch into a soft translucent BAND — reads as a streak
+    g.save();
+    path(); g.clip();
+    const gr = g.createLinearGradient(tw * 0.1, th * 0.85, tw * 0.5, th * 0.15);
+    gr.addColorStop(0, "rgba(255,255,255,0)");
+    gr.addColorStop(0.5, "rgba(255,255,255,0.45)");
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.strokeStyle = gr; g.lineWidth = 7; g.lineCap = "round";
+    g.beginPath(); g.moveTo(tw * 0.14, th * 0.85); g.lineTo(tw * 0.5, th * 0.18); g.stroke();
+    g.restore();
+  } else {
+    // stone rivets kept — per-block speckle scatter is added dynamically in drawBlocks
+    g.fillStyle = "rgba(90,94,102,0.7)";
+    g.beginPath(); g.arc(7, 7, 2, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(tw - 7, 7, 2, 0, Math.PI * 2); g.fill();
+  }
+}
+
+function buildSprites() {
+  const mats = { stone: [40, 30], wood: [40, 30], ice: [40, 30], barrel: [26, 34] };
+  for (const m in mats) {
+    const tw = mats[m][0], th = mats[m][1];
+    const c = document.createElement("canvas");
+    c.width = tw * 2; c.height = th * 2;
+    const g = c.getContext("2d");
+    g.scale(2, 2);
+    drawBlockTile(g, m, tw, th);
+    SPRITES.blocks[m] = c;
+  }
+  // ammo portraits — rendered via the shared worm recipe (gloss highlight included)
+  const types = ["red", "bomber", "splitter", "bouncer", "trooper", "cluster"];
+  for (const t of types) {
+    const c = document.createElement("canvas");
+    c.width = 156; c.height = 156;
+    const g = c.getContext("2d");
+    const old = ctx;
+    ctx = g;
+    g.save();
+    g.translate(88, 84);                 // tail extends left — bias the head right of centre
+    g.scale(2.0, 2.0);
+    drawWormBody({ x: 0, y: 0, radius: 16, team: "player", type: t, facing: 1,
+      wiggle: 0, alive: true, hp: 100, maxHp: 100, flashTimer: 0 });
+    g.restore();
+    ctx = old;
+    SPRITES.icons[t] = c;
+  }
+}
+
 // ====== LEVEL BUILD ======
 function buildLevel(lvl) {
   level = lvl;
@@ -261,7 +394,8 @@ function buildLevel(lvl) {
       const bxp = zoneStart - 40 + Math.random() * (1700 - zoneStart);
       blocks.push({ x: bxp, y: terrainHeightAt(bxp + 13) - 34, w: 26, h: 34,
         hp: 10, maxHp: 10, type: "barrel", vx: 0, vy: 0,
-        falling: false, settled: true, rot: 0 });
+        falling: false, settled: true, rot: 0,
+        seed: Math.floor(Math.random() * 97) });
     }
   }
   // COMPLETABILITY BUDGET v2 (Osimo 2026-07-03, "simple calculation: worms given =
@@ -282,6 +416,7 @@ function buildLevel(lvl) {
   let cap = inventory.reduce((s, i) => s + i.count * (i.type === "trooper" ? 3 : 1), 0);
   while (cap < needed) { inventory[0].count++; cap++; }
   selectedType = 0;
+  ammoScrollOffset = 0;
   loadNextWorm();
 }
 
@@ -340,7 +475,8 @@ function buildStructure(x, width, lvl) {
         vx: 0, vy: 0,
         falling: false,
         settled: false,
-        rot: 0
+        rot: 0,
+        seed: Math.floor(Math.random() * 97)   // deterministic per-block speckle seed
       });
       placed++;
     }
@@ -358,6 +494,7 @@ function makeWorm(x, y, team, type) {
     team: team, type: type,
     hp: 100, maxHp: 100,
     radius: 18,
+    paletteSeed: Math.floor(Math.random() * 3),   // cosmetic enemy hue pick — not a mechanic
     alive: true,
     falling: false,
     onGround: false,
@@ -384,6 +521,7 @@ function setupInput() {
   let lastPanX = 0;
   let downAt = null;
   let movedFar = false;
+  let carouselDrag = null;   // swipe-to-scroll capture for the ammo carousel (L5+ only)
 
   function getPos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -399,12 +537,24 @@ function setupInput() {
     e.preventDefault();
     initAudio();
     const p = getPos(e);
+    // Settings popover swallows every tap while open
+    if (checkSettingsTap(p)) return;
+    // Top-right circular buttons: pause / sound / settings
+    if (checkTopButtons(p)) return;
+    if (checkMuteTap(p)) return;
+    // Paused: tap anywhere else resumes
+    if (paused && gameState === "playing") { paused = false; return; }
     // Check inventory slots (screen-space HUD)
     if (gameState === "playing" && turn === "player") {
       if (checkInventoryTap(p)) return;
+      // swipe-to-scroll capture inside the carousel zone (only when the roster overflows)
+      const L = hudLayout();
+      if (inventory.length > L.vis && p.y > H - 110 && p.x < L.slotX0 + L.vis * L.slotGap + 40) {
+        carouselDrag = { x: p.x, moved: 0 };
+        pointerActive = true;
+        return;
+      }
     }
-    // Check mute button
-    if (checkMuteTap(p)) return;
 
     if (gameState !== "playing") return;
     const wpt = toWorld(p);
@@ -431,6 +581,17 @@ function setupInput() {
     if (!pointerActive) return;
     e.preventDefault();
     const p = getPos(e);
+    if (carouselDrag) {
+      carouselDrag.moved += p.x - carouselDrag.x;
+      if (Math.abs(carouselDrag.moved) > 44) {
+        const vis = Math.min(4, inventory.length);
+        ammoScrollOffset = Math.max(0, Math.min(inventory.length - vis,
+          ammoScrollOffset - Math.sign(carouselDrag.moved)));
+        carouselDrag.moved = 0;
+      }
+      carouselDrag.x = p.x;
+      return;
+    }
     if (downAt && Math.abs(p.x - downAt.x) + Math.abs(p.y - downAt.y) > 12) movedFar = true;
     if (panMode) {
       // map-style drag: finger right = look left
@@ -447,6 +608,7 @@ function setupInput() {
     if (!pointerActive) return;
     e.preventDefault();
     pointerActive = false;
+    if (carouselDrag) { carouselDrag = null; aiming = false; panMode = false; return; }
     if (aiming && loadedWorm) {
       fireWorm();
     } else if (panMode && !movedFar) {
@@ -501,15 +663,29 @@ function setupInput() {
 }
 
 function checkInventoryTap(p) {
-  const barY = H - 60;
-  const slotW = 120;
-  const totalW = inventory.length * slotW;
-  const startX = (W - totalW) / 2;
-  for (let i = 0; i < inventory.length; i++) {
-    const sx = startX + i * slotW;
-    if (p.x >= sx && p.x < sx + slotW - 10 && p.y >= barY && p.y < barY + 50) {
-      if (inventory[i].count > 0) {
-        selectedType = i;
+  // Glow-ring circle carousel (bottom-left). Maps a tapped VISIBLE slot back to its true
+  // inventory index via ammoScrollOffset — the underlying inventory array is never
+  // filtered, hidden or reordered (ammo-budget winnability guarantee untouched).
+  const L = hudLayout();
+  const vis = L.vis;
+  if (inventory.length > vis) {
+    const rx = L.slotX0 + (vis - 1) * L.slotGap + L.slotR + 22;
+    if ((p.x - 20) ** 2 + (p.y - L.slotY) ** 2 < 400) {
+      ammoScrollOffset = Math.max(0, ammoScrollOffset - 1);
+      return true;
+    }
+    if ((p.x - rx) ** 2 + (p.y - L.slotY) ** 2 < 400) {
+      ammoScrollOffset = Math.min(inventory.length - vis, ammoScrollOffset + 1);
+      return true;
+    }
+  }
+  for (let vi = 0; vi < vis; vi++) {
+    const idx = ammoScrollOffset + vi;
+    if (idx >= inventory.length) break;
+    const cx = L.slotX0 + vi * L.slotGap;
+    if ((p.x - cx) ** 2 + (p.y - L.slotY) ** 2 < (L.slotR + 5) ** 2) {
+      if (inventory[idx].count > 0) {
+        selectedType = idx;
         loadNextWorm();
       }
       return true;
@@ -518,19 +694,47 @@ function checkInventoryTap(p) {
   return false;
 }
 
+// SPEAKER CYCLE body extracted so the top-bar button AND the settings popover share it
+function cycleSfx() {
+  initAudio();
+  sfxMode = sfxMode === "tones" ? "voice" : sfxMode === "voice" ? "mute" : "tones";
+  muted = sfxMode === "mute";
+  try {
+    localStorage.setItem("aw_sfxMode", sfxMode);
+    localStorage.setItem("aw_muted", muted ? "1" : "0");   // keep the legacy key honest
+  } catch (e) {}
+  if (sfxMode === "voice") loadVoicePack();
+}
+
 function checkMuteTap(p) {
-  if (p.x > W - 60 && p.x < W - 10 && p.y > H - 55 && p.y < H - 5) {
-    initAudio();
-    sfxMode = sfxMode === "tones" ? "voice" : sfxMode === "voice" ? "mute" : "tones";
-    muted = sfxMode === "mute";
-    try {
-      localStorage.setItem("aw_sfxMode", sfxMode);
-      localStorage.setItem("aw_muted", muted ? "1" : "0");   // keep the legacy key honest
-    } catch (e) {}
-    if (sfxMode === "voice") loadVoicePack();
+  // restyled only: same linear cycle, now the middle circular button top-right
+  const L = hudLayout();
+  if ((p.x - L.sndX) ** 2 + (p.y - L.btnY) ** 2 < (L.btnR + 4) ** 2) {
+    cycleSfx();
     return true;
   }
   return false;
+}
+
+function checkTopButtons(p) {
+  const L = hudLayout();
+  const hit = (cx) => (p.x - cx) ** 2 + (p.y - L.btnY) ** 2 < (L.btnR + 4) ** 2;
+  if (hit(L.gearX)) { settingsOpen = !settingsOpen; return true; }
+  if (hit(L.pauseX)) { if (gameState === "playing") paused = !paused; return true; }
+  return false;
+}
+
+function checkSettingsTap(p) {
+  if (!settingsOpen) return false;
+  const pw = 240, ph = 108, px2 = W - pw - 12, py2 = 66;
+  if (p.x < px2 || p.x > px2 + pw || p.y < py2 || p.y > py2 + ph) {
+    settingsOpen = false;   // tap outside closes (never re-dispatches to the game)
+    return true;
+  }
+  if (p.y < py2 + 44) { cycleSfx(); return true; }
+  slowMoEnabled = !slowMoEnabled;
+  try { localStorage.setItem("aw_slowmo", slowMoEnabled ? "1" : "0"); } catch (e) {}
+  return true;
 }
 
 // SPEAKER CYCLE — strictly LINEAR single tap (flap-fight hard rule 1):
@@ -648,6 +852,15 @@ const VO_EX = {
   gameOver: VO_LINES.slice(44, 46), best:     VO_LINES.slice(46, 48),
 };
 
+// STALE-JOKE FIX (AW_MOCKUP_V1): wind is now VISIBLE on the HUD gauge, so "There is no
+// wind" (VO_LINES[11]) only fires when that is actually true (|wind| < 1.0 — the genuinely
+// calm turn). A windy miss gets its own pair that plays WITH the gauge instead of against
+// it. Two-line Jimmy+Joe EXCHANGE format preserved — never solo narration.
+// (VO_LINES[23] "TNT. That's TNT." verified compatible with the TNT art upgrade — untouched.)
+const VO_MISS_CALM = VO_LINES[11];
+const VO_MISS_WINDY = [["JIMMY", "Wind's up."], ["JOE", "Yes. It's right there on the gauge."]];
+VO_EX.miss = VO_EX.miss.concat([VO_MISS_WINDY]);
+
 const JIMMY_GAIN = 1.15, JOE_GAIN = 1.0;
 function djb2vo(s) {
   let h = 5381;
@@ -696,8 +909,14 @@ function drainVo() {
 // `key` names the bank so the SAME exchange never fires twice running.
 function say(key, priority) {
   if (sfxMode !== "voice" || !audioCtx) return;
-  const bank = VO_EX[key];
+  let bank = VO_EX[key];
   if (!bank || !bank.length) return;
+  if (key === "miss") {
+    // wind-aware gating — calm joke only when genuinely calm, gauge joke only when windy
+    bank = bank.filter(ex => ex === VO_MISS_CALM ? Math.abs(wind) < 1.0
+                           : ex === VO_MISS_WINDY ? Math.abs(wind) >= 1.0 : true);
+    if (!bank.length) return;
+  }
   // An exchange in progress is never interrupted by an ordinary event; only a priority
   // moment (level clear, personal best, game over) clears the floor.
   if (VO.busy && !priority) return;
@@ -749,6 +968,14 @@ const sfx = {
   lose:    () => { playTone(330, 0.4, "sawtooth", 0.16, 140); setTimeout(() => playTone(180, 0.7, "sawtooth", 0.16, 60), 250); }
 };
 
+// Score-breakdown ticker: every existing score+= site now routes through here so the HUD
+// can label the gain ("+100 KILL"). Values are UNCHANGED — this labels, never re-values.
+function addScore(n, label) {
+  score += n;
+  scoreEvents.push({ label: label, amount: n, t: performance.now() });
+  if (scoreEvents.length > 6) scoreEvents.shift();
+}
+
 // ====== SLINGSHOT & LOADING ======
 function loadNextWorm() {
   // Loading the next worm is the moment the PREVIOUS shot is definitively over —
@@ -775,6 +1002,10 @@ function loadNextWorm() {
       radius: 16
     };
   }
+  // keep the armed slot inside the carousel's visible window (UI only)
+  const visSlots = Math.min(4, inventory.length);
+  if (selectedType < ammoScrollOffset) ammoScrollOffset = selectedType;
+  if (selectedType >= ammoScrollOffset + visSlots) ammoScrollOffset = selectedType - visSlots + 1;
 }
 
 function fireWorm() {
@@ -802,6 +1033,8 @@ function fireWorm() {
   });
   inventory[selectedType].count--;
   loadedWorm = null;
+  // first successful aim retires the tutorial pill forever
+  if (!aimTaught) { aimTaught = true; try { localStorage.setItem("aw_aimTaught", "1"); } catch (e) {} }
   sfx.launch();
   setTimeout(() => sfx.wheee(), 120);
   shotKills = 0; shotSpoke = false; shotGlass = 0; shotCollapse = 0;
@@ -1119,7 +1352,7 @@ function updatePhysics(dt) {
           life: 30 + Math.random() * 15, maxLife: 45, size: 3 + Math.random() * 4,
           color: "#9fd0f5", type: "spark", gravity: 0.25 });
       }
-      if (w.team === "enemy") score += 100;
+      if (w.team === "enemy") addScore(100, "SPLASH");
       sfx.splash();
     }
     if (w.y > WORLD_H + 50) {
@@ -1243,6 +1476,7 @@ function explode(x, y, radius, team, skipTeam) {
   // ICE shatters instantly, stone/wood take a KNOCKBACK shove and can topple.
   const chain = [];
   const shockFrom = [];   // solid blocks struck hard enough to shatter glass they touch
+  let hitBlocks = 0;      // masonry the blast touched — drives the impact-dust spawn
   for (const b of blocks) {
     if (b.hp <= 0) continue;
     const cx = b.x + b.w / 2;
@@ -1258,6 +1492,7 @@ function explode(x, y, radius, team, skipTeam) {
       b.falling = true;
       b.settled = false;
       b.hp -= dmg;
+      hitBlocks++;
       // CHAIN SHATTER (Osimo 2026-08-21: glass panes "shatter on impact just by hitting
       // any neighbouring stone ones"). A solid block taking a real hit transmits the shock
       // into the glass touching it — so a stone hit two panes away still clears the wall.
@@ -1265,7 +1500,7 @@ function explode(x, y, radius, team, skipTeam) {
       // the shatter cascade jump the blast radius in a single frame.
       if (b.type !== "ice" && dmg > 8) shockFrom.push(b);
       if (b.hp <= 0) {
-        score += 10;
+        addScore(10, "BLOCK");
         if (b.type === "ice") {
           for (let s = 0; s < 12; s++) {
             particles.push({ x: cx + (Math.random()-0.5)*b.w, y: cy + (Math.random()-0.5)*b.h,
@@ -1277,12 +1512,32 @@ function explode(x, y, radius, team, skipTeam) {
         if (b.type === "barrel") {
           chain.push({ x: cx, y: cy });   // TNT — goes up itself
           b.settled = true;               // remove instantly, no falling husk
+          // READ-ONLY cosmetic telegraph: the husk stays visible at its blast point with a
+          // lit fuse spark until the staggered chain explosion (150 + ci*130ms) actually
+          // fires. Render lifetime only — chain collection/timing is untouched.
+          b.fusedFlag = true;
+          b.fx = cx - b.w / 2; b.fy = cy - b.h / 2;   // frozen render pos (physics may drop the dead block)
+          b.fuseT = Math.round((150 + (chain.length - 1) * 130) / 16.7);
         } else {
           b.falling = true;
           b.vx = (cx - x) / (d + 1) * 2;
           b.vy = -2;
         }
       }
+    }
+  }
+  // Impact dust — tan puffs off any masonry the blast touched, outward-biased from the
+  // contact point. Reuses the existing plain-circle particle branch — no new particle type.
+  if (hitBlocks > 0) {
+    const n = Math.min(16, 8 + hitBlocks * 2);
+    for (let di = 0; di < n; di++) {
+      const da = Math.random() * Math.PI * 2;
+      const dsp = 1.5 + Math.random() * 3.5;
+      const dLife = 24 + Math.random() * 14;
+      particles.push({ x: x + Math.cos(da) * radius * 0.5, y: y + Math.sin(da) * radius * 0.5,
+        vx: Math.cos(da) * dsp, vy: Math.sin(da) * dsp - 1,
+        life: dLife, maxLife: dLife, size: 3 + Math.random() * 4,
+        color: Math.random() < 0.5 ? "#c9a878" : "#a88752", type: "spark", gravity: 0.12 });
     }
   }
   // GLASS CHAIN SHATTER — resolved AFTER the blast loop, then propagated pane to pane so
@@ -1303,7 +1558,7 @@ function explode(x, y, radius, team, skipTeam) {
           shotGlass++;
           g.hp = 0;
           g.settled = true;               // glass leaves no falling husk
-          score += 10;
+          addScore(10, "GLASS");
           const gx = g.x + g.w / 2, gy2 = g.y + g.h / 2;
           for (let s2 = 0; s2 < 10; s2++) {
             particles.push({ x: gx + (Math.random() - 0.5) * g.w, y: gy2 + (Math.random() - 0.5) * g.h,
@@ -1321,7 +1576,14 @@ function explode(x, y, radius, team, skipTeam) {
   // Chain reactions fire a beat later so they READ as a chain
   for (let ci = 0; ci < chain.length; ci++) {
     const cpos = chain[ci];
-    setTimeout(() => { if (gameState === "playing") { sfx.barrel(); explode(cpos.x, cpos.y, 75, team);
+    setTimeout(() => { if (gameState === "playing") { sfx.barrel();
+      // shake at EACH staggered explosion, escalating off absolute chain position:
+      // pulse1=4, pulse2=6, pulse3=8 … capped at 14. A short chain now beats the
+      // block-landing baseline (5) while a long chain stays under the solo-kill peak (16).
+      // Past 10, extra shakeT extends DURATION only — render()'s Math.min(10,·) clamp
+      // (shared with 3 other writers) keeps per-frame amplitude fixed, untouched.
+      shakeT = Math.max(shakeT, 4 + Math.min(10, ci * 2));
+      explode(cpos.x, cpos.y, 75, team);
       if (ci === 0 && !shotSpoke) { shotSpoke = true; say("chain"); } } }, 150 + ci * 130);
   }
 }
@@ -1377,10 +1639,12 @@ function detonate(w) {
   w.alive = false;
   w.deathTimer = 100;          // no falling corpse — the boom IS the death
   gravestones.push({ x: w.x, y: terrainHeightAt(w.x), timer: 0 });
-  if (w.team === "enemy") score += 100;
+  if (w.team === "enemy") addScore(100, "KILL");
   // VIOLENT (Osimo 2026-07-03): big shake + white flash ring + fire debris.
   // skipTeam stays — drama, not friendly fire.
   shakeT = 16;
+  // slow-motion on major single impacts — settings toggle, OFF by default
+  if (slowMoEnabled) slowMoT = Math.max(slowMoT, 26);
   particles.push({ x: w.x, y: w.y - 6, vx: 0, vy: 0, life: 14, maxLife: 14,
     size: 60, color: "#ffffff", type: "ring", gravity: 0 });
   for (let s = 0; s < 26; s++) {
@@ -1445,7 +1709,7 @@ function showEndScreen(won) {
     } catch (e) {}
     const ammoLeft = inventory.reduce((n, it) => n + it.count, 0);
     const starCount = ammoLeft >= 3 ? 3 : ammoLeft >= 1 ? 2 : 1;
-    score += starCount * 250;
+    addScore(starCount * 250, "STARS");
     et.textContent = "\u2b50".repeat(starCount) + " LEVEL CLEAR!";
     document.getElementById("endScore").textContent = "SCORE " + score;
     et.style.color = "#39ff14";
@@ -1496,6 +1760,10 @@ function onEndBtn() {
 
 function resetGame() {
   score = 0;
+  scoreEvents = [];
+  playStartT = performance.now();
+  paused = false;
+  settingsOpen = false;
   buildLevel(1);
   turn = "player";
   wind = (Math.random() - 0.5) * 6;
@@ -1519,6 +1787,10 @@ function insertCoin() {
 
 function startGame() {
   score = 0;
+  scoreEvents = [];
+  playStartT = performance.now();
+  paused = false;
+  settingsOpen = false;
   buildLevel(1);
   turn = "player";
   wind = (Math.random() - 0.5) * 6;
@@ -1646,8 +1918,8 @@ function render() {
 function drawSky() {
   // Bright Angry-Birds daytime — azure fading to a warm horizon
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  grad.addColorStop(0, "#2f9ce8");
-  grad.addColorStop(0.55, "#7cc4f0");
+  grad.addColorStop(0, "#4fb8e8");
+  grad.addColorStop(0.55, "#8fd4ee");
   grad.addColorStop(1, "#cfeefb");
   ctx.fillStyle = grad;
   ctx.fillRect(camera.x - 10, 0, VIEW.w + 20, GROUND_Y + 140);
@@ -1662,6 +1934,22 @@ function drawSky() {
   ctx.beginPath(); ctx.arc(sunX, sunY, 70, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#fff3ae";
   ctx.beginPath(); ctx.arc(sunX, sunY, 26, 0, Math.PI * 2); ctx.fill();
+
+  // Distant bird silhouettes — fixed spots riding the sun's parallax rate
+  ctx.strokeStyle = "rgba(20,30,40,0.7)";
+  ctx.lineWidth = 2; ctx.lineCap = "round";
+  const birdBase = camera.x * 0.1;
+  const BIRDS = [[430, 122, 7], [540, 156, 5], [890, 112, 6], [1190, 144, 5]];   // below the HUD pill at phone scale
+  for (const bd of BIRDS) {
+    const bxp = birdBase + bd[0], byp = bd[1], bs = bd[2];
+    const flap = Math.sin(performance.now() / 320 + bd[0]) * 2;
+    ctx.beginPath();
+    ctx.moveTo(bxp - bs, byp + flap);
+    ctx.quadraticCurveTo(bxp - bs * 0.4, byp - bs * 0.5, bxp, byp);
+    ctx.quadraticCurveTo(bxp + bs * 0.4, byp - bs * 0.5, bxp + bs, byp + flap);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
 
   // Parallax hill bands behind the playfield (AB backdrop depth)
   ctx.fillStyle = "rgba(120,190,140,0.45)";
@@ -1768,6 +2056,14 @@ function drawTerrain() {
     ctx.moveTo(t.x + 4, t.y + 2); ctx.lineTo(t.x + 6, t.y - 6);
   }
   ctx.stroke();
+  // tiny flower dots piggybacked on the same deterministic loop (no per-frame flicker)
+  for (let i = 8; i < terrain.length - 8; i += 42) {
+    const t = terrain[i];
+    const fseed = (i * 2654435761) % 97;
+    ctx.fillStyle = fseed % 2 ? "#c9a0e8" : "#ffffff";
+    const fs = fseed % 3 ? 2 : 3;
+    ctx.fillRect(t.x + (fseed % 9) - 4, t.y - 3, fs, fs);
+  }
 
   // Soil layer
   ctx.fillStyle = "#8b5a2a";
@@ -1812,8 +2108,16 @@ function drawTerrain() {
 }
 
 function drawBlocks() {
+  // Per-frame loop only BLITS the pre-rendered material tiles (buildSprites); the dynamic
+  // overlays (damage cracks, per-block stone speckles, barrel fuse) draw on top.
+  // Geometry / bevel / damage-crack systems unchanged — constants moved into the tiles.
   for (const b of blocks) {
-    if (b.hp <= 0 && b.settled) continue;
+    if (b.hp <= 0 && b.settled) {
+      // fused TNT husk: a barrel queued into a chain stays visible at its blast point,
+      // spark lit, until its staggered explosion fires (render-only telegraph)
+      if (b.type === "barrel" && b.fuseT > 0) { b.fuseT--; drawBarrelFuse(b); }
+      continue;
+    }
     ctx.save();
     if (b.rot) {
       ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
@@ -1821,56 +2125,29 @@ function drawBlocks() {
       ctx.translate(-b.w / 2, -b.h / 2);
       ctx.translate(-b.x, -b.y);
     }
-    // AB-style chunky blocks: rounded corners, bevel light/shadow, thick outline
-    const rr = 5;
-    const paths = () => {
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, rr);
-      else ctx.rect(b.x, b.y, b.w, b.h);
-    };
+    const tile = SPRITES.blocks[b.type];
+    if (tile) ctx.drawImage(tile, b.x, b.y, b.w, b.h);
     if (b.type === "barrel") {
-      // Worms TNT barrel
-      ctx.fillStyle = "#c8342a"; ctx.strokeStyle = "#5c110b"; ctx.lineWidth = 3;
-      paths(); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = "#8a2018"; ctx.lineWidth = 2;
+      // fuse nub on every live barrel + small ambient flicker (slower period + smaller
+      // radius than drawBarrelFuse's urgent chain-telegraph spark — must stay distinct)
+      ctx.fillStyle = "#3a2a1a";
+      ctx.fillRect(b.x + b.w / 2 - 2, b.y - 5, 4, 6);
+      const fl = 0.5 + 0.4 * Math.sin(performance.now() / 90 + (b.seed || 0));
+      ctx.fillStyle = "rgba(255,238,120," + fl.toFixed(2) + ")";
       ctx.beginPath();
-      ctx.moveTo(b.x + 2, b.y + b.h * 0.25); ctx.lineTo(b.x + b.w - 2, b.y + b.h * 0.25);
-      ctx.moveTo(b.x + 2, b.y + b.h * 0.75); ctx.lineTo(b.x + b.w - 2, b.y + b.h * 0.75);
-      ctx.stroke();
-      ctx.fillStyle = "#fff"; ctx.font = "bold 9px sans-serif"; ctx.textAlign = "center";
-      ctx.fillText("TNT", b.x + b.w / 2, b.y + b.h * 0.58);
-      ctx.restore();
-      continue;
+      ctx.ellipse(b.x + b.w / 2, b.y - 8, 2 + fl, 2 + fl, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (b.type === "stone") {
+      // per-block speckle scatter — same deterministic seed trick as the terrain speckle
+      const sd = b.seed || 0;
+      ctx.fillStyle = "rgba(110,114,122,0.55)";
+      for (let k = 0; k < 4; k++) {
+        const s2 = ((sd + k * 31) * 2654435761) % 97;
+        ctx.fillRect(b.x + 6 + (s2 % Math.max(1, b.w - 14)),
+                     b.y + 8 + ((s2 * 7) % Math.max(1, b.h - 14)), 2, 2);
+      }
     }
-    if (b.type === "wood") { ctx.fillStyle = "#d9a15e"; ctx.strokeStyle = "#6b4318"; }
-    else if (b.type === "ice") { ctx.fillStyle = "rgba(170,222,255,0.75)"; ctx.strokeStyle = "#5e9fd4"; }
-    else { ctx.fillStyle = "#a8a8ac"; ctx.strokeStyle = "#57575c"; }
-    ctx.lineWidth = 3;
-    paths(); ctx.fill(); ctx.stroke();
-    // bevel: light top, dark bottom
-    ctx.fillStyle = "rgba(255,255,255,0.30)";
-    ctx.fillRect(b.x + 3, b.y + 2, b.w - 6, Math.max(2, b.h * 0.18));
-    ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.fillRect(b.x + 3, b.y + b.h - Math.max(2, b.h * 0.16) - 2, b.w - 6, Math.max(2, b.h * 0.16));
-    if (b.type === "wood") {
-      ctx.strokeStyle = "rgba(107,67,24,0.5)"; ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(b.x + 6, b.y + b.h * 0.4); ctx.lineTo(b.x + b.w - 6, b.y + b.h * 0.4);
-      ctx.moveTo(b.x + 6, b.y + b.h * 0.68); ctx.lineTo(b.x + b.w * 0.6, b.y + b.h * 0.68);
-      ctx.stroke();
-    } else if (b.type === "ice") {
-      // glassy shine
-      ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(b.x + b.w * 0.2, b.y + b.h * 0.7); ctx.lineTo(b.x + b.w * 0.45, b.y + b.h * 0.25);
-      ctx.stroke();
-    } else {
-      // stone rivets
-      ctx.fillStyle = "rgba(70,70,76,0.6)";
-      ctx.beginPath(); ctx.arc(b.x + 7, b.y + 7, 2, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(b.x + b.w - 7, b.y + 7, 2, 0, Math.PI * 2); ctx.fill();
-    }
-    // Damage cracks
+    // Damage cracks (unchanged)
     if (b.hp < b.maxHp * 0.5) {
       ctx.strokeStyle = "rgba(0,0,0,0.6)";
       ctx.lineWidth = 1.5;
@@ -1884,6 +2161,26 @@ function drawBlocks() {
     }
     ctx.restore();
   }
+}
+
+function drawBarrelFuse(b) {
+  // Drawn at the FROZEN blast position (fx/fy) so the husk never drifts away from where
+  // the queued chain explosion will actually fire.
+  const x = b.fx !== undefined ? b.fx : b.x;
+  const y = b.fy !== undefined ? b.fy : b.y;
+  ctx.save();
+  const tile = SPRITES.blocks.barrel;
+  if (tile) ctx.drawImage(tile, x, y, b.w, b.h);
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(x + b.w / 2 - 2, y - 6, 4, 7);
+  const fl = 0.6 + 0.4 * Math.sin(performance.now() / 40);
+  ctx.fillStyle = "rgba(255,238,120," + fl.toFixed(2) + ")";
+  ctx.beginPath();
+  ctx.ellipse(x + b.w / 2, y - 9, 3.5 + fl * 2, 3.5 + fl * 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(x + b.w / 2, y - 9, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 function drawWorms() {
@@ -1911,20 +2208,19 @@ function drawWormBody(w) {
   const wiggle = Math.sin(w.wiggle) * 2;
   const F = w.facing;
 
+  // Colours come from the shared TYPE_COLOR / ENEMY_PALETTES lookups (top of script) —
+  // same constants the ammo carousel reads, no duplicated hex literals.
+  // (cluster keeps its own colour or it renders as the splitter's blue and the player
+  // cannot tell the two apart in the tray.)
   let bodyColor, darkColor, bellyColor;
   if (w.team === "enemy") {
-    bodyColor = w.flashTimer > 0 ? "#fff" : "#6fce4a";
-    darkColor = "#2a7a1a"; bellyColor = "#c9edb0";
+    const pal = ENEMY_PALETTES[(w.paletteSeed || 0) % ENEMY_PALETTES.length];
+    bodyColor = w.flashTimer > 0 ? "#fff" : pal.body;
+    darkColor = pal.dark; bellyColor = pal.belly;
   } else {
-    if (w.type === "red")        { bodyColor = "#e8302a"; darkColor = "#8a1a16"; bellyColor = "#f6d7b0"; }
-    else if (w.type === "bomber"){ bodyColor = "#ffcc00"; darkColor = "#8a6a00"; bellyColor = "#fff3c0"; }
-    else if (w.type === "bouncer"){ bodyColor = "#8e44e0"; darkColor = "#4a1a80"; bellyColor = "#e2cdf8"; }
-    else if (w.type === "trooper"){ bodyColor = w.flashTimer > 0 ? "#fff" : "#e07820";
-                                    darkColor = "#7a3c08"; bellyColor = "#fadfc0"; }
-    // cluster needs its own colour or it renders as the splitter's blue and the player
-    // cannot tell the two apart in the tray
-    else if (w.type === "cluster"){ bodyColor = "#39d98a"; darkColor = "#12603c"; bellyColor = "#cdf6e2"; }
-    else                         { bodyColor = "#3a8acf"; darkColor = "#1a4a8a"; bellyColor = "#cde7fa"; }
+    const tc = TYPE_COLOR[w.type] || TYPE_COLOR.splitter;
+    bodyColor = tc.body; darkColor = tc.dark; bellyColor = tc.belly;
+    if (w.type === "trooper" && w.flashTimer > 0) bodyColor = "#fff";
   }
 
   ctx.fillStyle = bodyColor;
@@ -1953,6 +2249,14 @@ function drawWormBody(w) {
   ctx.fill();
 
   const hx = x + 7 * S * F, hy = y - 2 + wiggle;
+
+  // Glossy white highlight — top-left of the head (mockup recipe). Lives in this shared
+  // function so it appears on the loaded worm, in-flight projectiles, HP-bar'd worms,
+  // death-fade corpses AND every ammo-tray/carousel icon automatically.
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(hx - 6 * S * F, hy - 8 * S, 4 * S, 2.6 * S, -0.5 * F, 0, Math.PI * 2);
+  ctx.fill();
 
   // Eyes — big whites
   ctx.fillStyle = "#fff";
@@ -2067,7 +2371,7 @@ function drawSlingshot() {
   ctx.moveTo(sx + 26, gy - (gy - platY) * 0.35); ctx.lineTo(sx - 26, gy - (gy - platY) * 0.7);
   ctx.stroke();
   // deck
-  ctx.fillStyle = "#9a6428"; ctx.lineWidth = 3;
+  ctx.fillStyle = "#7a5230"; ctx.lineWidth = 3;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(sx - 44, platY - 6, 88, 14, 4); else ctx.rect(sx - 44, platY - 6, 88, 14);
   ctx.fill(); ctx.stroke();
@@ -2078,35 +2382,43 @@ function drawSlingshot() {
 
   // Slingshot Y on the deck
   const sy = platY - 24;               // trunk top reference
-  ctx.fillStyle = "#9a6428";
+  ctx.fillStyle = "#7a5230";
   ctx.strokeStyle = "#4a2808";
   ctx.lineWidth = 3;
-  // Trunk
+  // Trunk (+ thin front-face highlight stripe — mockup polish)
   ctx.fillRect(sx - 8, sy - 20, 16, 40);
   ctx.strokeRect(sx - 8, sy - 20, 16, 40);
+  ctx.fillStyle = "#9a7040";
+  ctx.fillRect(sx - 6, sy - 19, 4, 38);
+  ctx.fillStyle = "#7a5230";
   // Left fork
   ctx.save();
   ctx.translate(sx, sy - 20);
   ctx.rotate(-0.4);
-  ctx.fillRect(-7, -45, 14, 50);
-  ctx.strokeRect(-7, -45, 14, 50);
+  ctx.fillRect(-7, -63, 14, 68);
+  ctx.strokeRect(-7, -63, 14, 68);
+  ctx.fillStyle = "#9a7040";
+  ctx.fillRect(-5, -62, 4, 66);
   ctx.restore();
   // Right fork
   ctx.save();
   ctx.translate(sx, sy - 20);
   ctx.rotate(0.4);
-  ctx.fillRect(-7, -45, 14, 50);
-  ctx.strokeRect(-7, -45, 14, 50);
+  ctx.fillStyle = "#7a5230";
+  ctx.fillRect(-7, -63, 14, 68);
+  ctx.strokeRect(-7, -63, 14, 68);
+  ctx.fillStyle = "#9a7040";
+  ctx.fillRect(-5, -62, 4, 66);
   ctx.restore();
 
   // Fork tips (band anchors — SLING_Y is the launch anchor between them)
-  const leftTip = { x: sx - 22, y: sy - 60 };
-  const rightTip = { x: sx + 22, y: sy - 60 };
+  const leftTip = { x: sx - 24, y: sy - 82 };
+  const rightTip = { x: sx + 24, y: sy - 82 };
 
   // Elastic band
   if (loadedWorm && aiming && dragCurrent) {
     // Stretched - back band
-    ctx.strokeStyle = "#7a2418";
+    ctx.strokeStyle = "#c0392b";
     ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(leftTip.x, leftTip.y);
@@ -2118,17 +2430,22 @@ function drawSlingshot() {
     ctx.stroke();
     // Front band (drawn after worm)
   } else if (loadedWorm) {
-    // Relaxed band
-    ctx.strokeStyle = "#7a2418";
+    // Relaxed band — two strands converging on the launch anchor (SLING_X/SLING_Y, NOT
+    // loadedWorm.x/y: drawSlingshot runs before drawLoadedWorm resets those this frame)
+    ctx.strokeStyle = "#c0392b";
     ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.moveTo(leftTip.x, leftTip.y);
-    ctx.lineTo(rightTip.x, rightTip.y);
+    ctx.lineTo(SLING_X, SLING_Y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(rightTip.x, rightTip.y);
+    ctx.lineTo(SLING_X, SLING_Y);
     ctx.stroke();
   }
 
   // Store tips for later
-  slingTips = { left: leftTip, right: rightTip, base: { x: sx, y: sy - 60 } };
+  slingTips = { left: leftTip, right: rightTip, base: { x: sx, y: sy - 82 } };
 }
 
 let slingTips = null;
@@ -2165,8 +2482,21 @@ function drawLoadedWorm() {
 
   // Front elastic band (over worm)
   if (aiming && dragCurrent && slingTips) {
-    ctx.strokeStyle = "#5a2a00";
+    ctx.strokeStyle = "#a02818";
     ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(slingTips.right.x, slingTips.right.y);
+    ctx.lineTo(wx, wy);
+    ctx.stroke();
+  } else if (slingTips) {
+    // Idle cradle pass — drawn AFTER drawWormBody so both strands sit on top of the
+    // opaque sprite instead of vanishing behind it
+    ctx.strokeStyle = "#a02818";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(slingTips.left.x, slingTips.left.y);
+    ctx.lineTo(wx, wy);
+    ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(slingTips.right.x, slingTips.right.y);
     ctx.lineTo(wx, wy);
@@ -2186,15 +2516,24 @@ function drawAim() {
   const vx = Math.cos(ang) * power;
   const vy = Math.sin(ang) * power;
 
-  // Trajectory dots
+  // Trajectory dots — existing wind+gravity-aware arc, now with a true per-point alpha
+  // fade (was flat 0.8) and a light-blue filled endpoint circle (mockup)
   const points = predictTrajectory(loadedWorm.x, loadedWorm.y, vx, vy);
-  ctx.fillStyle = "rgba(255,255,255,0.8)";
   for (let i = 0; i < points.length; i += 3) {
     const p = points[i];
-    const sz = 4 - (i / points.length) * 2;
+    const f = i / points.length;
+    const sz = 4 - f * 2;
+    ctx.fillStyle = "rgba(255,255,255," + (0.9 - f * 0.55).toFixed(2) + ")";
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
+  }
+  if (points.length) {
+    const ep = points[points.length - 1];
+    ctx.fillStyle = "#8fd4ee";
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ep.x, ep.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
 
   // Power indicator circle
@@ -2324,105 +2663,288 @@ function drawGravestones() {
 }
 
 // ====== HUD ======
-function drawHUD() {
-  // Top bar
-  ctx.fillStyle = "rgba(0,0,0,0.7)";
-  ctx.fillRect(0, 0, W, 48);
-  ctx.strokeStyle = "rgba(232,48,42,0.4)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, 48);
-  ctx.lineTo(W, 48);
-  ctx.stroke();
+// Navy glass-pill re-skin (AW_MOCKUP_V1). All canvas-drawn in screen space — the same
+// coordinate system and hit-test pattern the old flat bars used. Every reading the old
+// bars showed (score, level/enemies, wind, sfx icon, per-slot counts) still appears.
 
-  // Turn indicator
-  ctx.font = "16px Bungee, sans-serif";
-  ctx.textAlign = "left";
+function fmtScore(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+function pillPath(x, y, pw, ph, r) {
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, pw, ph, r);
+  else ctx.rect(x, y, pw, ph);
+}
+
+function drawNavyPill(x, y, pw, ph, r) {
+  ctx.fillStyle = HUD_NAVY_FILL;
+  pillPath(x, y, pw, ph, r); ctx.fill();
+  ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 2;
+  pillPath(x, y, pw, ph, r); ctx.stroke();
+  // subtle lighter top-edge highlight
+  ctx.strokeStyle = "rgba(90,140,190,0.45)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x + r, y + 2.5); ctx.lineTo(x + pw - r, y + 2.5); ctx.stroke();
+}
+
+function drawStarIcon(cx, cy, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const rr = k % 2 === 0 ? r : r * 0.45;
+    const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+    if (k === 0) ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    else ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function drawHudButton(cx, cy, r, kind) {
+  ctx.fillStyle = "rgba(22,40,60,0.90)";
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, Math.PI * 2); ctx.stroke();
+  if (kind === "pause") {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(cx - 7, cy - 8, 5, 16);
+    ctx.fillRect(cx + 2, cy - 8, 5, 16);
+  } else if (kind === "play") {
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.moveTo(cx - 5, cy - 8); ctx.lineTo(cx + 8, cy); ctx.lineTo(cx - 5, cy + 8);
+    ctx.closePath(); ctx.fill();
+  } else if (kind === "sound") {
+    // same sfxMode-cycle glyphs as always
+    ctx.font = "20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(sfxMode === "mute" ? "🔇" : sfxMode === "voice" ? "🎙️" : "🔊", cx, cy + 1);
+  } else if (kind === "gear") {
+    ctx.font = "18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff";
+    ctx.fillText("⚙️", cx, cy + 1);
+  }
+}
+
+// Single source of HUD geometry — drawHUD AND the input hit-tests both read this, so the
+// tap targets can never drift away from the drawn pixels (screen-space W/H, live viewport).
+function hudLayout() {
+  const btnR = 24, btnY = 32;
+  const gearX = W - 34, sndX = W - 90, pauseX = W - 146;
+  const windW = 170, windH = 46, windY = 8;
+  const windX = pauseX - btnR - 10 - windW;
+  const pillX = 8, pillY = 8, pillH = 48;
+  const pillW = Math.max(240, windX - 18 - pillX);
+  const vis = Math.min(4, inventory.length);
+  const slotR = 39, slotGap = 90, slotY = H - 62, slotX0 = 70;
+  return { btnR: btnR, btnY: btnY, gearX: gearX, sndX: sndX, pauseX: pauseX,
+           windX: windX, windY: windY, windW: windW, windH: windH,
+           pillX: pillX, pillY: pillY, pillH: pillH, pillW: pillW,
+           vis: vis, slotR: slotR, slotGap: slotGap, slotY: slotY, slotX0: slotX0 };
+}
+
+function drawHUD() {
+  const L = hudLayout();
+
+  // ---- TOP BAR: navy glass pill ----
+  drawNavyPill(L.pillX, L.pillY, L.pillW, L.pillH, 12);
   ctx.textBaseline = "middle";
   if (gameState === "attract") {
+    ctx.font = "16px Bungee, sans-serif"; ctx.textAlign = "left";
     ctx.fillStyle = "#e8302a";
-    ctx.fillText("ANGRY WORMS", 16, 24);
+    ctx.fillText("ANGRY WORMS", L.pillX + 18, 32);
   } else {
-    // Our-turn-only: no turn banner — show the objective instead
+    // gold star + score (thousands separator)
+    drawStarIcon(L.pillX + 26, 25, 10, "#ffd23d");
+    ctx.font = "17px Bungee, sans-serif"; ctx.textAlign = "left";
+    ctx.fillStyle = "#ffd23d";
+    const scoreTxt = fmtScore(score);
+    ctx.fillText(scoreTxt, L.pillX + 44, 22);
+    const scoreW = ctx.measureText(scoreTxt).width;
+    // level / enemies readout (carried over from the old flat bar)
     const foes = worms.filter(w => w.team === "enemy" && w.alive).length;
-    ctx.fillStyle = "#39ff14";
-    ctx.shadowColor = "#39ff14";
-    ctx.shadowBlur = 12;
-    ctx.fillText("LVL " + level + " · ENEMIES " + foes, 16, 24);
-    ctx.shadowBlur = 0;
-  }
-
-  // Score
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.fillText("SCORE " + score, W / 2, 24);
-
-  // Wind
-  ctx.textAlign = "right";
-  ctx.fillStyle = wind > 0 ? "#ffcc00" : "#3a8acf";
-  const arrow = wind > 0.3 ? "→" : wind < -0.3 ? "←" : "•";
-  ctx.fillText(arrow + " WIND " + Math.abs(wind).toFixed(1), W - 16, 24);
-
-  // Bottom bar
-  ctx.fillStyle = "rgba(0,0,0,0.7)";
-  ctx.fillRect(0, H - 60, W, 60);
-  ctx.strokeStyle = "rgba(232,48,42,0.4)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, H - 60);
-  ctx.lineTo(W, H - 60);
-  ctx.stroke();
-
-  // Inventory slots
-  const slotW = 120;
-  const totalW = inventory.length * slotW;
-  const startX = (W - totalW) / 2;
-  for (let i = 0; i < inventory.length; i++) {
-    const sx = startX + i * slotW;
-    const sy = H - 55;
-    const sw = slotW - 10;
-    const sh = 50;
-    const sel = i === selectedType;
-    ctx.fillStyle = sel ? "rgba(232,48,42,0.25)" : "rgba(255,255,255,0.08)";
-    ctx.fillRect(sx, sy, sw, sh);
-    ctx.strokeStyle = sel ? "#e8302a" : "rgba(255,255,255,0.3)";
-    ctx.lineWidth = sel ? 3 : 2;
-    if (sel) {
-      ctx.shadowColor = "#e8302a";
-      ctx.shadowBlur = 15;
+    ctx.font = "9px Bungee, sans-serif";
+    ctx.fillStyle = "#9fd0f5";
+    ctx.fillText("LVL " + level + " · ENEMIES " + foes, L.pillX + 44, 41);
+    // score-breakdown ticker chips — newest 1-2 events, fading out
+    const nowT = performance.now();
+    let chipX = L.pillX + 54 + scoreW;
+    const chipMax = L.pillX + L.pillW - 130;
+    ctx.font = "9px Bungee, sans-serif";
+    let shown = 0;
+    for (let i = scoreEvents.length - 1; i >= 0 && shown < 2; i--) {
+      const ev = scoreEvents[i];
+      const age = nowT - ev.t;
+      if (age > 2400) break;
+      const a = age < 1800 ? 1 : 1 - (age - 1800) / 600;
+      const txt = "+" + ev.amount + " " + ev.label;
+      const tw2 = ctx.measureText(txt).width + 12;
+      if (chipX + tw2 > chipMax) break;
+      ctx.globalAlpha = a * 0.9;
+      ctx.fillStyle = "rgba(255,210,61,0.16)";
+      pillPath(chipX, 14, tw2, 18, 9); ctx.fill();
+      ctx.fillStyle = "#ffe9a0";
+      ctx.textAlign = "left";
+      ctx.fillText(txt, chipX + 6, 23);
+      ctx.globalAlpha = 1;
+      chipX += tw2 + 6;
+      shown++;
     }
-    ctx.strokeRect(sx, sy, sw, sh);
-    ctx.shadowBlur = 0;
-
-    // Mini worm icon
-    const iconWorm = { x: sx + 25, y: sy + 25, radius: 12, team: "player", type: inventory[i].type, facing: 1, wiggle: 0, alive: true, hp: 100, maxHp: 100 };
-    drawWormBody(iconWorm);
-
-    // Name + count
-    ctx.font = "10px Bungee, sans-serif";
-    ctx.fillStyle = "#fff";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    const name = inventory[i].type === "red" ? "RED" : inventory[i].type === "bomber" ? "BOMB"
-               : inventory[i].type === "bouncer" ? "BOUNCE" : inventory[i].type === "trooper" ? "TROOP"
-               : inventory[i].type === "cluster" ? "CLUSTER" : "SPLIT";
-    ctx.fillText(name, sx + 50, sy + 18);
-    ctx.font = "14px Bungee, sans-serif";
-    ctx.fillStyle = "#ffcc00";
-    ctx.fillText("x" + inventory[i].count, sx + 50, sy + 34);
+    // 3-portrait strip — a LIVE MIRROR of the carousel's visible window + selection
+    // (same scroll state, same data — this inventory model has no separate "queue")
+    const stripN = Math.min(3, inventory.length);
+    for (let vi = 0; vi < stripN; vi++) {
+      const idx = Math.min(ammoScrollOffset + vi, inventory.length - 1);
+      const it = inventory[idx];
+      const tc = TYPE_COLOR[it.type] || TYPE_COLOR.splitter;
+      const cx = L.pillX + L.pillW - 96 + vi * 38, cy = 32;
+      const sel = idx === selectedType;
+      ctx.globalAlpha = sel ? 1 : 0.6;
+      ctx.fillStyle = HUD_NAVY;
+      ctx.beginPath(); ctx.arc(cx, cy, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = sel ? tc.body : tc.dark; ctx.lineWidth = sel ? 2.5 : 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke();
+      const ic = SPRITES.icons[it.type];
+      if (ic) ctx.drawImage(ic, cx - 14, cy - 14, 28, 28);
+      ctx.globalAlpha = 1;
+    }
   }
 
-  // Mute button
-  ctx.fillStyle = "rgba(255,255,255,0.1)";
-  ctx.fillRect(W - 60, H - 55, 50, 50);
-  ctx.strokeStyle = "rgba(255,255,255,0.3)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(W - 60, H - 55, 50, 50);
-  ctx.font = "24px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#fff";
-  ctx.fillText(sfxMode === "mute" ? "\uD83D\uDD07" : sfxMode === "voice" ? "\uD83C\uDF99\uFE0F" : "\uD83D\uDD0A", W - 35, H - 30);
+  // ---- WIND PILL (display restyle only \u2014 value, range and physics untouched) ----
+  if (gameState !== "attract") {
+    drawNavyPill(L.windX, L.windY, L.windW, L.windH, 12);
+    // swoosh icon \u2014 three curved motion lines
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (let k = 0; k < 3; k++) {
+      const yy = L.windY + 15 + k * 8;
+      ctx.beginPath();
+      ctx.moveTo(L.windX + 12, yy);
+      ctx.quadraticCurveTo(L.windX + 22, yy - 5, L.windX + 32 - k * 4, yy - 1);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    ctx.font = "12px Bungee, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff";
+    ctx.fillText("WIND " + Math.abs(wind).toFixed(1) + " m/s", L.windX + 40, L.windY + L.windH / 2);
+    // direction indicator \u2014 same arrow-glyph thresholds as always
+    const warrow = wind > 0.3 ? "\u2192" : wind < -0.3 ? "\u2190" : "\u2022";
+    const ax2 = L.windX + L.windW - 18;
+    ctx.fillStyle = "#2a6dc0";
+    ctx.beginPath(); ctx.arc(ax2, L.windY + L.windH / 2, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "13px Bungee, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(warrow, ax2, L.windY + L.windH / 2 + 1);
+  }
+
+  // ---- TOP-RIGHT CIRCULAR BUTTONS ----
+  drawHudButton(L.pauseX, L.btnY, L.btnR, paused ? "play" : "pause");
+  drawHudButton(L.sndX, L.btnY, L.btnR, "sound");
+  drawHudButton(L.gearX, L.btnY, L.btnR, "gear");
+
+  // ---- AMMO CAROUSEL: bottom-left glow-ring circles ----
+  if (gameState !== "attract") {
+    const vis = L.vis;
+    ammoScrollOffset = Math.max(0, Math.min(ammoScrollOffset, Math.max(0, inventory.length - vis)));
+    for (let vi = 0; vi < vis; vi++) {
+      const idx = ammoScrollOffset + vi;
+      if (idx >= inventory.length) break;
+      const it = inventory[idx];
+      const cx = L.slotX0 + vi * L.slotGap, cy = L.slotY;
+      const tc = TYPE_COLOR[it.type] || TYPE_COLOR.splitter;
+      const sel = idx === selectedType;
+      ctx.save();
+      ctx.globalAlpha = 1;   // backing plate is ALWAYS solid — armed/unarmed is a ring/glow distinction only, never a hole in the HUD panel
+      ctx.fillStyle = HUD_NAVY_FILL;
+      ctx.beginPath(); ctx.arc(cx, cy, L.slotR, 0, Math.PI * 2); ctx.fill();
+      if (sel) { ctx.shadowColor = tc.body; ctx.shadowBlur = 14; }   // glow ONLY when armed
+      ctx.strokeStyle = tc.body;
+      ctx.globalAlpha = sel ? 1 : 0.85;
+      ctx.lineWidth = sel ? 5 : 3.5;
+      ctx.beginPath(); ctx.arc(cx, cy, L.slotR - 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = sel ? 1 : 0.82;
+      const ic = SPRITES.icons[it.type];
+      if (ic) ctx.drawImage(ic, cx - 33, cy - 33, 66, 66);
+      // white count badge bottom-right
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(cx + L.slotR * 0.62, cy + L.slotR * 0.62, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = HUD_NAVY;
+      ctx.font = "12px Bungee, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(it.count), cx + L.slotR * 0.62, cy + L.slotR * 0.62 + 1);
+      ctx.restore();
+    }
+    // scroll arrows \u2014 only when the roster overflows the window (L5+, 6 types)
+    if (inventory.length > vis) {
+      const rx = L.slotX0 + (vis - 1) * L.slotGap + L.slotR + 22;
+      const drawArrow = (cx, dir, active) => {
+        ctx.globalAlpha = active ? 0.95 : 0.35;
+        ctx.fillStyle = HUD_NAVY;
+        ctx.beginPath(); ctx.arc(cx, L.slotY, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, L.slotY, 14, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.moveTo(cx - 4 * dir, L.slotY - 6);
+        ctx.lineTo(cx + 5 * dir, L.slotY);
+        ctx.lineTo(cx - 4 * dir, L.slotY + 6);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+      };
+      drawArrow(20, -1, ammoScrollOffset > 0);
+      drawArrow(rx, 1, ammoScrollOffset < inventory.length - vis);
+    }
+  }
+
+  // ---- FIRST-AIM TUTORIAL PILL (bottom-right; retires itself after the first shot) ----
+  if (!aimTaught && gameState === "playing" &&
+      (aiming || (level === 1 && playStartT > 0 && performance.now() - playStartT < 5000))) {
+    const hw = 214, hh = 64, hx2 = W - hw - 14, hy2 = H - hh - 14;
+    ctx.fillStyle = "rgba(22,40,60,0.85)";
+    pillPath(hx2, hy2, hw, hh, 10); ctx.fill();
+    ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 1.5;
+    pillPath(hx2, hy2, hw, hh, 10); ctx.stroke();
+    // mini dotted arc ending in the light-blue endpoint circle
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    for (let k = 0; k < 6; k++) {
+      const t2 = k / 5;
+      const ax = hx2 + 14 + t2 * 56;
+      const ay = hy2 + hh - 14 - Math.sin(t2 * Math.PI * 0.85) * 30;
+      ctx.beginPath(); ctx.arc(ax, ay, 2.4 - t2 * 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#8fd4ee";
+    ctx.beginPath(); ctx.arc(hx2 + 74, hy2 + 22, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "10px Bungee, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("ADJUST ANGLE", hx2 + 92, hy2 + 24);
+    ctx.fillText("AND POWER!", hx2 + 92, hy2 + 42);
+  }
+
+  // ---- SETTINGS POPOVER ----
+  if (settingsOpen) {
+    const spw = 240, sph = 108, spx = W - spw - 12, spy = 66;
+    drawNavyPill(spx, spy, spw, sph, 10);
+    ctx.font = "11px Bungee, sans-serif"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+    ctx.fillText("SOUND", spx + 16, spy + 26);
+    ctx.fillStyle = "#8fd4ee"; ctx.textAlign = "right";
+    ctx.fillText(sfxMode === "mute" ? "MUTED" : sfxMode === "voice" ? "TONES + VOICE" : "TONES", spx + spw - 16, spy + 26);
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+    ctx.fillText("SLOW-MO", spx + 16, spy + 60);
+    ctx.fillStyle = slowMoEnabled ? "#39d98a" : "#8a8e96"; ctx.textAlign = "right";
+    ctx.fillText(slowMoEnabled ? "ON" : "OFF", spx + spw - 16, spy + 60);
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.font = "8px Bungee, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("TAP A ROW \u00B7 TAP OUTSIDE TO CLOSE", spx + spw / 2, spy + sph - 14);
+  }
+
+  // ---- PAUSED VEIL (physics frozen in gameLoop; last frame stays visible) ----
+  if (paused && gameState === "playing") {
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff";
+    ctx.font = "22px Bungee, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowColor = "#16283c"; ctx.shadowBlur = 12;
+    ctx.fillText("PAUSED \u2014 TAP TO RESUME", W / 2, H / 2);
+    ctx.shadowBlur = 0;
+  }
 }
 
 // ====== GAME LOOP ======
@@ -2435,19 +2957,25 @@ function gameLoop(time) {
     updatePhysics(dt);
     updateCamera();
   } else if (gameState === "playing") {
-    updatePhysics(dt);
-    updateCamera();
-    // Reload the sling when idle; lose only when ammo AND deployed troopers are spent
-    if (!loadedWorm && projectiles.length === 0 && turnTimer === 0) {
-      const hasShots = inventory.reduce((s, i) => s + i.count, 0);
-      const troopersBusy = worms.some(w => w.team === "player" && w.alive && (w.shotsLeft || 0) > 0);
-      const anyDying = worms.some(w => w.alive && w.dying);
-      if (hasShots > 0) {
-        loadNextWorm();
-      } else if (!troopersBusy && !anyDying) {
-        const enemiesAlive = worms.filter(w => w.team === "enemy" && w.alive).length;
-        if (enemiesAlive > 0) {
-          showEndScreen(false);
+    if (!paused) {   // minimal real pause: physics/timers frozen, render keeps running
+      frameCount++;
+      // slow-mo (settings toggle, OFF by default): physics steps every other frame (0.5x)
+      const slowSkip = slowMoT > 0 && frameCount % 2 === 0;
+      if (slowMoT > 0) slowMoT--;
+      if (!slowSkip) updatePhysics(dt);
+      updateCamera();
+      // Reload the sling when idle; lose only when ammo AND deployed troopers are spent
+      if (!loadedWorm && projectiles.length === 0 && turnTimer === 0) {
+        const hasShots = inventory.reduce((s, i) => s + i.count, 0);
+        const troopersBusy = worms.some(w => w.team === "player" && w.alive && (w.shotsLeft || 0) > 0);
+        const anyDying = worms.some(w => w.alive && w.dying);
+        if (hasShots > 0) {
+          loadNextWorm();
+        } else if (!troopersBusy && !anyDying) {
+          const enemiesAlive = worms.filter(w => w.team === "enemy" && w.alive).length;
+          if (enemiesAlive > 0) {
+            showEndScreen(false);
+          }
         }
       }
     }
