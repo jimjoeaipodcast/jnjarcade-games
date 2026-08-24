@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V6_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V7_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -1049,7 +1049,7 @@ const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: 
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch("angry-worms-pack.json?v=3").then(r => r.json())
+  fetch("angry-worms-pack.json?v=4").then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
@@ -1079,8 +1079,12 @@ function drainVo() {
       src.connect(g); g.connect(audioCtx.destination);
       VO.src = src;
       src.start();
-      // a beat between speakers — an exchange with no gap sounds like one person
-      setTimeout(drainVo, buf.duration * 1000 + 180);
+      // a beat between speakers — an exchange with no gap sounds like one person. Was
+      // 180ms (Osimo 2026-08-24: "Joe speaks after Jimmy too quickly, not respecting usual
+      // pause") — the house's own natural-pause reference is AUDIO_BIBLE's stop_silence
+      // cap of 0.60s for in-line TTS breath pauses; 350ms sits clearly inside that ceiling
+      // while being unambiguously longer than the too-fast 180ms.
+      setTimeout(drainVo, buf.duration * 1000 + 350);
     } catch (e) { drainVo(); }
   });
 }
