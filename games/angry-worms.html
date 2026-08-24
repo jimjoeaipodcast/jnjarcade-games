@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V5_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V6_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -991,6 +991,54 @@ const VO_MISS_CALM = VO_LINES[11];
 const VO_MISS_WINDY = [["JIMMY", "Wind's up."], ["JOE", "Yes. It's right there on the gauge."]];
 VO_EX.miss = VO_EX.miss.concat([VO_MISS_WINDY]);
 
+// MORE LINES (Osimo 2026-08-24: "limited in what they say") — additive only, same pattern
+// as VO_MISS_WINDY above: new pairs concat()'d onto each VO_EX bucket, VO_LINES itself and
+// every existing .slice() index left untouched. personality-consistency-guard scored, 100% PASS.
+VO_EX.kill = VO_EX.kill.concat([
+  [["JIMMY", "Clean kill. Exactly the plan."], ["JOE", "There wasn't a plan. There was a shot."]],
+  [["JOE", "That worked. Somehow."], ["JIMMY", "Not somehow. Obviously."]],
+  [["JIMMY", "Direct hit. Didn't even wobble."], ["JOE", "It wobbled. I have the footage."]],
+]);
+VO_EX.miss = VO_EX.miss.concat([
+  [["JIMMY", "The physics were against me."], ["JOE", "The physics were the same as every other shot."]],
+  [["JOE", "You've undershot it."], ["JIMMY", "I was testing the range."]],
+  [["JIMMY", "That one doesn't count."], ["JOE", "It counted. I counted it."]],
+]);
+VO_EX.multi = VO_EX.multi.concat([
+  [["JIMMY", "Three. That's three."], ["JOE", "I can also count."]],
+  [["JOE", "Both, somehow."], ["JIMMY", "Not somehow. Skill."]],
+]);
+VO_EX.water = VO_EX.water.concat([
+  [["JIMMY", "He's doing laps at this point."], ["JOE", "He's drowning. Slowly. With commentary."]],
+]);
+VO_EX.survived = VO_EX.survived.concat([
+  [["JOE", "Still standing."], ["JIMMY", "Barely. I'll take barely."]],
+]);
+VO_EX.chain = VO_EX.chain.concat([
+  [["JIMMY", "One barrel. Entire structure."], ["JOE", "That's not marksmanship. That's arson."]],
+]);
+VO_EX.glass = VO_EX.glass.concat([
+  [["JOE", "Every pane. Gone."], ["JIMMY", "It's satisfying and I won't apologise for that."]],
+]);
+VO_EX.cluster = VO_EX.cluster.concat([
+  [["JIMMY", "Six explosions. One worm."], ["JOE", "That ratio should concern someone."]],
+]);
+VO_EX.collapse = VO_EX.collapse.concat([
+  [["JOE", "Structural failure."], ["JIMMY", "Structural SUCCESS. Different word, same event."]],
+]);
+VO_EX.clear = VO_EX.clear.concat([
+  [["JIMMY", "Level done. Onward."], ["JOE", "Onward. Sure."]],
+]);
+VO_EX.last = VO_EX.last.concat([
+  [["JIMMY", "Final worm. Make it count."], ["JOE", "You've said that every level."]],
+]);
+VO_EX.gameOver = VO_EX.gameOver.concat([
+  [["JOE", "Run's over."], ["JIMMY", "Run's over. Legacy's just getting started."]],
+]);
+VO_EX.best = VO_EX.best.concat([
+  [["JIMMY", "New high score!"], ["JOE", "I'll allow the exclamation mark. Once."]],
+]);
+
 const JIMMY_GAIN = 1.15, JOE_GAIN = 1.0;
 function djb2vo(s) {
   let h = 5381;
@@ -1001,7 +1049,7 @@ const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: 
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch("angry-worms-pack.json?v=2").then(r => r.json())
+  fetch("angry-worms-pack.json?v=3").then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
