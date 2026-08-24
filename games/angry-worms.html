@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V7_20260824';
+window.__ANGRYWORMS_BUILD='AW_MOCKUP_V8_20260824';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -174,6 +174,18 @@ let score = 0;
 let turn = "player";
 let turnTimer = 0;
 let wind = 0;
+// WIND FAIRNESS (Osimo 2026-08-24: "can't have more than 25% of the shots with wind pushing
+// backwards"). Shots always fire rightward (slingshot fixed bottom-left), so "backwards"
+// means wind<0. The old `(Math.random()-0.5)*range` was symmetric — exactly 50% of shots got
+// headwind. Replaced everywhere wind is rolled with this: 75% of shots draw from [0, max]
+// (helpful or calm), 25% draw from [-max, 0) (backward) — an exact 75/25 split by
+// construction, not just a nudged distribution shape. `range` keeps each call site's own
+// existing magnitude (level-scaled at the per-shot reroll, flat elsewhere) — only the SIGN
+// bias changes, difficulty/intensity is untouched.
+function rollWind(range) {
+  const mag = range / 2;
+  return Math.random() < 0.25 ? -Math.random() * mag : Math.random() * mag;
+}
 let aiming = false;
 let dragStart = null;
 let dragCurrent = null;
@@ -1374,14 +1386,31 @@ function updatePhysics(dt) {
     }
     return false;
   }
+  // COLLAPSE CASCADE MUST RESOLVE IN ONE FRAME (Osimo 2026-08-24: "one block can't support
+  // 2 or more like that" — a stack floating after a hit). A single top-to-bottom pass over
+  // `blocks` in FIXED array order can miss a multi-level chain: if block C rests on B rests
+  // on A, and A loses support, a pass that reaches C before B has been marked falling this
+  // frame sees B's STALE (still-standing) state and wrongly calls C supported — the chain
+  // then needs one extra frame per level to fully unravel, which at 60fps can read as
+  // "stuck" for anything deeper than 2 levels. Loop the (cheap, side-effect-free) support
+  // check to a fixed point — repeat until a full pass marks nothing new falling — so any
+  // depth of chain reaction resolves within THIS frame regardless of array order.
+  let collapseChanged = true;
+  while (collapseChanged) {
+    collapseChanged = false;
+    for (const b of blocks) {
+      if (b.hp <= 0) {
+        if (!b.falling) { b.falling = true; collapseChanged = true; }
+      } else if (!b.falling && !blockSupported(b)) {
+        b.falling = true;           // tower lost its base — down it comes
+        b.settled = false;
+        shotCollapse++;
+        collapseChanged = true;
+      }
+    }
+  }
   for (const b of blocks) {
-    if (b.hp <= 0) {
-      b.falling = true;
-    } else if (!b.falling && !blockSupported(b)) {
-      b.falling = true;           // tower lost its base — down it comes
-      b.settled = false;
-      shotCollapse++;
-    } else if (!b.falling && b.hp > 0) {
+    if (!b.falling && b.hp > 0) {
       // TIPPING (Osimo 2026-08-21: "bricks could do with some more tipping over in some
       // case"). A block can be technically supported and still be unbalanced — resting on
       // a stump with most of its mass hanging off one side. Real blocks topple; ours sat
@@ -1871,7 +1900,7 @@ function switchTurn() {
     showEndScreen(false);
     return;
   }
-  wind = (Math.random() - 0.5) * (4 + level);
+  wind = rollWind(4 + level);
   if (!troopersBusy) camera.targetX = 0;   // glide home unless a trooper's mid-barrage
   loadNextWorm();
 }
@@ -1927,7 +1956,7 @@ function onEndBtn() {
     // Next level
     buildLevel(level + 1);
     turn = "player";
-    wind = (Math.random() - 0.5) * 6;
+    wind = rollWind(6);
     gameState = "playing";
     camera.targetX = 0;
   } else {
@@ -1948,7 +1977,7 @@ function resetGame() {
   settingsOpen = false;
   buildLevel(1);
   turn = "player";
-  wind = (Math.random() - 0.5) * 6;
+  wind = rollWind(6);
   gameState = "playing";
   camera.targetX = 0;
   document.getElementById("endScreen").style.display = "none";
@@ -1981,9 +2010,16 @@ function insertCoin() {
   overlay.classList.add("hidden");
   // Try fullscreen — webkitRequestFullscreen fallback matches flap-fight/astro-hop/etc,
   // though per the IS_IOS block above this is still always a no-op on real iOS Safari.
+  // navigationUI:'hide' (Osimo 2026-08-24, Chrome/Android/Pixel: "still getting that message
+  // regarding the full screen") is the real, documented option for asking the browser not to
+  // show fullscreen-transition chrome/hints — confirmed accepted by Chromium's API (no throw)
+  // before shipping. Not a guaranteed fix for Chrome's own one-time "drag from top to exit"
+  // system tutorial toast specifically (that's Android/Chrome-level onboarding UI, outside
+  // any page's control — same category as the iOS no-fullscreen-API platform limit above),
+  // but a real, safe, standards-based improvement regardless.
   try {
     const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch (e) {}
   startGame();
@@ -1997,7 +2033,7 @@ function startGame() {
   settingsOpen = false;
   buildLevel(1);
   turn = "player";
-  wind = (Math.random() - 0.5) * 6;
+  wind = rollWind(6);
   gameState = "intro";
   // Teleport to enemy side, hold 700ms, snap back to catapult
   camera.x = Math.max(0, WORLD_W - VIEW.w);
