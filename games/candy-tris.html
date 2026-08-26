@@ -363,7 +363,7 @@ const PIECES=[
 
 // ── Persistence: crushtris_saga (meta only — no mid-level board saves) ─────
 let SAVE={unlocked:1,stars:Array(30).fill(0),boosters:{hammer:3,shuffle:2,wrap:2},
-  theme:'classic',daily:{date:'',cleared:'',streak:0}};
+  theme:'classic',daily:{date:'',cleared:'',streak:0},failStreak:{level:0,count:0}};
 try{
   const raw=localStorage.getItem('crushtris_saga');
   if(raw){const p=JSON.parse(raw);
@@ -373,6 +373,7 @@ try{
       if(p.boosters)SAVE.boosters={hammer:p.boosters.hammer|0,shuffle:p.boosters.shuffle|0,wrap:p.boosters.wrap|0};
       if(typeof p.theme==='string')SAVE.theme=p.theme;
       if(p.daily)SAVE.daily={date:''+(p.daily.date||''),cleared:''+(p.daily.cleared||''),streak:p.daily.streak|0};
+      if(p.failStreak)SAVE.failStreak={level:p.failStreak.level|0,count:p.failStreak.count|0};
     }
   }
 }catch(e){}
@@ -2681,6 +2682,7 @@ function celebrate(){
     if(stars===3&&prev<3){SAVE.boosters.hammer++;toast+=(toast?' · ':'')+'⭐⭐⭐ +1 Hammer';}
     SAVE.stars[Lnum-1]=Math.max(prev,stars);
     SAVE.unlocked=Math.max(SAVE.unlocked,Math.min(31,Lnum+1));
+    if(SAVE.failStreak.level===Lnum)SAVE.failStreak={level:0,count:0}; // cleared it — stale struggle count shouldn't carry into a replay
   }
   persist();updateBoosterUI();
 
@@ -2699,10 +2701,29 @@ function celebrate(){
 }
 
 // ── Fail flow — free instant retry, unlimited ──────────────────────────────
+// Struggle-assist: 4 fails on the SAME saga level grants a couple of boosters
+// (hammer removes one problem candy, shuffle refreshes a bad board — the two
+// "get unstuck" tools, not wrap). Re-fires every 4th fail (4, 8, 12...), not
+// just once — someone still stuck at 8 needs it again. Daily excluded: it has
+// its own streak system and "the same level" doesn't apply the same way.
+function grantFailStreakPerks(){
+  if(mode!=='saga')return;
+  SAVE.failStreak=SAVE.failStreak.level===Lnum
+    ?{level:Lnum,count:SAVE.failStreak.count+1}
+    :{level:Lnum,count:1};
+  if(SAVE.failStreak.count%4===0){
+    SAVE.boosters.hammer++;SAVE.boosters.shuffle++;
+    persist();updateBoosterUI();
+    setTimeout(()=>showToast('Rough level — +1 🍭 Hammer · +1 🫘 Shuffle'),1900);
+  }else{
+    persist();
+  }
+}
 function levelFail(topout){
   levelEnding=true;piece=null;holding=false;cancelTargeting();
   sessionScore+=score;
   sfx.fail();
+  grantFailStreakPerks();
   showBanner(topout?'TOPPED OUT!':'OUT OF MOVES!','#ff4444',26);
   setTimeout(()=>{
     tapConfirm('LEVEL FAILED',
