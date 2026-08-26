@@ -1399,6 +1399,19 @@ updHud();
 seedBoard();
 requestAnimationFrame(loop);
 
+// Installed-PWA fullscreen on Android: the very first layout pass can measure
+// wrap.clientHeight before the standalone/fullscreen chrome has actually settled,
+// sizing the board for a taller-than-real viewport and pushing the spawn row below
+// the visible area (Osimo 2026-08-26: "the starting point is out of view on my
+// android"). visualViewport tracks the REAL visible area more reliably than
+// window.resize on mobile; route both into the existing resize handler (already
+// correctly rebuilds pre-game / clamps mid-game) rather than duplicating its logic.
+// The extra delayed dispatch is a safety net for the case neither fires at all
+// during that settle — can't reproduce the exact Android timing from here, so this
+// is a defensive best-effort fix rather than a confirmed root-cause match.
+if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>window.dispatchEvent(new Event('resize')));
+setTimeout(()=>window.dispatchEvent(new Event('resize')), 300);
+
 // ?attract=1 — headless footage capture auto-plays
 if(new URLSearchParams(location.search).get('attract')==='1'){
   ov.classList.add('hidden');
