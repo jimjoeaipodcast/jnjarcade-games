@@ -37,7 +37,7 @@ canvas{display:block}
 #dim{position:absolute;inset:0;border-radius:18px;background:rgba(0,0,0,0.30);display:none;
   pointer-events:none;z-index:3}
 #bststrip{position:relative;z-index:1;flex:0 0 auto;background:#1d1040;border-radius:18px;
-  display:flex;align-items:center;justify-content:space-around}
+  display:flex;flex-wrap:wrap;row-gap:8px;align-items:center;justify-content:space-around}
 #pillrow{position:relative;z-index:1;flex:0 0 auto;display:flex;align-items:stretch;
   justify-content:space-between}
 /* card internals are driven by --* vars written by layout() — no fixed px that
@@ -206,6 +206,7 @@ canvas{display:block}
     <div class="booster ui" id="b-hammer"><canvas width="124" height="124"></canvas><span class="cnt">3</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
     <div class="booster ui" id="b-shuffle"><canvas width="124" height="124"></canvas><span class="cnt">2</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
     <div class="booster ui" id="b-wrap"><canvas width="124" height="124"></canvas><span class="cnt">2</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
+    <div class="booster ui" id="b-swap"><canvas width="124" height="124"></canvas><span class="cnt">1</span><span class="lock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 10.4V7.6a4.8 4.8 0 0 1 9.6 0v2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="4.2" y="10.2" width="15.6" height="11.2" rx="2.6" fill="#fff"/><circle cx="12" cy="14.9" r="1.75" fill="#1a0e30"/><rect x="11.1" y="14.9" width="1.8" height="3.6" rx="0.9" fill="#1a0e30"/></svg></span></div>
   </div>
   <div id="pillrow">
     <div class="pill ui" id="pill-pause"><span class="ico-pause"><i></i><i></i></span><span class="ptxt">Pause</span></div>
@@ -294,6 +295,7 @@ function applyTheme(name){
 }
 const N='NORMAL',SH='STRIPED_H',SV='STRIPED_V',WR='WRAPPED',CB='COLOUR_BOMB',FISH='FISH';
 let ccSel=null;
+let swapSel=null;   // first cell picked for the Free Swap booster's 2-tap flow
 const PIECES=[
   [[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]]],
   [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
@@ -305,7 +307,7 @@ const PIECES=[
 ];
 
 // ── Persistence: crushtris_saga (meta only — no mid-level board saves) ─────
-let SAVE={unlocked:1,stars:Array(30).fill(0),boosters:{hammer:3,shuffle:2,wrap:2},
+let SAVE={unlocked:1,stars:Array(30).fill(0),boosters:{hammer:3,shuffle:2,wrap:2,swap:1},
   theme:'classic',daily:{date:'',cleared:'',streak:0},failStreak:{level:0,count:0}};
 try{
   const raw=localStorage.getItem('crushtris_saga');
@@ -313,7 +315,7 @@ try{
     if(p&&typeof p==='object'){
       SAVE.unlocked=Math.max(1,Math.min(31,p.unlocked|0||1));
       if(Array.isArray(p.stars))SAVE.stars=Array.from({length:30},(_,i)=>Math.max(0,Math.min(3,p.stars[i]|0)));
-      if(p.boosters)SAVE.boosters={hammer:p.boosters.hammer|0,shuffle:p.boosters.shuffle|0,wrap:p.boosters.wrap|0};
+      if(p.boosters)SAVE.boosters={hammer:p.boosters.hammer|0,shuffle:p.boosters.shuffle|0,wrap:p.boosters.wrap|0,swap:p.boosters.swap|0};
       if(typeof p.theme==='string')SAVE.theme=p.theme;
       if(p.daily)SAVE.daily={date:''+(p.daily.date||''),cleared:''+(p.daily.cleared||''),streak:p.daily.streak|0};
       if(p.failStreak)SAVE.failStreak={level:p.failStreak.level|0,count:p.failStreak.count|0};
@@ -728,6 +730,46 @@ function clearJellyAt(r,c){
   }
 }
 
+// ── Line clear bonus — leftover specials caught in a completing tetromino row
+//    used to just vanish with the row (Osimo: "if there were any sweets in
+//    there that went unused maybe we should do something with them"). Must
+//    run BEFORE removeMarkedLines splices the rows out — board coordinates
+//    are only valid pre-splice, and removeSet() itself doesn't touch row
+//    structure so it's safe to call here independent of the line-clear. ────
+function triggerLineClearBonuses(rows){
+  const bonus=new Set();
+  let sawFish=false,sawOther=false;
+  for(const r of rows){
+    for(let c=0;c<COLS;c++){
+      const cell=board[r][c];
+      if(!cell||cell.type===N)continue;
+      if(cell.type===FISH){
+        sawFish=true;
+        // many fish swarm every cell sharing this fish's colour, anywhere on the board
+        for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)
+          if(board[rr][cc]&&board[rr][cc].color===cell.color)bonus.add(ck(rr,cc));
+      } else {
+        sawOther=true;
+        // any other leftover special (striped/wrapped/colour bomb) blasts a 5×5 area
+        for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){
+          const nr=r+dr,nc=c+dc;
+          if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)bonus.add(ck(nr,nc));
+        }
+      }
+    }
+  }
+  if(!bonus.size)return;
+  // cells inside the rows about to be spliced vanish with the line regardless —
+  // exclude them so removeSet doesn't act on coordinates that are about to shift
+  const rowSet=new Set(rows);
+  const filtered=[...bonus].filter(k=>!rowSet.has(Math.floor(k/COLS)));
+  if(!filtered.length)return;
+  if(sawFish)showBanner('🐟 FISH SWARM!','#00ddff',26);
+  else if(sawOther)showBanner('💥 LINE BLAST!','#ff8800',26);
+  score+=filtered.length*30*lvlMult();
+  endlessLevelUp();
+  removeSet(filtered);
+}
 // ── Line clear — returns rows, FX added but rows NOT removed yet ──────────
 function markFullLines(){
   const rows=[];
@@ -1155,7 +1197,9 @@ function cascade(depth,afterLineClear){
 
       // CT_SAGA_V2 retiming: flash 280ms (was 240) so eyes can track the collapse
       setTimeout(()=>{
+        triggerLineClearBonuses(rows);   // pre-splice: coordinates still valid here
         removeMarkedLines(rows);
+        gravity(board);                  // bonus removal can leave gaps outside the cleared rows
         cascade(depth,false);
       },280);
       return;
@@ -1398,9 +1442,10 @@ function hardDrop(){while(valid(piece,board,1))piece.r++;lockPiece();}
 
 // ── BOOSTERS — earn-only economy, zero IAP ─────────────────────────────────
 const boosterEls={hammer:document.getElementById('b-hammer'),
-  shuffle:document.getElementById('b-shuffle'),wrap:document.getElementById('b-wrap')};
+  shuffle:document.getElementById('b-shuffle'),wrap:document.getElementById('b-wrap'),
+  swap:document.getElementById('b-swap')};
 function updateBoosterUI(){
-  for(const k of ['hammer','shuffle','wrap']){
+  for(const k of ['hammer','shuffle','wrap','swap']){
     const el=boosterEls[k];
     el.querySelector('.cnt').textContent=SAVE.boosters[k];
     el.classList.toggle('off',SAVE.boosters[k]<=0&&mode!=='daily');
@@ -1408,7 +1453,7 @@ function updateBoosterUI(){
     el.classList.toggle('aim',targeting===k||(k==='wrap'&&targeting==='wrap'));
   }
 }
-function cancelTargeting(){targeting=null;dimEl.style.display='none';updateBoosterUI();}
+function cancelTargeting(){targeting=null;swapSel=null;dimEl.style.display='none';updateBoosterUI();}
 function boosterTap(kind){
   if(gameOver||paused||levelEnding)return;
   if(mode==='daily'){showToast('🔒 Boosters locked in Daily');return;}
@@ -1430,12 +1475,32 @@ function boosterTap(kind){
     setTimeout(()=>cascade(0,false),150);  // shuffle-created matches fire for free
     return;
   }
-  targeting=kind;                          // hammer / wrap → targeting mode
+  targeting=kind;                          // hammer / wrap / swap → targeting mode
   dimEl.style.display='block';
   updateBoosterUI();
 }
 function fireTargetedBooster(r,c){
   const kind=targeting;
+  if(kind==='swap'){
+    // FREE SWAP — 2-tap select-then-fire (stays in targeting mode after tap 1,
+    // unlike hammer/wrap which fire on a single tap). Unconditional: no match
+    // required, unlike a normal drag-swap which reverts if nothing matches.
+    if(!board[r][c])return;
+    if(piece&&pCells(piece).some(p=>p.r===r&&p.c===c))return;   // settled cells only
+    if(!swapSel){swapSel={r,c};updateBoosterUI();return;}       // tap 1: select, stay targeting
+    if(swapSel.r===r&&swapSel.c===c){swapSel=null;return;}      // tap same cell again: deselect
+    if(Math.abs(swapSel.r-r)+Math.abs(swapSel.c-c)!==1){        // not a neighbour: reselect
+      showToast('Pick a NEIGHBOURING cube');swapSel={r,c};return;
+    }
+    const sr=swapSel.r,sc=swapSel.c;swapSel=null;
+    cancelTargeting();
+    SAVE.boosters.swap--;persist();updateBoosterUI();
+    sfx.thud();shake(2,4);
+    const a=board[sr][sc];board[sr][sc]=board[r][c];board[r][c]=a;
+    cascading=true;ccSel=null;lockR=r;lockC=c;
+    setTimeout(()=>cascade(0,false),120);
+    return;
+  }
   cancelTargeting();
   if(!board[r][c]&&kind==='hammer')return;               // hammer needs a candy
   if(piece&&pCells(piece).some(p=>p.r===r&&p.c===c))return; // settled cells only
@@ -1468,7 +1533,7 @@ function fireTargetedBooster(r,c){
     setTimeout(()=>cascade(0,false),200);
   }
 }
-for(const k of ['hammer','shuffle','wrap']){
+for(const k of ['hammer','shuffle','wrap','swap']){
   const el=boosterEls[k];
   const h=e=>{e.stopPropagation();e.preventDefault();initAudio();boosterTap(k);};
   el.addEventListener('touchend',h,{passive:false});
@@ -1483,7 +1548,8 @@ for(const k of ['hammer','shuffle','wrap']){
 const BOOSTER_RING={
   hammer :['#e6bcff','#a44df0','#5c2a8a'],
   shuffle:['#b6f3c2','#3fca55','#1d7a2e'],
-  wrap   :['#ffe3ac','#f2a935','#9a6414']
+  wrap   :['#ffe3ac','#f2a935','#9a6414'],
+  swap   :['#bfeeff','#3fd0ff','#0d6d8a']
 };
 function bRR(g,x,y,w,h,r){
   g.beginPath();
@@ -1553,9 +1619,40 @@ function drawWrapIcon(g,cx,cy,R){
   g.beginPath();g.ellipse(cx-w*0.19,cy-h*0.24,w*0.20,h*0.10,-0.5,0,Math.PI*2);g.fill();
   g.restore();
 }
-const BOOSTER_ICON={hammer:drawLollyIcon,shuffle:drawBeanIcon,wrap:drawWrapIcon};
+// 4 — FREE SWAP: two candy squares (blue/orange, echoing the two colours players
+// most often want to trade) with a curved double-arrow cycling between them.
+function drawSwapIcon(g,cx,cy,R){
+  g.save();
+  const s=R*0.62,rr=R*0.16;
+  const bx=cx-R*0.42,by=cy+R*0.10,ox=cx+R*0.42,oy=cy-R*0.10;
+  const bg=g.createLinearGradient(bx-s/2,by-s/2,bx+s/2,by+s/2);
+  bg.addColorStop(0,'#8fe0ff');bg.addColorStop(1,'#1a9fd6');
+  g.fillStyle=bg;bRR(g,bx-s/2,by-s/2,s,s,rr);g.fill();
+  g.strokeStyle='rgba(6,50,70,0.5)';g.lineWidth=R*0.055;g.stroke();
+  const og=g.createLinearGradient(ox-s/2,oy-s/2,ox+s/2,oy+s/2);
+  og.addColorStop(0,'#ffcd80');og.addColorStop(1,'#e08420');
+  g.fillStyle=og;bRR(g,ox-s/2,oy-s/2,s,s,rr);g.fill();
+  g.strokeStyle='rgba(88,44,0,0.5)';g.lineWidth=R*0.055;g.stroke();
+  // two curved arrows forming a swap cycle
+  g.strokeStyle='#ffffff';g.lineWidth=R*0.10;g.lineCap='round';
+  g.beginPath();g.arc(cx,cy,R*0.62,Math.PI*1.15,Math.PI*1.85);g.stroke();
+  g.beginPath();g.arc(cx,cy,R*0.62,Math.PI*0.15,Math.PI*0.85);g.stroke();
+  const ah=R*0.14;
+  g.beginPath();
+  g.moveTo(cx+R*0.62*Math.cos(Math.PI*1.85),cy+R*0.62*Math.sin(Math.PI*1.85));
+  g.lineTo(cx+R*0.62*Math.cos(Math.PI*1.85)-ah,cy+R*0.62*Math.sin(Math.PI*1.85)-ah*0.4);
+  g.lineTo(cx+R*0.62*Math.cos(Math.PI*1.85)-ah*0.2,cy+R*0.62*Math.sin(Math.PI*1.85)+ah*0.9);
+  g.closePath();g.fillStyle='#ffffff';g.fill();
+  g.beginPath();
+  g.moveTo(cx+R*0.62*Math.cos(Math.PI*0.85),cy+R*0.62*Math.sin(Math.PI*0.85));
+  g.lineTo(cx+R*0.62*Math.cos(Math.PI*0.85)+ah,cy+R*0.62*Math.sin(Math.PI*0.85)+ah*0.4);
+  g.lineTo(cx+R*0.62*Math.cos(Math.PI*0.85)+ah*0.2,cy+R*0.62*Math.sin(Math.PI*0.85)-ah*0.9);
+  g.closePath();g.fill();
+  g.restore();
+}
+const BOOSTER_ICON={hammer:drawLollyIcon,shuffle:drawBeanIcon,wrap:drawWrapIcon,swap:drawSwapIcon};
 function paintBoosterIcons(){
-  for(const k of ['hammer','shuffle','wrap']){
+  for(const k of ['hammer','shuffle','wrap','swap']){
     const el=boosterEls[k];if(!el)continue;
     const cv=el.querySelector('canvas');if(!cv)continue;
     const g=cv.getContext('2d');if(!g)continue;
@@ -1953,11 +2050,19 @@ function drawBoard(){
     ctx.shadowBlur=0;
   }
 
-  // Targeting cursor pulse (hammer / wrapped blast)
+  // Free Swap booster: cyan glow on the first-picked cell (tap 1 of 2)
+  if(swapSel&&board[swapSel.r]&&board[swapSel.r][swapSel.c]){
+    ctx.strokeStyle='#3fd0ff';ctx.lineWidth=3;
+    ctx.shadowColor='#3fd0ff';ctx.shadowBlur=10;
+    ctx.strokeRect(swapSel.c*CELL+2,swapSel.r*CELL+2,CELL-4,CELL-4);
+    ctx.shadowBlur=0;
+  }
+
+  // Targeting cursor pulse (hammer / wrapped blast / free swap)
   if(targeting){
     const t=0.5+0.5*Math.sin(now/180);
     ctx.globalAlpha=0.5+0.4*t;
-    ctx.strokeStyle=targeting==='hammer'?'#a44df0':'#f2a935';
+    ctx.strokeStyle=targeting==='hammer'?'#a44df0':targeting==='wrap'?'#f2a935':'#3fd0ff';
     ctx.lineWidth=3;
     ctx.setLineDash([6,5]);
     ctx.strokeRect(3,3,COLS*CELL-6,ROWS*CELL-6);
@@ -2219,7 +2324,7 @@ function coreReset(){
   // it must be the board midpoint, not the old hardcoded 10-wide 4
   lockR=ROWS-1;lockC=(COLS>>1)-1;comboCount=0;particles=[];rings=[];sweeps=[];flashRows=[];
   wasRotated=false;lastClearPowerful=false;backToBack=false;
-  ccSel=null;onSettleCb=null;shakeT=0;
+  ccSel=null;swapSel=null;onSettleCb=null;shakeT=0;
   nextQueue=[];bag=[];
   cancelTargeting();
   bannerEl.style.opacity='0';
@@ -2345,10 +2450,10 @@ function celebrate(){
     }
   }else{
     const prev=SAVE.stars[Lnum-1]||0;
-    if(prev===0){ // first-clear booster, type rotates by level%3
-      const kind=['hammer','shuffle','wrap'][Lnum%3];
+    if(prev===0){ // first-clear booster, type rotates by level%4 (added swap 2026-08-26)
+      const kind=['hammer','shuffle','wrap','swap'][Lnum%4];
       SAVE.boosters[kind]++;
-      toast='+1 '+(kind==='hammer'?'🍭 Hammer':kind==='shuffle'?'🫘 Shuffle':'🍬 Wrapped');
+      toast='+1 '+(kind==='hammer'?'🍭 Hammer':kind==='shuffle'?'🫘 Shuffle':kind==='wrap'?'🍬 Wrapped':'🔄 Swap');
     }
     if(stars===3&&prev<3){SAVE.boosters.hammer++;toast+=(toast?' · ':'')+'⭐⭐⭐ +1 Hammer';}
     SAVE.stars[Lnum-1]=Math.max(prev,stars);
