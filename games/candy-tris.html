@@ -351,6 +351,8 @@ function applyTheme(name){
   try{paintBoosterIcons();}catch(e){}
 }
 const N='NORMAL',SH='STRIPED_H',SV='STRIPED_V',WR='WRAPPED',CB='COLOUR_BOMB',FISH='FISH';
+const ASSIST_SPECIALS=[WR,SH,SV];   // CB excluded — too strong for a free catch-up nudge
+let midLevelAssistGiven=false,levelStartMoves=0;
 let ccSel=null;
 let swapSel=null;   // first cell picked for the Free Swap booster's 2-tap flow
 const PIECES=[
@@ -1413,6 +1415,28 @@ function useMove(){
   movesValEl.classList.add('flash');
   if(movesLeft<=5){movesValEl.classList.add('low');sfx.tick();}
   updateHUD();
+  maybeGrantMidLevelAssist();
+}
+// Catch-up nudge: once per level, the FIRST time we're past the halfway point on
+// moves AND under half the goal's progress, the next 1-2 queued pieces (not the
+// piece already falling — that would feel like a sudden rug-pull) each get ONE
+// cell pre-set to a special candy instead of a plain colour (Osimo: "a tetromino
+// or two will fall with power sweets already in them, like one per tetromino").
+function maybeGrantMidLevelAssist(){
+  if(mode!=='saga'||midLevelAssistGiven||levelStartMoves<=0)return;
+  if(movesLeft>levelStartMoves/2)return;
+  const[cur,target]=goalProgress();
+  if(target<=0||cur>=target/2)return;
+  midLevelAssistGiven=true;
+  for(const p of[nextQueue[0],nextQueue[1]]){
+    if(!p)continue;
+    const sh=pshape(p),cells=[];
+    for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)if(sh[r][c])cells.push([r,c]);
+    if(!cells.length)continue;
+    const[pr,pc]=cells[Math.floor(rand()*cells.length)];
+    p.specialCell={r:pr,c:pc,type:ASSIST_SPECIALS[Math.floor(rand()*ASSIST_SPECIALS.length)]};
+  }
+  showToast('✨ A little help is on the way');
 }
 
 // ── Lock ───────────────────────────────────────────────────────────────────
@@ -1420,8 +1444,15 @@ function lockPiece(){
   grounded=false;   // fresh lock-delay state for the next piece (hardDrop path included)
   const isSpin=checkTSpin();
   const cells=pCells(piece);
+  // mid-level assist: one cell of this piece may carry a pre-placed special
+  // (see maybeGrantMidLevelAssist) — resolve to absolute board coords once, here
+  const sc=piece.specialCell;
+  const specR=sc?piece.r+sc.r:null,specC=sc?piece.c+sc.c:null;
   lockR=0;lockC=piece.c+Math.floor(pshape(piece)[0].length/2);
-  for(const{r,c,col}of cells){board[r][c]={color:col,type:N};if(r>lockR)lockR=r;}
+  for(const{r,c,col}of cells){
+    board[r][c]=(sc&&r===specR&&c===specC)?{color:col,type:sc.type}:{color:col,type:N};
+    if(r>lockR)lockR=r;
+  }
   piece=null;comboCount=0;wasRotated=false;cascading=true;
   sfx.place();
   useMove();   // 1 move per piece lock (saga/daily)
@@ -1517,7 +1548,13 @@ function settleDone(){
   if(onSettleCb){const cb=onSettleCb;onSettleCb=null;cb();return;}
   if(mode!=='endless'&&!levelEnding){
     if(goalMet()){startLevelClear();return;}
-    if(movesLeft<=0&&!piece){levelFail(false);return;}
+    if(movesLeft<=0&&!piece){
+      // Osimo: "before losing the game, all existing sweets bombs, fish etc, all
+      // the power sweets must go off one by one, update the score and THEN decide
+      // if you lost or passed" — a last-chance bonus sweep, not just a cosmetic one.
+      detonateRemainingSpecials(()=>{if(goalMet())startLevelClear();else levelFail(false);});
+      return;
+    }
   }
   if(piece){lastDrop=performance.now();if(grounded)groundedSince=performance.now();}
   else spawnNext();
@@ -1527,6 +1564,31 @@ function goalMet(){
   if(goalType==='JELLY')return jellyLeft<=0;
   if(goalType==='LINES')return linesCleared>=goalTarget;
   return false;
+}
+// Sequential end-of-moves bonus sweep: finds and pops the FIRST remaining special
+// on the board (any type), then re-scans fresh — never a pre-collected coordinate
+// list, so a special that falls/gets consumed mid-sweep by an earlier detonation's
+// blast can't be double-processed or read stale coordinates. Reuses expandSpecials
+// so a chain of specials caught in each other's blast still combos correctly.
+function detonateRemainingSpecials(onDone){
+  levelEnding=true;
+  const findNext=()=>{
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
+      if(board[r][c]&&board[r][c].type!==N)return ck(r,c);
+    return null;
+  };
+  const popNext=()=>{
+    const key=findNext();
+    if(key===null){levelEnding=false;updateHUD();setTimeout(onDone,200);return;}
+    const exp=expandSpecials(new Set([key]),null);
+    score+=exp.size*30*lvlMult();
+    endlessLevelUp();
+    removeSet(exp);
+    gravity(board);
+    updateHUD();
+    setTimeout(popNext,240);
+  };
+  popNext();
 }
 
 // ── Remove a set of cells with per-type FX; ANY removal clears jelly ───────
@@ -2654,6 +2716,7 @@ function coreReset(){
   lockR=ROWS-1;lockC=(COLS>>1)-1;comboCount=0;particles=[];rings=[];sweeps=[];flashRows=[];
   wasRotated=false;lastClearPowerful=false;backToBack=false;
   ccSel=null;swapSel=null;onSettleCb=null;shakeT=0;
+  midLevelAssistGiven=false;levelStartMoves=0;
   nextQueue=[];bag=[];
   cancelTargeting();
   bannerEl.style.opacity='0';
@@ -2671,7 +2734,7 @@ function startLevel(L){
   const cfg=LEVELS[L-1];
   coreReset();
   level=1;dropInterval=850;
-  movesLeft=cfg.m;goalType=cfg.g;goalTarget=cfg.t;
+  movesLeft=cfg.m;levelStartMoves=cfg.m;goalType=cfg.g;goalTarget=cfg.t;
   seedBoard(cfg.rows,cfg.j);
   movesValEl.classList.remove('low');
   updateBoosterUI();
