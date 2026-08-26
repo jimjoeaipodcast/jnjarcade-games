@@ -763,7 +763,11 @@ const ck=(r,c)=>r*COLS+c;
 const emptyBoard=()=>Array.from({length:ROWS},()=>Array(COLS).fill(null));
 const emptyJelly=()=>Array.from({length:ROWS},()=>Array(COLS).fill(false));
 const randCol=()=>Math.floor(rand()*COLORS.length);
-const mkCol=sh=>sh.map(row=>row.map(v=>v?randCol():-1));
+const mkCol=sh=>{
+  const mono=rand()<1/7;   // occasional single-colour piece (assist) — rand(), not
+  const solid=mono?randCol():-1;   // Math.random(), so daily mode stays deterministic
+  return sh.map(row=>row.map(v=>v?(mono?solid:randCol()):-1));
+};
 const pshape=p=>PIECES[p.type][p.rot];
 
 // ── 7-bag randomizer (kills piece droughts — winnability house rule) ───────
