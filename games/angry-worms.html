@@ -1065,6 +1065,14 @@ function loadVoicePack() {
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
+// warm the pack on load if the RESTORED mode needs it — previously loadVoicePack()
+// only ran as a side effect of the cycle button, so returning with "voice" already
+// selected (from localStorage) left sfxMode correct but the pack never fetched,
+// forcing a manual mute→tones→voice cycle to actually hear commentary again
+// (Osimo 2026-08-26: works correctly in flap-fight, not here). Angry Worms' voice
+// mode is commentary-only (unlike flap-fight's tones mode, which also speaks), so
+// this only loads when actually needed, same as the existing sfxMode==="voice" gate.
+if (sfxMode === "voice") loadVoicePack();
 function voBuffer(who, text, cb) {
   const key = djb2vo(who + "|" + text);
   if (VO.buffers[key]) { cb(VO.buffers[key]); return; }
