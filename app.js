@@ -29,6 +29,13 @@ function bumpPlays(id) {
 /* ── Per-game worlds ──────────────────────────────────────── */
 
 const WORLDS = {
+  'pin-vaders-2': {
+    ink: '#ff2fd6', dim: '#5c1048', pit: '#0a0316', glowsoft: 'rgba(255,47,214,0.22)',
+    genre: 'PINBALL × SPACE INVADERS',
+    quote: '"bro the ball IS the laser. twenty aliens, two flippers, zero mercy. my thumbs have never mattered more."',
+    by: 'JIMMY',
+    attract: pinVaders2Attract,
+  },
   'jimmy-run': {
     ink: '#ff6b35', dim: '#5c2814', pit: '#140a04', glowsoft: 'rgba(255,107,53,0.22)',
     genre: 'TEMPLE RUN × MINION RUSH',
@@ -2463,3 +2470,67 @@ function chromeFlipperAttract(ctx, w, h, t, world, s) {
 }
 
 
+/* ── pin-vaders-2: canvas-drawn attract — mini pinball table, marching invaders, bouncing ball ── */
+function pinVaders2Attract(ctx, w, h, t, world, s) {
+  const ts = t / 1000;
+  if (!s.pv2) {
+    s.pv2 = { x: 0.5, y: 0.35, vx: 0.22, vy: 0.05, stars: [] };
+    for (let i = 0; i < 26; i++) s.pv2.stars.push([Math.random(), Math.random(), Math.random()]);
+  }
+  const st = s.pv2, CY = '#2fd6ff', MG = world.ink;
+  ctx.fillStyle = world.pit; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#fff';
+  for (const [sx, sy, sp] of st.stars) {
+    ctx.globalAlpha = 0.2 + 0.5 * Math.abs(Math.sin(ts * 2 + sp * 6));
+    ctx.fillRect(sx * w, sy * h, Math.max(1, w * 0.004), Math.max(1, w * 0.004));
+  }
+  ctx.globalAlpha = 1;
+  /* table rail: rounded-top capsule */
+  const mx = w * 0.09, top = h * 0.14, bot = h * 0.96, R = (w - 2 * mx) / 2, cx = w / 2;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = MG; ctx.globalAlpha = 0.28; ctx.lineWidth = w * 0.045;
+  ctx.beginPath(); ctx.moveTo(mx, bot); ctx.lineTo(mx, top + R); ctx.arc(cx, top + R, R, Math.PI, 0); ctx.lineTo(w - mx, bot); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.strokeStyle = '#cdd6e6'; ctx.lineWidth = w * 0.018;
+  ctx.beginPath(); ctx.moveTo(mx, bot); ctx.lineTo(mx, top + R); ctx.arc(cx, top + R, R, Math.PI, 0); ctx.lineTo(w - mx, bot); ctx.stroke();
+  ctx.strokeStyle = '#f4f8ff'; ctx.lineWidth = w * 0.006;
+  ctx.beginPath(); ctx.moveTo(mx, bot); ctx.lineTo(mx, top + R); ctx.arc(cx, top + R, R, Math.PI, 0); ctx.lineTo(w - mx, bot); ctx.stroke();
+  ctx.restore();
+  /* bumper domes */
+  const domes = [[cx - R * 0.45, top + R * 0.62, R * 0.17, MG], [cx, top + R * 0.42, R * 0.2, CY], [cx + R * 0.45, top + R * 0.62, R * 0.17, '#ffcc33']];
+  for (const [dx2, dy2, dr, dc] of domes) {
+    const g = ctx.createRadialGradient(dx2 - dr * 0.3, dy2 - dr * 0.35, dr * 0.1, dx2, dy2, dr);
+    g.addColorStop(0, '#fff'); g.addColorStop(0.45, dc); g.addColorStop(1, '#000');
+    ctx.save(); ctx.shadowColor = dc; ctx.shadowBlur = w * 0.02;
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(dx2, dy2, dr, 0, 7); ctx.fill(); ctx.restore();
+  }
+  /* marching invader blocks: 4 rows x 5 cols */
+  const rows = [MG, CY, '#ffcc33', '#6dff4d'];
+  const iw = w * 0.052, gx = w * 0.105, off = Math.sin(ts * 1.3) * w * 0.03;
+  for (let r = 0; r < 4; r++) for (let c2 = 0; c2 < 5; c2++) {
+    const ix = cx - gx * 2 + c2 * gx + off, iy = h * 0.42 + r * h * 0.055;
+    ctx.save(); ctx.shadowColor = rows[r]; ctx.shadowBlur = w * 0.012; ctx.fillStyle = rows[r];
+    ctx.fillRect(ix - iw / 2, iy - iw * 0.36, iw, iw * 0.72);
+    ctx.fillRect(ix - iw * 0.7, iy - iw * 0.1, iw * 0.2, iw * 0.45);
+    ctx.fillRect(ix + iw * 0.5, iy - iw * 0.1, iw * 0.2, iw * 0.45);
+    ctx.restore();
+  }
+  /* flippers pulse */
+  const fy = h * 0.9, fl = w * 0.17, fa = 0.5 - Math.max(0, Math.sin(ts * 2.6)) * 0.9;
+  for (const sgn of [-1, 1]) {
+    ctx.save(); ctx.translate(cx + sgn * w * 0.19, fy); ctx.rotate(sgn > 0 ? Math.PI - fa * sgn : fa * -1);
+    ctx.strokeStyle = '#e8ecf5'; ctx.lineCap = 'round'; ctx.lineWidth = w * 0.026;
+    ctx.shadowColor = sgn < 0 ? MG : CY; ctx.shadowBlur = w * 0.015;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(fl, 0); ctx.stroke(); ctx.restore();
+  }
+  /* bouncing chrome ball */
+  st.x += st.vx * 0.016; st.y += st.vy * 0.016; st.vy += 0.5 * 0.016;
+  if (st.x < 0.16 || st.x > 0.84) st.vx *= -1;
+  if (st.y > 0.82) { st.vy = -(0.45 + Math.random() * 0.25); st.vx = (Math.random() - 0.5) * 0.5; }
+  if (st.y < 0.2) st.vy = Math.abs(st.vy);
+  const bx = st.x * w, by = st.y * h, br = w * 0.022;
+  const bg = ctx.createRadialGradient(bx - br * 0.3, by - br * 0.3, br * 0.1, bx, by, br);
+  bg.addColorStop(0, '#fff'); bg.addColorStop(0.6, '#aab4c8'); bg.addColorStop(1, '#5a6478');
+  ctx.save(); ctx.shadowColor = '#fff'; ctx.shadowBlur = w * 0.01;
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill(); ctx.restore();
+}

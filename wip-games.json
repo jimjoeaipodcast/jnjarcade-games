@@ -43,6 +43,18 @@
   ],
   "games": [
     {
+      "id": "pin-vaders-2",
+      "name": "PIN VADERS 2",
+      "emoji": "\ud83d\udef8",
+      "genre": "PINBALL \u00d7 SPACE INVADERS",
+      "url": "games/pin-vaders-2.html",
+      "ai_file": "games/pin-vaders-2.html",
+      "status": "wip",
+      "special": "Isolated single-pass Fable build \u2014 from-spec only, zero reference to pin-vaders",
+      "note": "2026-08-27: full pinball physics (substepped flippers, surface-velocity flicks, pop bumpers that SET velocity) under a Space Invaders wave grid. Clear 20 invaders = INVADER JAM +100k. Drop targets light JACKPOT, BOOST/EXTRA BALL rollovers, HYPER/WARP lanes, once-per-ball DRAIN GUARD post, 8s ball save, silent pulsing-flipper attract AI.",
+      "ready": false
+    },
+    {
       "id": "jimmy-dash",
       "name": "JIMMY DASH",
       "emoji": "\u26a1",
