@@ -2400,7 +2400,14 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
   // real game instead) then trimmed to skip past the opening serve.
   if (!s.video) {
     const v = document.createElement('video');
-    v.src = 'assets/footage/pin-vaders-attract.mp4?v=2';   // v2 = ball-following camera
+    v.src = 'assets/footage/pin-vaders-attract.mp4?v=3';   // v3 2026-08-27 — re-recorded
+    // after the v4 neon-pinball visual overhaul, at the correct 960x720 live viewport (a
+    // first attempt at --viewport 480x800 fed the follow-camera's 960-wide zoom math a
+    // canvas half as wide as it assumed, over-zooming into the flippers — see
+    // tools/show/cameras/pin-vaders-follow.js ZOOM comment). Real contact this time: ball
+    // hits both drop-target banks (+75/+75), a rollover lane (+10), repeated flipper kicks
+    // with particle debris, continuous motion across the whole table — fixes Osimo's "just
+    // pressing the flippers repeatedly with little to no result" complaint on v2.
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
     v.play().catch(() => {});

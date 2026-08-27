@@ -1,17 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- PV_CHROME26_V8 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PIN-VADERS — JnJ Arcade</title>
-<!-- PINBALL × SPACE INVADERS v4 — the playfield invades. v4: full-cabinet presentation
+<!-- PINBALL × SPACE INVADERS v5 (chrome pass) — v4 full-cabinet presentation
      (viewport bands = backbox marquee + lockdown bar, no letterbox), half-res pixelation
-     pass over the whole world (cohesive pixel-art look), lamp inserts + rail chases +
-     posts + decals. Physics per GAME_BIBLE §14 (pinball-schminball MIT patterns,
-     Igor Zinken — constants adapted). -->
+     pass over the whole world, lamp inserts + rail chases + posts + decals. v5 adds the
+     mockup chrome: bevel+glow rails, per-hue glossy bumper domes, rim-lit invaders,
+     HYPER/WARP lane branding, HUD cards/pills, flipper-contact juice (burst+clack+shake),
+     functional PAUSE ring, attract-mode UFO scheduler. Physics per GAME_BIBLE §14
+     (pinball-schminball MIT patterns, Igor Zinken — constants adapted). -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100dvh; background: #0b0618; overflow: hidden;
@@ -73,6 +76,9 @@
 const SLUG  = 'pin-vaders';
 const TITLE = 'PIN-VADERS';
 const INK   = '#b76bff';
+// Live-verification marker for qa_game.sh --live — unique to THIS build (never reuse
+// sfxMuted_+SLUG, which exists in every historical build and passes on stale deploys).
+const BUILD_MARKER = 'PV_CHROME26_V8';
 // Global best for the marquee. Populated async; the HUD redraws with it once it lands,
 // so a slow network shows the local best rather than blocking or lying.
 let GLOBAL_HI = 0;
@@ -122,6 +128,7 @@ const MARCH_NOTES = [62, 55, 49, 44];
 let marchIdx = 0;
 const sfx = {
   flip:    () => tone(180, 240, 0.05, 'square', 0.10),
+  clack:   () => tone(950, 260, 0.045, 'triangle', 0.13),  // real flipper-ball contact ONLY — distinct from the press-button flip sfx
   bumper:  () => tone(520, 780, 0.07, 'square', 0.14),
   sling:   () => tone(340, 520, 0.06, 'square', 0.12),
   alien:   () => tone(880 + Math.random() * 160, 220, 0.12, 'square', 0.16),
@@ -175,9 +182,9 @@ const SEGS = [
 const GATE = { x1: 436, y1: 205, x2: 466, y2: 178, rest: 0.05 };
 const TIP  = { x: 436, y: 205, r: 5 };
 const BUMPERS = [
-  { x: 200, y: 300, r: 17, flash: 0, pop: 0 },
-  { x: 280, y: 300, r: 17, flash: 0, pop: 0 },
-  { x: 240, y: 362, r: 17, flash: 0, pop: 0 },
+  { x: 175, y: 158, r: 16, flash: 0, pop: 0, hue: '#ff2fd6' },  // magenta, left
+  { x: 240, y: 145, r: 18, flash: 0, pop: 0, hue: '#2fd6ff' },  // cyan, centre — tallest, per mockup
+  { x: 305, y: 158, r: 16, flash: 0, pop: 0, hue: '#ffcc33' },  // gold, right
 ];
 const SLINGS = [
   { x: 120, y: 626, r: 14, flash: 0 },
@@ -195,11 +202,13 @@ const SPINNER = { x: 33, y: 253, spins: 0, ang: 0, cd: 0 };
 const CANNON  = { x: 240, y: 592, r: 14, dir: 1, cd: 0, beam: 0, beamX: 0 };
 const ROLLS = [ { x: 177, lit: false }, { x: 240, lit: false }, { x: 302, lit: false } ];
 const SOS_Y = 92;
-const DROPS_L = [ { x: 70, y: 470, up: true }, { x: 105, y: 470, up: true }, { x: 140, y: 470, up: true } ];
-const DROPS_R = [ { x: 340, y: 470, up: true }, { x: 375, y: 470, up: true }, { x: 410, y: 470, up: true } ];
+const DROPS_L = [ { x: 88, y: 470, up: true }, { x: 123, y: 470, up: true }, { x: 158, y: 470, up: true } ];
+const DROPS_R = [ { x: 322, y: 470, up: true }, { x: 357, y: 470, up: true }, { x: 392, y: 470, up: true } ];
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let state = 'attract';
+let paused = false;                       // gameplay pause (PAUSE ring in top band; playing-state only)
+const PAUSE_BTN = { x: 0, y: 0, r: 0 };   // screen-space (device px) hit target, updated each drawCabinet frame
 let score = 0, wave = 1, stock = 3, shakeT = 0, tPrev = 0, acc = 0;
 let tilted = false, bumps = [], launchedAt = 0;
 let bonusX = 1, killsThisBall = 0, lockedCount = 0, multiball = false, shieldArmed = false;
@@ -213,11 +222,12 @@ function dmdSay(t) { dmd.text = t; dmd.x = 340; }
 
 function makeBall(x, y, vx, vy) {
   return { x: x ?? 451, y: y ?? 730, vx: vx || 0, vy: vy || 0, r: 11,
-           inLane: x === undefined, held: x === undefined };
+           inLane: x === undefined, held: x === undefined,
+           flipContact: null, cradleT: 0 };
 }
 
 // ── INVADERS + BOSS ──────────────────────────────────────────────────────────
-const INV = { x: 60, y: 110, cols: 6, rows: 3, cw: 48, rh: 40, dir: 1,
+const INV = { x: 60, y: 205, cols: 6, rows: 3, cw: 48, rh: 40, dir: 1,
               beatBase: 820, tAcc: 0, frame: 0, alive: [], count: 0, total: 1 };
 const BOSS = { active: false, x: 240, y: 100, w: 96, h: 36, hp: 0, maxHp: 1, dir: 1, flash: 0 };
 function isBossWave(w) { return w % 4 === 0; }
@@ -231,9 +241,9 @@ function spawnWave(w) {
     dmdSay('MOTHERSHIP INBOUND');
     return;
   }
-  INV.rows = Math.min(3 + ((w - 1) >> 1), 5);
+  INV.rows = Math.min(4 + ((w - 1) >> 1), 5);
   INV.beatBase = Math.max(820 - (w - 1) * 70, 420);
-  INV.x = 60; INV.y = 110; INV.dir = 1; INV.tAcc = 0; INV.frame = 0;
+  INV.x = 60; INV.y = 205; INV.dir = 1; INV.tAcc = 0; INV.frame = 0;
   INV.alive = Array.from({ length: INV.rows }, () => Array(INV.cols).fill(true));
   INV.count = INV.total = INV.rows * INV.cols;
 }
@@ -258,7 +268,17 @@ const BM_A = ['00100000100','00010001000','00111111100','01101110110','111111111
 const BM_B = ['00100000100','10010001001','10111111101','11101110111','11111111111','01111111110','00100000100','01000000010'];
 const BM_BOSS = ['000011111110000','001111111111100','011111111111110','110110110110011','011111111111110','000110000110000'];
 const BM_BUNKER = ['0111110','1111111','1111111','1100011'];
-const ROW_COL = ['#9fff8a', '#6ee7ff', '#ffffff', '#ffd05a', '#ff8ab5'];
+const ROW_COL = ['#ff2fd6', '#2fd6ff', '#ffcc33', '#6dff4d'];  // mockup order: magenta / cyan / gold, green spare
+
+// colour helpers (hex → rgba / tint-shade) — used by the chrome-pass rendering
+function hexRGB(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function hexA(hex, a) { const p = hexRGB(hex); return 'rgba(' + p[0] + ',' + p[1] + ',' + p[2] + ',' + a + ')'; }
+function mixHex(hex, f) {  // f>0 → toward white, f<0 → toward black
+  let p = hexRGB(hex), r = p[0], g = p[1], b = p[2];
+  if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+  else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+  return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')';
+}
 
 // ── JUICE ────────────────────────────────────────────────────────────────────
 function burst(x, y, n, col) {
@@ -284,6 +304,17 @@ function laneBall() { return ballsInPlay.find(b => b.inLane && b.held); }
 function pressDown(id, cx, cy) {
   const w = toWorld(cx, cy);
   if (inRect(w, MUTE_RECT)) { touches.set(id, { zone: 'mute', x0: cx, y0: cy, t0: performance.now() }); return; }
+  // PAUSE ring hit test (screen-space, top band — outside world coords)
+  if (state === 'playing' && PAUSE_BTN.r > 0) {
+    const rc = canvas.getBoundingClientRect();
+    const dxp = (cx - rc.left) * DPR - PAUSE_BTN.x, dyp = (cy - rc.top) * DPR - PAUSE_BTN.y;
+    if (Math.hypot(dxp, dyp) < PAUSE_BTN.r * 1.7) {
+      togglePause();
+      touches.set(id, { zone: 'none', x0: cx, y0: cy, t0: performance.now() });
+      return;
+    }
+  }
+  if (paused) { touches.set(id, { zone: 'none', x0: cx, y0: cy, t0: performance.now() }); return; }
   if (state !== 'playing') { touches.set(id, { zone: 'none', x0: cx, y0: cy, t0: performance.now() }); return; }
   if (laneBall() && w.x > 400) {
     plunger.dragId = id; plunger.dragY0 = cy;
@@ -318,7 +349,8 @@ canvas.addEventListener('mousedown', e => pressDown('m', e.clientX, e.clientY));
 canvas.addEventListener('mouseup',   e => pressUp('m', e.clientX, e.clientY));
 canvas.addEventListener('mousemove', e => pressMove('m', e.clientX, e.clientY));
 addEventListener('keydown', e => {
-  if (state !== 'playing' || tilted) return;
+  if (e.key === 'p' || e.key === 'P') { togglePause(); return; }
+  if (state !== 'playing' || tilted || paused) return;
   if (e.key === 'ArrowLeft'  || e.key === 'z') { if (!FLIPPERS[0].pressed) sfx.flip(); FLIPPERS[0].pressed = true; }
   if (e.key === 'ArrowRight' || e.key === '/') { if (!FLIPPERS[1].pressed) sfx.flip(); FLIPPERS[1].pressed = true; }
   if (e.key === ' ' && laneBall()) { plunger.pull = Math.min(120, plunger.pull + 14); e.preventDefault(); }
@@ -339,6 +371,11 @@ function firePlunger() {
   launchedAt = performance.now();
   skillShotLive = true;
   sfx.launch();
+}
+function togglePause() {
+  if (state !== 'playing') return;
+  paused = !paused;
+  FLIPPERS[0].pressed = FLIPPERS[1].pressed = false;
 }
 function nudge() {
   if (tilted) return;
@@ -390,12 +427,24 @@ function collideFlipper(b, f) {
   const cx = f.px + t * dx, cy = f.py + t * dy;
   let nx = b.x - cx, ny = b.y - cy, d = Math.hypot(nx, ny) || 1;
   if (d > b.r + f.thick) return;
+  b.flipContact = f;   // consumed by the cradle-release detector in stepBall
   nx /= d; ny /= d;
   b.x = cx + nx * (b.r + f.thick); b.y = cy + ny * (b.r + f.thick);
   const vn = b.vx * nx + b.vy * ny;
   if (vn < 0) { b.vx -= 1.1 * vn * nx; b.vy -= 1.1 * vn * ny; }
   const surfV = f.angVel * t * f.len;
   b.vx += -Math.sin(f.ang) * surfV; b.vy += Math.cos(f.ang) * surfV;
+  // CAUSALITY FIX (Osimo 2026-08-26 "pressing repeatedly with little no result"):
+  // a REAL strike (closing velocity + flipper actually swinging) gets burst + jolt +
+  // a distinct clack — a press that never connects gets none of this. The angVel gate
+  // reuses anti-pattern #3's principle (flick force only exists while angVel != 0) so a
+  // ball resting on a held-raised flipper can't spam it; vn flips positive the substep
+  // after reflection, so this fires once per real contact with no cooldown state.
+  if (vn < -30 && Math.abs(f.angVel) > 0.4) {
+    burst(cx, cy, 6, f.px < WORLD_W / 2 ? '#ff2fd6' : '#2fd6ff');
+    shakeT = Math.max(shakeT, 2);
+    sfx.clack();
+  }
 }
 function stepFlipper(f, dt) {
   const target = f.pressed && !tilted ? f.raisedAng : f.restAng, SWING = 14;
@@ -534,7 +583,28 @@ function stepBall(b, dt) {
   for (const s of SEGS) collideSeg(b, s);
   if (!b.inLane) collideSeg(b, GATE);
   collideStatic(b, TIP);
+  b.flipContact = null;
   for (const f of FLIPPERS) collideFlipper(b, f);
+
+  // CRADLE RELEASE (QA 3f, 2026-08-27): anti-pattern #3's physics ("flick force only
+  // exists while angVel != 0") means a REAL sustained key-hold leaves a raised flipper
+  // with angVel === 0 and a resting ball just balances on it indefinitely. The attract
+  // AI pulses around this, but the physics itself never freed a ball under a raw held
+  // input. Root fix lives here in the substep loop: a ball in contact with a HELD,
+  // fully-raised flipper (pressed && angVel === 0) while nearly motionless for >1.1s
+  // gets rolled off along the blade toward the tip, back into play. Gates keep normal
+  // play untouched: alternating taps never hold a raised flipper + near-zero ball
+  // speed continuously for 1.1s (organic 41-cycle playtest: zero triggers).
+  const fc = b.flipContact;
+  if (fc && fc.pressed && !tilted && fc.angVel === 0 && fc.ang === fc.raisedAng
+      && Math.hypot(b.vx, b.vy) < 25) {
+    b.cradleT = (b.cradleT || 0) + dt;
+    if (b.cradleT > 1.1) {
+      b.cradleT = 0;
+      b.vx += Math.cos(fc.ang) * 240;          // along the blade, pivot → tip
+      b.vy += Math.sin(fc.ang) * 240 - 140;    // small lift so it clears the blade
+    }
+  } else b.cradleT = 0;
 
   for (const p of BUMPERS)
     if (collideCircle(b, p, BUMPER_KICK)) {
@@ -545,6 +615,8 @@ function stepBall(b, dt) {
   for (const p of SLINGS)
     if (collideCircle(b, p, SLING_KICK)) {
       p.flash = 8; score += 10; sfx.sling(); burst(p.x, p.y, 6, '#ffd05a');
+      label(p.x, p.y - 20, '+10', '#ffd05a');
+      shakeT = Math.max(shakeT, 4);  // reads as a harder kicker hit than a bumper (3), per mockup energy
     }
 
   if (!b.inLane) {
@@ -616,7 +688,7 @@ function endBall(fromInvasion) {
 }
 function invade() {
   sfx.siren(); shakeT = 14;
-  INV.y = Math.max(110, INV.y - 120);
+  INV.y = Math.max(205, INV.y - 120);
   if (BOSS.active) BOSS.y = 100;
   if (state === 'attract') { serveBall(); return; }
   endBall(true);
@@ -639,7 +711,7 @@ function gameOver() {
   } else { startGame(); }
 }
 function startGame() {
-  state = 'playing'; score = 0; wave = 1; stock = 3;
+  state = 'playing'; paused = false; score = 0; wave = 1; stock = 3;
   bonusX = 1; killsThisBall = 0; lockedCount = 0; multiball = false; shieldArmed = false;
   ROLLS.forEach(r => r.lit = false);
   DROPS_L.forEach(d => d.up = true); DROPS_R.forEach(d => d.up = true);
@@ -651,9 +723,14 @@ function startGame() {
 }
 
 // ── ATTRACT AI ───────────────────────────────────────────────────────────────
-let attractT = 0, attractStill = 0;
+let attractT = 0, attractStill = 0, attractUfoT = 0;
 function attractAI(dtMs) {
   attractT += dtMs;
+  // cassette-causality: force the marquee UFO-jackpot moment on a ~12s schedule during
+  // attract so recordings always capture a large, unmissable cause→effect event.
+  // Silent per tone()'s state==='attract' mute gate.
+  attractUfoT += dtMs;
+  if (attractUfoT >= 12000) { attractUfoT = 0; if (!UFO.active) callUFO(); }
   const lb = laneBall();
   if (lb && attractT > 1200) { plunger.pull = 90 + Math.random() * 30; firePlunger(); attractT = 0; }
   if (SAUCER.heldBall) { lockedCount = 0; multiball = false; ejectSaucer(); }
@@ -672,6 +749,7 @@ function attractAI(dtMs) {
 
 // ── UPDATE ───────────────────────────────────────────────────────────────────
 function update(dtMs) {
+  if (paused) return;  // physics, timers, invaders, UFO all freeze; render keeps running
   if (state === 'attract') attractAI(dtMs);
 
   {
@@ -819,12 +897,15 @@ function buildTable() {
   const pg = c.createLinearGradient(0, 0, 0, WORLD_H);
   pg.addColorStop(0, '#221850'); pg.addColorStop(0.5, '#171040'); pg.addColorStop(1, '#0d0a2c');
   c.fillStyle = pg; c.fillRect(0, 0, WORLD_W, WORLD_H);
+  // nebula — V7 vibrancy pass: mockup's cloud is a BOLD, clearly-visible purple/magenta
+  // mass, so the earlier "soften" trim is reversed (alpha + core brightness up, same
+  // purple family). Still this one-time static prerender — never per-frame.
   const neb = c.createRadialGradient(240, 330, 30, 240, 380, 460);
-  neb.addColorStop(0, 'rgba(120,70,200,0.18)'); neb.addColorStop(0.6, 'rgba(60,30,120,0.10)'); neb.addColorStop(1, 'rgba(0,0,0,0)');
+  neb.addColorStop(0, 'rgba(150,85,235,0.42)'); neb.addColorStop(0.6, 'rgba(90,40,170,0.24)'); neb.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = neb; c.fillRect(0, 0, WORLD_W, WORLD_H);
 
   for (let i = 0; i < 90; i++) {
-    c.globalAlpha = 0.15 + Math.random() * 0.5;
+    c.globalAlpha = 0.12 + Math.random() * 0.42;
     c.fillStyle = ['#cfe6ff', '#e8dcff', '#ffffff'][i % 3];
     c.fillRect(20 + Math.random() * 440, 20 + Math.random() * 720, 2, 2);
   }
@@ -847,28 +928,71 @@ function buildTable() {
   c.beginPath(); c.moveTo(330, 60); c.lineTo(368, 84); c.stroke();
   c.fillStyle = '#cfe6ff'; c.beginPath(); c.arc(368, 84, 3.5, 0, Math.PI * 2); c.fill();
 
+  // asteroids: grey-purple cratered silhouettes, static bg decals (spec: scattered edge
+  // positions, soft radial-gradient rock shading) — checked against SAUCER/SPINNER/chevron
+  // columns (x=34/416)/CANNON/HYPER-WARP orbs/SEGS walls, no overlaps
+  const asteroid = (x, y, r, tilt) => {
+    const ag = c.createRadialGradient(x - r*0.3, y - r*0.3, 1, x, y, r);
+    ag.addColorStop(0, '#8a7a9a'); ag.addColorStop(0.55, '#5a4a6e'); ag.addColorStop(1, 'rgba(30,22,42,0)');
+    c.fillStyle = ag;
+    c.beginPath(); c.ellipse(x, y, r, r * 0.82, tilt || 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(20,14,30,0.35)';
+    c.beginPath(); c.arc(x - r*0.25, y + r*0.15, r*0.22, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc(x + r*0.3, y - r*0.1, r*0.15, 0, Math.PI*2); c.fill();
+  };
+  asteroid(455, 130, 15, 0.4);   // upper-right, near SAUCER, 27px clear
+  asteroid(25, 205, 12, -0.3);   // upper-left, near left rail
+  asteroid(450, 645, 13, 0.6);   // lower-right, right outlane channel
+  asteroid(30, 645, 11, -0.5);   // lower-left, mirrored
+
+  // ship/rocket silhouette — centred below the invader grid, fills the residual vertical
+  // gap between the grid-bottom (~360) and the drop-target banks (470); static decal only
+  c.save();
+  c.shadowColor = '#ff2fd6'; c.shadowBlur = 10;
+  c.fillStyle = '#ff2fd6';
+  c.beginPath();
+  c.moveTo(240, 388); c.lineTo(230, 412); c.lineTo(233, 430); c.lineTo(247, 430); c.lineTo(250, 412);
+  c.closePath(); c.fill();
+  c.fillStyle = '#ff8ae8';
+  c.beginPath(); c.moveTo(240, 388); c.lineTo(235, 408); c.lineTo(245, 408); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,47,214,0.55)';
+  c.beginPath(); c.moveTo(230, 412); c.lineTo(218, 428); c.lineTo(233, 430); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(250, 412); c.lineTo(262, 428); c.lineTo(247, 430); c.closePath(); c.fill();
+  c.restore();
+
   const halo = (x, y, r, col) => {
     const g = c.createRadialGradient(x, y, 2, x, y, r);
     g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
   };
-  for (const b of BUMPERS) halo(b.x, b.y, 40, 'rgba(110,231,255,0.14)');
+  for (const b of BUMPERS) halo(b.x, b.y, 44, hexA(b.hue, 0.26));  // V7: brighter luminous pool per mockup
   halo(SAUCER.x, SAUCER.y, 38, 'rgba(255,138,181,0.16)');
   halo(SPINNER.x + 8, SPINNER.y, 32, 'rgba(110,231,255,0.10)');
   for (const s of SLINGS) halo(s.x, s.y, 30, 'rgba(255,208,90,0.10)');
 
-  c.strokeStyle = 'rgba(110,231,255,0.25)'; c.lineWidth = 2;
-  c.beginPath(); c.arc(240, 322, 68, 0, Math.PI * 2); c.stroke();
-  c.setLineDash([4, 6]);
-  c.beginPath(); c.arc(240, 322, 82, 0, Math.PI * 2); c.stroke();
-  c.setLineDash([]);
-
+  // DROP TARGETS banks — V7 shared framing: the two banks are REAL separate mechanics
+  // (SHIELD left / UFO right — hitboxes, scoring, labels untouched), but the mockup reads
+  // them as ONE centred feature. Compositional fix only: a single recessed connector plate
+  // + one wider outer glow border spans BOTH banks (decal, zero collision), then each
+  // bank's own fill + neon outline draws inside it exactly as before.
+  {
+    const spanX0 = DROPS_L[0].x - 20, spanX1 = DROPS_R[2].x + 20, spanY = DROPS_L[0].y;
+    c.globalAlpha = 0.55; c.fillStyle = '#12102a';
+    c.fillRect(spanX0, spanY - 16, spanX1 - spanX0, 34);   // dim connector plate across the gap
+    c.globalAlpha = 1;
+    c.save(); c.shadowColor = '#ff2fd6'; c.shadowBlur = 14;
+    c.strokeStyle = 'rgba(255,47,214,0.55)'; c.lineWidth = 2;
+    c.strokeRect(spanX0 - 5, spanY - 21, spanX1 - spanX0 + 10, 44);  // one outer frame spanning both
+    c.restore();
+  }
   for (const bank of [DROPS_L, DROPS_R]) {
     const x0 = bank[0].x - 20, x1 = bank[2].x + 20, y = bank[0].y;
-    c.strokeStyle = 'rgba(61,154,40,0.5)'; c.lineWidth = 2;
-    c.strokeRect(x0, y - 16, x1 - x0, 34);
-    c.fillStyle = 'rgba(61,154,40,0.08)';
+    c.fillStyle = '#12102a';
     c.fillRect(x0, y - 16, x1 - x0, 34);
+    c.save(); c.shadowColor = '#ff2fd6'; c.shadowBlur = 8;
+    c.strokeStyle = '#ff2fd6'; c.lineWidth = 2;
+    c.strokeRect(x0, y - 16, x1 - x0, 34);
+    c.restore();
   }
 
   for (const rl of ROLLS) {
@@ -880,14 +1004,20 @@ function buildTable() {
     c.stroke();
   }
 
+  // chevron ladders — SUPER LANES (cyan, left/spinner zone) / INVADER JAM (magenta, right)
+  // brightness climbs toward the top of each stack; static decal art only
   for (let i = 0; i < 4; i++) {
     const cy = 540 - i * 66;
     for (const cx of [34, 416]) {
-      c.globalAlpha = 0.22;
-      c.strokeStyle = '#ffd05a'; c.lineWidth = 3; c.lineCap = 'round';
+      const ccol = cx === 34 ? '#2fd6ff' : '#ff2fd6';
+      c.save();
+      c.globalAlpha = 0.24 + i * 0.10;   // V7: 0.14+0.08i → 0.24+0.10i, brighter ladder
+      c.shadowColor = ccol; c.shadowBlur = 10;
+      c.strokeStyle = ccol; c.lineWidth = 3; c.lineCap = 'round';
       c.beginPath();
       c.moveTo(cx - 8, cy + 7); c.lineTo(cx, cy - 5); c.lineTo(cx + 8, cy + 7);
       c.stroke();
+      c.restore();
     }
   }
   c.globalAlpha = 1;
@@ -933,6 +1063,12 @@ function buildTable() {
   bmOn(c, BM_A, 396, 700, 2.2, '#6ee7ff');
   c.globalAlpha = 1;
 
+  // drain-guard triangle decal — glowing magenta, centred between the flipper pivots
+  c.save(); c.shadowColor = '#ff2fd6'; c.shadowBlur = 10;
+  c.fillStyle = '#ff2fd6';
+  c.beginPath(); c.moveTo(240, 736); c.lineTo(231, 752); c.lineTo(249, 752); c.closePath(); c.fill();
+  c.restore();
+
   // rubber posts at lane mouths + funnel tops
   const posts = [[160, 96], [220, 96], [258, 96], [318, 96], [26, 590], [424, 590]];
   for (const [px, py] of posts) {
@@ -943,16 +1079,49 @@ function buildTable() {
 
   c.restore();
 
-  const tube = (x1, y1, x2, y2) => {
+  // bevel+glow rail treatment (one-time static pass) — V8 DIMENSIONALITY REBUILD.
+  // V7's 10/6/2.5 stripe stack measured only ~2.0% of table width on-device vs the
+  // mockup's ~3-4%, and its #242c3c base band vanished against the dark space background,
+  // so the rail READ as the ~6px mid stripe alone. V8: base width up to 19 world-px
+  // (~4.2% of the 452-unit table) with SIX concentric bands (dark edge → midDark → mid →
+  // light2 → light → offset specular) whose mid tones are bright enough to register
+  // against the background, so the FULL width reads as one chrome cylinder rather than
+  // 3 flat stripes. All bands share round caps + exact SEGS endpoints, so consecutive
+  // segments overlap in full circles at every polygon vertex — no corner seams.
+  // Main boundary = neutral chrome/steel-blue; SEGS[9] = HYPER inlane (pink);
+  // SEGS[8] = WARP inlane (cyan). Geometry (SEGS) untouched — physics walls unchanged.
+  // Measured tuning note (V8, headless 390x844): the dark edge (lum ~46) reads as
+  // background, so the rail's PERCEIVED width = the midDark band and inward. midDark is
+  // therefore bright (lum ~100) and wide (0.86w) so ~13 screen-px of a 19-world-px outer
+  // rail actually registers — ~3.5% of the 373px table, inside the mockup's 3-4% target.
+  const PAL_CHROME = { glow: 'rgba(150,180,255,0.65)', dark: '#242c3c', midDark: '#57648a', mid: '#8a94ac', light2: '#b8c2d4', light: '#e8ecf5', hi: '#f7fbff' };
+  const PAL_PINK   = { glow: 'rgba(255,47,214,0.80)',  dark: '#3c1238', midDark: '#b8449f', mid: '#d668bd', light2: '#ff86e2', light: '#ffc2f0', hi: '#ffeefc' };
+  const PAL_CYAN   = { glow: 'rgba(47,214,255,0.80)',  dark: '#0f3340', midDark: '#26788f', mid: '#3fa8c2', light2: '#86dcf5', light: '#c2f0ff', hi: '#eefcff' };
+  const tube = (x1, y1, x2, y2, pal, w) => {
+    pal = pal || PAL_CHROME; w = w || 19;
     c.lineCap = 'round';
-    c.strokeStyle = '#241245'; c.lineWidth = 10;
-    c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
-    c.strokeStyle = '#8a55e0'; c.lineWidth = 6;
-    c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
-    c.strokeStyle = '#e2ccff'; c.lineWidth = 2;
-    c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+    const line = (w2, col) => {
+      c.strokeStyle = col; c.lineWidth = w2;
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+    };
+    c.save(); c.shadowColor = pal.glow; c.shadowBlur = 24;   // V7 glow level kept (verified correct)
+    line(w, pal.dark);
+    c.restore();
+    line(w, pal.dark);
+    line(w * 0.86, pal.midDark);
+    line(w * 0.66, pal.mid);
+    line(w * 0.45, pal.light2);
+    line(w * 0.26, pal.light);
+    const dx2 = x2 - x1, dy2 = y2 - y1, L = Math.hypot(dx2, dy2) || 1;
+    const ox2 = -dy2 / L * w * 0.15, oy2 = dx2 / L * w * 0.15;
+    c.strokeStyle = pal.hi; c.lineWidth = Math.max(1, w * 0.09);
+    c.beginPath(); c.moveTo(x1 + ox2, y1 + oy2); c.lineTo(x2 + ox2, y2 + oy2); c.stroke();
   };
-  for (const s of SEGS) tube(s.x1, s.y1, s.x2, s.y2);
+  // width hierarchy (matches the mockup: outer boundary boldest, inner dividers slimmer):
+  // outer boundary + lane cap = 19; HYPER/WARP inlane guides = 15; shooter-lane divider
+  // and top rollover dividers = 12 so their narrow channels stay readable
+  const TUBE_W = i => (i === 7 || i === 11 || i === 12) ? 12 : (i === 8 || i === 9) ? 15 : 19;
+  SEGS.forEach((s, i) => tube(s.x1, s.y1, s.x2, s.y2, i === 9 ? PAL_PINK : i === 8 ? PAL_CYAN : PAL_CHROME, TUBE_W(i)));
   c.globalAlpha = 0.5;
   c.strokeStyle = '#8a55e0'; c.lineWidth = 3;
   c.beginPath(); c.moveTo(GATE.x1, GATE.y1); c.lineTo(GATE.x2, GATE.y2); c.stroke();
@@ -963,6 +1132,32 @@ function buildTable() {
     c.fillStyle = '#cfc0ff'; c.beginPath(); c.arc(bx, by, 3.2, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#7a5fb0'; c.fillRect(bx - 2.4, by - 0.7, 4.8, 1.4);
   }
+
+  // HYPER/WARP lane end-cap glow orbs at the tubes' lower termini (cosmetic only —
+  // zero new collision; the SEGS these cap are unchanged physics walls)
+  const orb = (x, y, col, core) => {
+    c.save(); c.shadowColor = col; c.shadowBlur = 12;
+    const og = c.createRadialGradient(x - 2, y - 2, 1, x, y, 8);
+    og.addColorStop(0, '#ffffff'); og.addColorStop(0.35, core); og.addColorStop(1, col);
+    c.fillStyle = og;
+    c.beginPath(); c.arc(x, y, 7, 0, Math.PI * 2); c.fill();
+    c.restore();
+  };
+  orb(146, 708, '#ff2fd6', '#ff8ae8');   // HYPER LANE (left, pink)
+  orb(334, 708, '#2fd6ff', '#9ae8ff');   // WARP LANE (right, cyan)
+
+  // BOOST / EXTRA BALL / JACKPOT ring targets — VISUAL DECALS ONLY this round
+  // (no collision circle, no score hook; mechanical wiring deferred to a balance round)
+  const ringT = (x, y, r, col) => {
+    c.save(); c.shadowColor = col; c.shadowBlur = 16;   // V7: 10→16 brighter neon ring
+    c.strokeStyle = col; c.lineWidth = 2.5;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = 0.18; c.fillStyle = col; c.fill(); c.globalAlpha = 1;
+    c.restore();
+  };
+  ringT(185, 550, 15, '#2fd6ff');   // BOOST
+  ringT(240, 548, 18, '#ff2fd6');   // EXTRA BALL (centre, slightly larger)
+  ringT(295, 550, 15, '#ff5470');   // JACKPOT
 
   c.fillStyle = '#0a0618'; c.fillRect(146, 30, 188, 34);
   c.strokeStyle = '#4a2470'; c.lineWidth = 3; c.strokeRect(146, 30, 188, 34);
@@ -978,8 +1173,8 @@ const INSERTS = [
   { x: 240, y: 636, shape: 'circle',                 color: '#6ee7ff', lit: () => CANNON.cd <= 0 },
   { x: 168, y: 646, shape: 'arrow', rot: -0.5,       color: '#9fff8a', lit: () => true },
   { x: 312, y: 646, shape: 'arrow', rot: 0.5,        color: '#9fff8a', lit: () => true },
-  { x: 105, y: 442, shape: 'circle',                 color: '#9fff8a', lit: () => !shieldArmed },
-  { x: 375, y: 442, shape: 'circle',                 color: '#ff5470', lit: () => !UFO.active },
+  { x: 123, y: 442, shape: 'circle',                 color: '#9fff8a', lit: () => !shieldArmed },
+  { x: 357, y: 442, shape: 'circle',                 color: '#ff5470', lit: () => !UFO.active },
 ];
 function drawInsert(c2, ins, t) {
   const on = ins.lit() && ((t / 320 | 0) % 2 === 0);
@@ -1005,8 +1200,13 @@ function drawInsert(c2, ins, t) {
 
 // ── DYNAMIC WORLD DRAW ───────────────────────────────────────────────────────
 function drawFlipper(c2, f) {
+  // V8 DIMENSIONALITY: same widened multi-band chrome family as the rebuilt rail — the
+  // flipper is drawn as a short thick tube. Capsule radii up 13/7 → 15/8.5 (RENDER ONLY:
+  // physics reads f.thick=11 at the collision sites, untouched), the old 4-stop gradient
+  // is now a 7-stop chrome falloff, and an along-blade specular streak mirrors the rail's
+  // 'hi' pass. Tip glow / pivot cap language kept.
   const a = f.ang, ca = Math.cos(a), sa = Math.sin(a);
-  const bR = 13, tR = 7;
+  const bR = 15, tR = 8.5;
   const tx = f.px + ca * f.len, ty = f.py + sa * f.len;
   c2.fillStyle = 'rgba(0,0,0,0.4)';
   c2.beginPath();
@@ -1019,36 +1219,73 @@ function drawFlipper(c2, f) {
   c2.closePath();
   const nx = -sa, ny = ca;
   const g = c2.createLinearGradient(f.px - nx * bR, f.py - ny * bR, f.px + nx * bR, f.py + ny * bR);
-  g.addColorStop(0, '#5c33a0'); g.addColorStop(0.45, '#a76aff'); g.addColorStop(0.8, '#e6d6ff');
+  g.addColorStop(0, '#2c3444'); g.addColorStop(0.16, '#5a6478'); g.addColorStop(0.38, '#c6cedd');
+  g.addColorStop(0.5, '#f6f9ff'); g.addColorStop(0.64, '#d5dae6'); g.addColorStop(0.84, '#8a94a8');
+  g.addColorStop(1, '#3c4458');
   c2.fillStyle = g; c2.fill();
-  c2.strokeStyle = '#2a1745'; c2.lineWidth = 2.5; c2.stroke();
-  c2.fillStyle = '#ff5470';
+  c2.strokeStyle = '#1c2230'; c2.lineWidth = 3; c2.stroke();
+  // along-blade specular streak (rail 'hi' pass equivalent) — always on the upper face
+  const s2 = ny > 0 ? -1 : 1;
+  c2.save(); c2.lineCap = 'round';
+  c2.strokeStyle = 'rgba(255,255,255,0.85)'; c2.lineWidth = 2;
+  c2.beginPath();
+  c2.moveTo(f.px + ca * f.len * 0.12 + nx * bR * 0.22 * s2, f.py + sa * f.len * 0.12 + ny * bR * 0.22 * s2);
+  c2.lineTo(f.px + ca * f.len * 0.85 + nx * tR * 0.25 * s2, f.py + sa * f.len * 0.85 + ny * tR * 0.25 * s2);
+  c2.stroke();
+  c2.restore();
+  // tip glow — pink left / cyan right, matching the mockup flipper-tip treatment
+  const tipCol = f.px < WORLD_W / 2 ? '#ff2fd6' : '#2fd6ff';
+  c2.save(); c2.shadowColor = tipCol; c2.shadowBlur = 8;
+  c2.fillStyle = tipCol;
   c2.beginPath(); c2.arc(tx, ty, tR - 1, 0, Math.PI * 2); c2.fill();
-  c2.strokeStyle = '#8a1f35'; c2.lineWidth = 1.5; c2.stroke();
-  c2.fillStyle = '#e2ccff';
-  c2.beginPath(); c2.arc(f.px, f.py, 5.5, 0, Math.PI * 2); c2.fill();
-  c2.strokeStyle = '#2a1745'; c2.lineWidth = 1.5; c2.stroke();
+  c2.restore();
+  c2.strokeStyle = mixHex(tipCol, -0.5); c2.lineWidth = 1.5; c2.stroke();
+  c2.fillStyle = '#f0f2f8';
+  c2.beginPath(); c2.arc(f.px, f.py, 6.5, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#3a4256'; c2.lineWidth = 1.5; c2.stroke();
 }
 function drawBumper(c2, p) {
+  // glossy hemisphere dome per mockup — V8 DIMENSIONALITY: the dome fill is now a REAL
+  // 5-stop sphere falloff (offset bright highlight → lighter mid → saturated base hue →
+  // darkening shoulder → dark rim) instead of the old ~2-tone ramp, plus a soft filled
+  // glare at the highlight point; the chrome base-ring gets its own deepened 5-stop
+  // metallic falloff. Pop/flash logic + hitbox (p.r, physics) untouched.
+  const hue = p.hue || '#2fd6ff';
   if (p.pop > 0) {
     c2.globalAlpha = p.pop / 12;
-    c2.strokeStyle = '#6ee7ff'; c2.lineWidth = 3;
+    c2.strokeStyle = hue; c2.lineWidth = 3;
     c2.beginPath(); c2.arc(p.x, p.y, p.r + (12 - p.pop) * 2.2, 0, Math.PI * 2); c2.stroke();
     c2.globalAlpha = 1;
   }
-  c2.fillStyle = '#123048';
-  c2.beginPath(); c2.arc(p.x, p.y + 2, p.r + 4, 0, Math.PI * 2); c2.fill();
-  c2.fillStyle = p.flash > 0 ? '#bffaff' : '#2a7d9a';
-  c2.beginPath(); c2.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); c2.fill();
-  c2.fillStyle = p.flash > 0 ? '#ffffff' : '#6ee7ff';
-  c2.beginPath(); c2.arc(p.x, p.y, p.r - 3, 0, Math.PI * 2); c2.fill();
-  c2.fillStyle = p.flash > 0 ? '#ffd0da' : '#ff5470';
-  c2.beginPath(); c2.arc(p.x, p.y, p.r - 8, 0, Math.PI * 2); c2.fill();
-  c2.strokeStyle = '#8a1f35'; c2.lineWidth = 1.5; c2.stroke();
-  c2.strokeStyle = 'rgba(255,255,255,0.8)'; c2.lineWidth = 2;
-  c2.beginPath(); c2.arc(p.x - 2, p.y - 3, p.r - 10, Math.PI * 0.9, Math.PI * 1.5); c2.stroke();
+  // chrome base-ring — 5-stop metallic falloff
+  const bg2 = c2.createRadialGradient(p.x - 5, p.y - 1, 1, p.x, p.y + 2, p.r + 5);
+  bg2.addColorStop(0, '#f4f7fc'); bg2.addColorStop(0.3, '#c6cedd'); bg2.addColorStop(0.6, '#9aa4b8');
+  bg2.addColorStop(0.85, '#5a6478'); bg2.addColorStop(1, '#39415a');
+  c2.fillStyle = bg2;
+  c2.beginPath(); c2.arc(p.x, p.y + 2, p.r + 5, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = '#242c3c'; c2.lineWidth = 1.5; c2.stroke();
+  // dome — 5-stop glossy sphere shading
+  const dg = c2.createRadialGradient(p.x - p.r * 0.42, p.y - p.r * 0.48, 1.5, p.x, p.y, p.r + 1);
   if (p.flash > 0) {
-    c2.shadowColor = '#6ee7ff'; c2.shadowBlur = 22;
+    dg.addColorStop(0, '#ffffff'); dg.addColorStop(0.3, mixHex(hue, 0.75)); dg.addColorStop(0.6, mixHex(hue, 0.45));
+    dg.addColorStop(0.85, mixHex(hue, 0.15)); dg.addColorStop(1, mixHex(hue, -0.1));
+  } else {
+    dg.addColorStop(0, mixHex(hue, 0.92)); dg.addColorStop(0.22, mixHex(hue, 0.55)); dg.addColorStop(0.5, hue);
+    dg.addColorStop(0.78, mixHex(hue, -0.28)); dg.addColorStop(1, mixHex(hue, -0.55));
+  }
+  c2.fillStyle = dg;
+  c2.beginPath(); c2.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); c2.fill();
+  c2.strokeStyle = mixHex(hue, -0.6); c2.lineWidth = 1.5; c2.stroke();
+  // specular ellipse arc (kept from v4)
+  c2.strokeStyle = 'rgba(255,255,255,0.85)'; c2.lineWidth = 2;
+  c2.beginPath(); c2.arc(p.x - 2, p.y - 3, p.r - 8, Math.PI * 0.9, Math.PI * 1.5); c2.stroke();
+  // soft filled glare at the highlight point (glossy-sphere hot spot, not a sticker dot)
+  const glare = c2.createRadialGradient(p.x - p.r * 0.38, p.y - p.r * 0.44, 0.5, p.x - p.r * 0.38, p.y - p.r * 0.44, p.r * 0.4);
+  glare.addColorStop(0, 'rgba(255,255,255,0.75)'); glare.addColorStop(1, 'rgba(255,255,255,0)');
+  c2.fillStyle = glare;
+  c2.beginPath(); c2.arc(p.x - p.r * 0.38, p.y - p.r * 0.44, p.r * 0.4, 0, Math.PI * 2); c2.fill();
+  if (p.flash > 0) {
+    c2.shadowColor = hue; c2.shadowBlur = 28;
     c2.strokeStyle = '#fff'; c2.lineWidth = 2;
     c2.beginPath(); c2.arc(p.x, p.y, p.r + 1, 0, Math.PI * 2); c2.stroke();
     c2.shadowBlur = 0;
@@ -1075,6 +1312,31 @@ function drawBall(c2, b) {
   c2.fillStyle = 'rgba(255,255,255,0.9)';
   c2.beginPath(); c2.arc(b.x - 4, b.y - 4, 2.6, 0, Math.PI * 2); c2.fill();
 }
+// Rim-light glow for invader sprites, pre-baked ONCE per (frame × colour) into tiny
+// offscreen canvases so the per-frame cost is one drawImage per alien, not shadowBlur
+// on every bitmap pixel. Flat per-row fill deliberately preserved (mockup's flat-2D
+// invader vs glossy-3D bumper contrast) — only the glow outline is added.
+const ALIEN_SPR = {};
+function alienSprite(frame, col) {
+  const key = frame + '|' + col;
+  if (ALIEN_SPR[key]) return ALIEN_SPR[key];
+  const s = 2.6, bm = frame ? BM_B : BM_A;
+  const rows = bm.length, cols = bm[0].length, pad = 9;
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil(cols * s) + pad * 2; cv.height = Math.ceil(rows * s) + pad * 2;
+  const cc = cv.getContext('2d');
+  cc.shadowColor = col; cc.shadowBlur = 7;
+  cc.fillStyle = col;
+  for (let r = 0; r < rows; r++)
+    for (let k = 0; k < cols; k++)
+      if (bm[r][k] === '1') cc.fillRect(pad + k * s, pad + r * s, s, s);
+  cc.shadowBlur = 0;
+  for (let r = 0; r < rows; r++)
+    for (let k = 0; k < cols; k++)
+      if (bm[r][k] === '1') cc.fillRect(pad + k * s, pad + r * s, s, s);
+  ALIEN_SPR[key] = cv;
+  return cv;
+}
 function renderWorld(t) {
   const c2 = wctx;
   c2.setTransform(PIXF, 0, 0, PIXF, 0, 0);
@@ -1096,8 +1358,9 @@ function renderWorld(t) {
   const chevPulse = (t / 160) % 4 | 0;
   const cy = 540 - chevPulse * 66;
   for (const cx of [34, 416]) {
-    c2.strokeStyle = '#ffd05a'; c2.lineWidth = 3; c2.lineCap = 'round';
-    c2.shadowColor = '#ffd05a'; c2.shadowBlur = 8;
+    const chevCol = cx === 34 ? '#2fd6ff' : '#ff2fd6';  // SUPER LANES cyan / INVADER JAM magenta
+    c2.strokeStyle = chevCol; c2.lineWidth = 3; c2.lineCap = 'round';
+    c2.shadowColor = chevCol; c2.shadowBlur = 12;
     c2.beginPath();
     c2.moveTo(cx - 8, cy + 7); c2.lineTo(cx, cy - 5); c2.lineTo(cx + 8, cy + 7);
     c2.stroke(); c2.shadowBlur = 0;
@@ -1185,7 +1448,8 @@ function renderWorld(t) {
         if (!INV.alive[r][c]) continue;
         const a = alienPos(r, c);
         bmOn(c2, INV.frame ? BM_B : BM_A, a.x + 1, a.y + 2, 2.6, 'rgba(0,0,0,0.35)');
-        bmOn(c2, INV.frame ? BM_B : BM_A, a.x, a.y, 2.6, ROW_COL[r % ROW_COL.length]);
+        const spr = alienSprite(INV.frame, ROW_COL[r % ROW_COL.length]);
+        c2.drawImage(spr, a.x - spr.width / 2, a.y - spr.height / 2);
       }
   }
 
@@ -1246,6 +1510,40 @@ function renderWorld(t) {
 }
 
 // ── CABINET (screen-space: the viewport bands ARE the machine) ───────────────
+// HUD card/pill family (mockup): dark-navy gradient fill + thin neon border + outer
+// glow + rounded corners. Drawn in screen-space (crisp, not the half-res world canvas);
+// every size derives from the band height / W at render time — no fixed px constants.
+function rrect(c2, x, y, w, h, r) {
+  c2.beginPath();
+  c2.moveTo(x + r, y);
+  c2.arcTo(x + w, y, x + w, y + h, r);
+  c2.arcTo(x + w, y + h, x, y + h, r);
+  c2.arcTo(x, y + h, x, y, r);
+  c2.arcTo(x, y, x + w, y, r);
+  c2.closePath();
+}
+function drawCard(x, y, w, h, labelTxt, valueTxt, accent, valueCol) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, '#1a1638'); g.addColorStop(1, '#12102a');
+  rrect(ctx, x, y, w, h, Math.min(7 * DPR, h * 0.3));
+  ctx.fillStyle = g; ctx.fill();
+  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 7 * DPR;
+  ctx.strokeStyle = accent; ctx.lineWidth = 1.5 * DPR; ctx.stroke(); ctx.restore();
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.font = (h * 0.36) + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = '#c9b8ff';
+  ctx.fillText(labelTxt, x + w * 0.07, y + h * 0.52);
+  const lblW = ctx.measureText(labelTxt).width;
+  let vfs = h * 0.5;
+  ctx.font = vfs + 'px Bungee, "Arial Black", sans-serif';
+  const maxW = w * 0.86 - lblW;
+  while (vfs > 6 && ctx.measureText(valueTxt).width > maxW) {
+    vfs *= 0.9; ctx.font = vfs + 'px Bungee, "Arial Black", sans-serif';
+  }
+  ctx.textAlign = 'right';
+  ctx.fillStyle = valueCol || '#ffffff';
+  ctx.fillText(valueTxt, x + w * 0.93, y + h * 0.55);
+}
 function drawCabinet(t) {
   const W = canvas.width, H = canvas.height;
   const topH = VIEW.oy, botY = VIEW.oy + WORLD_H * VIEW.scale, botH = H - botY;
@@ -1294,36 +1592,73 @@ function drawCabinet(t) {
       ctx.fillRect(px2 - 2 * DPR, py2 - 2 * DPR, 4 * DPR, 4 * DPR);
     }
     ctx.globalAlpha = 1;
-    // title + hiscore + flanking aliens
-    const fs = Math.min(topH * 0.4, W * 0.07);
-    ctx.font = '' + fs + 'px Bungee, "Arial Black", sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#2a1745';
-    ctx.fillText('PIN-VADERS', W / 2 + 2 * DPR, topH * 0.42 + 2 * DPR);
-    ctx.fillStyle = '#b76bff';
-    ctx.shadowColor = '#b76bff'; ctx.shadowBlur = 12 * DPR;
-    ctx.fillText('PIN-VADERS', W / 2, topH * 0.42);
-    ctx.shadowBlur = 0;
+    // title lockup (split gradient) + tagline + hi-score + stat cards + PAUSE ring —
+    // fills the top band with live game state so it reads as game, not idle chrome
+    const inTop = pad * 0.6, inH = topH - pad * 1.2;
+    // PAUSE ring (functional: tap toggles pause during play; 'P' key too)
+    const pr = Math.min(inH * 0.22, W * 0.045);
+    PAUSE_BTN.x = pad + pr * 2.1; PAUSE_BTN.y = inTop + inH * 0.30; PAUSE_BTN.r = pr;
+    ctx.fillStyle = '#12102a';
+    ctx.beginPath(); ctx.arc(PAUSE_BTN.x, PAUSE_BTN.y, pr, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.shadowColor = '#a04fe0'; ctx.shadowBlur = 8 * DPR;
+    ctx.strokeStyle = paused ? '#ffd05a' : '#a04fe0'; ctx.lineWidth = 1.5 * DPR; ctx.stroke(); ctx.restore();
+    ctx.fillStyle = paused ? '#ffd05a' : '#c9b8ff';
+    if (paused) {
+      ctx.beginPath();
+      ctx.moveTo(PAUSE_BTN.x - pr * 0.28, PAUSE_BTN.y - pr * 0.42);
+      ctx.lineTo(PAUSE_BTN.x + pr * 0.5, PAUSE_BTN.y);
+      ctx.lineTo(PAUSE_BTN.x - pr * 0.28, PAUSE_BTN.y + pr * 0.42);
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillRect(PAUSE_BTN.x - pr * 0.38, PAUSE_BTN.y - pr * 0.42, pr * 0.28, pr * 0.84);
+      ctx.fillRect(PAUSE_BTN.x + pr * 0.10, PAUSE_BTN.y - pr * 0.42, pr * 0.28, pr * 0.84);
+    }
+    // title: 'PIN-' magenta→pink gradient / 'VADERS' white→cyan gradient,
+    // thick dark-navy outline stroke + outer glow (never flat text)
+    const fs = Math.min(topH * 0.34, W * 0.058);
+    const tCX = W * 0.34, tY = inTop + inH * 0.32;
+    ctx.font = fs + 'px Bungee, "Arial Black", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const w1 = ctx.measureText('PIN-').width, w2 = ctx.measureText('VADERS').width;
+    const minTX = PAUSE_BTN.x + PAUSE_BTN.r * 1.6;
+    const tX = Math.max(minTX, tCX - (w1 + w2) / 2);
+    ctx.strokeStyle = '#0d0a2c'; ctx.lineWidth = Math.max(2 * DPR, fs * 0.16);
+    ctx.strokeText('PIN-', tX, tY); ctx.strokeText('VADERS', tX + w1, tY);
+    const g1 = ctx.createLinearGradient(0, tY - fs * 0.55, 0, tY + fs * 0.55);
+    g1.addColorStop(0, '#ff8ae8'); g1.addColorStop(1, '#ff2fd6');
+    ctx.save(); ctx.shadowColor = '#ff2fd6'; ctx.shadowBlur = 9 * DPR;
+    ctx.fillStyle = g1; ctx.fillText('PIN-', tX, tY);
+    const g2 = ctx.createLinearGradient(0, tY - fs * 0.55, 0, tY + fs * 0.55);
+    // V7: white-DOMINANT per forensic spec — white holds to 60% of the glyph height,
+    // then eases into a LIGHT blue tint (was a hard white→saturated-cyan ramp)
+    g2.addColorStop(0, '#ffffff'); g2.addColorStop(0.6, '#ffffff'); g2.addColorStop(1, '#9aeaff');
+    ctx.shadowColor = '#2fd6ff';
+    ctx.fillStyle = g2; ctx.fillText('VADERS', tX + w1, tY);
+    ctx.restore();
     if (topH > 40 * DPR) {
-      // REAL hi-score. This read only localStorage and fell back to a hardcoded 999,999 —
-      // a fresh device advertised a fake record while the actual global best sat at
-      // 372,270 (Osimo 2026-07-29: "should reflect the actual highest score from
-      // cassette"). Global first, local second; if neither exists, say so.
+      // tagline
+      ctx.textAlign = 'center';
+      ctx.font = (fs * 0.30) + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.fillStyle = '#c9b8ff';
+      ctx.fillText('★ PINBALL. INVADE. WIN. ★', tCX, tY + fs * 0.78);
+      // REAL hi-score (Osimo 2026-07-29): global first, local second; if neither, say so.
       let local = 0;
       try {
         const board = JSON.parse(localStorage.getItem('jnj_board_' + SLUG) || '[]');
         if (board.length) local = Math.max(...board.map(e => e.s || 0));
       } catch (e) {}
       const hi = Math.max(GLOBAL_HI, local);
-      ctx.font = '' + (fs * 0.38) + 'px Bungee, "Arial Black", sans-serif';
+      ctx.font = (fs * 0.34) + 'px Bungee, "Arial Black", sans-serif';
       ctx.fillStyle = '#ffd05a';
-      ctx.fillText('HI-SCORE  ' + (hi ? hi.toLocaleString('en-GB') : '—'),
-                   W / 2, topH * 0.75);
-      // aliens flank the title
-      const as = Math.max(2, topH * 0.028);
+      ctx.fillText('HI-SCORE  ' + (hi ? hi.toLocaleString('en-GB') : '—'), tCX, inTop + inH * 0.86);
+      // stat cards, right column — WAVE / SCORE / MULTIPLIER (live state)
+      const cw = W * 0.26, chh = inH * 0.27, cx0 = W - pad - cw - 4 * DPR;
+      drawCard(cx0, inTop + inH * 0.05,  cw, chh, BOSS.active ? 'BOSS' : 'WAVE', '' + wave, '#a04fe0', '#ffffff');
+      drawCard(cx0, inTop + inH * 0.375, cw, chh, 'SCORE', score.toLocaleString('en-GB'), '#a04fe0', '#ffffff');
+      drawCard(cx0, inTop + inH * 0.70,  cw, chh, 'MULT', '×' + bonusX + (multiball ? '·2X' : ''), '#a04fe0', '#4de8ff');
+      // alien-head badge beside the WAVE card
       const frame = (t / 500 | 0) % 2;
-      bmMain(frame ? BM_B : BM_A, W * 0.16, topH * 0.5, as, '#9fff8a');
-      bmMain(frame ? BM_A : BM_B, W * 0.84, topH * 0.5, as, '#6ee7ff');
+      bmMain(frame ? BM_B : BM_A, cx0 - 12 * DPR, inTop + inH * 0.05 + chh / 2, Math.max(1, chh * 0.055), '#6dff4d');
     }
   }
 
@@ -1335,23 +1670,46 @@ function drawCabinet(t) {
     ctx.fillStyle = '#8a55e0'; ctx.fillRect(0, botY, W, 3 * DPR);
     ctx.fillStyle = 'rgba(226,204,255,0.5)'; ctx.fillRect(0, botY + 3 * DPR, W, 1.5 * DPR);
     if (botH > 34 * DPR) {
-      // coin door
-      const dw = Math.min(60 * DPR, W * 0.15), dh = botH * 0.5;
-      const dx = W / 2 - dw / 2, dy = botY + botH * 0.28;
-      ctx.fillStyle = '#160d2e'; ctx.fillRect(dx, dy, dw, dh);
-      ctx.strokeStyle = '#8a55e0'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(dx, dy, dw, dh);
-      ctx.fillStyle = '#ffd05a'; ctx.fillRect(W / 2 - 2 * DPR, dy + dh * 0.2, 4 * DPR, dh * 0.35);
-      ctx.fillStyle = '#ff5470';
-      ctx.beginPath(); ctx.arc(W / 2, dy + dh * 0.78, 4 * DPR, 0, Math.PI * 2); ctx.fill();
-      // flipper button hints
-      ctx.font = '' + (botH * 0.22) + 'px Bungee, "Arial Black", sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(226,204,255,0.65)';
-      ctx.fillText('◀ HOLD', W * 0.18, botY + botH * 0.55);
-      ctx.fillText('HOLD ▶', W * 0.82, botY + botH * 0.55);
-      ctx.fillStyle = '#ff5470';
-      ctx.beginPath(); ctx.arc(W * 0.07, botY + botH * 0.55, 6 * DPR, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(W * 0.93, botY + botH * 0.55, 6 * DPR, 0, Math.PI * 2); ctx.fill();
+      // BALL pill (left) · MISSION pill (centre-wide) · flipper-control glow buttons (right)
+      const bpad = Math.min(10 * DPR, botH * 0.12);
+      const ph2 = botH * 0.52, py2 = botY + botH * 0.24;
+      drawCard(bpad, py2, W * 0.16, ph2, 'BALL', '' + Math.max(0, stock), '#a04fe0', '#ffffff');
+      // MISSION pill — mechanically accurate: killing every alien DOES trigger wave-clear
+      const mw = W * 0.42, mx = W * 0.5 - mw * 0.58;
+      const mtxt = BOSS.active ? 'KILL THE MOTHERSHIP!' : 'CLEAR THE INVADERS!';
+      const gm = ctx.createLinearGradient(0, py2, 0, py2 + ph2);
+      gm.addColorStop(0, '#1a1638'); gm.addColorStop(1, '#12102a');
+      rrect(ctx, mx, py2, mw, ph2, Math.min(7 * DPR, ph2 * 0.3));
+      ctx.fillStyle = gm; ctx.fill();
+      ctx.save(); ctx.shadowColor = '#a04fe0'; ctx.shadowBlur = 7 * DPR;
+      ctx.strokeStyle = '#a04fe0'; ctx.lineWidth = 1.5 * DPR; ctx.stroke(); ctx.restore();
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+      ctx.font = (ph2 * 0.26) + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.fillStyle = '#c9b8ff';
+      ctx.fillText('MISSION:', mx + mw / 2, py2 + ph2 * 0.26);
+      ctx.font = '600 ' + (ph2 * 0.30) + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(mtxt, mx + mw / 2 - 6 * DPR, py2 + ph2 * 0.68);
+      const fr2 = (t / 500 | 0) % 2;
+      bmMain(fr2 ? BM_B : BM_A, mx + mw - 10 * DPR, py2 + ph2 * 0.68, Math.max(1, ph2 * 0.05), '#6dff4d');
+      // flipper-control glow-ring buttons — cyan ◀ left / magenta ▶ right; the ring
+      // brightens while that flipper is actually pressed (live causality feedback)
+      const br = Math.min(botH * 0.26, W * 0.05);
+      const bys = botY + botH * 0.5;
+      const btns = [
+        { x: W * 0.82, col: '#2fd6ff', glyph: '◀', on: FLIPPERS[0].pressed },
+        { x: W * 0.93, col: '#ff2fd6', glyph: '▶', on: FLIPPERS[1].pressed },
+      ];
+      for (const bt of btns) {
+        ctx.fillStyle = '#12102a';
+        ctx.beginPath(); ctx.arc(bt.x, bys, br, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.shadowColor = bt.col; ctx.shadowBlur = (bt.on ? 16 : 8) * DPR;
+        ctx.strokeStyle = bt.col; ctx.lineWidth = (bt.on ? 3 : 2) * DPR; ctx.stroke(); ctx.restore();
+        ctx.fillStyle = bt.on ? '#ffffff' : bt.col;
+        ctx.font = (br * 0.9) + 'px "Barlow Condensed", "Arial Narrow", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(bt.glyph, bt.x, bys + 1 * DPR);
+      }
     }
   }
 }
@@ -1396,11 +1754,41 @@ function render(t) {
   // feature tags
   ctx.font = '10px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillStyle = shieldArmed ? '#9fff8a' : 'rgba(159,255,138,0.4)';
-  ctx.fillText('SHIELD', 105, 490);
+  ctx.fillText('SHIELD', 123, 490);
   ctx.fillStyle = UFO.active ? '#ff5470' : 'rgba(255,84,112,0.4)';
-  ctx.fillText('UFO', 375, 490);
+  ctx.fillText('UFO', 357, 490);
   ctx.fillStyle = '#ff8ab5'; ctx.font = '9px "Barlow Condensed", "Arial Narrow", sans-serif';
   ctx.fillText(multiball ? '2X' : 'LOCK ' + lockedCount + '/2', SAUCER.x, SAUCER.y + SAUCER.r + 4);
+
+  // decal branding text (crisp layer; static values are DECAL TEXT ONLY, not live score)
+  ctx.textBaseline = 'middle';
+  ctx.font = '9px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = 'rgba(77,232,255,0.8)';
+  ctx.fillText('SUPER LANES', 34, 318);
+  ctx.font = '600 10px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = '#4de8ff';
+  ctx.fillText('250,000', 34, 330);
+  ctx.font = '9px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = 'rgba(255,105,224,0.8)';
+  ctx.fillText('INVADER JAM', 414, 318);
+  ctx.font = '600 10px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = '#ff69e0';
+  ctx.fillText('100,000', 414, 330);
+  // HYPER / WARP lane labels along the existing inlane tubes
+  ctx.font = '10px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.save(); ctx.translate(72, 648); ctx.rotate(Math.atan2(108, 132));
+  ctx.fillStyle = 'rgba(255,105,224,0.85)'; ctx.fillText('HYPER LANE', 0, -10); ctx.restore();
+  ctx.save(); ctx.translate(388, 648); ctx.rotate(Math.atan2(-108, 102));
+  ctx.fillStyle = 'rgba(77,232,255,0.85)'; ctx.fillText('WARP LANE', 0, -10); ctx.restore();
+  // ring-target call-outs (decals only — no mechanic wired this round)
+  ctx.font = '8px "Barlow Condensed", "Arial Narrow", sans-serif';
+  ctx.fillStyle = '#4de8ff'; ctx.fillText('BOOST', 185, 550);
+  ctx.fillStyle = '#ff69e0'; ctx.fillText('EXTRA', 240, 543); ctx.fillText('BALL', 240, 553);
+  ctx.fillStyle = '#ff5470'; ctx.fillText('JACKPOT', 295, 550);
+  // drop-target bank labels
+  ctx.fillStyle = '#c9b8ff';
+  ctx.fillText('DROP TARGETS', 123, 504);
+  ctx.fillText('DROP TARGETS', 357, 504);
 
   // floating labels
   ctx.font = '15px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1411,27 +1799,14 @@ function render(t) {
   }
   ctx.globalAlpha = 1;
 
-  // HUD
-  ctx.font = '20px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillStyle = '#fff';
-  ctx.fillText('SCORE ' + score, 14, 8);
-  ctx.font = '13px "Barlow Condensed", "Arial Narrow", sans-serif';
-  ctx.fillStyle = INK;
-  ctx.fillText((BOSS.active ? 'BOSS ' : 'WAVE ') + wave, 14, 32);
-  ctx.fillStyle = bonusX > 1 ? '#ffd05a' : 'rgba(255,208,90,0.4)';
-  ctx.fillText('BONUS ×' + bonusX, 14, 48);
-  for (let i = 0; i < stock; i++) {
-    const bx = 22 + i * 18;
-    const g = ctx.createRadialGradient(bx - 2, 70 - 2, 1, bx, 70, 6);
-    g.addColorStop(0, '#fff'); g.addColorStop(1, '#7a80a0');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(bx, 70, 6, 0, Math.PI * 2); ctx.fill();
-  }
+  // HUD — SCORE/WAVE/MULT/BALL now live in the backbox stat cards + BALL pill
+  // (screen-space bands), de-duplicating the old on-table text block; TILT stays on-table.
   if (tilted) {
     ctx.fillStyle = '#ff5470'; ctx.font = '16px "Barlow Condensed", "Arial Narrow", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillText('TILT', 14, 84);
   }
-  ctx.font = '22px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'right';
+  ctx.font = '22px "Barlow Condensed", "Arial Narrow", sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
   ctx.fillStyle = '#fff';
   ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 12, 12);
 
@@ -1447,6 +1822,18 @@ function render(t) {
     ctx.fillText(msg.txt, WORLD_W / 2, 540);
     ctx.shadowBlur = 0;
   }
+
+  if (paused) {
+    ctx.fillStyle = 'rgba(7,8,13,0.55)';
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.font = '32px Bungee, "Arial Black", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK; ctx.shadowColor = INK; ctx.shadowBlur = 18;
+    ctx.fillText('PAUSED', WORLD_W / 2, 380);
+    ctx.shadowBlur = 0;
+    ctx.font = '13px "Barlow Condensed", "Arial Narrow", sans-serif';
+    ctx.fillStyle = '#c9b8ff';
+    ctx.fillText('TAP THE ⏸ RING TO RESUME', WORLD_W / 2, 416);
+  }
 }
 
 // ── LOOP ─────────────────────────────────────────────────────────────────────
@@ -1460,7 +1847,12 @@ function loop(t) {
 // ── COIN ─────────────────────────────────────────────────────────────────────
 document.getElementById('coinBtn').addEventListener('click', () => {
   document.getElementById('overlay').classList.add('hidden');
-  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  // belt-and-braces: some browsers don't fire a native resize event on the fullscreen
+  // transition — recompute canvas/VIEW after the promise settles either way.
+  try {
+    const fsReq = document.documentElement.requestFullscreen?.();
+    if (fsReq && fsReq.then) fsReq.then(() => setTimeout(resize, 80), () => resize());
+  } catch (e) {}
   unlockAudio();
   startGame();
 });
@@ -1469,11 +1861,22 @@ spawnWave(1);
 serveBall();
 requestAnimationFrame(loop);
 
+// Installed-PWA fullscreen settle safety net (ported from hop-man.html 2026-08-26 Android
+// report — same failure class: first layout pass measures the viewport before installed-PWA
+// fullscreen chrome has settled, baking a stale canvas/VIEW into frame 1). visualViewport
+// tracks the real visible area more reliably than window's native 'resize' on mobile; both
+// paths route into the EXISTING resize() rather than duplicating its math. resize() only
+// mutates VIEW.scale/ox/oy + canvas.width/height with zero game-state side effects, so
+// redundant back-to-back calls are safe with no guard/debounce needed.
+if (window.visualViewport) visualViewport.addEventListener('resize', () => dispatchEvent(new Event('resize')));
+setTimeout(() => dispatchEvent(new Event('resize')), 300);
+
 // QA hook (playtest-by-evaluate — read state, force scenarios; no score set)
 window.__PV = {
+  marker: BUILD_MARKER,
   get: () => {
     const b = ballsInPlay[0] || { x: 0, y: 0, vx: 0, vy: 0, inLane: false, held: false };
-    return { state, score, wave, stock, nBalls: ballsInPlay.length,
+    return { state, paused, score, wave, stock, nBalls: ballsInPlay.length,
              x: b.x, y: b.y, vx: b.vx, vy: b.vy, inLane: b.inLane, held: b.held,
              invCount: INV.count, invY: INV.y, tilted, bonusX, lockedCount, multiball,
              shieldArmed, boss: BOSS.active ? { hp: BOSS.hp, x: BOSS.x, y: BOSS.y } : null,
