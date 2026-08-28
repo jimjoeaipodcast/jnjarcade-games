@@ -1932,38 +1932,34 @@ function drawCloud(x, y, w, alpha) {
 }
 
 // warp-pipe flicker (Osimo 2026-08-28: the flat darker-green telegraph "almost impossible
-// to tell the difference" at speed — replaced with an old-filament-bulb flicker between the
-// pipe's normal warp colour and a lighter tint of the SAME colour). Two independent
-// step-functions instead of a sine wave, so it reads as a real bulb's irregular jitter —
-// flicker, flicker, drop to nothing, flicker — never a smooth predictable pulse:
-// jitter re-rolls every ~60ms (the flicker itself), a slower gate re-rolls every ~220ms and
-// blacks the flicker out (falls back to the plain normal colour) about 3 windows in 10.
-function _hexMix(hexA, hexB, t) {
-  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16);
-  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-  const L = (x, y) => Math.round(x + (y - x) * t);
-  return `rgb(${L(ar, br)},${L(ag, bg)},${L(ab, bb)})`;
-}
-function warpFlickerAmt(now) {
-  const jr = Math.sin(Math.floor(now / 60) * 12.9898) * 43758.5453;
-  const jitter = jr - Math.floor(jr);
-  const gr = Math.sin(Math.floor(now / 220) * 78.233) * 12543.117;
-  const gate = gr - Math.floor(gr);
-  return gate < 0.30 ? 0 : jitter;
+// to tell the difference" at speed). v2 same day — tested live, corrected on two points:
+// (1) too fast/too busy — replaced the continuous dual-noise jitter with Osimo's own literal
+// on/off sequence ("on on off on off off on off off off and loop") held at a slow, deliberate
+// step rate so it reads as "subtlest, slower" rather than a twitchy strobe; (2) "flickers
+// white" — v1 blended continuously toward a colour mixed 55% toward pure white, and stacked an
+// ADDITIVE white-rgba highlight on top of that, compounding fast toward white. Replaced with a
+// genuine LUT-style swap: one fixed extra "lit" hex value per colour already used on the pipe
+// (each ~20% toward white, still clearly the same green, never blended toward anything else),
+// hard-swapped in and out — never interpolated — and the highlight strip no longer
+// participates at all (it was the single biggest contributor to the white cast).
+const WARP_FLICKER_PATTERN = [1,1,0,1,0,0,1,0,0,0];   // Osimo's literal sequence, looped
+const WARP_FLICKER_STEP_MS = 220;                     // slow — ~2.2s per full loop
+function warpFlickerOn(now) {
+  const step = Math.floor(now / WARP_FLICKER_STEP_MS) % WARP_FLICKER_PATTERN.length;
+  return WARP_FLICKER_PATTERN[step] === 1;
 }
 
 function drawPipe(x, y, w, h, isBottom, isWarp) {
   if (h <= 2) return;
-  const fl = isWarp ? warpFlickerAmt(performance.now()) : 0;
+  const lit = isWarp && warpFlickerOn(performance.now());
 
   // body gradient (left-to-right shading).
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
   if (isWarp) {
-    g.addColorStop(0,    _hexMix('#043321', '#8ea39b', fl));
-    g.addColorStop(0.30, _hexMix('#0a5c36', '#91b6a5', fl));
-    g.addColorStop(0.65, _hexMix('#04452a', '#8eab9f', fl));
-    g.addColorStop(1,    _hexMix('#021c11', '#8d9994', fl));
+    g.addColorStop(0,    lit ? '#3b6052' : '#043321');
+    g.addColorStop(0.30, lit ? '#408062' : '#0a5c36');
+    g.addColorStop(0.65, lit ? '#3b6e59' : '#04452a');
+    g.addColorStop(1,    lit ? '#3a4e45' : '#021c11');
   } else {
     g.addColorStop(0,    '#0a5e3a');
     g.addColorStop(0.30, '#12834f');
@@ -1976,16 +1972,17 @@ function drawPipe(x, y, w, h, isBottom, isWarp) {
   // cap
   const capH = 14;
   const capY = isBottom ? y : y + h - capH;
-  ctx.fillStyle = isWarp ? _hexMix('#0c7a40', '#92c3a9', fl) : '#15a358';
+  ctx.fillStyle = isWarp ? (lit ? '#41976a' : '#0c7a40') : '#15a358';
   ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
 
   // dark edge under cap
-  ctx.fillStyle = isWarp ? _hexMix('#021c11', '#8d9994', fl) : '#053a24';
+  ctx.fillStyle = isWarp ? (lit ? '#3a4e45' : '#021c11') : '#053a24';
   const edgeY = isBottom ? capY : capY + capH - 2;
   ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
 
-  // highlight strip — flicker nudges this brighter too so the lit moments read a little hot
-  ctx.fillStyle = isWarp ? `rgba(255,255,255,${(0.04 + fl * 0.18).toFixed(3)})` : 'rgba(255,255,255,.07)';
+  // highlight strip — constant, does NOT flicker (this additive white overlay was the main
+  // reason v1 read as flickering white when stacked on an already-lightened body colour)
+  ctx.fillStyle = isWarp ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.07)';
   ctx.fillRect(x + 3, y, 6, h);
 }
 
