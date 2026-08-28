@@ -1931,35 +1931,60 @@ function drawCloud(x, y, w, alpha) {
   ctx.globalAlpha = 1;
 }
 
-// warp-pipe flicker (Osimo 2026-08-28: the flat darker-green telegraph "almost impossible
-// to tell the difference" at speed). v2 same day — tested live, corrected on two points:
-// (1) too fast/too busy — replaced the continuous dual-noise jitter with Osimo's own literal
-// on/off sequence ("on on off on off off on off off off and loop") held at a slow, deliberate
-// step rate so it reads as "subtlest, slower" rather than a twitchy strobe; (2) "flickers
-// white" — v1 blended continuously toward a colour mixed 55% toward pure white, and stacked an
-// ADDITIVE white-rgba highlight on top of that, compounding fast toward white. Replaced with a
-// genuine LUT-style swap: one fixed extra "lit" hex value per colour already used on the pipe
-// (each ~20% toward white, still clearly the same green, never blended toward anything else),
-// hard-swapped in and out — never interpolated — and the highlight strip no longer
-// participates at all (it was the single biggest contributor to the white cast).
-const WARP_FLICKER_PATTERN = [1,1,0,1,0,0,1,0,0,0];   // Osimo's literal sequence, looped
-const WARP_FLICKER_STEP_MS = 220;                     // slow — ~2.2s per full loop
-function warpFlickerOn(now) {
-  const step = Math.floor(now / WARP_FLICKER_STEP_MS) % WARP_FLICKER_PATTERN.length;
-  return WARP_FLICKER_PATTERN[step] === 1;
+// warp-pipe telegraph (Osimo 2026-08-28, three passes same day): v1 was a flat darker-green
+// fill only — "almost impossible to tell" apart from regular pipes. v2 made it flicker
+// between two colours — tested live, still "didn't quite like the flashing" even slowed down
+// and tinted-not-whitened. v3: no colour change AT ALL — pipe stays the plain darker-green
+// telegraph exactly as v1 — and the tell is a handful of small sparkles that twinkle at fixed
+// spots on the pipe, independently timed so they never flash in unison ("magic dust... here
+// and there"). Position is defined as a FRACTION of the pipe's own w/h (drawPipe only receives
+// geometry, not the pipe object) so it holds correctly regardless of that pipe's actual height.
+const WARP_SPARKLES = [
+  { fx: 0.20, fy: 0.12, period: 2300, offset: 0    },
+  { fx: 0.75, fy: 0.28, period: 2700, offset: 640  },
+  { fx: 0.40, fy: 0.52, period: 1900, offset: 1250 },
+  { fx: 0.82, fy: 0.70, period: 2500, offset: 300  },
+  { fx: 0.28, fy: 0.86, period: 2100, offset: 1550 },
+];
+const WARP_SPARKLE_PULSE_MS = 260;   // how long any one sparkle stays visible per cycle
+function drawWarpSparkles(x, y, w, h, now) {
+  for (const s of WARP_SPARKLES) {
+    const t = (now + s.offset) % s.period;
+    if (t > WARP_SPARKLE_PULSE_MS) continue;             // dark the rest of its cycle
+    const k = t / WARP_SPARKLE_PULSE_MS;
+    const alpha = k < 0.35 ? k / 0.35 : 1 - (k - 0.35) / 0.65;  // quick catch-light, slow fade
+    const sx = x + w * s.fx, sy = y + h * s.fy;
+    const r = 2 + alpha * 1.8;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.fillStyle = '#eafff0';
+    ctx.shadowColor = '#8effc2';
+    ctx.shadowBlur = 7;
+    ctx.beginPath();                                       // 4-point glint, not a plain dot
+    ctx.moveTo(sx, sy - r * 2.2);
+    ctx.lineTo(sx + r * 0.45, sy - r * 0.45);
+    ctx.lineTo(sx + r * 2.2, sy);
+    ctx.lineTo(sx + r * 0.45, sy + r * 0.45);
+    ctx.lineTo(sx, sy + r * 2.2);
+    ctx.lineTo(sx - r * 0.45, sy + r * 0.45);
+    ctx.lineTo(sx - r * 2.2, sy);
+    ctx.lineTo(sx - r * 0.45, sy - r * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawPipe(x, y, w, h, isBottom, isWarp) {
   if (h <= 2) return;
-  const lit = isWarp && warpFlickerOn(performance.now());
 
   // body gradient (left-to-right shading).
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
   if (isWarp) {
-    g.addColorStop(0,    lit ? '#3b6052' : '#043321');
-    g.addColorStop(0.30, lit ? '#408062' : '#0a5c36');
-    g.addColorStop(0.65, lit ? '#3b6e59' : '#04452a');
-    g.addColorStop(1,    lit ? '#3a4e45' : '#021c11');
+    g.addColorStop(0,    '#043321');
+    g.addColorStop(0.30, '#0a5c36');
+    g.addColorStop(0.65, '#04452a');
+    g.addColorStop(1,    '#021c11');
   } else {
     g.addColorStop(0,    '#0a5e3a');
     g.addColorStop(0.30, '#12834f');
@@ -1972,18 +1997,19 @@ function drawPipe(x, y, w, h, isBottom, isWarp) {
   // cap
   const capH = 14;
   const capY = isBottom ? y : y + h - capH;
-  ctx.fillStyle = isWarp ? (lit ? '#41976a' : '#0c7a40') : '#15a358';
+  ctx.fillStyle = isWarp ? '#0c7a40' : '#15a358';
   ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
 
   // dark edge under cap
-  ctx.fillStyle = isWarp ? (lit ? '#3a4e45' : '#021c11') : '#053a24';
+  ctx.fillStyle = isWarp ? '#021c11' : '#053a24';
   const edgeY = isBottom ? capY : capY + capH - 2;
   ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
 
-  // highlight strip — constant, does NOT flicker (this additive white overlay was the main
-  // reason v1 read as flickering white when stacked on an already-lightened body colour)
+  // highlight strip
   ctx.fillStyle = isWarp ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.07)';
   ctx.fillRect(x + 3, y, 6, h);
+
+  if (isWarp) drawWarpSparkles(x, y, w, h, performance.now());
 }
 
 function drawEnemy(e) {
