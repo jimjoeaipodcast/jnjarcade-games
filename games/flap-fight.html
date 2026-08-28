@@ -1931,17 +1931,39 @@ function drawCloud(x, y, w, alpha) {
   ctx.globalAlpha = 1;
 }
 
+// warp-pipe flicker (Osimo 2026-08-28: the flat darker-green telegraph "almost impossible
+// to tell the difference" at speed — replaced with an old-filament-bulb flicker between the
+// pipe's normal warp colour and a lighter tint of the SAME colour). Two independent
+// step-functions instead of a sine wave, so it reads as a real bulb's irregular jitter —
+// flicker, flicker, drop to nothing, flicker — never a smooth predictable pulse:
+// jitter re-rolls every ~60ms (the flicker itself), a slower gate re-rolls every ~220ms and
+// blacks the flicker out (falls back to the plain normal colour) about 3 windows in 10.
+function _hexMix(hexA, hexB, t) {
+  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16);
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const L = (x, y) => Math.round(x + (y - x) * t);
+  return `rgb(${L(ar, br)},${L(ag, bg)},${L(ab, bb)})`;
+}
+function warpFlickerAmt(now) {
+  const jr = Math.sin(Math.floor(now / 60) * 12.9898) * 43758.5453;
+  const jitter = jr - Math.floor(jr);
+  const gr = Math.sin(Math.floor(now / 220) * 78.233) * 12543.117;
+  const gate = gr - Math.floor(gr);
+  return gate < 0.30 ? 0 : jitter;
+}
+
 function drawPipe(x, y, w, h, isBottom, isWarp) {
   if (h <= 2) return;
+  const fl = isWarp ? warpFlickerAmt(performance.now()) : 0;
 
-  // body gradient (left-to-right shading). Warp half = the SAME pipe shape in a
-  // clearly darker green — the darkness IS the telegraph, no flashing, no motion.
+  // body gradient (left-to-right shading).
   const g = ctx.createLinearGradient(x, 0, x + w, 0);
   if (isWarp) {
-    g.addColorStop(0,    '#043321');
-    g.addColorStop(0.30, '#0a5c36');
-    g.addColorStop(0.65, '#04452a');
-    g.addColorStop(1,    '#021c11');
+    g.addColorStop(0,    _hexMix('#043321', '#8ea39b', fl));
+    g.addColorStop(0.30, _hexMix('#0a5c36', '#91b6a5', fl));
+    g.addColorStop(0.65, _hexMix('#04452a', '#8eab9f', fl));
+    g.addColorStop(1,    _hexMix('#021c11', '#8d9994', fl));
   } else {
     g.addColorStop(0,    '#0a5e3a');
     g.addColorStop(0.30, '#12834f');
@@ -1954,16 +1976,16 @@ function drawPipe(x, y, w, h, isBottom, isWarp) {
   // cap
   const capH = 14;
   const capY = isBottom ? y : y + h - capH;
-  ctx.fillStyle = isWarp ? '#0c7a40' : '#15a358';
+  ctx.fillStyle = isWarp ? _hexMix('#0c7a40', '#92c3a9', fl) : '#15a358';
   ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
 
   // dark edge under cap
-  ctx.fillStyle = isWarp ? '#021c11' : '#053a24';
+  ctx.fillStyle = isWarp ? _hexMix('#021c11', '#8d9994', fl) : '#053a24';
   const edgeY = isBottom ? capY : capY + capH - 2;
   ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
 
-  // highlight strip
-  ctx.fillStyle = isWarp ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.07)';
+  // highlight strip — flicker nudges this brighter too so the lit moments read a little hot
+  ctx.fillStyle = isWarp ? `rgba(255,255,255,${(0.04 + fl * 0.18).toFixed(3)})` : 'rgba(255,255,255,.07)';
   ctx.fillRect(x + 3, y, 6, h);
 }
 
