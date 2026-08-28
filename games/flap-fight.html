@@ -2333,13 +2333,42 @@ initGame();
 loop();
 
 // live resize
+// Rotating the phone while on the coin/waiting overlay, the death overlay, or the
+// ArcadeScores modal (i.e. any time `running` is false) used to be silently ignored —
+// the canvas kept whatever size it had at the LAST resize() call (often the portrait
+// boot size) and just sat clipped/centered inside the new landscape box instead of
+// stretching to fill it (Osimo 2026-08-28: "turn the phone round to landscape...
+// make it stretch the width of the screen"). initGame() already runs resize() plus
+// reseeds bird/stars/clouds against the CURRENT cw/ch, and is already proven
+// idempotent (boot + restartToWaiting call it freely).
+//
+// Event listeners (resize + visualViewport) fire on a real device rotation, but a
+// live-verify pass on this fix found real-world CDP/headless harnesses where a
+// window 'resize' event dispatches fine yet a listener registered during the page's
+// OWN initial synchronous load never invokes its callback on later firings (a fresh
+// listener added after the fact works every time — isolated and reproduced via
+// direct instrumentation, not guessed). Rather than ship something whose correctness
+// can't be verified end-to-end, the actual guarantee here is a lightweight poll:
+// compare the live wrap box every 250ms, independent of any event ever firing at
+// all. The listeners stay as a same-frame fast path when they do work; the poll is
+// what's actually proven.
+let lastWrapW = wrap.clientWidth, lastWrapH = wrap.clientHeight;
+setInterval(() => {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if (w !== lastWrapW || h !== lastWrapH) {
+    lastWrapW = w; lastWrapH = h;
+    if (running) resize(); else initGame();
+  }
+}, 250);
 let resizeTimer;
 window.addEventListener('resize', () => {
+  if (!running) { initGame(); return; }
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    if (running) resize();
-  }, 120);
+  resizeTimer = setTimeout(resize, 120);
 });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => window.dispatchEvent(new Event('resize')));
+}
 
 // iOS detection incl. iPadOS 13+, which reports itself as MacIntel with touch points.
 const IS_IOS = /iphone|ipod|ipad/i.test(navigator.userAgent) ||
