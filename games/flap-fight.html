@@ -235,12 +235,18 @@ const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once l
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
 const STAR_POWER_MS     = 7500;     // star power duration (Osimo 2026-08-02: +50%): every pipe safe
 const STAR_WARN_MS      = 2000;     // final stretch — the ring BLINKS as the expiry telegraph
-const FLASH_PIPE_EVERY  = 5;        // 2 in every N pipes (level 10+) flash translucent — see flashPipe
+const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
 const FLASH_PIPE_OPEN_MS  = 3000;  // flash-through pipe: translucent (safe) window
 const FLASH_PIPE_SOLID_MS = 1000;  // ...then solid (deadly) for this long
 const FLASH_PIPE_CYCLE_MS = FLASH_PIPE_OPEN_MS + FLASH_PIPE_SOLID_MS;
 const SHRINK_SPAWN_MS   = 11000;    // shrink bomb: spawns this often once level 10+
 const SHRINK_MAX        = 3;        // max stacking shrink levels
+const NEAR_MISS_PX      = 10;       // clearance from a gap edge (px) that counts as a near miss
+const NEAR_MISS_POINTS  = 25;       // bonus for a single (non-streak) near miss
+const GHOST_TIMER_MS    = 22000;    // 2 near misses in a row -> timed ghost mode duration
+const GHOST_WARN_MS     = 2000;     // same expiry-telegraph window as star power
+const RECORD_ROCKET_PIPES = 20;     // breaking the scoreboard record: same as the ×20 combo
+const RECORD_ROCKET_MS    = 30000;  // rocket, but double its normal 10-pipe / 15s reach
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // WARP PIPE easter egg (Osimo 2026-08-17): every 5th level, exactly ONE pipe half (top or
 // bottom, random) renders in a darker green. Touch it and instead of taking damage the bird
@@ -751,6 +757,11 @@ let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osim
 let birdInflate, inflateInvincible, nextMegaSpawn;
 let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
 let starChain, starPower, starPowerUntil;
+// near miss (Osimo 2026-08-29): thread a gap within NEAR_MISS_PX of an edge, unassisted by
+// any power-up, and it's a near miss. One = a single free ghost pass + points. Two in a row
+// on consecutive pipes = a TIMED ghost window (ghostTimerUntil), same safePass family as
+// star power/birdGhost but lasts GHOST_TIMER_MS and phases through every pipe, not just one.
+let nearMissStreak = 0, ghostTimerUntil = 0, lastGhostWarnSec = 99;
 let pipeSpawnCount;
 let pipeSpawnAcc, enemySpawnAcc, enemySpawnCount;
 // warp pipe: which pipe ordinal of the current level carries the warp (0 = none), how many
@@ -839,17 +850,17 @@ function spawnPipe() {
   // would bury the tell (same fairness rule as wobble×flash below).
   const warpPipe = warpAtPipe > 0 && levelPipeCount === warpAtPipe;
   if (warpPipe) warpAtPipe = 0;   // one per band — consumed on spawn
-  // flash-through pipe (level 10+, 2-in-5 — doubled from 1-in-5, Osimo 2026-08-29 "from
-  // level ten double the transparent shoots"): mutually exclusive with wobble — stacking
+  // flash-through pipe (level 10+, 1-in-5): mutually exclusive with wobble — stacking
   // both effects on one pipe would compound two learn-the-pattern mechanics at once,
-  // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02). The two
-  // hits per FLASH_PIPE_EVERY-length cycle land 2 pipes apart (not adjacent), so back-to-
-  // back flash-pipes stay spaced rather than merging into one long safe stretch.
-  const flashPipe = !warpPipe && level >= 10 &&
-    (pipeSpawnCount % FLASH_PIPE_EVERY === 0 || pipeSpawnCount % FLASH_PIPE_EVERY === 2);
+  // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02). Reverted
+  // to 1-in-5 2026-08-29 — Osimo clarified "double the translucent shoots" meant the
+  // ghost PARACHUTES (see GHOST_SPAWN_MS below), not this mechanic; this one was a
+  // one-day misfire, not the intended target.
+  const flashPipe = !warpPipe && level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
   const wobble = !warpPipe && !flashPipe && level >= 6 && Math.random() < 0.35;
   pipes.push({
     x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
+    minClearance: Infinity, wasProtected: false,   // near-miss tracking (Osimo 2026-08-29)
     wobble, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false,
     fallTimer: wobble ? Math.round(rnd(55, 100)) : 0,
@@ -939,6 +950,19 @@ function setLevel(n) {
 // (Osimo 2026-08-02: shrink bomb stacks on top of the existing inflate system).
 function recomputeBirdRadius() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
+}
+
+// activateComboRocket — extracted 2026-08-29 (feedback_extract_dont_inline): the ×20-combo
+// chain and breaking the scoreboard record both fire the identical rocket effect, just with
+// different pipe/duration numbers and floater text, so this is the one real implementation.
+function activateComboRocket(pipesCount, ms, label) {
+  comboRocketPipes = pipesCount;
+  starPower = true;
+  starPowerUntil = Date.now() + ms;   // topped up each frame while the rocket runs
+  lastStarSec = 99;
+  sfx.star();
+  floaters.push({ x: bird.x, y: bird.y - bird.r - 14, text: label, alpha: 1, vy: -2, color: '#ff9900' });
+  spawnParticles(bird.x, bird.y, '#ff9900', 18);
 }
 
 // ─── Jimmy & Joe callouts (Osimo 2026-08-17) ─────────────────────────────────
@@ -1171,6 +1195,9 @@ function initGame() {
   nextShrinkSpawn   = Date.now() + SHRINK_SPAWN_MS;
   birdGhost         = false;
   birdShrink        = 0;
+  nearMissStreak    = 0;
+  ghostTimerUntil   = 0;
+  lastGhostWarnSec  = 99;
   starChain         = 0;
   starPower         = false;
   starPowerUntil    = 0;
@@ -1424,6 +1451,34 @@ function update(dt) {
           starPowerUntil = Math.min(starPowerUntil, Date.now() + 2000);
         }
       }
+
+      // NEAR MISS (Osimo 2026-08-29): threaded this gap within NEAR_MISS_PX of an edge,
+      // unassisted by any power-up (p.wasProtected false — ghost/star/flash-translucent
+      // passes don't count, that's not a skill read). One = a single free ghost pass +
+      // points, matching the existing ghost-parachute pickup exactly. Two IN A ROW on
+      // consecutive pipes = a timed ghost window instead — any pipe that doesn't qualify
+      // (too wide a pass, or a protected one) breaks the streak, same as a real hit does
+      // in inflate() below.
+      if (!p.wasProtected && p.minClearance < NEAR_MISS_PX) {
+        nearMissStreak++;
+        if (nearMissStreak >= 2) {
+          nearMissStreak = 0;
+          ghostTimerUntil = Date.now() + GHOST_TIMER_MS;
+          lastGhostWarnSec = 99;
+          if (sfxMode !== 'mute') sfx.star();
+          floaters.push({ x: bird.x, y: bird.y - bird.r - 16, text: '👻 GHOST MODE!', alpha: 1, vy: -2, color: '#9fe8ff' });
+          spawnParticles(bird.x, bird.y, '#9fe8ff', 16);
+        } else {
+          birdGhost = true;
+          score += NEAR_MISS_POINTS;
+          scoreEl.textContent = score;
+          if (sfxMode !== 'mute') sfx.score();
+          floaters.push({ x: bird.x, y: bird.y - bird.r - 14, text: `👻 NEAR MISS +${NEAR_MISS_POINTS}`, alpha: 1, vy: -1.8, color: '#9fe8ff' });
+          spawnParticles(bird.x, bird.y, '#9fe8ff', 8);
+        }
+      } else {
+        nearMissStreak = 0;
+      }
     }
 
     // collision: rect vs circle (dynamic bird.r)
@@ -1453,12 +1508,21 @@ function update(dt) {
           const hitSide = hitTop ? 'top' : 'bottom';
           if (hitSide === p.warpSide) { startWarp(p); return; }
         }
-        // 3 independent ways to pass a pipe unharmed: ghost phase (stays true for the
+        // 4 independent ways to pass a pipe unharmed: ghost phase (stays true for the
         // ENTIRE traversal now — cleared only after full exit above), timed star power,
-        // or this pipe currently flashing translucent.
-        const safePass = birdGhost || (starPower && Date.now() < starPowerUntil) || (p.flashPipe && p.translucentNow);
+        // this pipe currently flashing translucent, or the near-miss-streak ghost timer.
+        const safePass = birdGhost || (starPower && Date.now() < starPowerUntil) ||
+          (p.flashPipe && p.translucentNow) || Date.now() < ghostTimerUntil;
+        if (safePass) p.wasProtected = true;   // disqualifies this pipe from near-miss credit
         if (!safePass && Date.now() >= inflateInvincible) inflate();
         return;
+      } else {
+        // near-miss clearance — smallest gap-edge distance seen while legitimately
+        // inside the gap this traversal (evaluated once the pipe is confirmed passed,
+        // in the scoring block above)
+        const topClear = (bird.y - bird.r) - effGapY;
+        const botClear = (p.gapY + p.gapSize) - (bird.y + bird.r);
+        p.minClearance = Math.min(p.minClearance, topClear, botClear);
       }
     }
   }
@@ -1586,16 +1650,12 @@ function update(dt) {
         lastPopMs = now;
         // 🚀 COMBO ROCKET (Osimo 2026-08-19): hitting a full ×20 chain fires the bird
         // forward — star-mode pass-through, sparks out the rear, ~2.6× world speed,
-        // +40 for each of the next 10 pipes. Once per chain.
+        // +40 for each of the next 10 pipes. Once per chain. (activateComboRocket() —
+        // extracted 2026-08-29 once the record-break trigger below needed the exact
+        // same activation, see feedback_extract_dont_inline.)
         if (comboCount === 20 && !comboRocketArmed) {
           comboRocketArmed = true;
-          comboRocketPipes = 10;
-          starPower = true;
-          starPowerUntil = now + 15000;   // topped up each frame while the rocket runs
-          lastStarSec = 99;
-          sfx.star();
-          floaters.push({ x: bird.x, y: bird.y - bird.r - 14, text: '🚀 COMBO ROCKET!', alpha: 1, vy: -2, color: '#ff9900' });
-          spawnParticles(bird.x, bird.y, '#ff9900', 18);
+          activateComboRocket(10, 15000, '🚀 COMBO ROCKET!');
         }
         const pts = 25 * comboCount;
         score += pts;
@@ -1633,7 +1693,9 @@ function update(dt) {
   // check — same precedent as special/mega above, a timed pickup should never silently
   // skip its promised cadence just because the enemy pool is momentarily full.
   if (level >= 5 && Date.now() >= nextGhostSpawn) {
-    nextGhostSpawn = Date.now() + GHOST_SPAWN_MS;
+    // from level 10, ghost parachutes ("translucent shoots") spawn twice as often
+    // (Osimo 2026-08-29) — the baseline 5s cadence (level 5-9) is untouched.
+    nextGhostSpawn = Date.now() + (level >= 10 ? GHOST_SPAWN_MS / 2 : GHOST_SPAWN_MS);
     const y = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
     enemies.push({ x: cw + ENEMY_R + 8, y, vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: level >= 10, ghost: true });
@@ -1666,6 +1728,18 @@ function update(dt) {
     if (Date.now() >= starPowerUntil) starPower = false;
   }
 
+  // ghost-timer expiry (Osimo 2026-08-29) — same telegraph pattern as star power above:
+  // reuses TONES.starWarn(), the established "a timed buff is about to end" sound, rather
+  // than inventing a second one for the same job.
+  if (ghostTimerUntil > 0) {
+    const msLeft = ghostTimerUntil - Date.now();
+    if (msLeft <= GHOST_WARN_MS && msLeft > 0 && lastGhostWarnSec !== -1) {
+      lastGhostWarnSec = -1;
+      if (sfxMode !== 'mute') TONES.starWarn();
+    }
+    if (Date.now() >= ghostTimerUntil) ghostTimerUntil = 0;
+  }
+
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -1689,6 +1763,17 @@ function update(dt) {
   if (!topAnnounced && topScore > 0 && score > topScore) {
     topAnnounced = true; pbAnnounced = true;
     showCallout('top');
+    // RECORD-BREAK TINY ROCKET (Osimo 2026-08-29): whatever size the bird currently is
+    // (regular/medium/large — birdInflate 0/1/2) it snaps straight to fully tiny, and
+    // gets the same ×20-combo rocket, but reaching twice as far (RECORD_ROCKET_PIPES/MS
+    // vs the normal 10 pipes/15s) — the scoreboard record is the bigger moment of the two.
+    birdInflate = 0;
+    birdShrink = SHRINK_MAX;
+    recomputeBirdRadius();
+    sfx.shrink(1 + SHRINK_MAX * 0.5);
+    spawnParticles(bird.x, bird.y, '#e879f9', 14);
+    floaters.push({ x: bird.x, y: bird.y - bird.r - 30, text: '👑 RECORD! TINY + ROCKET!', alpha: 1, vy: -2, color: '#ffd700' });
+    activateComboRocket(RECORD_ROCKET_PIPES, RECORD_ROCKET_MS, '🚀 RECORD ROCKET!');
   } else if (!pbAnnounced && bestScore > 0 && score > bestScore) {
     pbAnnounced = true;
     showCallout('pb');
@@ -1812,9 +1897,10 @@ function draw() {
     const _inv = Date.now() < inflateInvincible;
     const _waitFlash = waiting && Math.floor(Date.now() / 300) % 3 === 0;
     const _star = starPower && Date.now() < starPowerUntil;
+    const _ghostTimer = Date.now() < ghostTimerUntil;   // timed ghost window (near-miss streak)
     if ((!_inv || Math.floor(Date.now() / 75) % 2 === 0) && !_waitFlash) {
       if (_inv) ctx.globalAlpha = 0.35;
-      else if (birdGhost) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
+      else if (birdGhost || _ghostTimer) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
       if (_star) {
         // Mario-star flash: a glow ring cycling through a bright palette every 90ms.
         // Final STAR_WARN_MS: the ring BLINKS on/off (Osimo 2026-08-02) so the expiry
@@ -1827,6 +1913,18 @@ function draw() {
           ctx.save();
           ctx.shadowColor = hue; ctx.shadowBlur = 22;
           ctx.strokeStyle = hue; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+      } else if (_ghostTimer) {
+        // same telegraph doctrine as the star ring, ghost-cyan instead of the rainbow
+        // palette so the two timed buffs stay visually distinct at a glance.
+        const left = ghostTimerUntil - Date.now();
+        const blinkOff = left < GHOST_WARN_MS && Math.floor(Date.now() / 120) % 2 === 0;
+        if (!blinkOff) {
+          ctx.save();
+          ctx.shadowColor = '#9fe8ff'; ctx.shadowBlur = 20;
+          ctx.strokeStyle = '#9fe8ff'; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
           ctx.restore();
         }
@@ -2233,6 +2331,7 @@ function inflate(cause) {
   if (birdShrink > 0) {
     birdShrink = 0;
     starChain = 0;
+    nearMissStreak = 0;   // a real hit breaks the near-miss streak too
     recomputeBirdRadius();
     bird.vy = recoilVy;
     inflateInvincible = Date.now() + 1000;
@@ -2243,7 +2342,8 @@ function inflate(cause) {
   }
   if (birdInflate >= 2) { balloonPop(); return; }  // 3rd hit = pop death
   birdInflate++;
-  starChain = 0;  // any hit breaks the star-power chain
+  starChain = 0;      // any hit breaks the star-power chain
+  nearMissStreak = 0; // ...and the near-miss streak
   recomputeBirdRadius();
   bird.vy = recoilVy;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
