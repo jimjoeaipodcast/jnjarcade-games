@@ -230,6 +230,21 @@ const CHUTE_R      = 22;            // parachute dome radius
 const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
 const GAP_START    = 220;           // initial pipe gap (wide)
 const GAP_MIN      = 105;           // narrowest pipe gap
+
+// ─── LEVEL 15 DIRECTION REVERSAL (Osimo 2026-08-29) ────────────────────────────
+// "when you reach level 15, the pipes widen up a little (kinda reset)... BUT our bird
+// transitions and starts moving right to left (going backwards)... placed on the right
+// hand side so he can see what's coming from the left... a full screen glitter pipe...
+// bird comes out of a pipe on the right and starts bouncing left." Fires ONCE per run.
+// scrollDir is the single source of truth for which way the world scrolls — 1 = normal
+// (world scrolls left, bird anchored near the left), -1 = reversed (world scrolls right,
+// bird anchored near the right). Every spawn-edge/movement/despawn/scoring/trail check
+// that cares about direction reads this ONE variable rather than a hardcoded sign, so
+// the reversal is one flip, not a dozen independent ones that could drift out of sync.
+const REVERSAL_LEVEL         = 15;
+const REVERSAL_SUCK_FRAMES   = 33;  // phase 1: bird flies toward centre, glitter builds
+const REVERSAL_GLITTER_FRAMES = 42; // phase 2: full-screen glitter flash — the "glitter pipe"
+const REVERSAL_POPOUT_FRAMES = 30;  // phase 3: bird rockets out the new side, world flips
 // Purple bomb bounce: DOUBLE the HEIGHT of a normal stomp (Osimo 2026-08-02: "merely
 // meant to be double the height" — v1 used 3× VELOCITY, but bounce height scales with
 // velocity SQUARED, so that was a 9× height full-screen launch). h ∝ v² → double height
@@ -881,6 +896,13 @@ let cw, ch;
 let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
+let scrollDir = 1;        // 1 = normal, -1 = reversed (see REVERSAL_LEVEL block above)
+let reversalDone = false; // guards the transition from ever firing twice in one run
+let reversal = null;      // {phase:'suckin'|'glitter'|'popout', t} while the cutscene plays
+let gapResetTime = 0;     // currentGapSize() measures elapsed time from here, not always
+                           // gameStartTime — the level-15 "gaps widen up a little (kinda
+                           // reset)" moves this forward once, so the same GAP_START→GAP_MIN
+                           // decay just runs again from a wider baseline
 let comboCount, lastPopMs, comboTimer;
 let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osimo 2026-08-19)
 let combo30RocketArmed = false;                        // ×30-chain mega rocket (Osimo 2026-08-29)
@@ -948,8 +970,21 @@ function initClouds() {
 
 // ─── time-based gap ──────────────────────────────────────────────────────────
 function currentGapSize() {
-  const mins = (Date.now() - gameStartTime) / 60000;
+  const mins = (Date.now() - gapResetTime) / 60000;
   return Math.max(GAP_MIN, Math.round(GAP_START - mins * 25));
+}
+
+// spawn edge for pipes/enemies — the RIGHT edge scrolling toward -x in normal play,
+// the LEFT edge scrolling toward +x once REVERSAL_LEVEL flips scrollDir. Single source
+// of truth so every regular-gameplay spawn site (5 enemy spawns + pipe spawn) agrees.
+function pipeSpawnX()   { return scrollDir === 1 ? cw + PIPE_W + 2   : -PIPE_W - 2; }
+function enemySpawnX()  { return scrollDir === 1 ? cw + ENEMY_R + 8  : -ENEMY_R - 8; }
+// has this pipe fully cleared the bird in the direction of travel? margin extends the
+// bird's own side of the check (0 = past the bird's centre, bird.r = past its whole
+// body) — used by both the scoring pass-check and the ghost-phase clear-check, mirrored
+// for whichever way scrollDir currently points.
+function pipePassed(p, margin) {
+  return scrollDir === 1 ? (p.x + PIPE_W < bird.x - margin) : (p.x > bird.x + margin);
 }
 
 // ─── resize (convention: subtract CELL buffer top+bottom) ─────────────────────
@@ -993,7 +1028,7 @@ function spawnPipe() {
   const flashPipe = !warpPipe && level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
   const wobble = !warpPipe && !flashPipe && level >= 6 && Math.random() < 0.35;
   pipes.push({
-    x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
+    x: pipeSpawnX(), gapY, gapSize: gap, counted: false,
     minClearance: Infinity, wasProtected: false,   // near-miss tracking (Osimo 2026-08-29)
     wobble, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false,
@@ -1012,7 +1047,7 @@ function spawnEnemy() {
   // slot instead of stacking an extra enemy on top (Osimo 2026-08-29).
   if (buddyPending && level >= 10) {
     buddyPending = false;
-    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, buddyChute: true });
+    enemies.push({ x: enemySpawnX(), y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, buddyChute: true });
     return;
   }
   // flashing extra-life parachute rides in with the normal wave now — same front entry
@@ -1021,7 +1056,7 @@ function spawnEnemy() {
   // of the normal ones, and if he doesn't get it he shouldn't blow up" — reverses the
   // earlier separate-timer + 5s-expiry-punish mechanic entirely).
   const special = birdInflate > 0 && Math.random() < 0.12;
-  enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, special });
+  enemies.push({ x: enemySpawnX(), y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, special });
 }
 
 function spawnParticles(x, y, color, count) {
@@ -1088,6 +1123,16 @@ function setLevel(n) {
   levelPipeCount = 0;
   warpAtPipe = (n % WARP_LEVEL_EVERY === 0) ? Math.floor(rnd(2, 10)) : 0;
   buddyPending = n >= 10;   // guaranteed one gold buddy-parachute this level (Osimo 2026-08-29)
+  // LEVEL 15: the direction-reversal cutscene (Osimo 2026-08-29) — fires exactly once
+  // per run. gapResetTime moves forward so currentGapSize() runs its GAP_START→GAP_MIN
+  // decay again from a wider baseline ("the pipes widen up a little, kinda reset");
+  // the actual world-flip happens in the 'popout' phase of the cutscene, not here —
+  // this only ARMS it, update(dt)'s reversal block does the rest while gameplay pauses.
+  if (n === REVERSAL_LEVEL && !reversalDone) {
+    reversalDone = true;
+    gapResetTime = Date.now();
+    reversal = { phase: 'suckin', t: 0 };
+  }
 }
 
 // bird.r depends on BOTH how inflated (hurt) and how shrunk (buffed) the bird is —
@@ -1113,7 +1158,9 @@ function updateBuddy(dt) {
   for (let bi = 0; bi < buddies.length; bi++) {
     const b = buddies[bi];
     const leader = bi === 0 ? bird : buddies[bi - 1];
-    const targetX = leader.x - BUDDY_TRAIL_X, targetY = leader.y + BUDDY_TRAIL_Y;
+    // "behind" flips sign with scrollDir — once the world reverses, trailing the
+    // leader means sitting on the OTHER side of it
+    const targetX = leader.x - scrollDir * BUDDY_TRAIL_X, targetY = leader.y + BUDDY_TRAIL_Y;
     b.x += (targetX - b.x) * BUDDY_LERP * dt;
     b.y += (targetY - b.y) * BUDDY_LERP * dt;
     for (let i = enemies.length - 1; i >= 0; i--) {
@@ -1414,6 +1461,10 @@ function initGame() {
   waiting       = true;
   dead          = false;
   gameStartTime = Date.now();
+  gapResetTime  = gameStartTime;   // currentGapSize() decay starts here until Lv15 moves it
+  scrollDir     = 1;
+  reversalDone  = false;
+  reversal      = null;
   bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   comboCount  = 0;
   comboRocketPipes = 0; comboRocketArmed = false; combo30RocketArmed = false; lastComboAnnounced = 0;
@@ -1460,6 +1511,55 @@ function update(dt) {
     return;
   }
 
+  // ── LEVEL 15 DIRECTION-REVERSAL CUTSCENE (Osimo 2026-08-29) — world pauses, same
+  // early-return shape as the pop/warp phases above. "make something cool for the
+  // transition of speed, the change of direction": a building glitter suck-in, a full-
+  // screen glitter flash (the "glitter pipe"), then a sudden rocket-out pop on the new
+  // side — slow build, sudden release, reads as a change of pace even though no core
+  // physics dt is actually being scaled.
+  if (reversal) {
+    reversal.t += dt;
+    if (reversal.phase === 'suckin') {
+      if (reversal.t < dt + 0.01) sfx.warp();   // once, the frame this phase begins
+      bird.rot += 30 * dt;                       // spin building toward the flip
+      const k = reversal.t / REVERSAL_SUCK_FRAMES;
+      if (frame % Math.max(1, Math.round(3 - k * 2)) < 1) {
+        spawnParticles(bird.x, bird.y, Math.random() < 0.5 ? '#ffd700' : '#fff4c2', 3);
+      }
+      if (reversal.t >= REVERSAL_SUCK_FRAMES) { reversal.phase = 'glitter'; reversal.t = 0; }
+      return;
+    }
+    if (reversal.phase === 'glitter') {
+      // dense full-canvas sparkle burst — drawn in draw(); here just keeps seeding
+      // particles across the whole screen so the flash reads as "everywhere," not
+      // centred on the bird
+      if (frame % 2 < 1) {
+        spawnParticles(rnd(0, cw), rnd(0, ch - GROUND_H), Math.random() < 0.5 ? '#ffd700' : '#eafff0', 4);
+      }
+      if (reversal.t >= REVERSAL_GLITTER_FRAMES) {
+        // THE FLIP — happens once, right here, at the moment the glitter fully covers
+        // the screen so the direction-change itself is never visible mid-motion
+        scrollDir *= -1;
+        pipes.length = 0;
+        enemies.length = 0;
+        bird.x = Math.round(cw * (scrollDir === 1 ? 0.22 : 0.78));
+        bird.y = Math.round(ch / 2);
+        bird.vy = -3;
+        bird.rot = 0;
+        sfx.warpOut();
+        spawnParticles(bird.x, bird.y, '#ffd700', 24);
+        floaters.push({ x: cw / 2, y: ch * 0.35, text: '🔄 REVERSED!', alpha: 1, vy: -1.4, color: '#ffd700' });
+        reversal.phase = 'popout';
+        reversal.t = 0;
+      }
+      return;
+    }
+    if (reversal.phase === 'popout') {
+      if (reversal.t >= REVERSAL_POPOUT_FRAMES) reversal = null;   // gameplay resumes next frame
+      return;
+    }
+  }
+
   // ── warp pipe phases (suck-in / spit-out animate the bird, world pauses) ──
   if (warp && warp.phase === 'suck') {
     warp.t += dt;
@@ -1473,7 +1573,7 @@ function update(dt) {
   if (warp && warp.phase === 'spit') {
     warp.t += dt;
     const p = warp.pipe;
-    p.x -= pipeSpeed * dt;                  // exit pair scrolls like any pipe
+    p.x -= scrollDir * pipeSpeed * dt;       // exit pair scrolls like any pipe
     bird.x = p.x + PIPE_W / 2;
     bird.y = p.gapY - bird.r + (warp.t / WARP_SPIT_FRAMES) * (bird.r * 2 + 14);
     bird.rot = 20;
@@ -1498,8 +1598,11 @@ function update(dt) {
   bird.vy += GRAVITY * dt;
   bird.y  += bird.vy * dt;
   // glide back to the home column after a warp spit-out left the bird mid-screen
-  // (no-op in normal play — bird.x never otherwise moves off home)
-  const homeX = Math.round(cw * 0.22);
+  // (no-op in normal play — bird.x never otherwise moves off home). Mirrors to the
+  // right side once scrollDir flips at REVERSAL_LEVEL — this MUST track scrollDir or
+  // the reversal cutscene's hard bird.x snap gets silently glided straight back to the
+  // old left-side home the very next frame.
+  const homeX = Math.round(cw * (scrollDir === 1 ? 0.22 : 0.78));
   if (Math.abs(bird.x - homeX) > 1) bird.x += (homeX - bird.x) * Math.min(1, 0.05 * dt);
   // clamp rotation: nose-down on fall, nose-up on rise
   bird.rot = Math.min(Math.max(bird.vy * 4.5, -28), 90);
@@ -1534,7 +1637,7 @@ function update(dt) {
   }
 
   // scroll ground
-  groundX = (groundX - pipeSpeed * 0.9 * rocketMult * dt) % (GROUND_H * 2);
+  groundX = (groundX - scrollDir * pipeSpeed * 0.9 * rocketMult * dt) % (GROUND_H * 2);
 
   // stars parallax
   for (const s of stars) {
@@ -1592,8 +1695,10 @@ function update(dt) {
   // pipes
   for (let i = pipes.length - 1; i >= 0; i--) {
     const p = pipes[i];
-    p.x -= pipeSpeed * rocketMult * dt;
-    if (p.x + PIPE_W < 0) { pipes.splice(i, 1); continue; }
+    p.x -= scrollDir * pipeSpeed * rocketMult * dt;
+    // off-screen check flips with scrollDir: normal play despawns off the left edge,
+    // reversed play despawns off the right edge
+    if (scrollDir === 1 ? (p.x + PIPE_W < 0) : (p.x > cw)) { pipes.splice(i, 1); continue; }
 
     // wobble / falling top pipe update
     if (p.wobble) {
@@ -1620,7 +1725,7 @@ function update(dt) {
     }
 
     // score pipe — ×4 value during the combo rocket (+40/pipe for its 10 pipes)
-    if (!p.counted && p.x + PIPE_W < bird.x) {
+    if (!p.counted && pipePassed(p, 0)) {
       p.counted = true;
       const rocketPipe = comboRocketPipes > 0;
       score += rocketPipe ? 40 : 10;
@@ -1680,7 +1785,7 @@ function update(dt) {
     // moment the ghosted bird overlaps it, and only clear the ghost once that pipe is
     // FULLY clear of the bird's trailing edge. The whole body passes through, guaranteed.
     if (birdGhost && inX) p.ghostPipe = true;
-    if (birdGhost && p.ghostPipe && p.x + PIPE_W < bird.x - bird.r) {
+    if (birdGhost && p.ghostPipe && pipePassed(p, bird.r)) {
       birdGhost = false;
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
     }
@@ -1721,13 +1826,14 @@ function update(dt) {
     if (!e.alive) { enemies.splice(i, 1); continue; }
 
     const spd = pipeSpeed * (e.fast ? 0.8 : 0.62);
-    e.x -= spd * dt;
+    e.x -= scrollDir * spd * dt;
     e.y += e.vy * dt;
     // bounce off top/bottom
     const minY = CHUTE_OFFSET + CHUTE_R + 4;
     if (e.y < minY)  { e.y = minY;  e.vy = Math.abs(e.vy); }
     if (e.y > ch - GROUND_H - ENEMY_R - 2) { e.y = ch - GROUND_H - ENEMY_R - 2; e.vy = -Math.abs(e.vy); }
-    if (e.x + CHUTE_R < 0) { enemies.splice(i, 1); continue; }
+    // same edge-flip as the pipe despawn check above
+    if (scrollDir === 1 ? (e.x + CHUTE_R < 0) : (e.x - CHUTE_R > cw)) { enemies.splice(i, 1); continue; }
 
     // stomp check: bird falls onto parachute from above
     const cx = e.x, cy = e.y - CHUTE_OFFSET;
@@ -1819,7 +1925,7 @@ function update(dt) {
         spawnParticles(e.x, cy, '#ffd700', 18);
         spawnParticles(e.x, cy, '#fff4c2', 8);
         const tail = buddies.length ? buddies[buddies.length - 1] : bird;
-        buddies.push({ x: tail.x - BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
+        buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
         floaters.push({ x: e.x, y: cy - CHUTE_R - 4,
                          text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
                          alpha: 1, vy: -1.8, color: '#ffd700' });
@@ -1896,7 +2002,7 @@ function update(dt) {
     const hardY = Math.random() < 0.5
       ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
       : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
-    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
+    enemies.push({ x: enemySpawnX(), y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, mega: true });
   }
 
@@ -1910,7 +2016,7 @@ function update(dt) {
     // (Osimo 2026-08-29) — the baseline 5s cadence (level 5-9) is untouched.
     nextGhostSpawn = Date.now() + (level >= 10 ? GHOST_SPAWN_MS / 2 : GHOST_SPAWN_MS);
     const y = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
-    enemies.push({ x: cw + ENEMY_R + 8, y, vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85),
+    enemies.push({ x: enemySpawnX(), y, vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: level >= 10, ghost: true });
   }
 
@@ -1923,7 +2029,7 @@ function update(dt) {
     const hardY = Math.random() < 0.5
       ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
       : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
-    enemies.push({ x: cw + ENEMY_R + 8, y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
+    enemies.push({ x: enemySpawnX(), y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, shrink: true });
   }
 
@@ -2155,17 +2261,18 @@ function draw() {
           ctx.restore();
         }
       }
-      drawBird(bird.x, bird.y, bird.rot);
+      drawBird(bird.x, bird.y, bird.rot, undefined, undefined, scrollDir);
       ctx.globalAlpha = 1;
     }
   }
   // companion CHAIN (Osimo 2026-08-29) — always translucent while trailing, never tilts
   // (no independent rotation tracked, a neutral sprite reads fine for a following buddy).
   // Drawn front-to-back so a later (further-back) buddy never visually overlaps in front
-  // of an earlier one.
+  // of an earlier one. Faces the same way as the player (scrollDir) — the whole flock
+  // turns around together at REVERSAL_LEVEL, not just the player bird.
   if (buddies.length) {
     ctx.globalAlpha = 0.55;
-    for (const b of buddies) drawBird(b.x, b.y, 0, BUDDY_SIZE, 0);
+    for (const b of buddies) drawBird(b.x, b.y, 0, BUDDY_SIZE, 0, scrollDir);
     ctx.globalAlpha = 1;
   }
   // waiting — tap to play hint
@@ -2227,6 +2334,36 @@ function draw() {
     ctx.textAlign = 'left';
   } else if (callout && Date.now() >= callout.until) {
     callout = null;
+  }
+
+  // LEVEL 15 DIRECTION-REVERSAL CUTSCENE — drawn last so it sits on top of everything
+  // (a "full screen glitter pipe" has to actually cover the full screen). The particle
+  // burst itself is seeded in update()'s reversal block and rendered by the normal
+  // particle loop above; this just adds the flash-wash and the pipe the bird pops out
+  // of — the two pieces that don't fit the existing particle/sprite systems.
+  if (reversal) {
+    if (reversal.phase === 'glitter') {
+      const k = reversal.t / REVERSAL_GLITTER_FRAMES;
+      const flashAlpha = k < 0.2 ? k / 0.2 : k > 0.75 ? Math.max(0, (1 - k) / 0.25) : 1;
+      ctx.save();
+      ctx.globalAlpha = flashAlpha * 0.55;
+      const flash = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
+      flash.addColorStop(0, '#fffbe0');
+      flash.addColorStop(0.6, '#ffd700');
+      flash.addColorStop(1, 'rgba(255,215,0,0)');
+      ctx.fillStyle = flash;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    } else if (reversal.phase === 'popout') {
+      // a short pipe stub the bird visually emerged from, fading out as the phase ends
+      const k = reversal.t / REVERSAL_POPOUT_FRAMES;
+      const stubAlpha = Math.max(0, 1 - k * 1.4);
+      ctx.save();
+      ctx.globalAlpha = stubAlpha;
+      const stubX = scrollDir === 1 ? bird.x - PIPE_W - 6 : bird.x + 6;
+      drawPipe(stubX, bird.y - 70, PIPE_W, 140, false, true);
+      ctx.restore();
+    }
   }
 }
 
@@ -2479,19 +2616,24 @@ function drawEnemy(e) {
   ctx.restore();
 }
 
-function drawBird(x, y, rotDeg, rOverride, inflateOverride) {
-  // both params optional — the real player bird keeps its dynamic size/tint (unchanged
-  // call sites, both args undefined); the buddy companion passes BUDDY_SIZE + 0 so it
-  // never inflates/shrinks/tints with the player's own state (Osimo 2026-08-29 v2:
-  // "no point having him match your size, keep him always small in the background")
+function drawBird(x, y, rotDeg, rOverride, inflateOverride, facingOverride) {
+  // rOverride/inflateOverride optional — the real player bird keeps its dynamic
+  // size/tint (unchanged call sites, both args undefined); the buddy companion passes
+  // BUDDY_SIZE + 0 so it never inflates/shrinks/tints with the player's own state
+  // (Osimo 2026-08-29 v2: "no point having him match your size, keep him always small
+  // in the background"). facingOverride defaults to 1 (normal, nose-right) so the
+  // instructions-overlay icon never flips regardless of live game state — only the
+  // real gameplay call sites (player + buddy chain) explicitly pass the live
+  // `scrollDir` so the whole flock visually turns around together at REVERSAL_LEVEL.
   const R = rOverride !== undefined ? rOverride : bird.r;
   const infl = inflateOverride !== undefined ? inflateOverride : birdInflate;
+  const facing = facingOverride !== undefined ? facingOverride : 1;
   const scale = R / BIRD_R;
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(rotDeg * Math.PI / 180);
-  ctx.scale(scale, scale);
+  ctx.scale(scale * facing, scale);
 
   // BACKPACK (behind body — draw first)
   ctx.fillStyle = '#7B4A1E';
