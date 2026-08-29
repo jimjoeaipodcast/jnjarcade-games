@@ -884,7 +884,7 @@ let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osimo 2026-08-19)
 let combo30RocketArmed = false;                        // ×30-chain mega rocket (Osimo 2026-08-29)
-let buddy = null;          // {x,y,vy} while an active companion trails the player, else null
+let buddies = [];          // chain of {x,y} companions, front-to-back — [] when none trail
 let buddyPending = false;  // armed true on entering a level>=10, consumed by the next spawnEnemy()
 let birdInflate, inflateInvincible, nextMegaSpawn;
 let lastHitCause = 'hitPipe';   // most recent inflate() cause — read by deathVoice() (Osimo 2026-08-29)
@@ -1097,31 +1097,38 @@ function recomputeBirdRadius() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
 }
 
-// updateBuddy — the trailing companion (Osimo 2026-08-29). Lerp-follows the player on
-// BOTH axes rather than independently-simulated physics: since bird.y already carries
-// every bounce/flap/fall the player does, lerping toward it directly means the buddy
-// "bounces when you bounce" and "moves as you move" for free, just arriving a beat later
-// (the lerp lag) — reads as a trailing companion without a second physics body to keep
-// in sync. Also runs its own small catch-check against `enemies` ("while translucent it
-// can also catch shoots") — a flat bonus per parachute, not the full mega/shrink/ghost-
-// specific effects the PLAYER'S stomp gets, since none of those (inflate/shrink) apply to
-// a companion that "always stays regular size till you take over."
+// updateBuddy — the trailing companion CHAIN (Osimo 2026-08-29, v2: "getting buddy power
+// again while you have one already adds a second buddy trailing your buddy"). `buddies`
+// is an array, front-to-back — buddies[0] lerp-follows the PLAYER exactly as before;
+// buddies[1] lerp-follows buddies[0] at the same trail offset; buddies[2] follows
+// buddies[1]; and so on — a conga line, each link using the identical lerp-follow math
+// (bird.y already carries every bounce/flap/fall, so following the link ahead means the
+// whole chain "bounces when you bounce" for free, just with compounding lag down the
+// line). Every buddy in the chain independently runs its own small catch-check against
+// `enemies` — more buddies genuinely means more catch coverage, not just more visual
+// tail — a flat bonus per parachute, not the full mega/shrink/ghost-specific effects the
+// PLAYER'S stomp gets, since none of those apply to a companion that "always stays
+// regular size till you take over."
 function updateBuddy(dt) {
-  const targetX = bird.x - BUDDY_TRAIL_X, targetY = bird.y + BUDDY_TRAIL_Y;
-  buddy.x += (targetX - buddy.x) * BUDDY_LERP * dt;
-  buddy.y += (targetY - buddy.y) * BUDDY_LERP * dt;
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (!e.alive) continue;
-    const cx = e.x, cy = e.y - CHUTE_OFFSET;
-    const dist = Math.hypot(buddy.x - cx, buddy.y - cy);
-    if (dist < BIRD_R + CHUTE_R) {
-      e.alive = false;
-      score += BUDDY_CATCH_POINTS;
-      scoreEl.textContent = score;
-      sfx.bonus(1);
-      spawnParticles(cx, cy, '#ffd700', 10);
-      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `✨ +${BUDDY_CATCH_POINTS}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+  for (let bi = 0; bi < buddies.length; bi++) {
+    const b = buddies[bi];
+    const leader = bi === 0 ? bird : buddies[bi - 1];
+    const targetX = leader.x - BUDDY_TRAIL_X, targetY = leader.y + BUDDY_TRAIL_Y;
+    b.x += (targetX - b.x) * BUDDY_LERP * dt;
+    b.y += (targetY - b.y) * BUDDY_LERP * dt;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e.alive) continue;
+      const cx = e.x, cy = e.y - CHUTE_OFFSET;
+      const dist = Math.hypot(b.x - cx, b.y - cy);
+      if (dist < BIRD_R + CHUTE_R) {
+        e.alive = false;
+        score += BUDDY_CATCH_POINTS;
+        scoreEl.textContent = score;
+        sfx.bonus(1);
+        spawnParticles(cx, cy, '#ffd700', 10);
+        floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `✨ +${BUDDY_CATCH_POINTS}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+      }
     }
   }
 }
@@ -1375,7 +1382,7 @@ function initGame() {
   birdShrink        = 0;
   nearMissStreak    = 0;
   ghostTimerUntil   = 0;
-  buddy             = null;
+  buddies           = [];
   buddyPending      = false;
   lastGhostWarnSec  = 99;
   starChain         = 0;
@@ -1802,13 +1809,20 @@ function update(dt) {
         birdGhost = true;
         floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
       } else if (e.buddyChute) {
-        // BUDDY PARACHUTE (Osimo 2026-08-29) — spawns a trailing companion. Starts at
-        // the player's current position so it doesn't visually teleport in.
+        // BUDDY PARACHUTE (Osimo 2026-08-29, v2: "getting it again while you have one
+        // already adds a second buddy trailing your buddy") — PUSHES onto the chain
+        // rather than overwriting. Starts trailing behind whichever entity is currently
+        // at the back of the chain (the player, if this is the first buddy; otherwise
+        // the last buddy already in the chain) so the new link doesn't visually teleport
+        // in ahead of where it belongs.
         sfx.buddyTime();
         spawnParticles(e.x, cy, '#ffd700', 18);
         spawnParticles(e.x, cy, '#fff4c2', 8);
-        buddy = { x: bird.x - BUDDY_TRAIL_X, y: bird.y + BUDDY_TRAIL_Y };
-        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '✨ BUDDY!', alpha: 1, vy: -1.8, color: '#ffd700' });
+        const tail = buddies.length ? buddies[buddies.length - 1] : bird;
+        buddies.push({ x: tail.x - BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
+        floaters.push({ x: e.x, y: cy - CHUTE_R - 4,
+                         text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
+                         alpha: 1, vy: -1.8, color: '#ffd700' });
       } else if (e.special) {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
         sfx.bonus(pitchMult);
@@ -1950,7 +1964,7 @@ function update(dt) {
     if (Date.now() >= ghostTimerUntil) ghostTimerUntil = 0;
   }
 
-  if (buddy) updateBuddy(dt);
+  if (buddies.length) updateBuddy(dt);
 
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -2145,11 +2159,13 @@ function draw() {
       ctx.globalAlpha = 1;
     }
   }
-  // companion (Osimo 2026-08-29) — always translucent while trailing, never tilts (no
-  // independent rotation tracked, a neutral sprite reads fine for a following buddy)
-  if (buddy) {
+  // companion CHAIN (Osimo 2026-08-29) — always translucent while trailing, never tilts
+  // (no independent rotation tracked, a neutral sprite reads fine for a following buddy).
+  // Drawn front-to-back so a later (further-back) buddy never visually overlaps in front
+  // of an earlier one.
+  if (buddies.length) {
     ctx.globalAlpha = 0.55;
-    drawBird(buddy.x, buddy.y, 0, BUDDY_SIZE, 0);
+    for (const b of buddies) drawBird(b.x, b.y, 0, BUDDY_SIZE, 0);
     ctx.globalAlpha = 1;
   }
   // waiting — tap to play hint
@@ -2624,19 +2640,23 @@ function inflate(cause) {
 // ─── balloon pop death ───────────────────────────────────────────────────────
 function balloonPop() {
   // BUDDY TAKEOVER (Osimo 2026-08-29: "when you die it takes your place and you carry
-  // on, he always stays regular size till you take over") — the companion swoops in
-  // INSTEAD of the death sequence: consumed once, bird resets to regular size (the
+  // on, he always stays regular size till you take over") — the FRONT companion swoops
+  // in INSTEAD of the death sequence: consumed once, bird resets to regular size (the
   // buddy's own promise — it never inherited whatever inflate/shrink state killed the
-  // player), a breather of invincibility, and play continues with zero interruption.
-  if (buddy) {
-    buddy = null;
+  // player), a breather of invincibility, and play continues with zero interruption. Any
+  // REMAINING buddies in the chain (v2: stacked buddies) simply stay put — updateBuddy's
+  // leader lookup re-resolves buddies[0] to follow the player directly next frame, no
+  // extra bookkeeping needed to shift the chain forward.
+  if (buddies.length) {
+    buddies.shift();
     birdInflate = 0;
     recomputeBirdRadius();
     bird.vy = -5;
     inflateInvincible = Date.now() + 1200;
     sfx.buddySave();
     spawnParticles(bird.x, bird.y, '#ffd700', 20);
-    floaters.push({ x: bird.x, y: bird.y - bird.r - 16, text: '✨ BUDDY SAVES YOU!', alpha: 1, vy: -2, color: '#ffd700' });
+    const saveText = buddies.length ? `✨ BUDDY SAVES YOU! (${buddies.length} left)` : '✨ BUDDY SAVES YOU!';
+    floaters.push({ x: bird.x, y: bird.y - bird.r - 16, text: saveText, alpha: 1, vy: -2, color: '#ffd700' });
     return;
   }
   popping  = true;
