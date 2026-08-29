@@ -235,7 +235,7 @@ const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once l
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
 const STAR_POWER_MS     = 7500;     // star power duration (Osimo 2026-08-02: +50%): every pipe safe
 const STAR_WARN_MS      = 2000;     // final stretch — the ring BLINKS as the expiry telegraph
-const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
+const FLASH_PIPE_EVERY  = 5;        // 2 in every N pipes (level 10+) flash translucent — see flashPipe
 const FLASH_PIPE_OPEN_MS  = 3000;  // flash-through pipe: translucent (safe) window
 const FLASH_PIPE_SOLID_MS = 1000;  // ...then solid (deadly) for this long
 const FLASH_PIPE_CYCLE_MS = FLASH_PIPE_OPEN_MS + FLASH_PIPE_SOLID_MS;
@@ -839,10 +839,14 @@ function spawnPipe() {
   // would bury the tell (same fairness rule as wobble×flash below).
   const warpPipe = warpAtPipe > 0 && levelPipeCount === warpAtPipe;
   if (warpPipe) warpAtPipe = 0;   // one per band — consumed on spawn
-  // flash-through pipe (level 10+, 1-in-5): mutually exclusive with wobble — stacking
+  // flash-through pipe (level 10+, 2-in-5 — doubled from 1-in-5, Osimo 2026-08-29 "from
+  // level ten double the transparent shoots"): mutually exclusive with wobble — stacking
   // both effects on one pipe would compound two learn-the-pattern mechanics at once,
-  // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02).
-  const flashPipe = !warpPipe && level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
+  // which breaks the "telegraph everything" fairness rule (Osimo 2026-08-02). The two
+  // hits per FLASH_PIPE_EVERY-length cycle land 2 pipes apart (not adjacent), so back-to-
+  // back flash-pipes stay spaced rather than merging into one long safe stretch.
+  const flashPipe = !warpPipe && level >= 10 &&
+    (pipeSpawnCount % FLASH_PIPE_EVERY === 0 || pipeSpawnCount % FLASH_PIPE_EVERY === 2);
   const wobble = !warpPipe && !flashPipe && level >= 6 && Math.random() < 0.35;
   pipes.push({
     x: cw + PIPE_W + 2, gapY, gapSize: gap, counted: false,
@@ -1931,28 +1935,35 @@ function drawCloud(x, y, w, alpha) {
   ctx.globalAlpha = 1;
 }
 
-// warp-pipe telegraph (Osimo 2026-08-28, three passes same day): v1 was a flat darker-green
-// fill only — "almost impossible to tell" apart from regular pipes. v2 made it flicker
-// between two colours — tested live, still "didn't quite like the flashing" even slowed down
-// and tinted-not-whitened. v3: no colour change AT ALL — pipe stays the plain darker-green
-// telegraph exactly as v1 — and the tell is a handful of small sparkles that twinkle at fixed
-// spots on the pipe, independently timed so they never flash in unison ("magic dust... here
-// and there"). Position is defined as a FRACTION of the pipe's own w/h (drawPipe only receives
-// geometry, not the pipe object) so it holds correctly regardless of that pipe's actual height.
+// warp-pipe telegraph (Osimo 2026-08-28, four passes same day): v1 flat darker-green fill —
+// "almost impossible to tell" apart from regular pipes. v2 flickered between two colours —
+// "didn't quite like the flashing" even slowed/tinted. v3: no colour change, 5 sparse sparkles
+// instead ("magic dust... here and there"). v4 (this pass) — Osimo tested v3, wanted MORE:
+// "twice the sparkle and almost constantly." Doubled the slot count 5→10 and raised each
+// slot's own pulse-to-period ratio to ~72% (was ~11%) — individual sparkles still genuinely
+// fade in/out (never a flat glow, still reads as "sparkle" not "lit up"), but with 10
+// independently-phased slots each lit ~72% of the time, the chance every slot is dark at once
+// is negligible — the pipe reads as almost continuously twinkling somewhere on its surface.
+// Position is a FRACTION of the pipe's own w/h (drawPipe only receives geometry, not the pipe
+// object) so it holds correctly regardless of that pipe's actual height.
 const WARP_SPARKLES = [
-  { fx: 0.20, fy: 0.12, period: 2300, offset: 0    },
-  { fx: 0.75, fy: 0.28, period: 2700, offset: 640  },
-  { fx: 0.40, fy: 0.52, period: 1900, offset: 1250 },
-  { fx: 0.82, fy: 0.70, period: 2500, offset: 300  },
-  { fx: 0.28, fy: 0.86, period: 2100, offset: 1550 },
+  { fx: 0.18, fy: 0.10, period: 2000, offset: 0,    pulseMs: 1450 },
+  { fx: 0.78, fy: 0.16, period: 2300, offset: 220,  pulseMs: 1650 },
+  { fx: 0.35, fy: 0.22, period: 1900, offset: 610,  pulseMs: 1380 },
+  { fx: 0.60, fy: 0.30, period: 2500, offset: 340,  pulseMs: 1800 },
+  { fx: 0.15, fy: 0.42, period: 2100, offset: 1000, pulseMs: 1500 },
+  { fx: 0.85, fy: 0.48, period: 2400, offset: 780,  pulseMs: 1750 },
+  { fx: 0.45, fy: 0.58, period: 1800, offset: 1300, pulseMs: 1300 },
+  { fx: 0.70, fy: 0.66, period: 2200, offset: 1550, pulseMs: 1600 },
+  { fx: 0.25, fy: 0.78, period: 2000, offset: 900,  pulseMs: 1450 },
+  { fx: 0.55, fy: 0.88, period: 2600, offset: 1900, pulseMs: 1900 },
 ];
-const WARP_SPARKLE_PULSE_MS = 260;   // how long any one sparkle stays visible per cycle
 function drawWarpSparkles(x, y, w, h, now) {
   for (const s of WARP_SPARKLES) {
     const t = (now + s.offset) % s.period;
-    if (t > WARP_SPARKLE_PULSE_MS) continue;             // dark the rest of its cycle
-    const k = t / WARP_SPARKLE_PULSE_MS;
-    const alpha = k < 0.35 ? k / 0.35 : 1 - (k - 0.35) / 0.65;  // quick catch-light, slow fade
+    if (t > s.pulseMs) continue;                          // dark the rest of its cycle
+    const k = t / s.pulseMs;
+    const alpha = k < 0.25 ? k / 0.25 : 1 - (k - 0.25) / 0.75;  // quick catch-light, slow fade
     const sx = x + w * s.fx, sy = y + h * s.fy;
     const r = 2 + alpha * 1.8;
     ctx.save();
