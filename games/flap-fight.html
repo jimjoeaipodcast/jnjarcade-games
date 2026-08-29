@@ -263,10 +263,14 @@ const COMBO30_ROCKET_MS    = 30000; // twice the time of the 20" — same number
 // sparkles, if you hit that shoot you have a second bird trail you... and when you die it
 // takes your place." One guaranteed per level from L10+ (armed in setLevel, consumed by
 // the next spawnEnemy() call — same "guaranteed, not random-chance" shape as the warp pipe).
-const BUDDY_TRAIL_X   = 34;   // follows this far behind the player horizontally
+const BUDDY_TRAIL_X   = 46;   // follows this far behind the player horizontally (Osimo
+                               // 2026-08-29 v2: "move him back a few more pixels", was 34)
 const BUDDY_TRAIL_Y   = 10;   // ...and this far below, vertically
 const BUDDY_LERP      = 0.20; // follow smoothing — bounces/moves WITH you, on a slight delay
 const BUDDY_CATCH_POINTS = 15;// flat bonus when the buddy itself pops a parachute
+const BUDDY_SIZE      = 8;    // Osimo 2026-08-29 v2: "no point having him match your size,
+                               // keep him always small in the background" — fixed radius,
+                               // independent of the player's own birdInflate/birdShrink state
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // WARP PIPE easter egg (Osimo 2026-08-17): every 5th level, exactly ONE pipe half (top or
 // bottom, random) renders in a darker green. Touch it and instead of taking damage the bird
@@ -2145,7 +2149,7 @@ function draw() {
   // independent rotation tracked, a neutral sprite reads fine for a following buddy)
   if (buddy) {
     ctx.globalAlpha = 0.55;
-    drawBird(buddy.x, buddy.y, 0);
+    drawBird(buddy.x, buddy.y, 0, BUDDY_SIZE, 0);
     ctx.globalAlpha = 1;
   }
   // waiting — tap to play hint
@@ -2459,8 +2463,13 @@ function drawEnemy(e) {
   ctx.restore();
 }
 
-function drawBird(x, y, rotDeg) {
-  const R = bird.r;  // dynamic radius — grows with each inflation
+function drawBird(x, y, rotDeg, rOverride, inflateOverride) {
+  // both params optional — the real player bird keeps its dynamic size/tint (unchanged
+  // call sites, both args undefined); the buddy companion passes BUDDY_SIZE + 0 so it
+  // never inflates/shrinks/tints with the player's own state (Osimo 2026-08-29 v2:
+  // "no point having him match your size, keep him always small in the background")
+  const R = rOverride !== undefined ? rOverride : bird.r;
+  const infl = inflateOverride !== undefined ? inflateOverride : birdInflate;
   const scale = R / BIRD_R;
 
   ctx.save();
@@ -2483,8 +2492,8 @@ function drawBird(x, y, rotDeg) {
   ctx.stroke();
 
   // BODY (colour tints warmer with each inflation)
-  const bodyColA = birdInflate === 0 ? '#FFE566' : birdInflate === 1 ? '#FFB03A' : '#FF6622';
-  const bodyColB = birdInflate === 0 ? '#F5A623' : birdInflate === 1 ? '#E05000' : '#CC1100';
+  const bodyColA = infl === 0 ? '#FFE566' : infl === 1 ? '#FFB03A' : '#FF6622';
+  const bodyColB = infl === 0 ? '#F5A623' : infl === 1 ? '#E05000' : '#CC1100';
   const bg = ctx.createRadialGradient(-2, -2, 1, 0, 0, BIRD_R + 2);
   bg.addColorStop(0, bodyColA);
   bg.addColorStop(1, bodyColB);
@@ -2494,8 +2503,8 @@ function drawBird(x, y, rotDeg) {
   ctx.fill();
 
   // inflation stress lines (appear from inflate 1+)
-  if (birdInflate >= 1) {
-    ctx.strokeStyle = `rgba(255,255,255,${birdInflate * 0.18})`;
+  if (infl >= 1) {
+    ctx.strokeStyle = `rgba(255,255,255,${infl * 0.18})`;
     ctx.lineWidth = 1.2;
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;
@@ -2507,7 +2516,7 @@ function drawBird(x, y, rotDeg) {
   }
 
   // WING
-  ctx.fillStyle = birdInflate === 0 ? '#E8980E' : '#C05000';
+  ctx.fillStyle = infl === 0 ? '#E8980E' : '#C05000';
   ctx.beginPath();
   ctx.ellipse(-5, 3, 6, 3, -0.25, 0, Math.PI * 2);
   ctx.fill();
