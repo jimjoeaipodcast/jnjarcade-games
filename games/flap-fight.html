@@ -1914,9 +1914,18 @@ function update(dt) {
   // shoot countdown — retired. Instead, in BOTH sound modes, a Mario-style
   // "invincibility ending" warble fires once when the ring starts blinking
   // (STAR_WARN_MS = final 2s) — audio twin of the blink telegraph.
+  // Osimo 2026-08-29 v2: "the star power ending warning should not sound if you still
+  // have ghost power. it carries over till the ghost one is finished" — safePass ORs
+  // both buffs together, so if ghost is still covering, star's own clock running out
+  // isn't actually dangerous yet; firing its warning here is a false alarm. Suppressed
+  // while the OTHER timed buff still covers — re-evaluated every frame, so if ghost
+  // outlasts star's whole final-2s window the star warning never fires at all (ghost's
+  // own warning below is the one that eventually fires), but if ghost lapses partway
+  // through star's final stretch, star's warning fires right then, right on schedule.
   if (starPower) {
     const msLeft = starPowerUntil - Date.now();
-    if (msLeft <= STAR_WARN_MS && lastStarSec !== -1) {
+    const ghostCovers = Date.now() < ghostTimerUntil;
+    if (msLeft <= STAR_WARN_MS && lastStarSec !== -1 && !ghostCovers) {
       lastStarSec = -1;   // fired for this star
       if (sfxMode !== 'mute') TONES.starWarn();
     }
@@ -1925,10 +1934,12 @@ function update(dt) {
 
   // ghost-timer expiry (Osimo 2026-08-29) — same telegraph pattern as star power above:
   // reuses TONES.starWarn(), the established "a timed buff is about to end" sound, rather
-  // than inventing a second one for the same job.
+  // than inventing a second one for the same job. Symmetric suppression (v2 above): don't
+  // warn that ghost is ending if star power is still actively covering the same pass.
   if (ghostTimerUntil > 0) {
     const msLeft = ghostTimerUntil - Date.now();
-    if (msLeft <= GHOST_WARN_MS && msLeft > 0 && lastGhostWarnSec !== -1) {
+    const starCovers = starPower && Date.now() < starPowerUntil;
+    if (msLeft <= GHOST_WARN_MS && msLeft > 0 && lastGhostWarnSec !== -1 && !starCovers) {
       lastGhostWarnSec = -1;
       if (sfxMode !== 'mute') TONES.starWarn();
     }
@@ -2702,17 +2713,27 @@ function drawIcon(canvasEl, kind) {
     ctx.scale(1.05, 1.05);
     drawBird(0, 0, -8);
   } else if (kind === 'pipe' || kind === 'warpPipe') {
-    ctx.translate(w / 2, 0);
-    ctx.scale(0.42, 0.42);
-    drawPipe(-PIPE_W / 2, -10, PIPE_W, h / 0.42 + 20, false, kind === 'warpPipe');
+    // Osimo 2026-08-29 v4: "looks like miniature screenshots" — the old -10/+20 overflow
+    // math deliberately bled the body past every edge of the icon canvas so it would
+    // never show a transparent gap, but that also cropped out the cap (the one feature
+    // that reads as "a pipe" instead of "a solid colour rectangle") and overflowed the
+    // sides too (PIPE_W=54 alone is wider than the 20px-wide icon box). Now draws a real
+    // short pipe SEGMENT — cap fully visible, centered with margin on all sides — same
+    // problem class as the row-icon blur fix: an accurate render still needs to actually
+    // fit its frame to read as an icon, not a swatch.
+    const pS = 0.34, pH = 80;             // unscaled pipe segment height fed to drawPipe
+    ctx.translate(w / 2, (h - pH * pS) / 2);
+    ctx.scale(pS, pS);
+    drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, kind === 'warpPipe');
   } else if (kind === 'flashPipe') {
     // no standalone flash-pipe render path exists (its translucent-open look is drawn
     // inline in the main per-frame loop, not a reusable function) — approximate with a
     // pulsing alpha on the regular pipe body so it still visibly "flashes".
     ctx.globalAlpha = Math.floor(Date.now() / 280) % 2 === 0 ? 1 : 0.3;
-    ctx.translate(w / 2, 0);
-    ctx.scale(0.42, 0.42);
-    drawPipe(-PIPE_W / 2, -10, PIPE_W, h / 0.42 + 20, false, false);
+    const pS = 0.34, pH = 80;
+    ctx.translate(w / 2, (h - pH * pS) / 2);
+    ctx.scale(pS, pS);
+    drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, false);
   } else {
     // parachute family — all via drawEnemy() with the exact flags the real enemy carries
     const e = { x: 0, y: 0, alive: true, phase: 0, fast: false };
@@ -2747,14 +2768,14 @@ function showOverlay(finalScore) {
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
     : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level.</span></div>
-       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="20" data-h="34"></canvas><span>Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="26" data-h="34"></canvas><span>Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything!</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. Thread a gap edge-close, unaided, for a free ghost too!</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="20" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="26" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die.</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="20" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫</span></div>`;
+       <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="26" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫</span></div>`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
