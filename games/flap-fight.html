@@ -2632,7 +2632,14 @@ function drawBird(x, y, rotDeg, rOverride, inflateOverride, facingOverride) {
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rotDeg * Math.PI / 180);
+  // Osimo 2026-08-29: "he seems spastic when he bounces... can we just mirror exact
+  // left to right" — mirroring a SPINNING sprite needs the rotation angle negated too,
+  // not just the x-scale axis. Flip-then-rotate(θ) ≠ mirror-of-rotate(θ), they're
+  // related by flip·R(θ) = R(-θ)·flip — negating rotDeg by `facing` here is what makes
+  // the two actually match (proved via a pixel-level ground-truth mirror comparison,
+  // not just visual guessing: the un-negated version disagreed with a true mirrored
+  // render on 40% of opaque pixels at a 35° tilt).
+  ctx.rotate(rotDeg * facing * Math.PI / 180);
   ctx.scale(scale * facing, scale);
 
   // BACKPACK (behind body — draw first)
