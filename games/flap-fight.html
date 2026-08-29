@@ -103,12 +103,16 @@
     text-align:center; padding:24px; z-index:5; border-radius:10px;
   }
   .overlay.hidden { display:none; }
-  .overlay-emoji { font-size:48px; }
+  .overlay-emoji { display:flex; align-items:center; justify-content:center; gap:4px; }
   .overlay-title {
     font-family:'Bungee',cursive; font-size:28px; font-weight:900;
     letter-spacing:.1em; color:var(--ink); text-shadow:0 0 18px var(--glow);
   }
   .overlay-sub { font-size:13px; line-height:1.6; opacity:.85; max-width:320px; }
+  /* instructions sprite icons (Osimo 2026-08-29) — real in-game sprites, not emoji */
+  .ovrow { display:flex; align-items:center; gap:8px; text-align:left; margin:4px 0; }
+  .ovrow-rev { flex-direction:row-reverse; }
+  .ovicon { flex-shrink:0; image-rendering:-webkit-optimize-contrast; }
   .board { font-size:12px; opacity:.8; line-height:1.7; margin-top:2px; }
   .board b { color:var(--ink); }
   .play-btn {
@@ -150,7 +154,10 @@
   <div class="canvas-wrap" id="wrap">
     <canvas id="c"></canvas>
     <div class="overlay hidden" id="ov">
-      <div class="overlay-emoji" id="ovEmoji">🎈💨</div>
+      <div class="overlay-emoji" id="ovEmoji">
+        <canvas class="ovicon" data-kind="bird" data-w="48" data-h="48"></canvas>
+        <canvas class="ovicon" data-kind="normal" data-w="48" data-h="48"></canvas>
+      </div>
       <div class="overlay-title" id="ovTitle">FLAP FIGHT</div>
       <div class="overlay-sub" id="ovsub">
         Tap to flap — gaps shrink every minute.<br>
@@ -247,6 +254,19 @@ const GHOST_TIMER_MS    = 22000;    // 2 near misses in a row -> timed ghost mod
 const GHOST_WARN_MS     = 2000;     // same expiry-telegraph window as star power
 const RECORD_ROCKET_PIPES = 20;     // breaking the scoreboard record: same as the ×20 combo
 const RECORD_ROCKET_MS    = 30000;  // rocket, but double its normal 10-pipe / 15s reach
+const COMBO30_ROCKET_PIPES = 20;    // ×30 combo (Osimo 2026-08-29): "extend the rocket to
+const COMBO30_ROCKET_MS    = 30000; // twice the time of the 20" — same numbers as the record
+                                     // rocket, kept as its own named constant (separate event,
+                                     // independently tunable even though currently identical)
+// BUDDY — the gold sparkly companion parachute (Osimo 2026-08-29): "at level 10 and every
+// level thereafter you see a weird parachute that flickers on and off in gold, and
+// sparkles, if you hit that shoot you have a second bird trail you... and when you die it
+// takes your place." One guaranteed per level from L10+ (armed in setLevel, consumed by
+// the next spawnEnemy() call — same "guaranteed, not random-chance" shape as the warp pipe).
+const BUDDY_TRAIL_X   = 34;   // follows this far behind the player horizontally
+const BUDDY_TRAIL_Y   = 10;   // ...and this far below, vertically
+const BUDDY_LERP      = 0.20; // follow smoothing — bounces/moves WITH you, on a slight delay
+const BUDDY_CATCH_POINTS = 15;// flat bonus when the buddy itself pops a parachute
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // WARP PIPE easter egg (Osimo 2026-08-17): every 5th level, exactly ONE pipe half (top or
 // bottom, random) renders in a darker green. Touch it and instead of taking damage the bird
@@ -255,13 +275,17 @@ const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // entered — bottom entry pops out of the one above it, top entry out of the one it entered).
 const WARP_LEVEL_EVERY = 5;         // arm one warp pipe on every Nth level
 const WARP_BONUS_MS    = 22000;     // bonus room duration (Osimo 2026-08-18 v2: 7s → 22s)
+const BONUS_STACK_MS   = 11000;     // +11s per CONSECUTIVE bonus-room entry this run (Osimo 2026-08-29)
 const WARP_SUCK_FRAMES = 42;        // suck-in animation length (60fps-equivalent ticks)
 const WARP_SPIT_FRAMES = 26;        // spit-out animation length
 const BONUS_CHUTES     = 12;        // parachutes seeded into the bonus room at entry
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
-const ctx     = canvas.getContext('2d');
+let ctx       = canvas.getContext('2d');   // was const — instructions-overlay icons (Osimo
+                                            // 2026-08-29) temporarily repoint this at a small
+                                            // icon canvas so real drawEnemy()/drawBird()/
+                                            // drawPipe() calls can render into it, then restore
 const wrap    = document.getElementById('wrap');
 const ov      = document.getElementById('ov');
 const ovTitle = document.getElementById('ovTitle');
@@ -335,6 +359,9 @@ const VO_LINES = [
   // Jimmy — the helpful one. Star-chain countdown + star-expiry countdown numbers:
   ["JIMMY", "Five!"], ["JIMMY", "Four!"], ["JIMMY", "Three!"], ["JIMMY", "Two!"], ["JIMMY", "One!"],
   ["JIMMY", "Star power!"],
+  ["JIMMY", "Ghost power!"],
+  ["JIMMY", "Buddy time!"],
+  ["JIMMY", "Buddy save!"],
   // Jimmy — personal best announcements (rotating):
   ["JIMMY", "Personal best!"],
   ["JIMMY", "New personal best!"],
@@ -368,6 +395,45 @@ const VO_LINES = [
   ["JIMMY", "Twenty thousand! Who are you?"], ["JIMMY", "Twenty five thousand!"],
   ["JIMMY", "Thirty thousand points! History!"], ["JIMMY", "Still climbing! Unreal!"],
   ["JIMMY", "One hundred thousand points! Legend! Forever!"],
+  // 2026-08-29 additions (Osimo: "increase their repertoire... 30 or so funny things to
+  // say") — personality-consistency-guard scored (41 lines, 33 PASS/8 GOLD, 0 shipped
+  // SOFT/HARD DRIFT, 0 LAW VIOLATION).
+  ["JIMMY", "Ten thousand! Now we're talking!"],
+  ["JIMMY", "Ten thousand points — that's a genuinely great run!"],
+  ["JIMMY", "Ten thousand! Look at you go!"],
+  ["JOE", "ten thousand. that's a good number."], ["JOE", "ten thousand. that'll do nicely."],
+  ["JOE", "ten thousand. quietly pleased. don't tell Jimmy."],
+  ["JIMMY", "Fifteen thousand! Okay, that's amazing!"],
+  ["JIMMY", "Fifteen thousand — I did not see that coming!"],
+  ["JIMMY", "Fifteen thousand points! Actually incredible!"],
+  ["JOE", "fifteen thousand. now I'm paying attention."], ["JOE", "fifteen thousand. that's actually impressive."],
+  ["JOE", "fifteen thousand. okay. didn't expect that."],
+  ["JIMMY", "TWENTY THOUSAND! That's not a run, that's a CHAMPIONSHIP!"],
+  ["JIMMY", "Twenty thousand points! Champion. Actual, certified champion!"],
+  ["JIMMY", "Twenty thousand! I'm rationing my exclamation points and you just ruined my budget!"],
+  ["JOE", "twenty thousand. champion. I don't use that word lightly."],
+  ["JOE", "twenty thousand. alright. that's genuinely champion form."],
+  ["JOE", "twenty thousand. I'm almost out of dry things to say."],
+  ["JIMMY", "That run had a beginning, a middle, and then... that was it."],
+  ["JIMMY", "Under five thousand! The pipes barely had to try!"],
+  ["JIMMY", "Not bad! By 'not bad' I mean it happened, and then it stopped!"],
+  ["JOE", "under five thousand. a journey, technically."],
+  ["JOE", "five thousand, give or take several thousand. mostly take."],
+  ["JOE", "that run had potential. brief potential."],
+  ["JIMMY", "Under a thousand! The bird filed for early retirement!"],
+  ["JIMMY", "That wasn't a run, that was a warning label!"],
+  ["JIMMY", "Under a thousand points! Even the tutorial felt targeted!"],
+  ["JOE", "under a thousand. I've seen loading screens last longer."],
+  ["JOE", "under a thousand points. the bird gave up before I did."],
+  ["JOE", "under a thousand. that's not a score, that's a typo."],
+  ["JIMMY", "Straight into the pipe! The gap was RIGHT there!"],
+  ["JOE", "flew into the pipe. the gap was open. right there."], ["JOE", "threaded zero needles today."],
+  ["JIMMY", "Straight down! Gravity remains undefeated!"],
+  ["JOE", "hit the floor. gravity, predictably, won again."],
+  ["JOE", "the ground was there. it's always there. you found it anyway."],
+  ["JIMMY", "Straight into the ceiling! Nobody was even looking up!"],
+  ["JOE", "hit the ceiling. there is nowhere to go up here. and yet."],
+  ["JOE", "smacked the roof. new record for shortest flight."],
   // Joe — every sound event, rotating variants, delivered flat:
   ["JOE", "boop."], ["JOE", "beep."], ["JOE", "flap."], ["JOE", "flip."], ["JOE", "flop."],
   ["JOE", "flap flap."], ["JOE", "boing."], ["JOE", "whoops."], ["JOE", "bing."],
@@ -375,6 +441,7 @@ const VO_LINES = [
   ["JOE", "ten in a row. I'm mildly moved."],
   ["JOE", "fifteen straight. this is getting silly."],
   ["JOE", "twenty. I'm framing this one."],
+  ["JOE", "twenty five straight. I'm quietly recalculating."], ["JOE", "thirty. in a row. I've stopped assuming you'll miss."],
   ["JOE", "boom."], ["JOE", "pop."], ["JOE", "splat."], ["JOE", "got him."],
   ["JOE", "ouch."], ["JOE", "tiny ouch."], ["JOE", "crap."], ["JOE", "that was a pipe."],
   ["JOE", "too high."], ["JOE", "the sky said no."], ["JOE", "bonk. upstairs."], ["JOE", "there's a roof."],
@@ -448,33 +515,71 @@ const DEATH_TIERS = [
             "the pipes needed a break anyway.",
             "quality flapping. noted in the ledger.",
             "that was fine. very fine."] },
-  { min: 500,     // MID — respectable, ended badly
-    JIMMY: ["What a run!", "Down in a blaze of glory!", "The bird will fly again!",
-            "Respectable! The pipes disagree, but respectable!",
-            "Solid flying. Questionable landing!",
-            "That was a proper flight!"],
-    JOE:   ["big boom.", "oh no.", "bye bye.", "that's that.",
-            "a reasonable effort. then a wall.",
-            "decent. the ending needs work.",
-            "the middle part was good."] },
-  { min: 0,       // LOW — the gentle roast
-    JIMMY: ["That was brief!", "The warm-up run. Classic!", "We never speak of this one!",
-            "Even the pipes feel bad!",
-            "A speedrun of losing!",
-            "The bird barely woke up!",
-            "Straight down. Committed, though!"],
-    JOE:   ["that was quick.", "a bold strategy.", "we don't talk about this one.",
-            "the pipes send their thanks.",
-            "blink and you missed it. I blinked.",
-            "gravity one, bird nil.",
-            "practice. presumably."] },
+  // 2026-08-29 (Osimo: "below 5000 take the piss out of them below 1000 ridicule them,
+  // more ridicule when they die, hit a pipe, hit the floor, hit the ceiling") —
+  // replaces the old min:500 "MID/respectable" + min:0 "gentle roast" tiers with two
+  // genuinely mockery-toned tiers at his exact thresholds. personality-consistency-
+  // guard scored (41 lines, 33 PASS/8 GOLD, 0 shipped SOFT/HARD DRIFT, 0 LAW VIOLATION).
+  { min: 1000,    // TAKE THE PISS — light, playful mockery
+    JIMMY: ["That run had a beginning, a middle, and then... that was it.",
+            "Under five thousand! The pipes barely had to try!",
+            "Not bad! By 'not bad' I mean it happened, and then it stopped!"],
+    JOE:   ["under five thousand. a journey, technically.",
+            "five thousand, give or take several thousand. mostly take.",
+            "that run had potential. brief potential."] },
+  { min: 0,       // RIDICULE — the harsh one
+    JIMMY: ["Under a thousand! The bird filed for early retirement!",
+            "That wasn't a run, that was a warning label!",
+            "Under a thousand points! Even the tutorial felt targeted!"],
+    JOE:   ["under a thousand. I've seen loading screens last longer.",
+            "under a thousand points. the bird gave up before I did.",
+            "under a thousand. that's not a score, that's a typo."] },
 ];
+// per-cause ridicule (Osimo 2026-08-29), layered ONTO the two roast tiers above only —
+// deathVoice() blends these into the tier bank when the tier is take-the-piss/ridicule,
+// picked by lastHitCause (set in inflate()). personality-consistency-guard scored (41
+// lines, 33 PASS/8 GOLD, 0 shipped SOFT/HARD DRIFT, 0 LAW VIOLATION).
+const DEATH_CAUSE_VO = {
+  hitPipe:    { JIMMY: ["Straight into the pipe! The gap was RIGHT there!"],
+                JOE:   ["flew into the pipe. the gap was open. right there.",
+                        "threaded zero needles today."] },
+  hitFloor:   { JIMMY: ["Straight down! Gravity remains undefeated!"],
+                JOE:   ["hit the floor. gravity, predictably, won again.",
+                        "the ground was there. it's always there. you found it anyway."] },
+  hitCeiling: { JIMMY: ["Straight into the ceiling! Nobody was even looking up!"],
+                JOE:   ["hit the ceiling. there is nowhere to go up here. and yet.",
+                        "smacked the roof. new record for shortest flight."] },
+};
 // big-score milestones (Osimo 2026-08-18): 10k/15k/20k/25k/30k each get their own line,
 // then every 10k beyond gets the generic pair; 100k is the LEGEND moment (both speak).
+// 10k/15k/20k EXPANDED to pools 2026-08-29 (Osimo: "increase their repertoire... above
+// 10000 great, above 15000 amazing, above 20000 champion") — original single lines kept
+// IN the pool (already-recorded audio, more variety for free) plus 3 new guard-scored
+// lines each. fireMilestone() picks randomly from an array, or uses the value directly
+// if it's still a plain string (25k/30k/beyond untouched, out of scope for this pass).
 const MILESTONE_VO = {
-  10000: { JIMMY: "Ten thousand points!",            JOE: "ten thousand. huh." },
-  15000: { JIMMY: "Fifteen thousand! Absurd!",       JOE: "fifteen. thousand." },
-  20000: { JIMMY: "Twenty thousand! Who are you?",   JOE: "twenty thousand. noted." },
+  10000: { JIMMY: ["Ten thousand points!",
+                   "Ten thousand! Now we're talking!",
+                   "Ten thousand points — that's a genuinely great run!",
+                   "Ten thousand! Look at you go!"],
+           JOE:   ["ten thousand. huh.", "ten thousand. that's a good number.",
+                   "ten thousand. that'll do nicely.",
+                   "ten thousand. quietly pleased. don't tell Jimmy."] },
+  15000: { JIMMY: ["Fifteen thousand! Absurd!",
+                   "Fifteen thousand! Okay, that's amazing!",
+                   "Fifteen thousand — I did not see that coming!",
+                   "Fifteen thousand points! Actually incredible!"],
+           JOE:   ["fifteen. thousand.", "fifteen thousand. now I'm paying attention.",
+                   "fifteen thousand. that's actually impressive.",
+                   "fifteen thousand. okay. didn't expect that."] },
+  20000: { JIMMY: ["Twenty thousand! Who are you?",
+                   "TWENTY THOUSAND! That's not a run, that's a CHAMPIONSHIP!",
+                   "Twenty thousand points! Champion. Actual, certified champion!",
+                   "Twenty thousand! I'm rationing my exclamation points and you just ruined my budget!"],
+           JOE:   ["twenty thousand. noted.",
+                   "twenty thousand. champion. I don't use that word lightly.",
+                   "twenty thousand. alright. that's genuinely champion form.",
+                   "twenty thousand. I'm almost out of dry things to say."] },
   25000: { JIMMY: "Twenty five thousand!",           JOE: "twenty five. I'm counting." },
   30000: { JIMMY: "Thirty thousand points! History!", JOE: "thirty thousand. respect." },
 };
@@ -482,11 +587,14 @@ const MILESTONE_BEYOND_VO = { JIMMY: "Still climbing! Unreal!", JOE: "still goin
 const LEGEND_VO = { JIMMY: "One hundred thousand points! Legend! Forever!",
                     JOE:   "one hundred thousand. I have no jokes. Well done." };
 // combo acknowledgments (Osimo 2026-08-18 v3): Joe marks the ×10/×15/×20 stomp chains —
-// combo cap raised 9 → 20 to make them reachable
+// combo cap raised 9 → 20 to make them reachable. Raised again 20 → 30 (Osimo 2026-08-29)
+// for the ×30 mega rocket — 25/30 lines guard-scored (COMBO_VO[30] scored GOLD).
 const COMBO_VO = {
   10: "ten in a row. I'm mildly moved.",
   15: "fifteen straight. this is getting silly.",
   20: "twenty. I'm framing this one.",
+  25: "twenty five straight. I'm quietly recalculating.",
+  30: "thirty. in a row. I've stopped assuming you'll miss.",
 };
 const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!",
                       "Best flight of your life!", "Past your best. Keep going!",
@@ -622,7 +730,7 @@ const TONES = {
 };
 // Voice mode: Joe covers the event sounds; Jimmy owns star activation and the
 // best-score moment (spoken announcements handle PB/top in showCallout + die()).
-// Deaths alternate BOTH hosts, score-aware (< 500 = the gentle-roast bank).
+// Deaths alternate BOTH hosts, score-aware (< 1000 = ridicule, < 5000 = take the piss).
 function deathVoice() {
   let who = 'JIMMY';
   try {
@@ -631,7 +739,12 @@ function deathVoice() {
     localStorage.setItem('ff_death_who', who);
   } catch (e) {}
   const tier = DEATH_TIERS.find(t => score >= t.min) || DEATH_TIERS[DEATH_TIERS.length - 1];
-  const bank = tier[who];
+  // roast tiers (min 0 or 1000) blend in a cause-specific bank alongside the general one
+  // (Osimo 2026-08-29: "more ridicule when they die, hit a pipe, hit the floor, hit the
+  // ceiling") — EPIC/GOOD tiers never reference cause, a good run doesn't need roasting.
+  const isRoastTier = tier.min === 0 || tier.min === 1000;
+  const causeBank = isRoastTier ? (DEATH_CAUSE_VO[lastHitCause] || {})[who] : null;
+  const bank = causeBank ? tier[who].concat(causeBank) : tier[who];
   // end-of-game monologue: Joe at JIMMY's gain (Osimo 2026-08-18 v7) — it's the closing
   // line of the run, not in-play ambience, so both hosts land at equal weight here
   voicePlay(who, bank[Math.floor(Math.random() * bank.length)], JIMMY_GAIN, true);
@@ -650,7 +763,10 @@ function dispatch(event, tonesFn, arg) {
     // hybrid: identical to voice EXCEPT flaps — those get the beep tone, not Joe
     // (Osimo 2026-08-19: "Jimmy counts Joe comments... but no Joe flap sounds")
     if (event === 'flap' && sfxMode === 'hybrid') { TONES.flap(); return; }
-    if (event === 'star')  { jimmySay('Star power!'); return; }
+    if (event === 'star')       { jimmySay('Star power!'); return; }
+    if (event === 'ghostpower') { jimmySay('Ghost power!'); return; }
+    if (event === 'buddytime')  { jimmySay('Buddy time!'); return; }
+    if (event === 'buddysave')  { jimmySay('Buddy save!'); return; }
     if (event === 'best')  { jimmySay(jimmyPick(JIMMY_PB_VO), true); return; }
     // pipe pass: the classic rising blip plays in BOTH spoken modes (Osimo 2026-08-19
     // v3: "missing going through pipe sound") — nobody SPEAKS on a pass (too frequent,
@@ -684,7 +800,10 @@ const sfx = {
   stomp:   (c, p)  => dispatch('stomp',   () => TONES.stomp(c, p), c),
   bonus:   (p)     => dispatch('bonus',   () => TONES.bonus(p)),
   shrink:  (p)     => dispatch('shrink',  () => TONES.bonus(p)),   // own Joe bank in 🎙️
-  star:    ()      => dispatch('star',    TONES.star),
+  star:       ()   => dispatch('star',       TONES.star),
+  ghostPower: ()   => dispatch('ghostpower', TONES.star),
+  buddyTime:  ()   => dispatch('buddytime',  TONES.star),
+  buddySave:  ()   => dispatch('buddysave',  TONES.star),
   hit:     (cause) => dispatch('hit',     TONES.hit, cause),       // hitPipe|hitCeiling|hitFloor
   death:   ()      => dispatch('death',   TONES.death),
   levelup: ()      => dispatch('levelup', TONES.levelup),
@@ -702,8 +821,14 @@ const sfx = {
   Object.values(JOE_BARKS).forEach(b => b.forEach(t => chk('JOE', t)));
   ['JIMMY', 'JOE'].forEach(w => {
     DEATH_TIERS.forEach(t => t[w].forEach(x => chk(w, x)));
-    Object.values(MILESTONE_VO).forEach(m => chk(w, m[w]));
+    // 2026-08-29: 10k/15k/20k are now pools (arrays); 25k/30k stay single strings —
+    // check must handle both or an array silently string-coerces (","-joined) into one
+    // bogus lookup instead of N real ones (exactly what happened before this fix).
+    Object.values(MILESTONE_VO).forEach(m => {
+      if (Array.isArray(m[w])) m[w].forEach(x => chk(w, x)); else chk(w, m[w]);
+    });
     chk(w, MILESTONE_BEYOND_VO[w]); chk(w, LEGEND_VO[w]);
+    Object.values(DEATH_CAUSE_VO).forEach(c => c[w].forEach(x => chk(w, x)));
   });
   JIMMY_PB_VO.forEach(t => chk('JIMMY', t));
   JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
@@ -754,7 +879,11 @@ let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let comboCount, lastPopMs, comboTimer;
 let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osimo 2026-08-19)
+let combo30RocketArmed = false;                        // ×30-chain mega rocket (Osimo 2026-08-29)
+let buddy = null;          // {x,y,vy} while an active companion trails the player, else null
+let buddyPending = false;  // armed true on entering a level>=10, consumed by the next spawnEnemy()
 let birdInflate, inflateInvincible, nextMegaSpawn;
+let lastHitCause = 'hitPipe';   // most recent inflate() cause — read by deathVoice() (Osimo 2026-08-29)
 let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
 let starChain, starPower, starPowerUntil;
 // near miss (Osimo 2026-08-29): thread a gap within NEAR_MISS_PX of an edge, unassisted by
@@ -767,6 +896,7 @@ let pipeSpawnAcc, enemySpawnAcc, enemySpawnCount;
 // warp pipe: which pipe ordinal of the current level carries the warp (0 = none), how many
 // pipes this level has spawned, and the warp state machine (null | suck | bonus | spit)
 let warpAtPipe, levelPipeCount, warp, bonusUntil;
+let bonusEntryCount = 0;   // consecutive bonus-room visits this run (Osimo 2026-08-29)
 // callouts: server #1 score (fetched once at load), once-per-run announce flags, active banner
 let topScore = 0;
 let pbAnnounced, topAnnounced, callout;
@@ -874,6 +1004,13 @@ function spawnEnemy() {
   const y    = rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28);
   const vy   = level >= 5 ? (Math.random() < 0.5 ? 1 : -1) * rnd(0.35, 0.85) : 0;
   const fast = level >= 10;
+  // gold BUDDY parachute — guaranteed once per level from L10+, consumes this spawn
+  // slot instead of stacking an extra enemy on top (Osimo 2026-08-29).
+  if (buddyPending && level >= 10) {
+    buddyPending = false;
+    enemies.push({ x: cw + ENEMY_R + 8, y, vy, alive: true, phase: Math.random() * Math.PI * 2, fast, buddyChute: true });
+    return;
+  }
   // flashing extra-life parachute rides in with the normal wave now — same front entry
   // point, same band, no separate timer and no unstomped-penalty. Only worth offering
   // when it'd actually help (Osimo 2026-08-02: "place it always from the front as part
@@ -925,7 +1062,10 @@ function fireMilestone(v) {
         who = last === 'JIMMY' ? 'JOE' : 'JIMMY';
         localStorage.setItem('ff_mile_who', who);
       } catch (e) {}
-      const line = (MILESTONE_VO[v] || MILESTONE_BEYOND_VO)[who];
+      // 2026-08-29: 10k/15k/20k are now pools (arrays); 25k/30k/beyond stay single
+      // strings — handle both without forcing every threshold into array form.
+      const pool = (MILESTONE_VO[v] || MILESTONE_BEYOND_VO)[who];
+      const line = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool;
       voicePlay(who, line, who === 'JIMMY' ? JIMMY_GAIN : JOE_GAIN, true);
     }
   } else if (sfxMode === 'tones') {
@@ -943,6 +1083,7 @@ function setLevel(n) {
   // (ordinal picked at random, never the very first so the level-up moment breathes)
   levelPipeCount = 0;
   warpAtPipe = (n % WARP_LEVEL_EVERY === 0) ? Math.floor(rnd(2, 10)) : 0;
+  buddyPending = n >= 10;   // guaranteed one gold buddy-parachute this level (Osimo 2026-08-29)
 }
 
 // bird.r depends on BOTH how inflated (hurt) and how shrunk (buffed) the bird is —
@@ -950,6 +1091,35 @@ function setLevel(n) {
 // (Osimo 2026-08-02: shrink bomb stacks on top of the existing inflate system).
 function recomputeBirdRadius() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
+}
+
+// updateBuddy — the trailing companion (Osimo 2026-08-29). Lerp-follows the player on
+// BOTH axes rather than independently-simulated physics: since bird.y already carries
+// every bounce/flap/fall the player does, lerping toward it directly means the buddy
+// "bounces when you bounce" and "moves as you move" for free, just arriving a beat later
+// (the lerp lag) — reads as a trailing companion without a second physics body to keep
+// in sync. Also runs its own small catch-check against `enemies` ("while translucent it
+// can also catch shoots") — a flat bonus per parachute, not the full mega/shrink/ghost-
+// specific effects the PLAYER'S stomp gets, since none of those (inflate/shrink) apply to
+// a companion that "always stays regular size till you take over."
+function updateBuddy(dt) {
+  const targetX = bird.x - BUDDY_TRAIL_X, targetY = bird.y + BUDDY_TRAIL_Y;
+  buddy.x += (targetX - buddy.x) * BUDDY_LERP * dt;
+  buddy.y += (targetY - buddy.y) * BUDDY_LERP * dt;
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (!e.alive) continue;
+    const cx = e.x, cy = e.y - CHUTE_OFFSET;
+    const dist = Math.hypot(buddy.x - cx, buddy.y - cy);
+    if (dist < BIRD_R + CHUTE_R) {
+      e.alive = false;
+      score += BUDDY_CATCH_POINTS;
+      scoreEl.textContent = score;
+      sfx.bonus(1);
+      spawnParticles(cx, cy, '#ffd700', 10);
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `✨ +${BUDDY_CATCH_POINTS}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+    }
+  }
 }
 
 // activateComboRocket — extracted 2026-08-29 (feedback_extract_dont_inline): the ×20-combo
@@ -1118,7 +1288,11 @@ function enterBonus() {
   // its last valid position (top-left, where the suck parked it) and never exited.
   // THE Osimo 2026-08-18 stuck-bird bug.
   warp = { phase: 'bonus', gapY: warp.gapY, gapSize: warp.gapSize, starRemainMs: warp.starRemainMs };
-  bonusUntil = Date.now() + WARP_BONUS_MS;
+  // each CONSECUTIVE bonus-room visit this run runs 11s longer than the last (Osimo
+  // 2026-08-29) — uncapped; warp pipes are rare enough (1 per 5 levels) that this
+  // never needs a ceiling in practice.
+  bonusEntryCount++;
+  bonusUntil = Date.now() + WARP_BONUS_MS + (bonusEntryCount - 1) * BONUS_STACK_MS;
   pipes = [];                  // no pipes in the bonus room
   // parachutes EVERYWHERE — seed a dense field, spread across the whole sky
   for (let i = 0; i < BONUS_CHUTES; i++) {
@@ -1197,6 +1371,8 @@ function initGame() {
   birdShrink        = 0;
   nearMissStreak    = 0;
   ghostTimerUntil   = 0;
+  buddy             = null;
+  buddyPending      = false;
   lastGhostWarnSec  = 99;
   starChain         = 0;
   starPower         = false;
@@ -1208,6 +1384,7 @@ function initGame() {
   warpAtPipe        = 0;
   levelPipeCount    = 0;
   warp              = null;
+  bonusEntryCount   = 0;
   bonusUntil        = 0;
   pbAnnounced       = false;
   topAnnounced      = false;
@@ -1228,7 +1405,7 @@ function initGame() {
   gameStartTime = Date.now();
   bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   comboCount  = 0;
-  comboRocketPipes = 0; comboRocketArmed = false; lastComboAnnounced = 0;
+  comboRocketPipes = 0; comboRocketArmed = false; combo30RocketArmed = false; lastComboAnnounced = 0;
   lastPopMs   = 0;
   clearTimeout(comboTimer);
   comboEl.classList.remove('on');
@@ -1465,7 +1642,7 @@ function update(dt) {
           nearMissStreak = 0;
           ghostTimerUntil = Date.now() + GHOST_TIMER_MS;
           lastGhostWarnSec = 99;
-          if (sfxMode !== 'mute') sfx.star();
+          if (sfxMode !== 'mute') sfx.ghostPower();
           floaters.push({ x: bird.x, y: bird.y - bird.r - 16, text: '👻 GHOST MODE!', alpha: 1, vy: -2, color: '#9fe8ff' });
           spawnParticles(bird.x, bird.y, '#9fe8ff', 16);
         } else {
@@ -1620,6 +1797,14 @@ function update(dt) {
         spawnParticles(e.x, cy, '#9fe8ff', 14);
         birdGhost = true;
         floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
+      } else if (e.buddyChute) {
+        // BUDDY PARACHUTE (Osimo 2026-08-29) — spawns a trailing companion. Starts at
+        // the player's current position so it doesn't visually teleport in.
+        sfx.buddyTime();
+        spawnParticles(e.x, cy, '#ffd700', 18);
+        spawnParticles(e.x, cy, '#fff4c2', 8);
+        buddy = { x: bird.x - BUDDY_TRAIL_X, y: bird.y + BUDDY_TRAIL_Y };
+        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '✨ BUDDY!', alpha: 1, vy: -1.8, color: '#ffd700' });
       } else if (e.special) {
         // DEFLATE PARACHUTE — shrink bird back one inflation level
         sfx.bonus(pitchMult);
@@ -1639,13 +1824,15 @@ function update(dt) {
         // normal stomp — combo + points
         const now = Date.now();
         if (now - lastPopMs < COMBO_WINDOW) {
-          // cap 9 → 20 (Osimo 2026-08-18 v3) so the ×10/×15/×20 combo acknowledgments
-          // are actually reachable; stomp-squeak pitch still clamps at 9 inside TONES
-          comboCount = Math.min(comboCount + 1, 20);
+          // cap 20 → 30 (Osimo 2026-08-29) so the ×25/×30 acknowledgments + the ×30
+          // mega rocket upgrade are reachable; stomp-squeak pitch still clamps at 9
+          // inside TONES
+          comboCount = Math.min(comboCount + 1, 30);
         } else {
           comboCount = 1;
-          lastComboAnnounced = 0;    // new chain — the ×10/×15/×20 lines re-arm
-          comboRocketArmed = false;  // and so does the ×20 rocket
+          lastComboAnnounced = 0;      // new chain — the ×10/×15/×20/×25/×30 lines re-arm
+          comboRocketArmed = false;    // and so does the ×20 rocket
+          combo30RocketArmed = false;  // ...and the ×30 upgrade
         }
         lastPopMs = now;
         // 🚀 COMBO ROCKET (Osimo 2026-08-19): hitting a full ×20 chain fires the bird
@@ -1656,6 +1843,14 @@ function update(dt) {
         if (comboCount === 20 && !comboRocketArmed) {
           comboRocketArmed = true;
           activateComboRocket(10, 15000, '🚀 COMBO ROCKET!');
+        }
+        // ×30 MEGA ROCKET (Osimo 2026-08-29: "at combo 30 extend the rocket to twice
+        // the time of the 20") — same activation, bigger numbers; calling it again
+        // simply overwrites comboRocketPipes/starPowerUntil to the larger values, so
+        // an in-flight ×20 rocket genuinely EXTENDS rather than restarting or stacking.
+        if (comboCount === 30 && !combo30RocketArmed) {
+          combo30RocketArmed = true;
+          activateComboRocket(COMBO30_ROCKET_PIPES, COMBO30_ROCKET_MS, '🚀 MEGA ROCKET ×30!');
         }
         const pts = 25 * comboCount;
         score += pts;
@@ -1739,6 +1934,8 @@ function update(dt) {
     }
     if (Date.now() >= ghostTimerUntil) ghostTimerUntil = 0;
   }
+
+  if (buddy) updateBuddy(dt);
 
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -1933,6 +2130,13 @@ function draw() {
       ctx.globalAlpha = 1;
     }
   }
+  // companion (Osimo 2026-08-29) — always translucent while trailing, never tilts (no
+  // independent rotation tracked, a neutral sprite reads fine for a following buddy)
+  if (buddy) {
+    ctx.globalAlpha = 0.55;
+    drawBird(buddy.x, buddy.y, 0);
+    ctx.globalAlpha = 1;
+  }
   // waiting — tap to play hint
   if (waiting) {
     const a = 0.55 + 0.45 * Math.sin(Date.now() * 0.006);
@@ -2123,9 +2327,15 @@ function drawPipe(x, y, w, h, isBottom, isWarp) {
 
 function drawEnemy(e) {
   const x = e.x, y = e.y, special = e.special, mega = e.mega, shrink = e.shrink, ghost = e.ghost;
+  const buddyChute = e.buddyChute;
   ctx.save();
   ctx.translate(x, y);
   if (ghost) ctx.globalAlpha = 0.5;  // ghost parachute: usual colours, just translucent
+  // BUDDY PARACHUTE (Osimo 2026-08-29: "flickers on and off in gold, and sparkles") —
+  // simple binary blink, deliberately simpler than the warp-pipe's flicker sequence
+  // (a different visual language for a different, rarer pickup).
+  const buddyFlickerOn = !buddyChute || Math.floor(Date.now() / 220) % 2 === 0;
+  if (buddyChute) ctx.globalAlpha = buddyFlickerOn ? 1 : 0.25;
 
   const CR = CHUTE_R;        // 22 — dome radius
   const CO = CHUTE_OFFSET;   // 26 — dome centre above body centre
@@ -2153,7 +2363,9 @@ function drawEnemy(e) {
   // PARACHUTE DOME — special flips red/yellow each frame pair; mega is steady purple/yellow
   ctx.save();
   ctx.translate(0, -CO);
-  const panels = mega
+  const panels = buddyChute
+    ? ['#ffd700', '#fff4c2', '#ffd700', '#fff4c2']
+    : mega
     ? ['#a855f7', '#ffcf3d', '#a855f7', '#ffcf3d']
     : shrink
     ? (flash ? ['#e879f9', '#7e22ce', '#e879f9', '#7e22ce'] : ['#7e22ce', '#e879f9', '#7e22ce', '#e879f9'])
@@ -2177,11 +2389,11 @@ function drawEnemy(e) {
     const a = Math.PI + (i / 4) * Math.PI;
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
-  // dome outline — mega/shrink get a glow ring so they read as the special pickups they are
-  if (mega || shrink) {
+  // dome outline — mega/shrink/buddy get a glow ring so they read as the special pickups they are
+  if (mega || shrink || buddyChute) {
     ctx.save();
-    ctx.shadowColor = mega ? '#a855f7' : '#e879f9'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = mega ? 'rgba(168,85,247,0.8)' : 'rgba(232,121,249,0.8)'; ctx.lineWidth = 2;
+    ctx.shadowColor = buddyChute ? '#ffd700' : mega ? '#a855f7' : '#e879f9'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = buddyChute ? 'rgba(255,215,0,0.85)' : mega ? 'rgba(168,85,247,0.8)' : 'rgba(232,121,249,0.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
     ctx.restore();
   } else {
@@ -2191,16 +2403,47 @@ function drawEnemy(e) {
   }
   ctx.restore();
 
-  // BODY — mega purple, shrink fuchsia/purple flash, special flashes yellow/red, normal plain red
-  ctx.fillStyle = mega ? '#7e22ce' : shrink ? (flash ? '#e879f9' : '#a21caf') : flash ? '#ffcf3d' : '#e84040';
+  // BODY — buddy gold, mega purple, shrink fuchsia/purple flash, special flashes yellow/red, normal plain red
+  ctx.fillStyle = buddyChute ? '#e8b400' : mega ? '#7e22ce' : shrink ? (flash ? '#e879f9' : '#a21caf') : flash ? '#ffcf3d' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = mega ? '#581c87' : shrink ? '#701a75' : flash ? '#cc9900' : '#cc2020';
+  ctx.strokeStyle = buddyChute ? '#a67c00' : mega ? '#581c87' : shrink ? '#701a75' : flash ? '#cc9900' : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
+
+  // sparkles (Osimo 2026-08-29: "and sparkles") — 3 fixed local points around the dome,
+  // same fade-in/peak/fade-out shape as the warp-pipe's, independently phased.
+  if (buddyChute) {
+    const now = Date.now();
+    const spots = [
+      { lx: -CR * 0.5, ly: -CO - 4, period: 900, offset: 0 },
+      { lx:  CR * 0.55, ly: -CO + 2, period: 1100, offset: 300 },
+      { lx: 0, ly: -CO - CR * 0.5, period: 1000, offset: 600 },
+    ];
+    for (const s of spots) {
+      const t = (now + s.offset) % s.period;
+      const pulseMs = s.period * 0.5;
+      if (t > pulseMs) continue;
+      const k = t / pulseMs;
+      const a = k < 0.3 ? k / 0.3 : 1 - (k - 0.3) / 0.7;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, a) * (buddyFlickerOn ? 1 : 0.25);
+      ctx.fillStyle = '#fffbe6';
+      ctx.shadowColor = '#ffe680'; ctx.shadowBlur = 6;
+      const r = 1.5 + a * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(s.lx, s.ly - r * 2); ctx.lineTo(s.lx + r * 0.4, s.ly - r * 0.4);
+      ctx.lineTo(s.lx + r * 2, s.ly); ctx.lineTo(s.lx + r * 0.4, s.ly + r * 0.4);
+      ctx.lineTo(s.lx, s.ly + r * 2); ctx.lineTo(s.lx - r * 0.4, s.ly + r * 0.4);
+      ctx.lineTo(s.lx - r * 2, s.ly); ctx.lineTo(s.lx - r * 0.4, s.ly - r * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
 
   ctx.restore();
 }
@@ -2317,6 +2560,10 @@ function drawBird(x, y, rotDeg) {
 
 // ─── inflate (hit but not dead yet) ──────────────────────────────────────────
 function inflate(cause) {
+  // captured once, reused for both sfx.hit() below AND lastHitCause (Osimo 2026-08-29:
+  // death ridicule lines now vary by cause) — one computed value, not two independently
+  // hand-written ternaries that could drift apart.
+  lastHitCause = cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe';
   // Recoil pushes AWAY from whichever surface was hit — ceiling knocks the bird DOWN,
   // everything else (floor/pipe) knocks it UP. A flat -5 (up) on every cause used to
   // shove a ceiling-hit bird FURTHER into the ceiling, re-triggering the overlap check
@@ -2335,7 +2582,7 @@ function inflate(cause) {
     recomputeBirdRadius();
     bird.vy = recoilVy;
     inflateInvincible = Date.now() + 1000;
-    sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
+    sfx.hit(lastHitCause);
     spawnParticles(bird.x, bird.y, '#e879f9', 10);
     floaters.push({ x: bird.x, y: bird.y - bird.r - 6, text: '💜 SIZE RESTORED!', alpha: 1, vy: -1.8, color: '#e879f9' });
     return;
@@ -2347,7 +2594,7 @@ function inflate(cause) {
   recomputeBirdRadius();
   bird.vy = recoilVy;
   inflateInvincible = Date.now() + 1000;  // 1s invincibility flash
-  sfx.hit(cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe');
+  sfx.hit(lastHitCause);
   spawnParticles(bird.x, bird.y, '#ffffff', 8);
   spawnParticles(bird.x, bird.y, '#ffaa44', 6);
   const msgs = ['', '💨 INFLATED!', '💨 BLOATED!!'];
@@ -2356,6 +2603,22 @@ function inflate(cause) {
 
 // ─── balloon pop death ───────────────────────────────────────────────────────
 function balloonPop() {
+  // BUDDY TAKEOVER (Osimo 2026-08-29: "when you die it takes your place and you carry
+  // on, he always stays regular size till you take over") — the companion swoops in
+  // INSTEAD of the death sequence: consumed once, bird resets to regular size (the
+  // buddy's own promise — it never inherited whatever inflate/shrink state killed the
+  // player), a breather of invincibility, and play continues with zero interruption.
+  if (buddy) {
+    buddy = null;
+    birdInflate = 0;
+    recomputeBirdRadius();
+    bird.vy = -5;
+    inflateInvincible = Date.now() + 1200;
+    sfx.buddySave();
+    spawnParticles(bird.x, bird.y, '#ffd700', 20);
+    floaters.push({ x: bird.x, y: bird.y - bird.r - 16, text: '✨ BUDDY SAVES YOU!', alpha: 1, vy: -2, color: '#ffd700' });
+    return;
+  }
   popping  = true;
   popRingR = 0;
   popRingX = bird.x;
@@ -2406,24 +2669,98 @@ function die() {
   }
 }
 
+// ─── instructions-overlay sprite icons (Osimo 2026-08-29: "make it cute with sprites
+// from the game, so they actually know what shoot colours, even flashing ones flash") ──
+// Reuses the REAL drawEnemy()/drawBird()/drawPipe() functions at a small scale so every
+// icon is guaranteed pixel-identical to the real in-game sprite, never a hand-drawn
+// approximation that could drift from it. Works by temporarily repointing the global
+// `ctx` at the icon's own small canvas, drawing, then restoring it — always synchronous
+// within one call, so the main RAF loop (single-threaded JS) can never observe `ctx`
+// pointed at the wrong canvas mid-frame.
+const ICON_DPR = 3;   // Osimo 2026-08-29 "that's ugly" — icons were 1 css-px per canvas
+// px, blurry mush on a real (3x) phone screen. Backing store now renders 3x oversized
+// via data-w/data-h (the LOGICAL size every kind's draw math below still uses,
+// unchanged) + a display-size CSS box, so it reads crisp/PNG-like while staying a real
+// canvas render of the actual sprite functions (never a static image — required for the
+// flashing/sparkling kinds to keep animating).
+function drawIcon(canvasEl, kind) {
+  if (!canvasEl) return;
+  const w = parseInt(canvasEl.dataset.w, 10), h = parseInt(canvasEl.dataset.h, 10);
+  if (canvasEl.width !== w * ICON_DPR) {
+    canvasEl.width = w * ICON_DPR;
+    canvasEl.height = h * ICON_DPR;
+    canvasEl.style.width = w + 'px';
+    canvasEl.style.height = h + 'px';
+  }
+  const realCtx = ctx;
+  ctx = canvasEl.getContext('2d');
+  ctx.setTransform(ICON_DPR, 0, 0, ICON_DPR, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  if (kind === 'bird') {
+    ctx.translate(w / 2, h / 2 + 2);
+    ctx.scale(1.05, 1.05);
+    drawBird(0, 0, -8);
+  } else if (kind === 'pipe' || kind === 'warpPipe') {
+    ctx.translate(w / 2, 0);
+    ctx.scale(0.42, 0.42);
+    drawPipe(-PIPE_W / 2, -10, PIPE_W, h / 0.42 + 20, false, kind === 'warpPipe');
+  } else if (kind === 'flashPipe') {
+    // no standalone flash-pipe render path exists (its translucent-open look is drawn
+    // inline in the main per-frame loop, not a reusable function) — approximate with a
+    // pulsing alpha on the regular pipe body so it still visibly "flashes".
+    ctx.globalAlpha = Math.floor(Date.now() / 280) % 2 === 0 ? 1 : 0.3;
+    ctx.translate(w / 2, 0);
+    ctx.scale(0.42, 0.42);
+    drawPipe(-PIPE_W / 2, -10, PIPE_W, h / 0.42 + 20, false, false);
+  } else {
+    // parachute family — all via drawEnemy() with the exact flags the real enemy carries
+    const e = { x: 0, y: 0, alive: true, phase: 0, fast: false };
+    if (kind === 'special') e.special = true;
+    else if (kind === 'shrink') e.shrink = true;
+    else if (kind === 'ghost') e.ghost = true;
+    else if (kind === 'buddy') e.buddyChute = true;
+    ctx.translate(w / 2, h * 0.62);
+    ctx.scale(0.46, 0.46);
+    drawEnemy(e);
+  }
+  ctx.restore();
+  ctx = realCtx;
+}
+// icons whose sprite genuinely animates (flash/sparkle) need periodic redraws while the
+// overlay is open — driven off the SAME Date.now() timing drawEnemy()/drawPipe() already
+// use internally, so this is a redraw cadence only, not a second animation system.
+let overlayIconTimer = null;
+function refreshOverlayIcons() {
+  document.querySelectorAll('.ovicon[data-kind]').forEach(el => drawIcon(el, el.dataset.kind));
+}
+function startOverlayIcons() {
+  refreshOverlayIcons();
+  clearInterval(overlayIconTimer);
+  overlayIconTimer = setInterval(refreshOverlayIcons, 140);
+}
+function stopOverlayIcons() { clearInterval(overlayIconTimer); overlayIconTimer = null; }
+
 function showOverlay(finalScore) {
   const s = (typeof finalScore === 'number') ? finalScore : score;
   ovTitle.textContent = 'FLAP FIGHT';
-  ovEmoji.textContent = s > 0 ? '💥🎈' : '🎈💨';
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
-    : `Tap to flap — gaps shrink every level.<br>
-       Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).<br>
-       Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.<br>
-       Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!<br>
-       <b>Lv5+:</b> 👻 ghosts let you phase one pipe free; 5-in-a-row = ⭐ STAR POWER.<br>
-       <b>Lv10+:</b> some pipes flash translucent — fly through when they do; 💜 bombs shrink you tiny.<br>
-       <b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫`;
+    : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="20" data-h="34"></canvas><span>Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything!</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. Thread a gap edge-close, unaided, for a free ghost too!</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="20" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="20" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫</span></div>`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
   playBtn.textContent = s > 0 ? 'PLAY AGAIN' : 'INSERT COIN';
   ov.classList.remove('hidden');
+  startOverlayIcons();   // header bird+chute + every sprite icon above, incl. the flashing ones
 }
 
 // ─── main loop ─────────────────────────────────────────────────────────────────
@@ -2478,6 +2815,7 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 // one tap, no second confirmation screen.
 function restartToWaiting() {
   ov.classList.add('hidden');
+  stopOverlayIcons();
   if (animId) cancelAnimationFrame(animId);
   initGame();   // enters waiting state — tap again to launch bird
   loop();
