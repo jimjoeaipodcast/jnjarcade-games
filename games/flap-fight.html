@@ -112,7 +112,16 @@
   /* instructions sprite icons (Osimo 2026-08-29) — real in-game sprites, not emoji */
   .ovrow { display:flex; align-items:center; gap:8px; text-align:left; margin:4px 0; }
   .ovrow-rev { flex-direction:row-reverse; }
-  .ovicon { flex-shrink:0; image-rendering:-webkit-optimize-contrast; }
+  /* Osimo 2026-08-30: "still not making PNG images of the sprites, instead it's still
+     using square images" — the generic `canvas {}` rule above (game-viewport frame:
+     dark bg, border, rounded corners, glow) was matching these icon canvases too, since
+     it's a bare tag selector with no exclusion. The bitmap itself was always genuinely
+     transparent (pixel-sampled earlier) — the visible "square" was this inherited CSS
+     box painted around it, a different layer my earlier pixel test never looked at. */
+  .ovicon {
+    flex-shrink:0; image-rendering:-webkit-optimize-contrast;
+    background:transparent; border:none; border-radius:0; box-shadow:none;
+  }
   .board { font-size:12px; opacity:.8; line-height:1.7; margin-top:2px; }
   .board b { color:var(--ink); }
   .play-btn {
