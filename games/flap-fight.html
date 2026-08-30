@@ -301,6 +301,14 @@ const BUDDY_LERP      = 0.20; // follow smoothing — bounces/moves WITH you, on
 const BUDDY_SIZE      = 8;    // Osimo 2026-08-29 v2: "no point having him match your size,
                                // keep him always small in the background" — fixed radius,
                                // independent of the player's own birdInflate/birdShrink state
+const MAX_BUDDIES     = 2;    // Osimo 2026-08-30 v3: "allow a max of two buddies"
+// SCOUT — a one-shot dash instead of a 3rd permanent buddy (Osimo 2026-08-30 v3): "make
+// the 3rd buddy launch towards the nearest power shoot and get it for you... it will get
+// any shoot and add it to your tally." Not part of the `buddies` chain at all — a
+// separate, disposable helper that flies straight at the best target, collects it via
+// the same applyPickupEffect() every catch uses, then is gone.
+const SCOUT_SPEED  = 5;               // dash speed toward its current target
+const SCOUT_CATCH_R = BIRD_R + CHUTE_R; // same catch-radius convention as a buddy catch
 const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // WARP PIPE easter egg (Osimo 2026-08-17): every 5th level, exactly ONE pipe half (top or
 // bottom, random) renders in a darker green. Touch it and instead of taking damage the bird
@@ -945,6 +953,7 @@ let comboCount, lastPopMs, comboTimer;
 let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osimo 2026-08-19)
 let combo30RocketArmed = false;                        // ×30-chain mega rocket (Osimo 2026-08-29)
 let buddies = [];          // chain of {x,y} companions, front-to-back — [] when none trail
+let scouts = [];           // one-shot dash helpers beyond MAX_BUDDIES — {x,y}, disposable
 let buddyPending = false;  // armed true on entering a level>=10, consumed by the next spawnEnemy()
 let birdInflate, inflateInvincible, nextMegaSpawn;
 let lastHitCause = 'hitPipe';   // most recent inflate() cause — read by deathVoice() (Osimo 2026-08-29)
@@ -1291,11 +1300,20 @@ function applyPickupEffect(e, cx, cy) {
     sfx.buddyTime();
     spawnParticles(cx, cy, '#ffd700', 18);
     spawnParticles(cx, cy, '#fff4c2', 8);
-    const tail = buddies.length ? buddies[buddies.length - 1] : bird;
-    buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
-    floaters.push({ x: cx, y: cy - CHUTE_R - 4,
-                     text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
-                     alpha: 1, vy: -1.8, color: '#ffd700' });
+    if (buddies.length < MAX_BUDDIES) {
+      const tail = buddies.length ? buddies[buddies.length - 1] : bird;
+      buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4,
+                       text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
+                       alpha: 1, vy: -1.8, color: '#ffd700' });
+    } else {
+      // Osimo 2026-08-30 v3: "allow a max of two buddies... make the 3rd buddy launch
+      // towards the nearest power shoot and get it for you... you still only have 2
+      // buddies max" — beyond the cap, a buddy chute spawns a one-shot SCOUT instead
+      // of growing the permanent chain (see findScoutTarget()/updateScouts()).
+      scouts.push({ x: cx, y: cy - CHUTE_OFFSET });
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '⚡ SCOUT LAUNCHED!', alpha: 1, vy: -1.8, color: '#ffd700' });
+    }
   } else if (e.special) {
     sfx.bonus(pitchMult);
     spawnParticles(cx, cy, '#00ffcc', 14);
@@ -1344,7 +1362,11 @@ function updateBuddy(dt) {
     b.y += (targetY - b.y) * BUDDY_LERP * dt;
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      if (!e.alive) continue;
+      // glitterPipe excluded — a buddy accidentally consuming a gauntlet's escape
+      // route (bug found 2026-08-30 while adding scouts: applyPickupEffect() has no
+      // branch for it, so it would've silently scored as a plain chute and vanished)
+      // is never the player's own choice, unlike touching one themselves
+      if (!e.alive || e.glitterPipe) continue;
       const cx = e.x, cy = e.y - CHUTE_OFFSET;
       const dist = Math.hypot(b.x - cx, b.y - cy);
       if (dist < BIRD_R + CHUTE_R) {
@@ -1359,6 +1381,54 @@ function updateBuddy(dt) {
         }
       }
     }
+  }
+}
+
+// findScoutTarget — nearest qualifying enemy to (fromX,fromY): power-ups first
+// (mega/shrink/ghost/special/starChute — "the nearest power shoot"), any plain chute
+// as a fallback ("if not power shoots in screen it will get any shoot"). buddyChute and
+// glitterPipe are never valid scout targets — recruiting further buddies or consuming a
+// gauntlet's escape route are the player's own choices, not something a scout does for
+// them.
+function findScoutTarget(fromX, fromY) {
+  let best = null, bestDist = Infinity;
+  for (const e of enemies) {
+    if (!e.alive || e.buddyChute || e.glitterPipe) continue;
+    if (!(e.mega || e.shrink || e.ghost || e.special || e.starChute)) continue;
+    const d = Math.hypot(e.x - fromX, (e.y - CHUTE_OFFSET) - fromY);
+    if (d < bestDist) { bestDist = d; best = e; }
+  }
+  if (best) return best;
+  for (const e of enemies) {
+    if (!e.alive || e.buddyChute || e.glitterPipe) continue;
+    const d = Math.hypot(e.x - fromX, (e.y - CHUTE_OFFSET) - fromY);
+    if (d < bestDist) { bestDist = d; best = e; }
+  }
+  return best;
+}
+
+// updateScouts — one-shot dash helpers beyond MAX_BUDDIES (Osimo 2026-08-30 v3). Each
+// scout re-targets fresh every frame (never holds a stale enemy reference — the target
+// could despawn, get stomped, or get caught by something else first) and steers
+// straight at it. Reaching it applies the SAME real reward every other catch uses, then
+// the scout is spent.
+function updateScouts(dt) {
+  for (let i = scouts.length - 1; i >= 0; i--) {
+    const s = scouts[i];
+    const target = findScoutTarget(s.x, s.y);
+    if (!target) continue;   // nothing to chase yet — hold position, retry next frame
+    const cx = target.x, cy = target.y - CHUTE_OFFSET;
+    const dx = cx - s.x, dy = cy - s.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < SCOUT_CATCH_R) {
+      target.alive = false;
+      applyPickupEffect(target, cx, cy);
+      spawnParticles(s.x, s.y, '#ffd700', 10);
+      scouts.splice(i, 1);
+      continue;
+    }
+    s.x += (dx / dist) * SCOUT_SPEED * dt;
+    s.y += (dy / dist) * SCOUT_SPEED * dt;
   }
 }
 
@@ -1651,6 +1721,7 @@ function initGame() {
   nearMissStreak    = 0;
   ghostTimerUntil   = 0;
   buddies           = [];
+  scouts            = [];
   buddyPending      = false;
   lastGhostWarnSec  = 99;
   starChain         = 0;
@@ -2266,6 +2337,7 @@ function update(dt) {
   }
 
   if (buddies.length) updateBuddy(dt);
+  if (scouts.length) updateScouts(dt);
 
   // particles
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -2475,6 +2547,13 @@ function draw() {
   if (buddies.length) {
     ctx.globalAlpha = 0.55;
     for (const b of buddies) drawBird(b.x, b.y, 0, BUDDY_SIZE, 0, scrollDir);
+    ctx.globalAlpha = 1;
+  }
+  // SCOUTS (Osimo 2026-08-30 v3) — a touch more opaque than the passive buddy chain,
+  // reads as "actively on a mission" rather than idly trailing
+  if (scouts.length) {
+    ctx.globalAlpha = 0.75;
+    for (const s of scouts) drawBird(s.x, s.y, 0, BUDDY_SIZE, 0, scrollDir);
     ctx.globalAlpha = 1;
   }
   // waiting — tap to play hint
