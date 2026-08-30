@@ -255,6 +255,10 @@ const MEGA_BOUNCE_GRACE_MS = 500;   // brief post-mega-bounce grace — the stro
                                      // when the bomb spawns near the top of the screen
 const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once level 5+
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
+const STAR_CHAIN_NEED_REVERSED = 10; // Osimo 2026-08-29: "after the reversal starts you
+                                      // need to hit 10 consecutive shoots" — doubled once
+                                      // scrollDir flips at REVERSAL_LEVEL
+const STAR_CHUTE_MS_MIN = 70000, STAR_CHUTE_MS_MAX = 100000; // rare Lv20+ instant-star pickup
 const STAR_POWER_MS     = 7500;     // star power duration (Osimo 2026-08-02: +50%): every pipe safe
 const STAR_WARN_MS      = 2000;     // final stretch — the ring BLINKS as the expiry telegraph
 const FLASH_PIPE_EVERY  = 5;        // 1 in every N pipes (level 10+) flashes translucent
@@ -282,7 +286,6 @@ const BUDDY_TRAIL_X   = 46;   // follows this far behind the player horizontally
                                // 2026-08-29 v2: "move him back a few more pixels", was 34)
 const BUDDY_TRAIL_Y   = 10;   // ...and this far below, vertically
 const BUDDY_LERP      = 0.20; // follow smoothing — bounces/moves WITH you, on a slight delay
-const BUDDY_CATCH_POINTS = 15;// flat bonus when the buddy itself pops a parachute
 const BUDDY_SIZE      = 8;    // Osimo 2026-08-29 v2: "no point having him match your size,
                                // keep him always small in the background" — fixed radius,
                                // independent of the player's own birdInflate/birdShrink state
@@ -293,11 +296,17 @@ const SHRINK_SCALE      = 0.72;     // bird.r multiplier per shrink stack
 // scroll motion) → spat out of the TOP pipe of a fresh pair (regardless of which half was
 // entered — bottom entry pops out of the one above it, top entry out of the one it entered).
 const WARP_LEVEL_EVERY = 5;         // arm one warp pipe on every Nth level
-const WARP_BONUS_MS    = 22000;     // bonus room duration (Osimo 2026-08-18 v2: 7s → 22s)
+const WARP_BONUS_MS    = 30000;     // bonus room duration (Osimo 2026-08-29 v3: "you can
+                                     // stay in bonus world for longer" — was 22000)
 const BONUS_STACK_MS   = 11000;     // +11s per CONSECUTIVE bonus-room entry this run (Osimo 2026-08-29)
 const WARP_SUCK_FRAMES = 42;        // suck-in animation length (60fps-equivalent ticks)
 const WARP_SPIT_FRAMES = 26;        // spit-out animation length
-const BONUS_CHUTES     = 12;        // parachutes seeded into the bonus room at entry
+const BONUS_CHUTES     = 18;        // parachutes seeded into the bonus room at entry
+                                     // (Osimo 2026-08-29 v3: "fewer shoots... add a few
+                                     // more" — was 12)
+const BONUS_GLITTER_PIPES = 2;      // "a few glittery pipes" — hit one, instant exit
+const GLITTER_PIPE_R      = 26;     // touch radius for the early-exit trigger
+const GLITTER_PIPE_W = 40, GLITTER_PIPE_H = 96;   // rendered size (drawn centred on e.x/e.y)
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -375,7 +384,9 @@ function playTone(freq, dur, type = 'sine', vol = 0.15, sweepTo = null, delay = 
 // (who,text) pairs from the VO_LINES table below — the game source is the single
 // source of truth, the pack can never drift from it.
 const VO_LINES = [
-  // Jimmy — the helpful one. Star-chain countdown + star-expiry countdown numbers:
+  // Jimmy — the helpful one. Star-chain countdown + star-expiry countdown numbers.
+  // Nine/Eight/Seven/Six added 2026-08-29 (post-reversal chain is 10, was 5):
+  ["JIMMY", "Nine!"], ["JIMMY", "Eight!"], ["JIMMY", "Seven!"], ["JIMMY", "Six!"],
   ["JIMMY", "Five!"], ["JIMMY", "Four!"], ["JIMMY", "Three!"], ["JIMMY", "Two!"], ["JIMMY", "One!"],
   ["JIMMY", "Star power!"],
   ["JIMMY", "Ghost power!"],
@@ -911,6 +922,7 @@ let buddyPending = false;  // armed true on entering a level>=10, consumed by th
 let birdInflate, inflateInvincible, nextMegaSpawn;
 let lastHitCause = 'hitPipe';   // most recent inflate() cause — read by deathVoice() (Osimo 2026-08-29)
 let nextGhostSpawn, nextShrinkSpawn, birdGhost, birdShrink;
+let nextStarChuteSpawn;   // rare Lv20+ instant-star-power pickup (Osimo 2026-08-29 v3)
 let starChain, starPower, starPowerUntil;
 // near miss (Osimo 2026-08-29): thread a gap within NEAR_MISS_PX of an edge, unassisted by
 // any power-up, and it's a near miss. One = a single free ghost pass + points. Two in a row
@@ -985,6 +997,44 @@ function enemySpawnX()  { return scrollDir === 1 ? cw + ENEMY_R + 8  : -ENEMY_R 
 // for whichever way scrollDir currently points.
 function pipePassed(p, margin) {
   return scrollDir === 1 ? (p.x + PIPE_W < bird.x - margin) : (p.x > bird.x + margin);
+}
+
+// star chain requirement doubles once the world has reversed (Osimo 2026-08-29: "after
+// the reversal starts you need to hit 10 consecutive shoots to get star power")
+function currentStarChainNeed() { return scrollDir === -1 ? STAR_CHAIN_NEED_REVERSED : STAR_CHAIN_NEED; }
+const STAR_COUNTDOWN_WORDS = { 1:'One!', 2:'Two!', 3:'Three!', 4:'Four!', 5:'Five!',
+                                6:'Six!', 7:'Seven!', 8:'Eight!', 9:'Nine!' };
+
+// grantStarPower — extracted once the rare Lv20+ star chute needed the identical
+// activation the chain-completion already does (feedback_extract_dont_inline).
+function grantStarPower(label) {
+  starChain = 0;
+  starPower = true;
+  starPowerUntil = Date.now() + STAR_POWER_MS;
+  lastStarSec = 99;
+  sfx.star();
+  floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: label, alpha: 1, vy: -2, color: '#ffd700' });
+}
+
+// rollBonusEnemyType — extracted 2026-08-29 v3 (Osimo: "the bonus worlds have fewer
+// shoots, add a few more, any from the total list of shoots") — shared between
+// enterBonus()'s initial seed and the ongoing replenish loop so the bonus room's whole
+// population draws from the FULL pickup variety, not just shrink/mega. Each extra type
+// still respects its own main-game level gate (buddy Lv10+, star Lv20+) — the bonus
+// room is a denser version of what's already unlocked, not an early-progression skip.
+function rollBonusEnemyType(e) {
+  const r = Math.random();
+  const shrinkChance = birdInflate > 0 ? 0.28 : 0.12;
+  const megaChance = 0.10;
+  const ghostChance = level >= 5 ? 0.08 : 0;
+  const buddyChance = level >= 10 ? 0.05 : 0;
+  const starChance = level >= 20 ? 0.03 : 0;
+  let acc = 0;
+  if (r < (acc += shrinkChance)) e.shrink = true;
+  else if (r < (acc += megaChance)) e.mega = true;
+  else if (r < (acc += ghostChance)) e.ghost = true;
+  else if (r < (acc += buddyChance)) e.buddyChute = true;
+  else if (r < (acc += starChance)) e.starChute = true;
 }
 
 // ─── resize (convention: subtract CELL buffer top+bottom) ─────────────────────
@@ -1142,6 +1192,95 @@ function recomputeBirdRadius() {
   bird.r = Math.round(BIRD_R * Math.pow(1.5, birdInflate) * Math.pow(SHRINK_SCALE, birdShrink));
 }
 
+// applyPickupEffect — extracted 2026-08-29 (Osimo v3: "anything your buddies collect
+// goes to the main bird leading... anything they get tallies up or reduces you in size
+// etc.") — the REAL per-type reward, shared between the player's own stomp AND a
+// buddy's catch: whichever one collects it, the same effect lands on the main/leading
+// bird. Deliberately excludes the physical bounce (bird.vy) and the stomp-combo-counter
+// (comboCount/rocket triggers) — those are tied to the PLAYER'S OWN physical stomp
+// gesture, not a passive collection, so each caller still handles those itself. Returns
+// 'normal' for a plain chute so the caller (stomp vs buddy-catch genuinely differ only
+// for that one case) can finish the job its own way.
+function applyPickupEffect(e, cx, cy) {
+  if (e.starChute) {
+    // rare Lv20+ instant star power (Osimo 2026-08-29 v3: "some rare multicoloured
+    // flashing shoots they are star power") — bypasses the chain entirely, so it
+    // doesn't touch starChain/the countdown at all
+    spawnParticles(cx, cy, '#ffd700', 10);
+    spawnParticles(cx, cy, '#4dd9f5', 10);
+    spawnParticles(cx, cy, '#c96bff', 10);
+    grantStarPower('⭐ INSTANT STAR POWER!');
+    return;
+  }
+  // star-power chain: ANY type counts, buddy catches included ("they collect for
+  // you") — requirement doubles post-reversal (Osimo 2026-08-29 v2/v3).
+  const need = currentStarChainNeed();
+  starChain++;
+  if (starChain >= need) {
+    grantStarPower('⭐ STAR POWER!');
+  } else if (sfxMode === 'voice' || sfxMode === 'hybrid') {
+    const word = STAR_COUNTDOWN_WORDS[need - starChain];
+    if (word) jimmySay(word);
+  }
+
+  // the smaller the bird, the squeakier every bounce sounds — grows with each
+  // shrink stack, most noticeable at max shrink ("phew phew", Osimo 2026-08-02)
+  const pitchMult = 1 + birdShrink * 0.5;
+
+  if (e.mega) {
+    sfx.bonus(pitchMult);
+    spawnParticles(cx, cy, '#a855f7', 16);
+    spawnParticles(cx, cy, '#ffcf3d', 8);
+    score += 30;
+    scoreEl.textContent = score;
+    floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '🚀 MEGA BOUNCE! +30', alpha: 1, vy: -1.8, color: '#a855f7' });
+  } else if (e.shrink) {
+    sfx.shrink(pitchMult);
+    spawnParticles(cx, cy, '#e879f9', 14);
+    spawnParticles(cx, cy, '#7e22ce', 7);
+    birdShrink = Math.min(birdShrink + 1, SHRINK_MAX);
+    if (birdInflate > 0) {
+      birdInflate--;
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '💜 EXTRA LIFE!', alpha: 1, vy: -1.8, color: '#e879f9' });
+    } else {
+      score += 40;
+      scoreEl.textContent = score;
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '+40 TINY BONUS!', alpha: 1, vy: -1.8, color: '#e879f9' });
+    }
+    recomputeBirdRadius();
+  } else if (e.ghost) {
+    sfx.bonus(pitchMult);
+    spawnParticles(cx, cy, '#9fe8ff', 14);
+    birdGhost = true;
+    floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
+  } else if (e.buddyChute) {
+    sfx.buddyTime();
+    spawnParticles(cx, cy, '#ffd700', 18);
+    spawnParticles(cx, cy, '#fff4c2', 8);
+    const tail = buddies.length ? buddies[buddies.length - 1] : bird;
+    buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
+    floaters.push({ x: cx, y: cy - CHUTE_R - 4,
+                     text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
+                     alpha: 1, vy: -1.8, color: '#ffd700' });
+  } else if (e.special) {
+    sfx.bonus(pitchMult);
+    spawnParticles(cx, cy, '#00ffcc', 14);
+    spawnParticles(cx, cy, '#7fff00', 7);
+    const sc = '#ffcf3d';
+    if (birdInflate > 0) {
+      birdInflate--;
+      recomputeBirdRadius();
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: sc });
+    } else {
+      score += 50;
+      scoreEl.textContent = score;
+      floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: sc });
+    }
+  } else {
+    return 'normal';
+  }
+}
+
 // updateBuddy — the trailing companion CHAIN (Osimo 2026-08-29, v2: "getting buddy power
 // again while you have one already adds a second buddy trailing your buddy"). `buddies`
 // is an array, front-to-back — buddies[0] lerp-follows the PLAYER exactly as before;
@@ -1150,10 +1289,16 @@ function recomputeBirdRadius() {
 // (bird.y already carries every bounce/flap/fall, so following the link ahead means the
 // whole chain "bounces when you bounce" for free, just with compounding lag down the
 // line). Every buddy in the chain independently runs its own small catch-check against
-// `enemies` — more buddies genuinely means more catch coverage, not just more visual
-// tail — a flat bonus per parachute, not the full mega/shrink/ghost-specific effects the
-// PLAYER'S stomp gets, since none of those apply to a companion that "always stays
-// regular size till you take over."
+// `enemies` — v3 (Osimo 2026-08-29): "anything your buddies collect goes to the main
+// bird leading... anything they get tallies up or reduces you in size etc." — a catch
+// now routes through the SAME `applyPickupEffect()` the player's own stomp uses, so a
+// buddy catching a shrink bomb, deflate chute, ghost, star chute, or another buddy
+// chute genuinely gives YOU that real reward, not a flat consolation bonus. Two things
+// stay buddy-catch-specific rather than shared: no physical bounce (a buddy shouldn't
+// launch the player upward involuntarily), and a plain/normal chute doesn't feed the
+// player's own stomp-combo counter (that's tied to the physical stomp gesture) — it
+// still scores using the player's CURRENT combo multiplier, just without advancing or
+// resetting that chain.
 function updateBuddy(dt) {
   for (let bi = 0; bi < buddies.length; bi++) {
     const b = buddies[bi];
@@ -1170,11 +1315,14 @@ function updateBuddy(dt) {
       const dist = Math.hypot(b.x - cx, b.y - cy);
       if (dist < BIRD_R + CHUTE_R) {
         e.alive = false;
-        score += BUDDY_CATCH_POINTS;
-        scoreEl.textContent = score;
-        sfx.bonus(1);
-        spawnParticles(cx, cy, '#ffd700', 10);
-        floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `✨ +${BUDDY_CATCH_POINTS}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+        if (applyPickupEffect(e, cx, cy) === 'normal') {
+          const pts = 25 * Math.max(1, comboCount);
+          score += pts;
+          scoreEl.textContent = score;
+          sfx.bonus(1);
+          spawnParticles(cx, cy, '#ffd700', 10);
+          floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `✨ +${pts}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+        }
       }
     }
   }
@@ -1354,11 +1502,24 @@ function enterBonus() {
   pipes = [];                  // no pipes in the bonus room
   // parachutes EVERYWHERE — seed a dense field, spread across the whole sky
   for (let i = 0; i < BONUS_CHUTES; i++) {
-    enemies.push({
+    const e = {
       x: rnd(cw * 0.15, cw * 1.5),
       y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
       vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
       alive: true, phase: Math.random() * Math.PI * 2, fast: false,
+    };
+    rollBonusEnemyType(e);
+    enemies.push(e);
+  }
+  // GLITTERY PIPES (Osimo 2026-08-29 v3: "a few glittery pipes... the second you hit a
+  // glittery pipe you go back to the regular world") — a few early-exit triggers seeded
+  // among the parachute field, spread out so they're not immediately unavoidable.
+  for (let i = 0; i < BONUS_GLITTER_PIPES; i++) {
+    enemies.push({
+      x: rnd(cw * 0.3, cw * 1.4),
+      y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
+      vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
+      alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
     });
   }
   bird.x = cw * 0.30; bird.y = ch * 0.45; bird.vy = 0;
@@ -1425,6 +1586,7 @@ function initGame() {
   nextMegaSpawn     = Date.now() + Math.round(rnd(50000, 80000));
   nextGhostSpawn    = Date.now() + GHOST_SPAWN_MS;
   nextShrinkSpawn   = Date.now() + SHRINK_SPAWN_MS;
+  nextStarChuteSpawn = Date.now() + Math.round(rnd(STAR_CHUTE_MS_MIN, STAR_CHUTE_MS_MAX));
   birdGhost         = false;
   birdShrink        = 0;
   nearMissStreak    = 0;
@@ -1661,23 +1823,29 @@ function update(dt) {
   // spawn enemies: interval shrinks each level, min 45 frames. In the bonus room the
   // field just replenishes toward its seeded density — chutes everywhere, no cap games.
   if (inBonus) {
-    if (enemies.length < BONUS_CHUTES) {
+    const chuteCount = enemies.filter(e => !e.glitterPipe).length;
+    if (chuteCount < BONUS_CHUTES) {
       const e = {
         x: cw + ENEMY_R + 8,
         y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
         vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
         alive: true, phase: Math.random() * Math.PI * 2, fast: false,
       };
-      // BONUS-ROOM SPECIALS (Osimo 2026-08-19, corrected same day): flashing purple
-      // shrink chutes (super tiny — and they deflate one level first when the bird
-      // is inflated, so they ARE the size-fix), steady purple/yellow mega chutes
-      // (the big high bounce). While the bird is BIGGER than it started, extra
-      // shrink chutes appear so the fix is always in reach.
-      const r = Math.random();
-      const shrinkChance = birdInflate > 0 ? 0.34 : 0.14;
-      if (r < shrinkChance) e.shrink = true;
-      else if (r < shrinkChance + 0.12) e.mega = true;
+      // BONUS-ROOM VARIETY (Osimo 2026-08-19, expanded v3 2026-08-29: "any from the
+      // total list of shoots") — rollBonusEnemyType() draws from the full pickup pool
+      // (shrink/mega/ghost/buddy/star, each respecting its own main-game level gate),
+      // not just shrink/mega.
+      rollBonusEnemyType(e);
       enemies.push(e);
+    }
+    const glitterCount = enemies.filter(e => e.glitterPipe).length;
+    if (glitterCount < BONUS_GLITTER_PIPES) {
+      enemies.push({
+        x: cw + ENEMY_R + 8,
+        y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
+        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
+        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
+      });
     }
   } else {
     const eInt = Math.max(45, 88 - (level - 1) * 5);
@@ -1835,6 +2003,18 @@ function update(dt) {
     // same edge-flip as the pipe despawn check above
     if (scrollDir === 1 ? (e.x + CHUTE_R < 0) : (e.x - CHUTE_R > cw)) { enemies.splice(i, 1); continue; }
 
+    // GLITTERY PIPE (Osimo 2026-08-29 v3) — bonus-room-only early exit. ANY-direction
+    // touch, not a downward stomp (it's a pipe hazard, not a parachute pickup), so this
+    // is checked separately and BEFORE the stomp-distance/dome-offset math below, which
+    // doesn't apply to a pipe-shaped object.
+    if (e.glitterPipe) {
+      if (Math.hypot(bird.x - e.x, bird.y - e.y) < bird.r + GLITTER_PIPE_R) {
+        exitBonus();
+        return;
+      }
+      continue;
+    }
+
     // stomp check: bird falls onto parachute from above
     const cx = e.x, cy = e.y - CHUTE_OFFSET;
     const dcx = bird.x - cx, dcy = bird.y - cy;
@@ -1852,100 +2032,27 @@ function update(dt) {
       // bonus room: bounces at HALF the usual height (Osimo 2026-08-18) — h ∝ v²,
       // so half height = velocity ÷ √2. Keeps the dense chute field controllable.
       bird.vy = inBonus ? -7 / Math.SQRT2 : -7;
-
-      // star-power chain: 5 consecutive stomps (any type, no miss) → 5s pass-through-
-      // everything, Mario-star style. Available from LEVEL 1 (Osimo 2026-08-02 v2: "if
-      // at any time from level 1 you hit five bombs in a row" — the earlier level-5 gate
-      // was a misread).
-      starChain++;
-      if (starChain >= STAR_CHAIN_NEED) {
-        starChain = 0;
-        starPower = true;
-        starPowerUntil = Date.now() + STAR_POWER_MS;
-        lastStarSec = 99;   // re-arm the expiry countdown for this star
-        sfx.star();
-        floaters.push({ x: bird.x, y: bird.y - bird.r - 12, text: '⭐ STAR POWER!', alpha: 1, vy: -2, color: '#ffd700' });
-      } else if (sfxMode === 'voice' || sfxMode === 'hybrid') {
-        // Jimmy counts the chain DOWN toward the star: stomp 1 → "Four!" … stomp 4
-        // → "One!" (the 5th is "Star power!" above). Chain reset (any hit) re-arms it.
-        // Fires in BOTH spoken modes — the hybrid gate was missed in the 4-way
-        // restructure, which is why "Jimmy was counting" went silent there
-        // (Osimo 2026-08-19 v3).
-        jimmySay(['Four!', 'Three!', 'Two!', 'One!'][starChain - 1]);
-      }
-
-      // the smaller the bird, the squeakier every bounce sounds — grows with each
-      // shrink stack, most noticeable at max shrink ("phew phew", Osimo 2026-08-02)
-      const pitchMult = 1 + birdShrink * 0.5;
-
       if (e.mega) {
         // MEGA BOUNCE — 3× a normal stomp's launch, purple/yellow bomb. That -21 vy can
         // punch the bird into the ceiling within 2-3 frames when the bomb spawns near
         // the top of its edge band — real bug, reported as "purple made me explode
         // instead of 3x jump" (Osimo 2026-08-02). A brief grace absorbs the overshoot
-        // without touching the bounce height itself.
+        // without touching the bounce height itself. (Score/particles for mega live in
+        // applyPickupEffect() below — only the physical bounce stays here, since a
+        // buddy catching a mega bomb shouldn't launch the PLAYER upward involuntarily.)
         bird.vy = (inBonus ? -7 / Math.SQRT2 : -7) * MEGA_BOUNCE_MULT;
         inflateInvincible = Math.max(inflateInvincible, Date.now() + MEGA_BOUNCE_GRACE_MS);
-        sfx.bonus(pitchMult);
-        spawnParticles(e.x, cy, '#a855f7', 16);
-        spawnParticles(e.x, cy, '#ffcf3d', 8);
-        score += 30;
-        scoreEl.textContent = score;
-        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🚀 MEGA BOUNCE! +30', alpha: 1, vy: -1.8, color: '#a855f7' });
-      } else if (e.shrink) {
-        // SHRINK BOMB — extra life (deflates one level, or a bonus if already at 0)
-        // plus a stacking shrink — smaller bird threads the late-game gaps easier.
-        sfx.shrink(pitchMult);
-        spawnParticles(e.x, cy, '#e879f9', 14);
-        spawnParticles(e.x, cy, '#7e22ce', 7);
-        birdShrink = Math.min(birdShrink + 1, SHRINK_MAX);
-        if (birdInflate > 0) {
-          birdInflate--;
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '💜 EXTRA LIFE!', alpha: 1, vy: -1.8, color: '#e879f9' });
-        } else {
-          score += 40;
-          scoreEl.textContent = score;
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+40 TINY BONUS!', alpha: 1, vy: -1.8, color: '#e879f9' });
-        }
-        recomputeBirdRadius();
-      } else if (e.ghost) {
-        // GHOST PARACHUTE — bird goes translucent, passes through the very next pipe free
-        sfx.bonus(pitchMult);
-        spawnParticles(e.x, cy, '#9fe8ff', 14);
-        birdGhost = true;
-        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
-      } else if (e.buddyChute) {
-        // BUDDY PARACHUTE (Osimo 2026-08-29, v2: "getting it again while you have one
-        // already adds a second buddy trailing your buddy") — PUSHES onto the chain
-        // rather than overwriting. Starts trailing behind whichever entity is currently
-        // at the back of the chain (the player, if this is the first buddy; otherwise
-        // the last buddy already in the chain) so the new link doesn't visually teleport
-        // in ahead of where it belongs.
-        sfx.buddyTime();
-        spawnParticles(e.x, cy, '#ffd700', 18);
-        spawnParticles(e.x, cy, '#fff4c2', 8);
-        const tail = buddies.length ? buddies[buddies.length - 1] : bird;
-        buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
-        floaters.push({ x: e.x, y: cy - CHUTE_R - 4,
-                         text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
-                         alpha: 1, vy: -1.8, color: '#ffd700' });
-      } else if (e.special) {
-        // DEFLATE PARACHUTE — shrink bird back one inflation level
-        sfx.bonus(pitchMult);
-        spawnParticles(e.x, cy, '#00ffcc', 14);
-        spawnParticles(e.x, cy, '#7fff00', 7);
-        const sc = '#ffcf3d';
-        if (birdInflate > 0) {
-          birdInflate--;
-          recomputeBirdRadius();
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '🌀 DEFLATED!', alpha: 1, vy: -1.8, color: sc });
-        } else {
-          score += 50;
-          scoreEl.textContent = score;
-          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: sc });
-        }
-      } else {
+      }
+      // applyPickupEffect() — extracted 2026-08-29 v3 (feedback_extract_dont_inline):
+      // star-chain progress + the real mega/shrink/ghost/buddyChute/special/starChute
+      // reward, shared verbatim with the buddy-catch path in updateBuddy() above.
+      // Returns 'normal' for a plain chute so this call site (the only one that still
+      // owns the stomp-combo counter) finishes that part itself.
+      if (applyPickupEffect(e, e.x, cy) === 'normal') {
         // normal stomp — combo + points
+        // pitchMult lives inside applyPickupEffect()'s own scope now; the normal
+        // branch stayed here (it owns the stomp-combo counter), so it needs its own
+        const pitchMult = 1 + birdShrink * 0.5;
         const now = Date.now();
         if (now - lastPopMs < COMBO_WINDOW) {
           // cap 20 → 30 (Osimo 2026-08-29) so the ×25/×30 acknowledgments + the ×30
@@ -2031,6 +2138,18 @@ function update(dt) {
       : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
     enemies.push({ x: enemySpawnX(), y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
                    alive: true, phase: Math.random() * Math.PI * 2, fast: false, shrink: true });
+  }
+
+  // star chute (level 20+): rare (70-100s), multicoloured flashing — an instant grant
+  // of star power, no chain needed (Osimo 2026-08-29 v3: "some rare multicoloured
+  // flashing shoots they are star power"). Same hard-to-reach edge band as mega/shrink.
+  if (level >= 20 && Date.now() >= nextStarChuteSpawn) {
+    nextStarChuteSpawn = Date.now() + Math.round(rnd(STAR_CHUTE_MS_MIN, STAR_CHUTE_MS_MAX));
+    const hardY = Math.random() < 0.5
+      ? rnd(CHUTE_OFFSET + CHUTE_R + 4, ch * 0.18)
+      : rnd(ch * 0.82, ch - GROUND_H - CHUTE_OFFSET - 4);
+    enemies.push({ x: enemySpawnX(), y: hardY, vy: rnd(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1),
+                   alive: true, phase: Math.random() * Math.PI * 2, fast: true, starChute: true });
   }
 
   // star power expiry — the window from the star chain above runs out.
@@ -2185,6 +2304,13 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
+    if (e.glitterPipe) {
+      // pipe-shaped, not parachute-shaped — reuses drawPipe(isWarp=true), which
+      // already includes the same animated sparkle system the warp bonus-pipe uses,
+      // so "glittery" is free/consistent rather than a second visual language
+      drawPipe(e.x - GLITTER_PIPE_W / 2, e.y - GLITTER_PIPE_H / 2, GLITTER_PIPE_W, GLITTER_PIPE_H, true, true);
+      continue;
+    }
     drawEnemy(e);
   }
 
@@ -2496,6 +2622,13 @@ function drawPipe(x, y, w, h, isBottom, isWarp) {
 function drawEnemy(e) {
   const x = e.x, y = e.y, special = e.special, mega = e.mega, shrink = e.shrink, ghost = e.ghost;
   const buddyChute = e.buddyChute;
+  const starChute = e.starChute;
+  // rare Lv20+ instant-star pickup (Osimo 2026-08-29 v3: "multicoloured flashing") —
+  // cycles the SAME rainbow palette the star-power ring already uses, so it visually
+  // reads as "this is the star thing" on sight, distinct from every single-hue flash
+  const STAR_PALETTE = ['#ff4d4d', '#ffd700', '#4dff88', '#4dd9f5', '#c96bff'];
+  const starHue  = STAR_PALETTE[Math.floor(Date.now() / 90) % STAR_PALETTE.length];
+  const starHue2 = STAR_PALETTE[(Math.floor(Date.now() / 90) + 1) % STAR_PALETTE.length];
   ctx.save();
   ctx.translate(x, y);
   if (ghost) ctx.globalAlpha = 0.5;  // ghost parachute: usual colours, just translucent
@@ -2531,7 +2664,9 @@ function drawEnemy(e) {
   // PARACHUTE DOME — special flips red/yellow each frame pair; mega is steady purple/yellow
   ctx.save();
   ctx.translate(0, -CO);
-  const panels = buddyChute
+  const panels = starChute
+    ? [starHue, starHue2, starHue, starHue2]
+    : buddyChute
     ? ['#ffd700', '#fff4c2', '#ffd700', '#fff4c2']
     : mega
     ? ['#a855f7', '#ffcf3d', '#a855f7', '#ffcf3d']
@@ -2558,10 +2693,10 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*CR, Math.sin(a)*CR); ctx.stroke();
   }
   // dome outline — mega/shrink/buddy get a glow ring so they read as the special pickups they are
-  if (mega || shrink || buddyChute) {
+  if (mega || shrink || buddyChute || starChute) {
     ctx.save();
-    ctx.shadowColor = buddyChute ? '#ffd700' : mega ? '#a855f7' : '#e879f9'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = buddyChute ? 'rgba(255,215,0,0.85)' : mega ? 'rgba(168,85,247,0.8)' : 'rgba(232,121,249,0.8)'; ctx.lineWidth = 2;
+    ctx.shadowColor = starChute ? starHue : buddyChute ? '#ffd700' : mega ? '#a855f7' : '#e879f9'; ctx.shadowBlur = starChute ? 16 : 12;
+    ctx.strokeStyle = starChute ? starHue : buddyChute ? 'rgba(255,215,0,0.85)' : mega ? 'rgba(168,85,247,0.8)' : 'rgba(232,121,249,0.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, CR, Math.PI, 0); ctx.closePath(); ctx.stroke();
     ctx.restore();
   } else {
@@ -2572,12 +2707,12 @@ function drawEnemy(e) {
   ctx.restore();
 
   // BODY — buddy gold, mega purple, shrink fuchsia/purple flash, special flashes yellow/red, normal plain red
-  ctx.fillStyle = buddyChute ? '#e8b400' : mega ? '#7e22ce' : shrink ? (flash ? '#e879f9' : '#a21caf') : flash ? '#ffcf3d' : '#e84040';
+  ctx.fillStyle = starChute ? starHue : buddyChute ? '#e8b400' : mega ? '#7e22ce' : shrink ? (flash ? '#e879f9' : '#a21caf') : flash ? '#ffcf3d' : '#e84040';
   ctx.beginPath(); ctx.arc(0, 0, BR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.7)';
   ctx.beginPath(); ctx.arc(-1, -2, 3, 0, Math.PI * 2); ctx.fill();
   // dangling legs
-  ctx.strokeStyle = buddyChute ? '#a67c00' : mega ? '#581c87' : shrink ? '#701a75' : flash ? '#cc9900' : '#cc2020';
+  ctx.strokeStyle = starChute ? starHue2 : buddyChute ? '#a67c00' : mega ? '#581c87' : shrink ? '#701a75' : flash ? '#cc9900' : '#cc2020';
   ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-3, BR - 1); ctx.lineTo(-4, BR + 5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo( 3, BR - 1); ctx.lineTo( 4, BR + 5); ctx.stroke();
