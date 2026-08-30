@@ -1429,7 +1429,19 @@ function updateScouts(dt) {
     const dist = Math.hypot(dx, dy);
     if (dist < SCOUT_CATCH_R) {
       target.alive = false;
-      applyPickupEffect(target, cx, cy);
+      // 'normal' handled like a buddy's catch (QA 2026-08-30: the return value was
+      // being ignored here, so a scout that fell back to a plain chute — its target
+      // despawned mid-dash, or no power-up existed — collected it for ZERO points;
+      // Osimo's spec is explicit: "it will get any shoot and add it to your tally").
+      // Scores at the player's CURRENT combo multiplier without advancing/resetting
+      // the physical stomp chain, exactly like updateBuddy()'s normal-catch branch.
+      if (applyPickupEffect(target, cx, cy) === 'normal') {
+        const pts = 25 * Math.max(1, comboCount);
+        score += pts;
+        scoreEl.textContent = score;
+        sfx.bonus(1);
+        floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `⚡ +${pts}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+      }
       spawnParticles(s.x, s.y, '#ffd700', 10);
       scouts.splice(i, 1);
       continue;
@@ -1626,7 +1638,10 @@ function enterBonus() {
     bird.y = ch / 2; bird.vy = 0;
     for (let i = 0; i < BONUS_GLITTER_PIPES; i++) {
       enemies.push({
-        x: rnd(cw * 0.3, cw * 1.4),
+        // seed band mirrors with scrollDir (QA 2026-08-30) — same despawn-edge trap as
+        // the safe room's seed: a reversed gauntlet (Lv20/25 between the two reversals)
+        // instantly culled any glitter pipe seeded past cw
+        x: scrollDir === 1 ? rnd(cw * 0.3, cw * 1.4) : rnd(-cw * 0.4, cw * 0.7),
         y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
         vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
         alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
@@ -1646,10 +1661,15 @@ function enterBonus() {
   bonusEntryCount++;
   bonusUntil = Date.now() + WARP_BONUS_MS + (bonusEntryCount - 1) * BONUS_STACK_MS;
   pipes = [];                  // no pipes in the bonus room
-  // parachutes EVERYWHERE — seed a dense field, spread across the whole sky
+  // parachutes EVERYWHERE — seed a dense field, spread across the whole sky.
+  // Band mirrors with scrollDir (QA 2026-08-30): the off-screen third of the seed must
+  // sit on the SPAWN side so it streams in — the Lv15 safe room is always entered
+  // post-reversal (the cutscene fires at the start of 15, before its warp pipe can
+  // spawn), and with the old fixed right-biased band a reversed room seeded a third
+  // of its chutes past the DESPAWN edge (instantly culled) while the rest drained out.
   for (let i = 0; i < BONUS_CHUTES; i++) {
     const e = {
-      x: rnd(cw * 0.15, cw * 1.5),
+      x: scrollDir === 1 ? rnd(cw * 0.15, cw * 1.5) : rnd(-cw * 0.5, cw * 0.85),
       y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
       vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
       alive: true, phase: Math.random() * Math.PI * 2, fast: false,
@@ -1657,7 +1677,9 @@ function enterBonus() {
     rollBonusEnemyType(e);
     enemies.push(e);
   }
-  bird.x = cw * 0.30; bird.y = ch * 0.45; bird.vy = 0;
+  // mirrors with scrollDir like the gauntlet branch above — otherwise a reversed room
+  // drops the bird on the left and the homeX glide immediately drags it across the field
+  bird.x = Math.round(cw * (scrollDir === 1 ? 0.30 : 0.70)); bird.y = ch * 0.45; bird.vy = 0;
   floaters.push({ x: cw / 2, y: ch * 0.3, text: '🎉 BONUS ROOM!', alpha: 1, vy: -1.2, color: '#0c7a40' });
 }
 
@@ -1677,6 +1699,12 @@ function exitBonus() {
     fallOffset: 0, falling: false, fallTimer: 0,
     flashPipe: false, translucentNow: false, warpPipe: false, warpSide: null,
   };
+  // clean slate for the pipe field too (QA 2026-08-30): a gauntlet exit could leave its
+  // in-flight pipes behind — one landed exactly on the exit pair/bird, overlapping
+  // sprites at the re-entry moment and sweeping a gauntlet-narrow gap across the player
+  // during the spit grace. The safe room already has no pipes here, so this is a no-op
+  // for it. "Thrown back out to regular level" = the gauntlet keeps nothing.
+  pipes.length = 0;
   pipes.push(p);
   enemies = [];                // clear the bonus field
   warp = { phase: 'spit', t: 0, pipe: p, starRemainMs: warp.starRemainMs };
@@ -1932,8 +1960,11 @@ function update(dt) {
   if (comboRocketPipes > 0) {
     starPowerUntil = Math.max(starPowerUntil, Date.now() + 1500);
     if (frame % 2 < 1) {
-      particles.push({ x: bird.x - bird.r - 3, y: bird.y + rnd(-4, 6),
-                       vx: -rnd(2.5, 4.5), vy: rnd(-0.8, 0.8),
+      // exhaust spawns at the bird's REAR and streams away behind it — both flip with
+      // scrollDir (QA 2026-08-30: post-reversal the fixed left-side offset put the
+      // flame in FRONT of the left-facing bird, streaming out of its beak)
+      particles.push({ x: bird.x - scrollDir * (bird.r + 3), y: bird.y + rnd(-4, 6),
+                       vx: -scrollDir * rnd(2.5, 4.5), vy: rnd(-0.8, 0.8),
                        alpha: 1, r: rnd(1.5, 3.2),
                        color: Math.random() < 0.5 ? '#ff9900' : '#ffcf3d' });
     }
@@ -1972,7 +2003,12 @@ function update(dt) {
     const chuteCount = enemies.filter(e => !e.glitterPipe).length;
     if (chuteCount < BONUS_CHUTES) {
       const e = {
-        x: cw + ENEMY_R + 8,
+        // enemySpawnX(), not a hardcoded right edge (QA 2026-08-30): in the reversed
+        // Lv15 safe room a right-edge spawn moves +x and hits the despawn check the
+        // SAME tick — every replenished chute died before ever being drawn, so the
+        // room drained to an empty sky within seconds. Identical to the fix the
+        // gauntlet's glitter replenish already got.
+        x: enemySpawnX(),
         y: rnd(CHUTE_OFFSET + CHUTE_R + 12, ch - GROUND_H - 28),
         vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.3, 0.8),
         alive: true, phase: Math.random() * Math.PI * 2, fast: false,
@@ -2604,17 +2640,29 @@ function draw() {
     ctx.restore();
   }
 
-  // bonus room banner + countdown
+  // bonus room banner + countdown — the GAUNTLET branches off (QA 2026-08-30): it has
+  // no clock at all (bonusUntil is a 999999999 sentinel), so the shared countdown line
+  // rendered "stomp everything — 1000000s" for its entire duration. The gauntlet's one
+  // rule worth pinning on screen is the escape condition instead.
   if (warp && warp.phase === 'bonus') {
-    const left = Math.max(0, Math.ceil((bonusUntil - Date.now()) / 1000));
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#7dffb8';
-    ctx.font = 'bold 22px "Barlow Condensed","Arial Narrow",sans-serif';
-    ctx.shadowColor = '#0c7a40'; ctx.shadowBlur = 10;
-    ctx.fillText('BONUS ROOM', cw * 0.5, 54);
-    ctx.font = 'bold 15px "Barlow Condensed","Arial Narrow",sans-serif';
-    ctx.fillText(`stomp everything — ${left}s`, cw * 0.5, 74);
+    if (gauntletActive) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 22px "Barlow Condensed","Arial Narrow",sans-serif';
+      ctx.shadowColor = '#7a5c00'; ctx.shadowBlur = 10;
+      ctx.fillText('⚡ GAUNTLET', cw * 0.5, 54);
+      ctx.font = 'bold 15px "Barlow Condensed","Arial Narrow",sans-serif';
+      ctx.fillText('touch a glitter pipe to escape', cw * 0.5, 74);
+    } else {
+      const left = Math.max(0, Math.ceil((bonusUntil - Date.now()) / 1000));
+      ctx.fillStyle = '#7dffb8';
+      ctx.font = 'bold 22px "Barlow Condensed","Arial Narrow",sans-serif';
+      ctx.shadowColor = '#0c7a40'; ctx.shadowBlur = 10;
+      ctx.fillText('BONUS ROOM', cw * 0.5, 54);
+      ctx.font = 'bold 15px "Barlow Condensed","Arial Narrow",sans-serif';
+      ctx.fillText(`stomp everything — ${left}s`, cw * 0.5, 74);
+    }
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -3167,7 +3215,10 @@ function die() {
 
   if (score > bestScore) {
     bestScore = score;
-    localStorage.setItem('hs_flap-fight', bestScore);
+    // guarded like every other localStorage write in this file (QA 2026-08-30) — an
+    // exotic-mode throw here would abort die() BEFORE ArcadeScores.show(), eating the
+    // whole score screen
+    try { localStorage.setItem('hs_flap-fight', bestScore); } catch (e) {}
     if (score > 0) sfx.best();
   }
 
