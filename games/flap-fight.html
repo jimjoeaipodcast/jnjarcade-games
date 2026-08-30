@@ -244,13 +244,16 @@ const GAP_MIN      = 105;           // narrowest pipe gap
 // "when you reach level 15, the pipes widen up a little (kinda reset)... BUT our bird
 // transitions and starts moving right to left (going backwards)... placed on the right
 // hand side so he can see what's coming from the left... a full screen glitter pipe...
-// bird comes out of a pipe on the right and starts bouncing left." Fires ONCE per run.
-// scrollDir is the single source of truth for which way the world scrolls — 1 = normal
-// (world scrolls left, bird anchored near the left), -1 = reversed (world scrolls right,
-// bird anchored near the right). Every spawn-edge/movement/despawn/scoring/trail check
-// that cares about direction reads this ONE variable rather than a hardcoded sign, so
-// the reversal is one flip, not a dozen independent ones that could drift out of sync.
-const REVERSAL_LEVEL         = 15;
+// bird comes out of a pipe on the right and starts bouncing left." Each level in
+// REVERSAL_LEVELS fires the cutscene ONCE and TOGGLES scrollDir (15 flips to reversed,
+// 30 flips back to normal — Osimo 2026-08-30 v2: "should anyone reach level 30 reverse
+// the flow once again to how it is at start left to right"). scrollDir is the single
+// source of truth for which way the world scrolls — 1 = normal (world scrolls left,
+// bird anchored near the left), -1 = reversed (world scrolls right, bird anchored near
+// the right). Every spawn-edge/movement/despawn/scoring/trail check that cares about
+// direction reads this ONE variable rather than a hardcoded sign, so each reversal is
+// one flip, not a dozen independent ones that could drift out of sync.
+const REVERSAL_LEVELS        = [15, 30];
 const REVERSAL_SUCK_FRAMES   = 33;  // phase 1: bird flies toward centre, glitter builds
 const REVERSAL_GLITTER_FRAMES = 42; // phase 2: full-screen glitter flash — the "glitter pipe"
 const REVERSAL_POPOUT_FRAMES = 30;  // phase 3: bird rockets out the new side, world flips
@@ -316,6 +319,19 @@ const BONUS_CHUTES     = 18;        // parachutes seeded into the bonus room at 
 const BONUS_GLITTER_PIPES = 2;      // "a few glittery pipes" — hit one, instant exit
 const GLITTER_PIPE_R      = 26;     // touch radius for the early-exit trigger
 const GLITTER_PIPE_W = 40, GLITTER_PIPE_H = 96;   // rendered size (drawn centred on e.x/e.y)
+
+// ─── GAUNTLET BONUS ROOM (Osimo 2026-08-30 v2) ─────────────────────────────────
+// "should have these [glittery pipes] at level 20 25 30 etc... instead make it resemble
+// a normal level... make it near infinite, but the gaps... get smaller faster... if you
+// hit a glittery pipe you thrown back out." The L5/10/15 warp pipes keep the ORIGINAL
+// safe floating-chute-field bonus room (unchanged, no glitter pipes — those were wrongly
+// appearing there before this fix). From GAUNTLET_LEVEL on, entering a bonus room
+// instead plays like real gameplay — real pipes, real collision consequences, the
+// normal enemy cadence — just with a faster-shrinking gap floor and no natural end
+// besides dying or touching a glitter pipe.
+const GAUNTLET_LEVEL = 20;
+const GAUNTLET_GAP_MIN = 85;              // narrower floor than normal play's 105
+const GAUNTLET_GAP_SHRINK_PER_MIN = 60;   // vs normal play's 25/min — shrinks faster
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -917,7 +933,9 @@ let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
 let scrollDir = 1;        // 1 = normal, -1 = reversed (see REVERSAL_LEVEL block above)
-let reversalDone = false; // guards the transition from ever firing twice in one run
+let reversalLevelsFired = new Set(); // which REVERSAL_LEVELS entries already fired this run
+let gauntletActive = false;   // true while inBonus AND this visit is the Lv20+ gauntlet
+let gauntletStartTime = 0;    // gauntletGapSize()'s own faster decay measures from here
 let reversal = null;      // {phase:'suckin'|'glitter'|'popout', t} while the cutscene plays
 let gapResetTime = 0;     // currentGapSize() measures elapsed time from here, not always
                            // gameStartTime — the level-15 "gaps widen up a little (kinda
@@ -991,6 +1009,12 @@ function initClouds() {
 
 // ─── time-based gap ──────────────────────────────────────────────────────────
 function currentGapSize() {
+  // gauntlet bonus room (Lv20+) shrinks faster and floors narrower than normal play —
+  // "the gaps on the pipes in these bonus levels get smaller faster" (Osimo 2026-08-30)
+  if (gauntletActive) {
+    const gMins = (Date.now() - gauntletStartTime) / 60000;
+    return Math.max(GAUNTLET_GAP_MIN, Math.round(GAP_START - gMins * GAUNTLET_GAP_SHRINK_PER_MIN));
+  }
   const mins = (Date.now() - gapResetTime) / 60000;
   return Math.max(GAP_MIN, Math.round(GAP_START - mins * 25));
 }
@@ -1182,13 +1206,14 @@ function setLevel(n) {
   levelPipeCount = 0;
   warpAtPipe = (n % WARP_LEVEL_EVERY === 0) ? Math.floor(rnd(2, 10)) : 0;
   buddyPending = n >= 10;   // guaranteed one gold buddy-parachute this level (Osimo 2026-08-29)
-  // LEVEL 15: the direction-reversal cutscene (Osimo 2026-08-29) — fires exactly once
-  // per run. gapResetTime moves forward so currentGapSize() runs its GAP_START→GAP_MIN
-  // decay again from a wider baseline ("the pipes widen up a little, kinda reset");
-  // the actual world-flip happens in the 'popout' phase of the cutscene, not here —
-  // this only ARMS it, update(dt)'s reversal block does the rest while gameplay pauses.
-  if (n === REVERSAL_LEVEL && !reversalDone) {
-    reversalDone = true;
+  // LEVEL 15 (reverse) + LEVEL 30 (un-reverse, Osimo 2026-08-30 v2) — the direction-
+  // reversal cutscene, each REVERSAL_LEVELS entry fires exactly once per run.
+  // gapResetTime moves forward so currentGapSize() runs its GAP_START→GAP_MIN decay
+  // again from a wider baseline ("the pipes widen up a little, kinda reset"); the
+  // actual world-flip happens in the 'popout' phase of the cutscene, not here — this
+  // only ARMS it, update(dt)'s reversal block does the rest while gameplay pauses.
+  if (REVERSAL_LEVELS.includes(n) && !reversalLevelsFired.has(n)) {
+    reversalLevelsFired.add(n);
     gapResetTime = Date.now();
     reversal = { phase: 'suckin', t: 0 };
   }
@@ -1503,6 +1528,41 @@ function enterBonus() {
   // its last valid position (top-left, where the suck parked it) and never exited.
   // THE Osimo 2026-08-18 stuck-bird bug.
   warp = { phase: 'bonus', gapY: warp.gapY, gapSize: warp.gapSize, starRemainMs: warp.starRemainMs };
+  gauntletActive = level >= GAUNTLET_LEVEL;
+
+  if (gauntletActive) {
+    // GAUNTLET (Osimo 2026-08-30 v2: "should have these [glittery pipes] at level 20
+    // 25 30 etc... instead make it resemble a normal level... make it near infinite,
+    // but the gaps... get smaller faster... if you hit a glittery pipe you thrown back
+    // out to regular level") — no timer at all; the only ways out are a glitter pipe
+    // or dying, exactly like a normal run. Real pipes populate through the ordinary
+    // spawnPipe() cadence in update() (now allowed to run during inBonus via
+    // gauntletActive below) — currentGapSize() already narrows faster while this is
+    // active. Bird keeps whichever side the OUTER game is currently scrolling from —
+    // a gauntlet entered mid-reversal should read as "the same world, just harder,"
+    // not silently reset direction.
+    gauntletStartTime = Date.now();
+    bonusUntil = Date.now() + 999999999;
+    pipes = [];
+    enemies = [];
+    bird.x = Math.round(cw * (scrollDir === 1 ? 0.22 : 0.78));
+    bird.y = ch / 2; bird.vy = 0;
+    for (let i = 0; i < BONUS_GLITTER_PIPES; i++) {
+      enemies.push({
+        x: rnd(cw * 0.3, cw * 1.4),
+        y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
+        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
+        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
+      });
+    }
+    floaters.push({ x: cw / 2, y: ch * 0.3, text: '⚡ GAUNTLET! WATCH FOR GLITTER PIPES', alpha: 1, vy: -1.2, color: '#ffd700' });
+    return;
+  }
+
+  // SAFE bonus room (Lv5/10/15, unchanged) — the original floating-chute-field
+  // reward: no glitter pipes (those were wrongly appearing here before this fix —
+  // Osimo: "I just saw one glittery pipe in bonus level 5"), no real pipe collision,
+  // soft bounce off the edges.
   // each CONSECUTIVE bonus-room visit this run runs 11s longer than the last (Osimo
   // 2026-08-29) — uncapped; warp pipes are rare enough (1 per 5 levels) that this
   // never needs a ceiling in practice.
@@ -1520,22 +1580,12 @@ function enterBonus() {
     rollBonusEnemyType(e);
     enemies.push(e);
   }
-  // GLITTERY PIPES (Osimo 2026-08-29 v3: "a few glittery pipes... the second you hit a
-  // glittery pipe you go back to the regular world") — a few early-exit triggers seeded
-  // among the parachute field, spread out so they're not immediately unavoidable.
-  for (let i = 0; i < BONUS_GLITTER_PIPES; i++) {
-    enemies.push({
-      x: rnd(cw * 0.3, cw * 1.4),
-      y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
-      vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
-      alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
-    });
-  }
   bird.x = cw * 0.30; bird.y = ch * 0.45; bird.vy = 0;
   floaters.push({ x: cw / 2, y: ch * 0.3, text: '🎉 BONUS ROOM!', alpha: 1, vy: -1.2, color: '#0c7a40' });
 }
 
 function exitBonus() {
+  gauntletActive = false;   // back to normal-mode currentGapSize() the instant we leave
   // fresh pipe pair mid-screen mirroring the entry pair; bird ALWAYS pops out of the
   // TOP pipe's mouth (Osimo: bottom entry exits the one above it; top entry exits the
   // one it entered) — counted so the exit pair can never double-score.
@@ -1634,7 +1684,9 @@ function initGame() {
   gameStartTime = Date.now();
   gapResetTime  = gameStartTime;   // currentGapSize() decay starts here until Lv15 moves it
   scrollDir     = 1;
-  reversalDone  = false;
+  reversalLevelsFired = new Set();
+  gauntletActive = false;
+  gauntletStartTime = 0;
   reversal      = null;
   bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   comboCount  = 0;
@@ -1782,9 +1834,10 @@ function update(dt) {
   // BONUS ROOM IS A SAFE ROOM (Osimo 2026-08-18 bug: the bird could sink, inflate
   // twice off the floor and POP inside the reward room — death in a bonus room is
   // never "the player's fault in hindsight"). In bonus the edges bounce softly
-  // instead of hurting.
+  // instead of hurting. EXCEPT the Lv20+ gauntlet (Osimo 2026-08-30 v2: "resemble a
+  // normal level") — that one keeps real consequences, same as regular play.
   if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) {
-    if (inBonus) {
+    if (inBonus && !gauntletActive) {
       if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = Math.abs(bird.vy) * 0.4; }
       else { bird.y = ch - GROUND_H - bird.r; bird.vy = -Math.abs(bird.vy) * 0.6 - 2; }
     } else {
@@ -1823,15 +1876,20 @@ function update(dt) {
   }
 
   // spawn pipes/enemies — leaky-bucket accumulators, not frame%N, so cadence holds at
-  // any frame rate (a stalled tick can't skip clean past an exact modulo boundary)
-  if (!inBonus) {
+  // any frame rate (a stalled tick can't skip clean past an exact modulo boundary).
+  // Real pipes now ALSO spawn during the Lv20+ gauntlet ("resemble a normal level") —
+  // spawnPipe() itself calls currentGapSize(), which already narrows faster while
+  // gauntletActive is set.
+  if (!inBonus || gauntletActive) {
     pipeSpawnAcc += dt * rocketMult;
     if (pipeSpawnAcc >= PIPE_FRAMES) { pipeSpawnAcc -= PIPE_FRAMES; spawnPipe(); }
   }
 
-  // spawn enemies: interval shrinks each level, min 45 frames. In the bonus room the
-  // field just replenishes toward its seeded density — chutes everywhere, no cap games.
-  if (inBonus) {
+  // spawn enemies: interval shrinks each level, min 45 frames. The SAFE bonus room
+  // (Lv5/10/15) replenishes toward its seeded floating-chute density — chutes
+  // everywhere, no cap games. Regular gameplay AND the Lv20+ gauntlet both use the
+  // same normal cadence-based trigger ("resemble a normal level" — Osimo 2026-08-30 v2).
+  if (inBonus && !gauntletActive) {
     const chuteCount = enemies.filter(e => !e.glitterPipe).length;
     if (chuteCount < BONUS_CHUTES) {
       const e = {
@@ -1847,15 +1905,6 @@ function update(dt) {
       rollBonusEnemyType(e);
       enemies.push(e);
     }
-    const glitterCount = enemies.filter(e => e.glitterPipe).length;
-    if (glitterCount < BONUS_GLITTER_PIPES) {
-      enemies.push({
-        x: cw + ENEMY_R + 8,
-        y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
-        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
-        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
-      });
-    }
   } else {
     const eInt = Math.max(45, 88 - (level - 1) * 5);
     if (frame > PIPE_FRAMES * 0.6) {
@@ -1866,6 +1915,18 @@ function update(dt) {
         enemySpawnCount++;
         if (level >= 10 && enemySpawnCount % 2 === 0) spawnEnemy(); // dual wave at L10+
       }
+    }
+  }
+  // glitter-pipe replenish — ONLY the gauntlet has them; the safe bonus room never
+  // seeds any (Osimo 2026-08-30 v2: they were wrongly appearing there before this fix)
+  if (gauntletActive) {
+    const glitterCount = enemies.filter(e => e.glitterPipe).length;
+    if (glitterCount < BONUS_GLITTER_PIPES) {
+      enemies.push({
+        x: enemySpawnX(), y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
+        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
+        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
+      });
     }
   }
 
@@ -1908,8 +1969,14 @@ function update(dt) {
       score += rocketPipe ? 40 : 10;
       scoreEl.textContent = score;
       sfx.score();
-      pipesUntilLevel--;
-      if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
+      // level progression PAUSES inside the gauntlet (Osimo 2026-08-30 v2: "near
+      // infinite") — you're AT level 20+, not climbing past it while in there; this
+      // also sidesteps a real edge case where levelling to exactly 30 mid-gauntlet
+      // would fire the un-reversal cutscene while still nominally inside a bonus room
+      if (!gauntletActive) {
+        pipesUntilLevel--;
+        if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
+      }
       floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2,
                       text: rocketPipe ? '+40 🚀' : '+10', alpha: 1, vy: -1.4,
                       color: rocketPipe ? '#ff9900' : '#4dd9f5' });
