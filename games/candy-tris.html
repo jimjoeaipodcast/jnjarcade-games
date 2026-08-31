@@ -195,6 +195,8 @@ canvas{display:block}
 .tile .pips{position:absolute;bottom:5px;left:0;right:0;font-size:9px;letter-spacing:1px;color:#ffd700}
 #hub-stars{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#ffd700;font-size:14px;
   letter-spacing:1px;margin:12px 0 6px}
+#hub-reset{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#8a8fa3;font-size:12px;
+  letter-spacing:.5px;margin:0 0 14px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 #theme-row{display:flex;gap:8px}
 .theme-btn{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:12px;color:#fff;
   background:#241542;border:2px solid #7a4fd0;border-radius:10px;padding:6px 10px;cursor:pointer;
@@ -267,6 +269,7 @@ canvas{display:block}
     </div>
     <div id="hub-grid"></div>
     <div id="hub-stars">★ 0 / 90</div>
+    <div id="hub-reset" class="ui">↺ start from scratch</div>
     <div id="theme-row"></div>
   </div>
   <div class="screen" id="endscreen">
@@ -297,11 +300,12 @@ canvas{display:block}
 <div id="howto" class="hidden ui">
   <h2>HOW TO PLAY</h2>
   <ul>
-    <li><b>Tap</b> the board — rotate the piece.</li>
-    <li><b>Swipe up</b> — cycle the piece's candy colours.</li>
-    <li><b>Swipe left/right</b> — move the piece.</li>
-    <li><b>Swipe down</b> — drop instantly.</li>
-    <li><b>Hold</b> — fall faster while you hold.</li>
+    <li>👆 <b>Tap</b> the board — rotate the piece.</li>
+    <li>⬆️ <b>Swipe up</b> — cycle the piece's candy colours.</li>
+    <li>⬅️➡️ <b>Swipe left/right</b> — move the piece.</li>
+    <li>⬇️ <b>Swipe down</b> — drop instantly.</li>
+    <li>✋ <b>Hold</b> — fall faster while you hold.</li>
+    <li>🏆 Clear Level 30 to unlock <b>ENDLESS</b> — play it to get on the scoreboard.</li>
   </ul>
   <p class="ht-foot">Match candies. Clear lines. Crush it.</p>
   <button id="htGo" class="bigbtn ui">🪙 GOT IT — START</button>
@@ -731,6 +735,23 @@ let wasRotated=false,lastClearPowerful=false,backToBack=false;
 let mode='endless';          // 'saga' | 'endless' | 'daily'
 let Lnum=0;                  // saga level number (1-30), 0 = endless/daily
 let movesLeft=Infinity;
+// MOVE ROLLOVER (Osimo 2026-09-01: "from the beginning roll over any unused moves to
+// the next level") — Osimo confirmed this stacks WITH the existing Sugar Crush payout
+// below, not instead of it: leftover moves still cash in for their score bonus +
+// striped-candy conversion exactly as before, AND that same leftover count also carries
+// forward as bonus starting moves for whichever saga level starts next. Saga only — endless
+// has no move limit to roll into, and daily's fixed movesLeft=20 is a fairness-critical
+// constant ("the logical grid must be byte-identical on every device"; a variable rollover
+// would make daily's difficulty depend on the player's own prior saga performance, breaking
+// that guarantee). BOUND to a specific target level (pendingMoveRolloverFor), not just
+// one-shot-on-next-startLevel-call: a bare one-shot flag was live-tested and found to leak
+// into whichever level the player starts next, even an unrelated one picked from the map
+// (clear lvl5 with leftover → tap MAP instead of NEXT → replay lvl2 → lvl2 silently inherits
+// lvl5's leftover). Binding to the exact next level number closes that path structurally
+// instead of chasing every exit route (quit-to-hub, wipe, hub tile clicks) that could
+// otherwise leave stale state for the wrong level to pick up.
+let pendingMoveRollover=0;
+let pendingMoveRolloverFor=0;
 let goalType=null,goalTarget=0;
 let jelly=[],jellyTotal=0,jellyLeft=0;
 let levelEnding=false;       // input frozen during sugar crush / celebration
@@ -2734,7 +2755,8 @@ function startLevel(L){
   const cfg=LEVELS[L-1];
   coreReset();
   level=1;dropInterval=850;
-  movesLeft=cfg.m;levelStartMoves=cfg.m;goalType=cfg.g;goalTarget=cfg.t;
+  movesLeft=cfg.m+(L===pendingMoveRolloverFor?pendingMoveRollover:0);levelStartMoves=movesLeft;goalType=cfg.g;goalTarget=cfg.t;
+  pendingMoveRollover=0;pendingMoveRolloverFor=0;   // one-shot regardless of match/no-match
   seedBoard(cfg.rows,cfg.j);
   movesValEl.classList.remove('low');
   updateBoosterUI();
@@ -2774,6 +2796,8 @@ function startLevelClear(){
   levelEnding=true;piece=null;holding=false;cancelTargeting();
   const Lmult=mode==='daily'?1:Math.max(1,Lnum);
   const leftover=(movesLeft===Infinity)?0:movesLeft;
+  // saga only (see pendingMoveRollover's own comment for why daily/endless are excluded)
+  if(mode==='saga'){pendingMoveRollover+=leftover;pendingMoveRolloverFor=Lnum+1;}
   if(leftover>0){
     showBanner('🍬 SUGAR CRUSH!','#ff69b4',30);
     sfx.riser();
@@ -3061,6 +3085,27 @@ document.getElementById('tile-endless').addEventListener('click',e=>{
   e.stopPropagation();
   if(SAVE.unlocked<=30){showToast('Clear Level 30 to unlock Endless');return;}
   document.getElementById('hub').style.display='none';gatedStart(()=>startEndless());
+});
+
+// ── Wipe saga progress — Osimo 2026-08-31: "allow anyone to wipe and lock all
+// but the first again should they want to start from scratch and take advantage
+// of the roll over moves." Locks levels back to just Level 1 and clears stars —
+// theme and daily-challenge streak are a separate concern from saga progress and
+// are deliberately left untouched. Booster counts reset to the same defaults
+// SAVE itself starts new players with (not a hand-typed second copy of them).
+function wipeSagaProgress(){
+  SAVE.unlocked=1;
+  SAVE.stars=Array(30).fill(0);
+  SAVE.boosters={hammer:3,shuffle:2,wrap:2,swap:1};
+  SAVE.failStreak={level:0,count:0};
+  pendingMoveRollover=0;pendingMoveRolloverFor=0;
+  persist();
+  showHub();
+  showToast('Progress wiped — starting fresh from Level 1');
+}
+document.getElementById('hub-reset').addEventListener('click',e=>{
+  e.stopPropagation();
+  tapConfirm('START FROM SCRATCH','Wipe all saga progress? Levels lock back to just Level 1 and all stars reset. Theme and Daily streak are kept.','WIPE','CANCEL',wipeSagaProgress,null);
 });
 
 // ── Attract AI — competent self-play, silent, no game-over UI ──────────────
