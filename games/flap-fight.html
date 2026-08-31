@@ -307,10 +307,10 @@ const BUDDY_LERP      = 0.20; // follow smoothing — bounces/moves WITH you, on
 const BUDDY_SIZE      = 8;    // Osimo 2026-08-29 v2: "no point having him match your size,
                                // keep him always small in the background" — fixed radius,
                                // independent of the player's own birdInflate/birdShrink state
-const MAX_BUDDIES     = 2;    // Osimo 2026-08-30 v3: "allow a max of two buddies"
-// SCOUT — a one-shot dash instead of a 3rd permanent buddy (Osimo 2026-08-30 v3): "make
-// the 3rd buddy launch towards the nearest power shoot and get it for you... it will get
-// any shoot and add it to your tally." Not part of the `buddies` chain at all — a
+const MAX_BUDDIES     = 3;    // Osimo 2026-08-30 v3: "max of two buddies"; raised to 3 2026-08-31
+// SCOUT — a one-shot dash instead of a permanent 4th+ buddy (Osimo 2026-08-30 v3): "make
+// the [next] buddy launch towards the nearest power shoot and get it for you... it will
+// get any shoot and add it to your tally." Not part of the `buddies` chain at all — a
 // separate, disposable helper that flies straight at the best target, collects it via
 // the same applyPickupEffect() every catch uses, then is gone.
 const SCOUT_SPEED  = 5;               // dash speed toward its current target
@@ -1317,10 +1317,9 @@ function applyPickupEffect(e, cx, cy) {
                        text: buddies.length > 1 ? `✨ BUDDY ×${buddies.length}!` : '✨ BUDDY!',
                        alpha: 1, vy: -1.8, color: '#ffd700' });
     } else {
-      // Osimo 2026-08-30 v3: "allow a max of two buddies... make the 3rd buddy launch
-      // towards the nearest power shoot and get it for you... you still only have 2
-      // buddies max" — beyond the cap, a buddy chute spawns a one-shot SCOUT instead
-      // of growing the permanent chain (see findScoutTarget()/updateScouts()).
+      // Osimo 2026-08-30 v3 (cap raised 2→3 2026-08-31): beyond MAX_BUDDIES, a buddy
+      // chute spawns a one-shot SCOUT instead of growing the permanent chain (see
+      // findScoutTarget()/updateScouts()).
       scouts.push({ x: cx, y: cy - CHUTE_OFFSET });
       floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '⚡ SCOUT LAUNCHED!', alpha: 1, vy: -1.8, color: '#ffd700' });
     }
