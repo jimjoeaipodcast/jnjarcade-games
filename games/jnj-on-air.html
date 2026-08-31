@@ -409,7 +409,7 @@ function loadPack() {
   // keep serving the old pack forever, so a sprite or VO fix ships to the CDN and the
   // player still sees and hears the previous build — the game HTML updates, its assets
   // silently do not. v2 = 2026-08-03 walk-cycle frames + caps-fixed voice takes.
-  fetch('jnj-on-air-pack.json?v=4').then(r => r.json()).then(p => {
+  fetch('jnj-on-air-pack.json?v=5').then(r => r.json()).then(p => {
     for (const k of ['studio', 'corridor', 'prop'])
       if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
     // Osimo's kettle-free shelf plate — overlaid on the shelves once the kettle is taken.
@@ -466,7 +466,13 @@ const LOOKS = {
   portraitR: [['JIMMY', "Cigar man. He judges me. I can feel it from here."]],
   table: [['JIMMY', "The desk. Two mics, one candle, and the exact spot where the lollipop should be."]],
   decanter: [['JIMMY', "The decanter. Joe calls it 'set dressing'. The level goes down every week."]],
-  lolliTray: [['JIMMY', "The outro tray. Empty. A lollipop-shaped hole in the show."]],
+  // STALENESS FIX (Osimo 2026-09-01, same class as changeMachine/propDoor below): the
+  // LOOK line stayed static while the interact() line for this same hotspot (case
+  // 'lolliTray') already went flags.lolliGiven-aware — so examining after the show went
+  // live still described the tray as pre-delivery "empty" as if nothing had happened.
+  lolliTray: () => flags.lolliGiven
+    ? [['JIMMY', "Still no lollipop in here. Doesn't matter — it's out there, doing its job now."]]
+    : [['JIMMY', "The outro tray. Empty. A lollipop-shaped hole in the show."]],
   jimmyChair: [['JIMMY', "My chair. Wait — there's a sticky wrapper under it. The lollipop LIVED here."]],
   broomSpot: [['JIMMY', "The studio broom. Long, dependable, zero showbusiness ambition."]],
   fridge: [['JIMMY', "The mini-fridge. A takeaway menu held up by a lollipop-shaped magnet."]],
@@ -474,7 +480,11 @@ const LOOKS = {
   socket: [['JIMMY', "A wall socket. The most powerful thing in this room, and it's not even on the show."]],
   exitR: [['JIMMY', "The corridor. Where our arcade cabinets live and my money goes to die."]],
   exitL: [['JIMMY', "Back to the studio. Where Joe is. Waiting. Loudly, somehow, without speaking."]],
-  hopmanCab: [['JIMMY', "The hop-man cabinet. And... there's the LOLLIPOP. Stuck to the screen. Above frog height."]],
+  // STALENESS FIX (Osimo 2026-09-01): same gap as lolliTray above — interact()'s case
+  // 'hopmanCab' already checks flags.lolliDown, this LOOK line never did.
+  hopmanCab: () => flags.lolliDown
+    ? [['JIMMY', "The hop-man cabinet. Lollipop-free now. The frog's still up there, still smug about something."]]
+    : [['JIMMY', "The hop-man cabinet. And... there's the LOLLIPOP. Stuck to the screen. Above frog height."]],
   wormsCab: [['JIMMY', "Angry Worms. Joe played it twice. The worms won both times."]],
   candyCab: [['JIMMY', "Candy-tris. I got the high score. Joe says the machine was being polite."]],
   // stale-key bug (Osimo 2026-08-19): this used to say the key was still trapped
