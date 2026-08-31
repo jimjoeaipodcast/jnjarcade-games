@@ -174,17 +174,23 @@ let score = 0;
 let turn = "player";
 let turnTimer = 0;
 let wind = 0;
-// WIND FAIRNESS (Osimo 2026-08-24: "can't have more than 25% of the shots with wind pushing
-// backwards"). Shots always fire rightward (slingshot fixed bottom-left), so "backwards"
-// means wind<0. The old `(Math.random()-0.5)*range` was symmetric — exactly 50% of shots got
-// headwind. Replaced everywhere wind is rolled with this: 75% of shots draw from [0, max]
-// (helpful or calm), 25% draw from [-max, 0) (backward) — an exact 75/25 split by
-// construction, not just a nudged distribution shape. `range` keeps each call site's own
-// existing magnitude (level-scaled at the per-shot reroll, flat elsewhere) — only the SIGN
-// bias changes, difficulty/intensity is untouched.
+// WIND FAIRNESS v2 (Osimo 2026-09-01: "only 20% of shots should have the wind against us,
+// 20% stagnant, 60% in favour") — supersedes the 2026-08-24 75/25 two-way split. That
+// version's "75% favourable" bucket was really "favourable-OR-calm" (`Math.random()*mag`
+// can land anywhere from 0 to max), with no EXPLICIT calm case — this version gives
+// "stagnant" its own guaranteed 20% slice instead of leaving it to chance overlap, and a
+// tight, explicit near-zero range (rounds to the wind pill's own displayed "0.0 m/s" at
+// its one-decimal precision) so a stagnant roll actually READS as stagnant, not just a
+// low-magnitude favourable one. Shots always fire rightward (slingshot fixed bottom-left),
+// so "against" means wind<0. `range` keeps each call site's own existing magnitude
+// (level-scaled at the per-shot reroll, flat elsewhere) — only the 3-way split is new,
+// difficulty/intensity untouched.
 function rollWind(range) {
   const mag = range / 2;
-  return Math.random() < 0.25 ? -Math.random() * mag : Math.random() * mag;
+  const roll = Math.random();
+  if (roll < 0.20) return -Math.random() * mag;             // 20% against
+  if (roll < 0.40) return (Math.random() - 0.5) * 0.08;      // 20% stagnant — displays 0.0 m/s
+  return Math.random() * mag;                                // 60% in favour
 }
 let aiming = false;
 let dragStart = null;
@@ -698,6 +704,7 @@ function setupInput() {
     // Top-right circular buttons: pause / sound / settings
     if (checkTopButtons(p)) return;
     if (checkMuteTap(p)) return;
+    if (checkEnemyStripTap(p)) return;
     // Paused: tap anywhere else resumes
     if (paused && gameState === "playing") { paused = false; return; }
     // Check inventory slots (screen-space HUD)
@@ -1270,12 +1277,19 @@ function trooperFire(w) {
   }
   // Ballistic solve over a fixed flight time → lands near the target every time,
   // with a little scatter so it isn't a laser
+  // WIND COMPENSATION (Osimo 2026-09-01: "can the orange bird always aim at the enemy
+  // all 3 shots") — vy already compensates for gravity's cumulative per-frame pull
+  // (0.5*GRAVITY*T below), but vx never compensated for wind's identical per-frame pull
+  // (updatePhysics applies `p.vx += wind * 0.03` every flight frame, same shape as
+  // gravity on vy) — so any nonzero wind silently dragged every "aimed" shot downwind by
+  // the time it landed, on top of the small intentional scatter. Same formula shape as
+  // the existing vy solve, mirrored onto vx with wind*0.03 standing in for GRAVITY.
   const T = 46;
   const dx = (t.x - w.x) + (Math.random() - 0.5) * 60;
   const dy = (t.y - (w.y - 24)) + (Math.random() - 0.5) * 20;
   projectiles.push({
     x: w.x, y: w.y - 24,
-    vx: dx / T,
+    vx: dx / T - 0.5 * (wind * 0.03) * T,
     vy: dy / T - 0.5 * GRAVITY * T,
     type: "trooperShot",
     team: "player",
@@ -1353,6 +1367,29 @@ function updatePhysics(dt) {
         break;
       }
     }
+    // TNT PROXIMITY DETONATION (Osimo 2026-09-01: "when a bird does near tnt they should
+    // blow up") — a shot that flies close to a barrel but never actually clips its
+    // hitbox used to just sail past; now a near pass detonates it too, same as a direct
+    // hit. Deliberately a separate, slightly generous radius from the literal AABB check
+    // above rather than just widening that box — this only ever applies to barrels, every
+    // other block still needs a real hit. Centred on the BARREL, not the projectile's
+    // (up to 45px off) position — measured live: centring on the projectile only dealt
+    // the barrel partial damage near the edge of the proximity radius, which "took some
+    // damage" rather than the "blows up" he actually asked for. Centring on the barrel
+    // guarantees it takes the full blast (d=0 for itself) every time, which is also what
+    // reliably lets it chain into any OTHER barrel nearby exactly like a direct hit does.
+    if (!p.dead && p.age > 10) {
+      for (const b of blocks) {
+        if (b.hp <= 0 || b.type !== "barrel") continue;
+        const bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
+        const dx = bcx - p.x, dy = bcy - p.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 45) {
+          explode(bcx, bcy, p.type === "trooperShot" ? 38 : 50, p.team);
+          p.dead = true;
+          break;
+        }
+      }
+    }
     // Worm collision
     for (const w of worms) {
       if (!w.alive) continue;
@@ -1428,6 +1465,43 @@ function updatePhysics(dt) {
         b.settled = false;
         shotCollapse++;
         collapseChanged = true;
+      }
+    }
+    // SUPPORT FAN-OUT CAP (Osimo 2026-09-01: "no single brick can balance more than one
+    // brick — if two or more [rest] above it they all collapse"). blockSupported() only
+    // asks "is THIS block resting on something solid" — it says nothing about how many
+    // OTHER blocks are ALSO resting on that same one. Measured before writing this: across
+    // levels 3-15, buildStructure()'s independent per-row block counts routinely produced
+    // 4-12 blocks per level where a single lower block was already the sole/nearest support
+    // for 2 blocks above it side by side, both silently counted stable. Same fixed-point
+    // loop as the check above so a fan-out collapse can itself cascade further up within
+    // this same frame, and a block already falling this pass is correctly excluded both as
+    // a supporter and as something worth felling twice.
+    for (const o of blocks) {
+      if (o.hp <= 0 || o.falling) continue;
+      const restingOnO = [];
+      for (const b of blocks) {
+        if (b === o || b.hp <= 0 || b.falling) continue;
+        if (Math.abs((b.y + b.h) - o.y) < SUPPORT_GAP &&
+            b.x + b.w > o.x + 6 && b.x < o.x + o.w - 6) restingOnO.push(b);
+      }
+      if (restingOnO.length >= 2) {
+        const ocx = o.x + o.w / 2;
+        for (const b of restingOnO) {
+          b.falling = true; b.settled = false; shotCollapse++; collapseChanged = true;
+          // A bare falling=true flag isn't enough: the landing check later this same
+          // frame (search "b.falling = b.hp <= 0") sees the block hasn't moved from a
+          // position that's still touching this exact support and instantly re-settles
+          // it right back, silently undoing the mark before it's ever visible — caught
+          // live, the flag-only version tested correctly in isolation but had zero
+          // effect once wired into the real per-frame landing logic. Give it a genuine
+          // push away from the shared support's centre instead (mirrors the shove
+          // explode() already gives blocks it fells), so it actually separates before
+          // any landing re-check can fire.
+          const bcx = b.x + b.w / 2;
+          b.vx = (b.vx || 0) + Math.sign(bcx - ocx || 1) * (1.5 + Math.random() * 1.5);
+          b.vy = (b.vy || 0) - 1.5;
+        }
       }
     }
   }
@@ -3147,6 +3221,35 @@ function drawHudButton(cx, cy, r, kind) {
 
 // Single source of HUD geometry — drawHUD AND the input hit-tests both read this, so the
 // tap targets can never drift away from the drawn pixels (screen-space W/H, live viewport).
+// ENEMY STRIP layout (Osimo 2026-09-01) — shared by drawHUD's render and
+// checkEnemyStripTap's hit-test so the two geometries can never drift apart. Right-
+// anchored: the LAST enemy sits near the pill's right edge, earlier ones grow leftward,
+// so it never overflows regardless of how many enemies a level has (max ~6 in practice —
+// buildLevel() seeds at most 5 structures + 1 open bonus worm per level).
+function enemyStripLayout() {
+  const L = hudLayout();
+  const foes = worms.filter(w => w.team === "enemy");
+  const n = foes.length;
+  if (n === 0) return { L: L, items: [] };
+  const maxW = 150;
+  const spacing = Math.min(38, maxW / n);
+  const r = Math.min(17, spacing / 2 - 2);
+  const rightEdge = L.pillX + L.pillW - 20 - r;
+  const items = foes.map((w, vi) => ({ w: w, cx: rightEdge - (n - 1 - vi) * spacing, cy: 32, r: r }));
+  return { L: L, items: items };
+}
+function checkEnemyStripTap(p) {
+  if (gameState !== "playing") return false;
+  const es = enemyStripLayout();
+  for (const item of es.items) {
+    const dx = p.x - item.cx, dy = p.y - item.cy;
+    if (dx * dx + dy * dy < (item.r + 4) * (item.r + 4)) {
+      camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, item.w.x - VIEW.w / 2));
+      return true;
+    }
+  }
+  return false;
+}
 function hudLayout() {
   const btnR = 24, btnY = 32;
   const gearX = W - 34, sndX = W - 90, pauseX = W - 146;
@@ -3214,22 +3317,24 @@ function drawHUD() {
       chipX += tw2 + 6;
       shown++;
     }
-    // 3-portrait strip — a LIVE MIRROR of the carousel's visible window + selection
-    // (same scroll state, same data — this inventory model has no separate "queue")
-    const stripN = Math.min(3, inventory.length);
-    for (let vi = 0; vi < stripN; vi++) {
-      const idx = Math.min(ammoScrollOffset + vi, inventory.length - 1);
-      const it = inventory[idx];
-      const tc = TYPE_COLOR[it.type] || TYPE_COLOR.splitter;
-      const cx = L.pillX + L.pillW - 96 + vi * 38, cy = 32;
-      const sel = idx === selectedType;
-      ctx.globalAlpha = sel ? 1 : 0.6;
+    // ENEMY STRIP (Osimo 2026-09-01: "instead of our worm have the total amount of enemy
+    // worms, and their relative colours, when they die they become greyed out, if you
+    // click on any of them screen moves to center them") — replaces the old ammo mirror
+    // (purely decorative; the bottom carousel is the real, functional ammo selector, so
+    // nothing playable is lost). Layout shared with checkEnemyStripTap() below.
+    const es = enemyStripLayout();
+    for (const item of es.items) {
+      const w = item.w;
+      const pal = ENEMY_PALETTES[(w.paletteSeed || 0) % ENEMY_PALETTES.length];
+      const bodyColor = w.alive ? pal.body : "#6b7280";
+      const ringColor = w.alive ? pal.dark : "#3f4652";
+      ctx.globalAlpha = w.alive ? 1 : 0.55;
       ctx.fillStyle = HUD_NAVY;
-      ctx.beginPath(); ctx.arc(cx, cy, 17, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = sel ? tc.body : tc.dark; ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.stroke();
-      const ic = SPRITES.icons[it.type];
-      if (ic) ctx.drawImage(ic, cx - 14, cy - 14, 28, 28);
+      ctx.beginPath(); ctx.arc(item.cx, item.cy, item.r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = ringColor; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(item.cx, item.cy, item.r - 1, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath(); ctx.arc(item.cx, item.cy, Math.max(3, item.r - 5), 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
   }
