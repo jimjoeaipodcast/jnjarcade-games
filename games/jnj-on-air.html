@@ -68,7 +68,7 @@
 <div id="rotateHint">🔄 ROTATE FOR THE FULL STUDIO</div>
 <div id="overlay">
   <h1>JNJ: ON AIR<br>IN 10 MINUTES</h1>
-  <p>Tap to walk &amp; poke things · double-tap to look closer<br>
+  <p>Tap to walk &amp; poke things · long-press to look closer<br>
      Tap an item, then a thing, to use them together.<br>
      Joe has opinions about all of it.</p>
   <div id="btnRow"></div>
@@ -80,7 +80,7 @@
   <h2>HOW TO PLAY</h2>
   <ul>
     <li><b>Tap</b> a thing — Jimmy walks over and <b>uses</b> it.</li>
-    <li><b>Double-tap</b> a thing — Jimmy <b>looks</b> at it and tells you what it is.</li>
+    <li><b>Long-press</b> a thing — Jimmy <b>looks</b> at it and tells you what it is.</li>
     <li><b>Tap an item</b> in your pockets to pick it up, then <b>tap a thing</b> to use them together.</li>
     <li><b>Tap two items</b> together to combine them.</li>
     <li>Tap anywhere while someone's talking to move the line along.</li>
@@ -444,7 +444,7 @@ function playVoice(who, text) {
   audioCtx.decodeAudioData(arr.buffer, buf => { voiceBuffers[key] = buf; start(buf); }, () => {});
 }
 
-// look lines (double-tap) — every hotspot answers, always
+// look lines (long-press) — every hotspot answers, always
 const LOOKS = {
   joe: [['JIMMY', "That's Joe. Co-host, tea enthusiast, professionally unimpressed."],
         ['JOE', "I can hear you describing me."]],
@@ -467,7 +467,7 @@ const LOOKS = {
   candyCab: [['JIMMY', "Candy-tris. I got the high score. Joe says the machine was being polite."]],
   // stale-key bug (Osimo 2026-08-19): this used to say the key was still trapped
   // inside the machine even after it was already fished out and sitting in
-  // inventory. Both this double-tap look AND propDoor's below now check
+  // inventory. Both this long-press look AND propDoor's below now check
   // flags.gotKey/propUnlocked instead of always showing the pre-pickup line.
   changeMachine: () => flags.gotKey
     ? [['JIMMY', "The change machine. Empty coin return now — I already fished that key out. We've moved past it."]]
@@ -839,25 +839,13 @@ function applyRoomChange() {
 
 // ── INPUT ────────────────────────────────────────────────────────────────────
 const DEADZONE = 17;
-// EXAMINE is a DOUBLE-TAP, not a long press (Osimo 2026-08-21: "maybe change long press to
-// double tap"). Long-press punished anyone who tapped deliberately — a slightly slow, careful
-// tap silently became "look at" instead of "use", with no way to tell which you'd get until
-// after you'd committed. A double-tap is explicit.
-const DOUBLETAP = 320;        // ms between the two taps
-const DOUBLETAP_SLOP = 44;    // px — generous, this is a thumb on a phone
+// EXAMINE is a LONG-PRESS, INTERACT is a plain tap (Osimo 2026-08-31: reinstated — this
+// was changed to double-tap 2026-08-21 ("maybe change long press to double tap") on the
+// theory that long-press punished a deliberate tap, but double-tap didn't hold up either;
+// back to long-press/tap, same 420ms threshold the original used.
+const LONGPRESS = 420;         // ms held before release counts as EXAMINE, not INTERACT
 let touchStart = null;
-let lastTap = null;           // {x, y, t, key, prevSelected}
-// Cancels a walk-then-interact that a second tap has since overridden. The first tap of a
-// double-tap has ALREADY started the walk and queued interact(); without this token the
-// queued interact still fires when the walk lands, so you'd get "use" AND "look".
-let walkToken = 0;
 
-function tapKey(kind, id) { return kind + ':' + id; }
-function isDoubleTap(px, py, key) {
-  return !!lastTap && lastTap.key === key &&
-         performance.now() - lastTap.t <= DOUBLETAP &&
-         Math.hypot(px - lastTap.x, py - lastTap.y) <= DOUBLETAP_SLOP;
-}
 function toWorld(px, py) {
   const r = canvas.getBoundingClientRect();
   return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
@@ -923,44 +911,26 @@ function onUp(e) {
   // inventory
   const it = invAt(w.x, w.y);
   if (it) {
-    const k = tapKey('inv', it);
-    if (isDoubleTap(p.clientX, p.clientY, k)) {
-      // undo the selection toggle the FIRST tap of this double-tap already applied, so
-      // examining an item doesn't quietly pick it up / put it down as a side effect
-      selectedItem = lastTap.prevSelected;
-      lastTap = null;
-      say('JIMMY', ITEMS[it].look); sayRun(); return;
-    }
-    lastTap = { x: p.clientX, y: p.clientY, t: performance.now(), key: k, prevSelected: selectedItem };
+    if (held >= LONGPRESS) { say('JIMMY', ITEMS[it].look); sayRun(); return; }
     if (selectedItem && selectedItem !== it) { combineItems(selectedItem, it); selectedItem = null; return; }
     selectedItem = selectedItem === it ? null : it; sfx.blip(); return;
   }
 
   const hs = hotspotAt(w.x, w.y);
-  if (hs && isDoubleTap(p.clientX, p.clientY, tapKey('hs', hs.id || (hs.x + '_' + hs.y)))) {
-    // LOOK from anywhere — and cancel the walk/interact the first tap started
-    walkToken++; player.targetX = null; player.action = null;
-    lastTap = null;
-    lookAt(hs); return;
-  }
+  if (hs && held >= LONGPRESS) { lookAt(hs); return; }   // EXAMINE from anywhere
   if (hs) {
-    lastTap = { x: p.clientX, y: p.clientY, t: performance.now(),
-                key: tapKey('hs', hs.id || (hs.x + '_' + hs.y)), prevSelected: selectedItem };
-    // guard(): the queued action only runs if no later tap superseded it — see walkToken
-    const my = ++walkToken;
-    const guard = (fn) => () => { if (my === walkToken) fn(); };
     if (hs.exit && !hs.exit.locked) {
-      walkTo(hs.walkX, guard(() => goRoom(hs.exit.to, hs.exit.spawn))); return;
+      walkTo(hs.walkX, () => goRoom(hs.exit.to, hs.exit.spawn)); return;
     }
     if (hs.exit && hs.exit.locked) {
       if (hs.exit.locked()) {
         const item = selectedItem; selectedItem = null;
-        walkTo(hs.walkX, guard(() => interact(hs, item))); return;
+        walkTo(hs.walkX, () => interact(hs, item)); return;
       }
-      walkTo(hs.walkX, guard(() => goRoom(hs.exit.to, hs.exit.spawn))); return;
+      walkTo(hs.walkX, () => goRoom(hs.exit.to, hs.exit.spawn)); return;
     }
     const item = selectedItem; selectedItem = null;
-    walkTo(hs.walkX, guard(() => interact(hs, item)));
+    walkTo(hs.walkX, () => interact(hs, item));
     return;
   }
   // plain walk
@@ -1974,7 +1944,7 @@ function buildButtons() {
   nb.textContent = '🪙 ' + (hasSave ? 'NEW GAME' : 'INSERT COIN');
   nb.addEventListener('click', () => beginGame(false));
   row.appendChild(nb);
-  // Always reachable, not just on a first run — someone who forgot the double-tap needs a
+  // Always reachable, not just on a first run — someone who forgot the long-press needs a
   // way back to the rules that isn't "wipe your save".
   const hb = document.createElement('button');
   hb.className = 'obtn ghost'; hb.textContent = '❓ HOW TO PLAY';
