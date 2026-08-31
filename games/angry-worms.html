@@ -1467,44 +1467,17 @@ function updatePhysics(dt) {
         collapseChanged = true;
       }
     }
-    // SUPPORT FAN-OUT CAP (Osimo 2026-09-01: "no single brick can balance more than one
-    // brick — if two or more [rest] above it they all collapse"). blockSupported() only
-    // asks "is THIS block resting on something solid" — it says nothing about how many
-    // OTHER blocks are ALSO resting on that same one. Measured before writing this: across
-    // levels 3-15, buildStructure()'s independent per-row block counts routinely produced
-    // 4-12 blocks per level where a single lower block was already the sole/nearest support
-    // for 2 blocks above it side by side, both silently counted stable. Same fixed-point
-    // loop as the check above so a fan-out collapse can itself cascade further up within
-    // this same frame, and a block already falling this pass is correctly excluded both as
-    // a supporter and as something worth felling twice.
-    for (const o of blocks) {
-      if (o.hp <= 0 || o.falling) continue;
-      const restingOnO = [];
-      for (const b of blocks) {
-        if (b === o || b.hp <= 0 || b.falling) continue;
-        if (Math.abs((b.y + b.h) - o.y) < SUPPORT_GAP &&
-            b.x + b.w > o.x + 6 && b.x < o.x + o.w - 6) restingOnO.push(b);
-      }
-      if (restingOnO.length >= 2) {
-        const ocx = o.x + o.w / 2;
-        for (const b of restingOnO) {
-          b.falling = true; b.settled = false; shotCollapse++; collapseChanged = true;
-          // A bare falling=true flag isn't enough: the landing check later this same
-          // frame (search "b.falling = b.hp <= 0") sees the block hasn't moved from a
-          // position that's still touching this exact support and instantly re-settles
-          // it right back, silently undoing the mark before it's ever visible — caught
-          // live, the flag-only version tested correctly in isolation but had zero
-          // effect once wired into the real per-frame landing logic. Give it a genuine
-          // push away from the shared support's centre instead (mirrors the shove
-          // explode() already gives blocks it fells), so it actually separates before
-          // any landing re-check can fire.
-          const bcx = b.x + b.w / 2;
-          b.vx = (b.vx || 0) + Math.sign(bcx - ocx || 1) * (1.5 + Math.random() * 1.5);
-          b.vy = (b.vy || 0) - 1.5;
-        }
-      }
-    }
   }
+  // SUPPORT FAN-OUT CAP — Osimo 2026-09-01 asked for this ("if one brick is alone, not
+  // more than one brick can balance above that one single brick"), a version shipped and
+  // was reverted the same day: live on real levels it made structures visibly implode the
+  // instant a level loaded (blocks tumbling/jostling against worms for several seconds
+  // before the player ever saw a clean structure) — the runtime per-frame physics
+  // approach was the wrong shape for this rule even though the underlying detection
+  // logic itself measured correctly in isolated testing. Needs a generation-time fix
+  // (don't let buildStructure() place the violating geometry in the first place) rather
+  // than a runtime collapse rule fighting already-placed blocks. Not reattempted blind —
+  // see [[project_angryworms]] for the full incident writeup before trying again.
   for (const b of blocks) {
     if (!b.falling && b.hp > 0) {
       // TIPPING (Osimo 2026-08-21: "bricks could do with some more tipping over in some
@@ -3319,23 +3292,33 @@ function drawHUD() {
     }
     // ENEMY STRIP (Osimo 2026-09-01: "instead of our worm have the total amount of enemy
     // worms, and their relative colours, when they die they become greyed out, if you
-    // click on any of them screen moves to center them") — replaces the old ammo mirror
-    // (purely decorative; the bottom carousel is the real, functional ammo selector, so
-    // nothing playable is lost). Layout shared with checkEnemyStripTap() below.
+    // click on any of them screen moves to center them" — then: "instead of dots have the
+    // actual worm sprites up there"). Replaces the old ammo mirror (purely decorative;
+    // the bottom carousel is the real, functional ammo selector, so nothing playable is
+    // lost). Layout shared with checkEnemyStripTap() below. Reuses the REAL drawWormBody()
+    // at small scale (game-builder's own house pattern for HUD icons — an icon is never a
+    // simplified redraw, it's the real render function shrunk) rather than a flat circle:
+    // a throwaway {x,y,facing,wiggle,team,paletteSeed} matches every field drawWormBody
+    // actually reads, translated+scaled around the icon's own centre so the worm draws at
+    // its normal internal size and lands exactly inside the HUD slot.
     const es = enemyStripLayout();
     for (const item of es.items) {
       const w = item.w;
       const pal = ENEMY_PALETTES[(w.paletteSeed || 0) % ENEMY_PALETTES.length];
-      const bodyColor = w.alive ? pal.body : "#6b7280";
       const ringColor = w.alive ? pal.dark : "#3f4652";
-      ctx.globalAlpha = w.alive ? 1 : 0.55;
       ctx.fillStyle = HUD_NAVY;
       ctx.beginPath(); ctx.arc(item.cx, item.cy, item.r, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = ringColor; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(item.cx, item.cy, item.r - 1, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath(); ctx.arc(item.cx, item.cy, Math.max(3, item.r - 5), 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.beginPath(); ctx.arc(item.cx, item.cy, item.r - 2, 0, Math.PI * 2); ctx.clip();
+      if (!w.alive) { ctx.filter = "grayscale(1) brightness(0.65)"; ctx.globalAlpha = 0.7; }
+      const iconScale = (item.r - 3) / 24;   // worm's natural visual radius is ~18*1.35
+      ctx.translate(item.cx, item.cy);
+      ctx.scale(iconScale, iconScale);
+      ctx.translate(-item.cx, -item.cy);
+      drawWormBody({ x: item.cx, y: item.cy, facing: 1, wiggle: 0, team: "enemy", type: null, paletteSeed: w.paletteSeed, flashTimer: 0 });
+      ctx.restore();
     }
   }
 
