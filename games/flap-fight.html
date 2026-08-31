@@ -330,19 +330,22 @@ const WARP_SPIT_FRAMES = 26;        // spit-out animation length
 const BONUS_CHUTES     = 18;        // parachutes seeded into the bonus room at entry
                                      // (Osimo 2026-08-29 v3: "fewer shoots... add a few
                                      // more" — was 12)
-const BONUS_GLITTER_PIPES = 2;      // "a few glittery pipes" — hit one, instant exit
-const GLITTER_PIPE_R      = 26;     // touch radius for the early-exit trigger
-const GLITTER_PIPE_W = 40, GLITTER_PIPE_H = 96;   // rendered size (drawn centred on e.x/e.y)
-
-// ─── GAUNTLET BONUS ROOM (Osimo 2026-08-30 v2) ─────────────────────────────────
-// "should have these [glittery pipes] at level 20 25 30 etc... instead make it resemble
-// a normal level... make it near infinite, but the gaps... get smaller faster... if you
-// hit a glittery pipe you thrown back out." The L5/10/15 warp pipes keep the ORIGINAL
-// safe floating-chute-field bonus room (unchanged, no glitter pipes — those were wrongly
-// appearing there before this fix). From GAUNTLET_LEVEL on, entering a bonus room
-// instead plays like real gameplay — real pipes, real collision consequences, the
-// normal enemy cadence — just with a faster-shrinking gap floor and no natural end
-// besides dying or touching a glitter pipe.
+// ─── GAUNTLET BONUS ROOM (Osimo 2026-08-31 v3) ─────────────────────────────────
+// "make that bonus level appear like a normal level, but with ALL pipes sparkly and
+// the gaps get smaller faster, and the second player touches any pipe it sends you
+// back to the regular game — no more floating green pipes moving like that." v2 spawned
+// 2 separate floating pipe-shaped ENEMIES as the hazard, bobbing independently of the
+// real pipe field Osimo was already flying through — exactly the "floating... moving
+// like that" he flagged. v3 drops that entirely: EVERY real pipe spawned by the normal
+// spawnPipe() cadence renders sparkly while gauntletActive (draw call site keys off the
+// flag directly, no per-pipe tag needed), and touching one's body (the same collision
+// check normal play already runs) calls exitBonus() instead of inflate() — see the pipe
+// collision block below. The L5/10/15 warp pipes keep the ORIGINAL safe floating-chute-
+// field bonus room untouched (no pipes there at all). From GAUNTLET_LEVEL on, entering a
+// bonus room plays like real gameplay in every other respect — real pipes, the normal
+// enemy cadence — just with a faster-shrinking gap floor and no natural end besides
+// dying (floor/ceiling — unchanged, still a real hit) or touching a pipe (now a soft
+// return to the regular game instead of a life lost).
 const GAUNTLET_LEVEL = 20;
 const GAUNTLET_GAP_MIN = 85;              // narrower floor than normal play's 105
 const GAUNTLET_GAP_SHRINK_PER_MIN = 60;   // vs normal play's 25/min — shrinks faster
@@ -1369,11 +1372,7 @@ function updateBuddy(dt) {
     b.y += (targetY - b.y) * BUDDY_LERP * dt;
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      // glitterPipe excluded — a buddy accidentally consuming a gauntlet's escape
-      // route (bug found 2026-08-30 while adding scouts: applyPickupEffect() has no
-      // branch for it, so it would've silently scored as a plain chute and vanished)
-      // is never the player's own choice, unlike touching one themselves
-      if (!e.alive || e.glitterPipe || e.greyChute) continue;
+      if (!e.alive || e.greyChute) continue;
       const cx = e.x, cy = e.y - CHUTE_OFFSET;
       const dist = Math.hypot(b.x - cx, b.y - cy);
       if (dist < BIRD_R + CHUTE_R) {
@@ -1393,21 +1392,20 @@ function updateBuddy(dt) {
 
 // findScoutTarget — nearest qualifying enemy to (fromX,fromY): power-ups first
 // (mega/shrink/ghost/special/starChute — "the nearest power shoot"), any plain chute
-// as a fallback ("if not power shoots in screen it will get any shoot"). buddyChute and
-// glitterPipe are never valid scout targets — recruiting further buddies or consuming a
-// gauntlet's escape route are the player's own choices, not something a scout does for
-// them.
+// as a fallback ("if not power shoots in screen it will get any shoot"). buddyChute is
+// never a valid scout target — recruiting further buddies is the player's own choice,
+// not something a scout does for them.
 function findScoutTarget(fromX, fromY) {
   let best = null, bestDist = Infinity;
   for (const e of enemies) {
-    if (!e.alive || e.buddyChute || e.glitterPipe || e.greyChute) continue;
+    if (!e.alive || e.buddyChute || e.greyChute) continue;
     if (!(e.mega || e.shrink || e.ghost || e.special || e.starChute)) continue;
     const d = Math.hypot(e.x - fromX, (e.y - CHUTE_OFFSET) - fromY);
     if (d < bestDist) { bestDist = d; best = e; }
   }
   if (best) return best;
   for (const e of enemies) {
-    if (!e.alive || e.buddyChute || e.glitterPipe || e.greyChute) continue;
+    if (!e.alive || e.buddyChute || e.greyChute) continue;
     const d = Math.hypot(e.x - fromX, (e.y - CHUTE_OFFSET) - fromY);
     if (d < bestDist) { bestDist = d; best = e; }
   }
@@ -1620,34 +1618,22 @@ function enterBonus() {
   gauntletActive = level >= GAUNTLET_LEVEL;
 
   if (gauntletActive) {
-    // GAUNTLET (Osimo 2026-08-30 v2: "should have these [glittery pipes] at level 20
-    // 25 30 etc... instead make it resemble a normal level... make it near infinite,
-    // but the gaps... get smaller faster... if you hit a glittery pipe you thrown back
-    // out to regular level") — no timer at all; the only ways out are a glitter pipe
-    // or dying, exactly like a normal run. Real pipes populate through the ordinary
-    // spawnPipe() cadence in update() (now allowed to run during inBonus via
-    // gauntletActive below) — currentGapSize() already narrows faster while this is
-    // active. Bird keeps whichever side the OUTER game is currently scrolling from —
-    // a gauntlet entered mid-reversal should read as "the same world, just harder,"
-    // not silently reset direction.
+    // GAUNTLET (Osimo 2026-08-31 v3: "resemble a normal level... ALL pipes sparkly...
+    // touch any pipe sends you back") — no timer at all; the only ways out are touching
+    // a pipe or dying on the floor/ceiling, exactly like a normal run. Real pipes
+    // populate through the ordinary spawnPipe() cadence in update() (now allowed to run
+    // during inBonus via gauntletActive below) — currentGapSize() already narrows faster
+    // while this is active, and the draw/collision call sites key sparkle-rendering +
+    // exitBonus()-on-touch off gauntletActive directly. Bird keeps whichever side the
+    // OUTER game is currently scrolling from — a gauntlet entered mid-reversal should
+    // read as "the same world, just harder," not silently reset direction.
     gauntletStartTime = Date.now();
     bonusUntil = Date.now() + 999999999;
     pipes = [];
     enemies = [];
     bird.x = Math.round(cw * (scrollDir === 1 ? 0.22 : 0.78));
     bird.y = ch / 2; bird.vy = 0;
-    for (let i = 0; i < BONUS_GLITTER_PIPES; i++) {
-      enemies.push({
-        // seed band mirrors with scrollDir (QA 2026-08-30) — same despawn-edge trap as
-        // the safe room's seed: a reversed gauntlet (Lv20/25 between the two reversals)
-        // instantly culled any glitter pipe seeded past cw
-        x: scrollDir === 1 ? rnd(cw * 0.3, cw * 1.4) : rnd(-cw * 0.4, cw * 0.7),
-        y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
-        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
-        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
-      });
-    }
-    floaters.push({ x: cw / 2, y: ch * 0.3, text: '⚡ GAUNTLET! WATCH FOR GLITTER PIPES', alpha: 1, vy: -1.2, color: '#ffd700' });
+    floaters.push({ x: cw / 2, y: ch * 0.3, text: '⚡ GAUNTLET! TOUCH ANY PIPE = BACK TO GAME', alpha: 1, vy: -1.2, color: '#ffd700' });
     return;
   }
 
@@ -2000,7 +1986,7 @@ function update(dt) {
   // everywhere, no cap games. Regular gameplay AND the Lv20+ gauntlet both use the
   // same normal cadence-based trigger ("resemble a normal level" — Osimo 2026-08-30 v2).
   if (inBonus && !gauntletActive) {
-    const chuteCount = enemies.filter(e => !e.glitterPipe).length;
+    const chuteCount = enemies.length;
     if (chuteCount < BONUS_CHUTES) {
       const e = {
         // enemySpawnX(), not a hardcoded right edge (QA 2026-08-30): in the reversed
@@ -2032,19 +2018,6 @@ function update(dt) {
       }
     }
   }
-  // glitter-pipe replenish — ONLY the gauntlet has them; the safe bonus room never
-  // seeds any (Osimo 2026-08-30 v2: they were wrongly appearing there before this fix)
-  if (gauntletActive) {
-    const glitterCount = enemies.filter(e => e.glitterPipe).length;
-    if (glitterCount < BONUS_GLITTER_PIPES) {
-      enemies.push({
-        x: enemySpawnX(), y: rnd(CHUTE_OFFSET + CHUTE_R + 20, ch - GROUND_H - 40),
-        vy: (Math.random() < 0.5 ? 1 : -1) * rnd(0.25, 0.6),
-        alive: true, phase: Math.random() * Math.PI * 2, fast: false, glitterPipe: true,
-      });
-    }
-  }
-
   // pipes
   for (let i = pipes.length - 1; i >= 0; i--) {
     const p = pipes[i];
@@ -2166,7 +2139,13 @@ function update(dt) {
         const safePass = birdGhost || (starPower && Date.now() < starPowerUntil) ||
           (p.flashPipe && p.translucentNow) || Date.now() < ghostTimerUntil;
         if (safePass) p.wasProtected = true;   // disqualifies this pipe from near-miss credit
-        if (!safePass && Date.now() >= inflateInvincible) inflate();
+        // GAUNTLET (Osimo 2026-08-31 v3): every pipe in here is the "glittery" hazard —
+        // touching one's body sends you back to the regular game instead of costing a
+        // life, exactly the old floating-glitter-pipe consequence, just triggered by the
+        // real pipes players are already flying through rather than a separate decoy.
+        if (!safePass && Date.now() >= inflateInvincible) {
+          if (gauntletActive) exitBonus(); else inflate();
+        }
         return;
       } else {
         // near-miss clearance — smallest gap-edge distance seen while legitimately
@@ -2193,18 +2172,6 @@ function update(dt) {
     if (e.y > ch - GROUND_H - ENEMY_R - 2) { e.y = ch - GROUND_H - ENEMY_R - 2; e.vy = -Math.abs(e.vy); }
     // same edge-flip as the pipe despawn check above
     if (scrollDir === 1 ? (e.x + CHUTE_R < 0) : (e.x - CHUTE_R > cw)) { enemies.splice(i, 1); continue; }
-
-    // GLITTERY PIPE (Osimo 2026-08-29 v3) — bonus-room-only early exit. ANY-direction
-    // touch, not a downward stomp (it's a pipe hazard, not a parachute pickup), so this
-    // is checked separately and BEFORE the stomp-distance/dome-offset math below, which
-    // doesn't apply to a pipe-shaped object.
-    if (e.glitterPipe) {
-      if (Math.hypot(bird.x - e.x, bird.y - e.y) < bird.r + GLITTER_PIPE_R) {
-        exitBonus();
-        return;
-      }
-      continue;
-    }
 
     // stomp check: bird falls onto parachute from above
     const cx = e.x, cy = e.y - CHUTE_OFFSET;
@@ -2494,8 +2461,11 @@ function draw() {
     const botY   = p.gapY + p.gapSize, botH = ch - GROUND_H - p.gapY - p.gapSize;
     const showGhostly = p.flashPipe && p.translucentNow;
     if (showGhostly) ctx.globalAlpha = 0.35;
-    drawPipe(p.x + xOff, 0,    PIPE_W, topH, false, p.warpPipe && p.warpSide === 'top');
-    drawPipe(p.x,         botY, PIPE_W, botH, true,  p.warpPipe && p.warpSide === 'bottom');
+    // GAUNTLET (Osimo 2026-08-31 v3: "ALL pipes sparkly"): every pipe renders with the
+    // same sparkle system a warp-entry pipe's dark half already uses — no per-pipe tag
+    // needed, this just keys off the room-wide flag directly.
+    drawPipe(p.x + xOff, 0,    PIPE_W, topH, false, gauntletActive || (p.warpPipe && p.warpSide === 'top'));
+    drawPipe(p.x,         botY, PIPE_W, botH, true,  gauntletActive || (p.warpPipe && p.warpSide === 'bottom'));
     if (showGhostly) ctx.globalAlpha = 1;
     // flash-through pipe outline — cyan glow while translucent (safe to fly through),
     // dim red pulse while solid (armed, telegraphs it's about to switch back)
@@ -2523,13 +2493,6 @@ function draw() {
   // enemies
   for (const e of enemies) {
     if (!e.alive) continue;
-    if (e.glitterPipe) {
-      // pipe-shaped, not parachute-shaped — reuses drawPipe(isWarp=true), which
-      // already includes the same animated sparkle system the warp bonus-pipe uses,
-      // so "glittery" is free/consistent rather than a second visual language
-      drawPipe(e.x - GLITTER_PIPE_W / 2, e.y - GLITTER_PIPE_H / 2, GLITTER_PIPE_W, GLITTER_PIPE_H, true, true);
-      continue;
-    }
     drawEnemy(e);
   }
 
