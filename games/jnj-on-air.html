@@ -81,6 +81,7 @@
   <ul>
     <li><b>Tap</b> a thing — Jimmy walks over and <b>uses</b> it.</li>
     <li><b>Long-press</b> a thing — Jimmy <b>looks</b> at it and tells you what it is.</li>
+    <li>Or tap the <b>🔍</b> by your pockets, then tap a thing — same as a long-press.</li>
     <li><b>Tap an item</b> in your pockets to pick it up, then <b>tap a thing</b> to use them together.</li>
     <li><b>Tap two items</b> together to combine them.</li>
     <li>Tap anywhere while someone's talking to move the line along.</li>
@@ -170,6 +171,10 @@ let fadeT = 0, fadeDir = 0, pendingRoom = null, pendingSpawn = 0;
 const flags = {};                 // puzzle progression booleans
 let inv = [];                     // item ids
 let selectedItem = null;
+// 🔍 EXAMINE tool (Osimo 2026-08-31): a tap-driven alternative to long-press. Select it,
+// then tap any object — that tap examines it instead of using it, same as a long-press,
+// then disarms. Mutually exclusive with an item selection (arming one clears the other).
+let examineMode = false;
 let counters = [];                // collected comeback ids
 const usedCounters = [];
 const quipsHeard = {};            // hotspot id -> true (first-interaction points)
@@ -303,7 +308,14 @@ function addItem(id) { if (!inv.includes(id)) { inv.push(id); sfx.pickup(); toas
 function removeItem(id) { inv = inv.filter(i => i !== id); if (selectedItem === id) selectedItem = null; }
 function hasItem(id) { return inv.includes(id); }
 const INV_Y = WORLD_H - 62, INV_S = 52;
-function invRect(i) { return { x: 12 + i * (INV_S + 8), y: INV_Y, w: INV_S, h: INV_S }; }
+// slot 0 is reserved for the 🔍 EXAMINE button (Osimo 2026-08-31: "on the left hand side
+// of the inventory") — real items start one slot in, at invRect(1)'s old invRect(0) spot.
+const EXAMINE_BTN = { x: 12, y: INV_Y, w: INV_S, h: INV_S };
+function inExamineBtn(wx, wy) {
+  return wx >= EXAMINE_BTN.x && wx <= EXAMINE_BTN.x + EXAMINE_BTN.w &&
+         wy >= EXAMINE_BTN.y && wy <= EXAMINE_BTN.y + EXAMINE_BTN.h;
+}
+function invRect(i) { return { x: 12 + (i + 1) * (INV_S + 8), y: INV_Y, w: INV_S, h: INV_S }; }
 function invAt(wx, wy) {
   for (let i = 0; i < inv.length; i++) { const r = invRect(i);
     if (wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h) return inv[i]; }
@@ -908,16 +920,27 @@ function onUp(e) {
   }
   if (state !== 'playing' || moved >= DEADZONE) return;
 
+  // 🔍 EXAMINE tool button — arms/disarms; a verb-select, mutually exclusive with an
+  // item-select (matches selectedItem's own toggle-off-on-repeat-tap behaviour)
+  if (inExamineBtn(w.x, w.y)) {
+    examineMode = !examineMode; selectedItem = null; sfx.blip(); return;
+  }
+
   // inventory
   const it = invAt(w.x, w.y);
   if (it) {
-    if (held >= LONGPRESS) { say('JIMMY', ITEMS[it].look); sayRun(); return; }
+    if (held >= LONGPRESS || examineMode) {
+      examineMode = false; say('JIMMY', ITEMS[it].look); sayRun(); return;
+    }
     if (selectedItem && selectedItem !== it) { combineItems(selectedItem, it); selectedItem = null; return; }
     selectedItem = selectedItem === it ? null : it; sfx.blip(); return;
   }
 
   const hs = hotspotAt(w.x, w.y);
-  if (hs && held >= LONGPRESS) { lookAt(hs); return; }   // EXAMINE from anywhere
+  if (hs && (held >= LONGPRESS || examineMode)) {   // EXAMINE from anywhere
+    examineMode = false; lookAt(hs); return;
+  }
+  examineMode = false;   // armed but tapped something examine doesn't apply to below — disarm
   if (hs) {
     if (hs.exit && !hs.exit.locked) {
       walkTo(hs.walkX, () => goRoom(hs.exit.to, hs.exit.spawn)); return;
@@ -1764,6 +1787,16 @@ function drawDialogue() {
   lines.forEach((l, i) => ctx.fillText(l, 88, 34 + i * 22));
 }
 function drawInventory() {
+  // 🔍 EXAMINE button — same slot styling as an inventory item, permanent leftmost slot
+  ctx.fillStyle = 'rgba(10,10,16,0.8)';
+  ctx.beginPath(); ctx.roundRect(EXAMINE_BTN.x, EXAMINE_BTN.y, EXAMINE_BTN.w, EXAMINE_BTN.h, 8); ctx.fill();
+  if (examineMode) {
+    ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.shadowColor = INK; ctx.shadowBlur = 10;
+    ctx.stroke(); ctx.shadowBlur = 0;
+  } else { ctx.strokeStyle = '#3a3a44'; ctx.lineWidth = 2; ctx.stroke(); }
+  ctx.font = '26px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🔍', EXAMINE_BTN.x + EXAMINE_BTN.w / 2, EXAMINE_BTN.y + EXAMINE_BTN.h / 2 + 2);
+
   for (let i = 0; i < inv.length; i++) {
     const r = invRect(i), id = inv[i];
     ctx.fillStyle = 'rgba(10,10,16,0.8)';
@@ -1779,6 +1812,10 @@ function drawInventory() {
     ctx.fillStyle = INK; ctx.font = 'bold 12px "Courier New", monospace';
     ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
     ctx.fillText('USE ' + ITEMS[selectedItem].name + ' ON...', 14, INV_Y - 6);
+  } else if (examineMode) {
+    ctx.fillStyle = INK; ctx.font = 'bold 12px "Courier New", monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('EXAMINE WHAT?', 14, INV_Y - 6);
   }
 }
 function drawHUD() {
