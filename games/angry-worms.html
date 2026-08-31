@@ -485,7 +485,7 @@ function buildSprites() {
 }
 
 // ====== LEVEL BUILD ======
-function buildLevel(lvl) {
+function buildLevel(lvl, rollover) {
   level = lvl;
   terrain = generateTerrain(lvl);
   blocks = [];
@@ -557,6 +557,20 @@ function buildLevel(lvl) {
   const needed = openFoes * 2 + bunkFoes * 3 + 1 + slack;
   let cap = inventory.reduce((s, i) => s + i.count * (i.type === "trooper" ? 3 : 1), 0);
   while (cap < needed) { inventory[0].count++; cap++; }
+  // ROLLOVER (Osimo 2026-08-31: "rollover of all unused worms from one level to the
+  // other") — added AFTER the winnability guarantee above, so it's a pure bonus on top
+  // of what the level already guarantees, never a substitute for it (the guarantee
+  // still holds on its own with rollover at zero). Only present on the level-clear
+  // path, which passes the just-finished level's leftover inventory as `rollover`; a
+  // fresh game/restart calls buildLevel(1) with no second arg, so nothing carries over.
+  if (rollover) {
+    for (const leftover of rollover) {
+      if (leftover.count <= 0) continue;
+      const match = inventory.find(i => i.type === leftover.type);
+      if (match) match.count += leftover.count;
+      else inventory.push({ type: leftover.type, count: leftover.count });
+    }
+  }
   selectedType = 0;
   ammoScrollOffset = 0;
   loadNextWorm();
@@ -1961,8 +1975,9 @@ function onEndBtn() {
   es.style.display = "none";
   const enemiesAlive = worms.filter(w => w.team === "enemy" && w.alive).length;
   if (enemiesAlive === 0) {
-    // Next level
-    buildLevel(level + 1);
+    // Next level — carry the leftover unused ammo forward (Osimo 2026-08-31)
+    const leftoverAmmo = inventory;
+    buildLevel(level + 1, leftoverAmmo);
     turn = "player";
     wind = rollWind(6);
     gameState = "playing";
