@@ -2,7 +2,7 @@
   "social": [
     {
       "name": "Shop",
-      "emoji": "\ud83d\udecd\ufe0f",
+      "emoji": "🛍️",
       "url": "https://jimmy-joe-shop.fourthwall.com/",
       "gradient": [
         "#FF9F0A",
@@ -12,7 +12,7 @@
     },
     {
       "name": "X",
-      "emoji": "\u2715",
+      "emoji": "✕",
       "url": "https://x.com/JimJoeAiPodcast",
       "gradient": [
         "#2b2b2b",
@@ -22,7 +22,7 @@
     },
     {
       "name": "Patreon",
-      "emoji": "\u2615",
+      "emoji": "☕",
       "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
       "gradient": [
         "#FF6E4A",
@@ -32,7 +32,7 @@
     },
     {
       "name": "Ko-fi",
-      "emoji": "\u2615",
+      "emoji": "☕",
       "url": "https://ko-fi.com/jimmynjoe",
       "gradient": [
         "#FF5E5B",
@@ -43,26 +43,35 @@
   ],
   "games": [
     {
+      "id": "on-air-service",
+      "name": "ORDER UP",
+      "emoji": "🛎️",
+      "genre": "Service Rush",
+      "url": "games/on-air-service.html",
+      "status": "wip",
+      "note": "Walk-and-serve rush across Galley to Studio to Arcade: cook, tray-carry and deliver to Jimmy, Joe and 10 other regulars before their thought-bubble patience pops red -- direct control only, waves escalate by the clock, never by reputation."
+    },
+    {
       "id": "pin-vaders-2",
       "name": "PIN VADERS 2",
-      "emoji": "\ud83d\udef8",
-      "genre": "PINBALL \u00d7 SPACE INVADERS",
+      "emoji": "🛸",
+      "genre": "PINBALL × SPACE INVADERS",
       "url": "games/pin-vaders-2.html",
       "ai_file": "games/pin-vaders-2.html",
       "status": "wip",
-      "special": "Isolated single-pass Fable build \u2014 from-spec only, zero reference to pin-vaders",
+      "special": "Isolated single-pass Fable build — from-spec only, zero reference to pin-vaders",
       "note": "2026-08-27: full pinball physics (substepped flippers, surface-velocity flicks, pop bumpers that SET velocity) under a Space Invaders wave grid. Clear 20 invaders = INVADER JAM +100k. Drop targets light JACKPOT, BOOST/EXTRA BALL rollovers, HYPER/WARP lanes, once-per-ball DRAIN GUARD post, 8s ball save, silent pulsing-flipper attract AI.",
       "ready": false
     },
     {
       "id": "jimmy-dash",
       "name": "JIMMY DASH",
-      "emoji": "\u26a1",
-      "genre": "TEMPLE RUN \u00d7 GROK BUILD",
+      "emoji": "⚡",
+      "genre": "TEMPLE RUN × GROK BUILD",
       "url": "games/jimmy-dash.html",
       "ai_file": "games/jimmy-dash.html",
       "status": "wip",
-      "special": "Grok Build rebuild test \u2014 built from the JIMMY-RUN-SPEC handoff",
+      "special": "Grok Build rebuild test — built from the JIMMY-RUN-SPEC handoff",
       "note": "Grok Build's from-spec rebuild of Jimmy Run, installed for side-by-side testing. Same 191 voice clips, same art. Compare against JIMMY RUN in the patreon hall.",
       "ai_improved": true,
       "ai_improved_date": "2026-08-19",
@@ -71,12 +80,12 @@
     {
       "id": "dead-air-dash",
       "name": "DEAD AIR DASH",
-      "emoji": "\ud83d\udce1",
-      "genre": "TEMPLE RUN \u00d7 DOODLE JUMP",
+      "emoji": "📡",
+      "genre": "TEMPLE RUN × DOODLE JUMP",
       "url": "games/dead-air-dash.html",
       "ai_file": "games/dead-air-dash.html",
       "status": "wip",
-      "special": "Game Lab \u2014 first VERTICAL RUNNER cabinet",
+      "special": "Game Lab — first VERTICAL RUNNER cabinet",
       "note": "Jimmy bounces up the studio floors while the DEAD AIR static rises below. Drag to steer, edges wrap. Lollipops fill the HYPE meter; rocket/shield/magnet/spring-shoes on platforms; bounce ON trolls to pop them. Full Jimmy+Joe voice mode on the speaker button.",
       "ai_improved": true,
       "ai_improved_date": "2026-08-18",
@@ -86,50 +95,50 @@
     {
       "id": "brick-invaders",
       "name": "BRICK-INVADERS",
-      "emoji": "\ud83e\uddf1",
-      "genre": "BREAKOUT \u00d7 SPACE INVADERS",
+      "emoji": "🧱",
+      "genre": "BREAKOUT × SPACE INVADERS",
       "url": "games/brick-invaders.html",
       "status": "wip",
-      "special": "Game Lab #15 \u2014 first PHASER-track cabinet (engine PoC)",
-      "note": "2026-07-16: signature = the brick wall IS the invader formation \u2014 marches sideways, drops at edges, breaching the red deadline costs a life. Waves ramp march speed only. Phaser 3 arcade physics + particles + camera shake/flash; house WebAudio sfx; drag paddle, tap launch."
+      "special": "Game Lab #15 — first PHASER-track cabinet (engine PoC)",
+      "note": "2026-07-16: signature = the brick wall IS the invader formation — marches sideways, drops at edges, breaching the red deadline costs a life. Waves ramp march speed only. Phaser 3 arcade physics + particles + camera shake/flash; house WebAudio sfx; drag paddle, tap launch."
     },
     {
       "id": "chrome-flipper",
       "name": "CHROME FLIPPER",
-      "emoji": "\u26a1",
-      "genre": "PINBALL \u00d7 CYBERPUNK",
+      "emoji": "⚡",
+      "genre": "PINBALL × CYBERPUNK",
       "url": "games/chrome-flipper.html",
       "status": "wip",
-      "special": "Game Lab #14 \u2014 pixel art pinball, 3 cyberpunk tables, CHROME multiplier lanes, multiball, moving bumper",
-      "note": "Built by grok-4.5 (Ricky). Tables: Neon Street \u2192 Corp Tower \u2192 Skyline Hack. CHROME rollover lanes = \u00d72 score. Table 2: all 5 drops \u2192 multiball \u00d72. Table 3: moving bumper, endless. Full pixel art via half-res offscreen canvas."
+      "special": "Game Lab #14 — pixel art pinball, 3 cyberpunk tables, CHROME multiplier lanes, multiball, moving bumper",
+      "note": "Built by grok-4.5 (Ricky). Tables: Neon Street → Corp Tower → Skyline Hack. CHROME rollover lanes = ×2 score. Table 2: all 5 drops → multiball ×2. Table 3: moving bumper, endless. Full pixel art via half-res offscreen canvas."
     },
     {
       "id": "jnj-on-air",
       "name": "JNJ: ON AIR IN 10 MINUTES",
-      "emoji": "\ud83c\udf99\ufe0f",
-      "genre": "MONKEY ISLAND \u00d7 TALK SHOW",
+      "emoji": "🎙️",
+      "genre": "MONKEY ISLAND × TALK SHOW",
       "url": "games/jnj-on-air.html",
       "status": "ready",
-      "special": "Game Lab #12 \u2014 first ADVENTURE cabinet",
-      "note": "v4 2026-08-18: studio replated (clear floor walkway \u2014 no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on \u2014 tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock \u2014 emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
+      "special": "Game Lab #12 — first ADVENTURE cabinet",
+      "note": "v4 2026-08-18: studio replated (clear floor walkway — no more furniture trampling), walk cycle faces the direction of travel, no-battle ending (show goes LIVE and the game carries on — tap Joe to wrap), kettle hotspot fixed onto the drawn kettle, 3 new prop-room clickables, painted in-scene props (lollipop/key/padlock — emoji stays inventory-only), fullscreen + rotate, Bungee cassette font. 154-line real Jimmy+Joe Chatterbox VO.",
       "ready": true,
       "ready_date": "2026-08-18"
     },
     {
       "id": "jungle-hop",
       "name": "JUNGLE-HOP",
-      "emoji": "\ud83c\udf34",
-      "genre": "PITFALL \u00d7 DK JR",
+      "emoji": "🌴",
+      "genre": "PITFALL × DK JR",
       "url": "games/jungle-hop.html",
       "status": "wip",
       "special": "Game Lab #11",
-      "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards \u2014 rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn \u2014 bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
+      "note": "v2 2026-07-03: VINE SWINGING signature (grab mid-air, pendulum momentum, pump with the stick, release flings you), Pitfall hazards — rolling logs, patrol snakes, croc-head stepping stones (jaws open/close), water pits w/ checkpoint respawn — bananas + gold bars on vine arcs, treasure chest ends each level, level generator ramps course length, full sfx + mute. Left stick move, right tap jump/grab/release."
     },
     {
       "id": "tomb-hunt",
       "name": "TOMB HUNT",
-      "emoji": "\ud83c\udffa",
-      "genre": "JUNGLE HUNT \u00d7 TOMB RAIDER",
+      "emoji": "🏺",
+      "genre": "JUNGLE HUNT × TOMB RAIDER",
       "url": "games/tomb-hunt.html",
       "status": "wip",
       "special": "Game Lab #3",
@@ -138,8 +147,8 @@
     {
       "id": "bomb-garden",
       "name": "BOMB GARDEN",
-      "emoji": "\ud83d\udca3",
-      "genre": "BOMBERMAN \u00d7 PLANTS VS ZOMBIES",
+      "emoji": "💣",
+      "genre": "BOMBERMAN × PLANTS VS ZOMBIES",
       "url": "games/bomb-garden.html",
       "status": "wip",
       "special": "Game Lab #4",
@@ -148,8 +157,8 @@
     {
       "id": "pac-lemming",
       "name": "PAC-LEMMING",
-      "emoji": "\ud83d\udfe1",
-      "genre": "LEMMINGS \u00d7 PAC-MAN",
+      "emoji": "🟡",
+      "genre": "LEMMINGS × PAC-MAN",
       "url": "games/pac-lemming.html",
       "status": "wip",
       "special": "Game Lab #6",
@@ -158,8 +167,8 @@
     {
       "id": "bomb-lemmings",
       "name": "BOMB-LEMMINGS",
-      "emoji": "\ud83d\udca3",
-      "genre": "LEMMINGS \u00d7 BOMBERMAN",
+      "emoji": "💣",
+      "genre": "LEMMINGS × BOMBERMAN",
       "url": "games/bomb-lemmings.html",
       "status": "wip",
       "special": "Game Lab #7",
@@ -168,8 +177,8 @@
     {
       "id": "lemming-invaders",
       "name": "LEMMING-INVADERS",
-      "emoji": "\ud83d\udc7e",
-      "genre": "LEMMINGS \u00d7 SPACE INVADERS",
+      "emoji": "👾",
+      "genre": "LEMMINGS × SPACE INVADERS",
       "url": "games/lemming-invaders.html",
       "status": "wip",
       "special": "Game Lab #8",
@@ -178,7 +187,7 @@
     {
       "id": "astro-hop",
       "name": "ASTRO-HOP",
-      "emoji": "\ud83d\ude80",
+      "emoji": "🚀",
       "genre": "PLATFORM MECHANICS SHOWCASE",
       "url": "games/astro-hop.html",
       "status": "wip",
@@ -188,7 +197,7 @@
     {
       "id": "cave-plunge",
       "name": "CAVE-PLUNGE",
-      "emoji": "\ud83e\udea8",
+      "emoji": "🪨",
       "genre": "CAVE EXPLORER",
       "url": "games/cave-plunge.html",
       "status": "wip",
@@ -198,7 +207,7 @@
     {
       "id": "lupo-alberto",
       "name": "LUPO ALBERTO",
-      "emoji": "\ud83d\udc3a",
+      "emoji": "🐺",
       "genre": "PLATFORM TRAINING CABINET",
       "url": "games/lupo-alberto.html",
       "status": "wip",
