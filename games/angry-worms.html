@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_MOCKUP_V8_20260824';
+window.__ANGRYWORMS_BUILD='AW_PAINT_V9_20260901';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -291,180 +291,477 @@ function generateStars() {
 
 function generateClouds() {
   clouds = [];
-  for (let i = 0; i < 8; i++) {
+  // AW_PAINT_V9: each cloud is a pre-rendered painterly sprite (see buildCloudSprites) —
+  // pick a sprite, a scale and a parallax depth; far clouds are smaller, slower, higher.
+  for (let i = 0; i < 9; i++) {
+    const depth = Math.random();                     // 0 = far, 1 = near
     clouds.push({
-      x: Math.random() * WORLD_W,
-      y: 40 + Math.random() * 180,
-      r: 30 + Math.random() * 40,
-      s: 0.1 + Math.random() * 0.2
+      x: -260 + Math.random() * (WORLD_W + 400),
+      y: 28 + Math.random() * 190 - depth * 20,
+      k: Math.floor(Math.random() * 4),
+      sc: 0.55 + depth * 0.75,
+      par: 0.12 + depth * 0.18,
+      s: 0.06 + depth * 0.16
     });
   }
 }
 
-// ====== PRE-RENDERED SPRITES (built once at init — per-frame loop only blits) ======
-// Block material tiles at 2x resolution, plus the six ammo-tray worm portraits rendered
-// through the SHARED drawWormBody() so any recipe change (e.g. the gloss highlight)
-// automatically appears in the tray and the top-bar strip too.
-const SPRITES = { icons: {}, blocks: {} };
-
-function drawBlockTile(g, type, tw, th) {
-  const rr = 5;
+// ====== PAINTERLY HELPERS (AW_PAINT_V9) ======
+// Everything static is baked ONCE into offscreen canvases with these helpers so the
+// per-frame loop only blits. A seeded LCG keeps every baked texture (embedded stones,
+// grass blades, bark grain, cloud puffs) identical across re-bakes — no shimmer.
+function makeRng(seed) {
+  let s = (seed >>> 0) || 1;
+  return function () {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+const _hexCache = {};
+function hexRgb(h) {
+  let c = _hexCache[h];
+  if (!c) {
+    const n = parseInt(h.slice(1), 16);
+    c = _hexCache[h] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  return c;
+}
+// shade(hex, t): t > 0 mixes toward white, t < 0 toward black — light/dark tones are
+// derived from ONE base hex so TYPE_COLOR / ENEMY_PALETTES stay the single source of truth.
+const _shadeCache = {};
+function shade(h, t) {
+  const key = h + "|" + t;
+  let out = _shadeCache[key];
+  if (out) return out;
+  const a = hexRgb(h), b = t >= 0 ? [255, 255, 255] : [0, 0, 0], k = Math.abs(t);
+  out = "rgb(" + Math.round(a[0] + (b[0] - a[0]) * k) + "," + Math.round(a[1] + (b[1] - a[1]) * k) + "," + Math.round(a[2] + (b[2] - a[2]) * k) + ")";
+  _shadeCache[key] = out;
+  return out;
+}
+function rgbaOf(h, a) { const c = hexRgb(h); return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a + ")"; }
+function mkCanvas(w, h) {
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+  return c;
+}
+// A single grass blade: tapered triangle with a lean, base slightly below the anchor so
+// it "roots" into whatever it sits on. Shared by terrain, block tops and the sling foot.
+function drawBlade(g, x, y, h, lean, wdt, col) {
+  g.fillStyle = col;
+  g.beginPath();
+  g.moveTo(x - wdt, y + 2);
+  g.quadraticCurveTo(x + lean * h * 0.45, y - h * 0.55, x + lean * h, y - h);
+  g.lineTo(x + wdt, y + 2);
+  g.closePath();
+  g.fill();
+}
+const GRASS_GREENS = ["#8fd23a", "#6dbb2c", "#a9de48", "#5aa424", "#7ccf3c"];
+function drawTuft(g, x, y, n, h, r) {
+  r = r || makeRng((x * 131 + y * 17) | 0);
+  for (let i = 0; i < n; i++) {
+    const bx = x + (i - (n - 1) / 2) * 2.4 + (r() - 0.5);
+    drawBlade(g, bx, y, h * (0.6 + r() * 0.6), (i - (n - 1) / 2) * 0.35 + (r() - 0.5) * 0.4, 1 + r() * 0.6, GRASS_GREENS[Math.floor(r() * GRASS_GREENS.length)]);
+  }
+}
+// Smooth grey pebble / boulder with a top-left light and a dark rim — the "embedded
+// stones" of the mockup's cliff face, the slingshot's rock base, and rubble.
+function drawStone(g, x, y, rx, ry, rot, lit, tint) {
+  g.save();
+  g.translate(x, y); g.rotate(rot || 0);
+  const base = tint || [170, 150, 125];
+  const sg = g.createRadialGradient(-rx * 0.35, -ry * 0.45, 1, 0, 0, rx * 1.15);
+  sg.addColorStop(0, "rgb(" + Math.round(base[0] * lit + 55) + "," + Math.round(base[1] * lit + 50) + "," + Math.round(base[2] * lit + 45) + ")");
+  sg.addColorStop(0.7, "rgb(" + Math.round(base[0] * lit * 0.8) + "," + Math.round(base[1] * lit * 0.8) + "," + Math.round(base[2] * lit * 0.8) + ")");
+  sg.addColorStop(1, "rgb(" + Math.round(base[0] * 0.28) + "," + Math.round(base[1] * 0.26) + "," + Math.round(base[2] * 0.24) + ")");
+  g.fillStyle = sg;
+  g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = "rgba(25,16,8,0.7)"; g.lineWidth = 1.4; g.stroke();
+  // tiny specular
+  g.fillStyle = "rgba(255,255,255,0.35)";
+  g.beginPath(); g.ellipse(-rx * 0.4, -ry * 0.45, rx * 0.22, ry * 0.16, -0.4, 0, Math.PI * 2); g.fill();
+  g.restore();
+}
+// Tapered bark cylinder between two points: perpendicular light→dark gradient (cylinder
+// shading), wobbly grain streaks along its axis, thick dark outline. Used for the Y-fork.
+// opts: { noOutline } — the slingshot fork outlines its whole Y silhouette in one pass
+// (see buildSlingSprite) so its arms are filled here without their own outline.
+function drawBranch(g, x1, y1, x2, y2, w1, w2, seed, opts) {
+  opts = opts || {};
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  let nx = -dy / len, ny = dx / len;
+  if (nx > 0 || (nx === 0 && ny > 0)) { nx = -nx; ny = -ny; }   // +n = the lit (left/top) side
+  const r = makeRng(seed || 77);
+  g.save();
+  g.lineJoin = "round"; g.lineCap = "round";
   const path = () => {
     g.beginPath();
-    if (g.roundRect) g.roundRect(1.5, 1.5, tw - 3, th - 3, rr);
-    else g.rect(1.5, 1.5, tw - 3, th - 3);
+    g.moveTo(x1 + nx * w1, y1 + ny * w1);
+    g.lineTo(x2 + nx * w2, y2 + ny * w2);
+    g.lineTo(x2 - nx * w2, y2 - ny * w2);
+    g.lineTo(x1 - nx * w1, y1 - ny * w1);
+    g.closePath();
   };
-  if (type === "barrel") {
-    // TNT crate — mockup-corrected: wood-toned body (#9B6B3C family), red paper label
-    // WRAP on the middle third only (not the whole body), dark metal corner bands, and
-    // a bundled-dynamite graphic on the top face. All baked here once — zero per-frame.
-    const wg = g.createLinearGradient(0, 0, 0, th);
-    wg.addColorStop(0, "#A87848");
-    wg.addColorStop(0.5, "#9B6B3C");
-    wg.addColorStop(1, "#82562E");
-    g.fillStyle = wg; g.strokeStyle = "#6b4028"; g.lineWidth = 3;
-    path(); g.fill(); g.stroke();
-    // vertical plank seams on the crate body
-    g.strokeStyle = "rgba(74,46,16,0.5)"; g.lineWidth = 1;
+  const gr = g.createLinearGradient(x1 + nx * w1, y1 + ny * w1, x1 - nx * w1, y1 - ny * w1);
+  gr.addColorStop(0, "#b57d4a"); gr.addColorStop(0.28, "#96602f"); gr.addColorStop(0.62, "#7a4a22"); gr.addColorStop(1, "#3e2210");
+  g.fillStyle = gr; path(); g.fill();
+  g.save(); path(); g.clip();
+  // bark grain: dark wobbly streaks following the axis
+  g.strokeStyle = "rgba(48,26,10,0.55)"; g.lineWidth = 1.3;
+  const n = 4 + Math.floor((w1 + w2) / 4);
+  for (let k = 0; k < n; k++) {
+    const off = (r() * 2 - 1) * 0.85;
     g.beginPath();
-    g.moveTo(tw * 0.35, 3); g.lineTo(tw * 0.35, th - 3);
-    g.moveTo(tw * 0.65, 3); g.lineTo(tw * 0.65, th - 3);
-    g.stroke();
-    // top-face dynamite bundle — 3 short vertical sticks with lighter caps
-    for (const dx of [tw * 0.35, tw * 0.5, tw * 0.65]) {
-      g.fillStyle = "#C23B2B";
-      g.fillRect(dx - 2, 4, 4, 8);
-      g.fillStyle = "#E05545";
-      g.beginPath(); g.ellipse(dx, 4, 2, 1.2, 0, 0, Math.PI * 2); g.fill();
+    for (let t = 0; t <= 1.001; t += 0.12) {
+      const wt = w1 + (w2 - w1) * t;
+      const px = x1 + dx * t + nx * wt * off + (r() - 0.5) * 1.2;
+      const py = y1 + dy * t + ny * wt * off + (r() - 0.5) * 1.2;
+      if (t === 0) g.moveTo(px, py); else g.lineTo(px, py);
     }
-    // thin coiled fuse rising off the middle stick
-    g.strokeStyle = "#3A2A1A"; g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(tw * 0.5, 3.5);
-    g.quadraticCurveTo(tw * 0.56, 1, tw * 0.62, 2.5);
-    g.quadraticCurveTo(tw * 0.66, 3.5, tw * 0.7, 2);
     g.stroke();
-    // red paper label wrap — middle third, with darker fold lines top/bottom
-    g.fillStyle = "#E8541E";
-    g.fillRect(2, th * 0.38, tw - 4, th * 0.28);
-    g.strokeStyle = "#B03A10"; g.lineWidth = 1;
+  }
+  // a knot or two
+  for (let k = 0; k < 2; k++) {
+    const t = 0.25 + r() * 0.5, wt = w1 + (w2 - w1) * t, off = (r() - 0.5) * 0.8;
+    const kx = x1 + dx * t + nx * wt * off, ky = y1 + dy * t + ny * wt * off;
+    g.strokeStyle = "rgba(40,22,8,0.6)"; g.lineWidth = 1;
+    for (let er = 1.2; er <= 3.6; er += 1.2) { g.beginPath(); g.ellipse(kx, ky, er * 1.3, er, Math.atan2(dy, dx), 0, Math.PI * 2); g.stroke(); }
+  }
+  // light edge highlight
+  g.strokeStyle = "rgba(255,220,170,0.28)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x1 + nx * (w1 - 2), y1 + ny * (w1 - 2)); g.lineTo(x2 + nx * (w2 - 2), y2 + ny * (w2 - 2)); g.stroke();
+  g.restore();
+  if (!opts.noOutline) { g.strokeStyle = "#241408"; g.lineWidth = 2.6; path(); g.stroke(); }
+  g.restore();
+}
+// Corner points of a tapered branch quad — "o" = the side away from the fork's centre
+// line (x = 0), "i" = toward it. Used to trace the slingshot's Y silhouette.
+function branchCorners(x1, y1, x2, y2, w1, w2) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  let nx = -dy / len, ny = dx / len;
+  if ((x1 + x2) * nx < 0) { nx = -nx; ny = -ny; }   // +n points away from x = 0
+  return {
+    oRoot: [x1 + nx * w1, y1 + ny * w1], iRoot: [x1 - nx * w1, y1 - ny * w1],
+    oTip: [x2 + nx * w2, y2 + ny * w2], iTip: [x2 - nx * w2, y2 - ny * w2]
+  };
+}
+function segIntersect(a, b, c, d) {
+  const r = [b[0] - a[0], b[1] - a[1]], s = [d[0] - c[0], d[1] - c[1]];
+  const den = r[0] * s[1] - r[1] * s[0];
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den;
+  return [a[0] + r[0] * t, a[1] + r[1] * t];
+}
+
+// ====== PRE-RENDERED SPRITES (built once at init — per-frame loop only blits) ======
+// Block material tiles at 2x resolution (with TILE_PAD headroom for grass tufts and a
+// baked soft shadow), the six ammo-tray worm portraits rendered through the SHARED
+// drawWormBody(), cloud sprites, the parallax hill strips, and the slingshot fork.
+const SPRITES = { icons: {}, blocks: {}, clouds: [], pad: 6 };
+const TILE_PAD = 6;   // world px of headroom around every block tile
+
+function drawBlockTile(g, type, tw, th) {
+  const rr = 4;
+  const OUT = "#221c18";
+  const body = (inset) => {
     g.beginPath();
-    g.moveTo(2, th * 0.38); g.lineTo(tw - 2, th * 0.38);
-    g.moveTo(2, th * 0.66); g.lineTo(tw - 2, th * 0.66);
-    g.stroke();
-    // white TNT lettering + black outline pass (kept from V2, now on the label band)
-    g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.textBaseline = "alphabetic";
-    g.strokeStyle = "#000"; g.lineWidth = 2.5; g.lineJoin = "round";
-    g.strokeText("TNT", tw / 2, th * 0.58);
-    g.fillStyle = "#fff";
-    g.fillText("TNT", tw / 2, th * 0.58);
-    // dark metal corner bands, tiny top-edge glint on the upper pair
-    g.fillStyle = "#3A3A3A";
-    g.fillRect(2, 2, 6, 4); g.fillRect(tw - 8, 2, 6, 4);
-    g.fillRect(2, th - 6, 6, 4); g.fillRect(tw - 8, th - 6, 6, 4);
-    g.fillStyle = "rgba(255,255,255,0.15)";
-    g.fillRect(2, 2, 6, 1); g.fillRect(tw - 8, 2, 6, 1);
+    if (g.roundRect) g.roundRect(inset, inset, tw - inset * 2, th - inset * 2, rr);
+    else g.rect(inset, inset, tw - inset * 2, th - inset * 2);
+  };
+  // baked soft contact shadow (down-right) — the mockup's blocks all sit in a soft shade
+  g.save();
+  g.shadowColor = "rgba(0,0,0,0.38)"; g.shadowBlur = 5; g.shadowOffsetX = 1.5; g.shadowOffsetY = 3;
+  g.fillStyle = OUT; body(1.5); g.fill();
+  g.restore();
+  g.lineJoin = "round";
+  if (type === "barrel") {
+    // TNT crate — the mockup's red drum: bright red body, dark end bands with a hot
+    // pink edge, white TNT with a fat black outline.
+    const bg = g.createLinearGradient(0, 0, tw, 0);
+    bg.addColorStop(0, "#f5524a"); bg.addColorStop(0.45, "#d92b27"); bg.addColorStop(1, "#9f1613");
+    g.fillStyle = bg; body(1.5); g.fill();
+    g.save(); body(1.5); g.clip();
+    g.fillStyle = "#5a100e";
+    g.fillRect(0, 0, tw, th * 0.2); g.fillRect(0, th * 0.8, tw, th * 0.2);
+    g.fillStyle = "#ff8a74";
+    g.fillRect(0, th * 0.2, tw, 1.6); g.fillRect(0, th * 0.8 - 1.6, tw, 1.6);
+    g.fillStyle = "rgba(255,255,255,0.30)"; g.fillRect(2.5, 2, 3, th - 4);   // left sheen
+    g.fillStyle = "rgba(0,0,0,0.22)"; g.fillRect(tw - 5, 2, 3, th - 4);      // right shade
+    g.restore();
+    g.font = "bold 10px Arial, Helvetica, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.strokeStyle = "#160504"; g.lineWidth = 3;
+    g.strokeText("TNT", tw / 2, th * 0.5 + 0.5);
+    g.fillStyle = "#fff"; g.fillText("TNT", tw / 2, th * 0.5 + 0.5);
+    g.strokeStyle = OUT; g.lineWidth = 2.5; body(1.5); g.stroke();
     return;
   }
-  if (type === "wood") { g.fillStyle = "#8b6030"; g.strokeStyle = "#5a3a1a"; }
-  else if (type === "ice") { g.fillStyle = "rgba(168,224,240,0.65)"; g.strokeStyle = "#6bb8d0"; }
-  else {
-    // stone — full-block DIAGONAL gradient (baked once here, blitted per-frame)
-    const sg = g.createLinearGradient(0, 0, tw, th);
-    sg.addColorStop(0, "#C4C8D0");
-    sg.addColorStop(1, "#9498A0");
-    g.fillStyle = sg; g.strokeStyle = "#8a8e96";
-  }
-  g.lineWidth = 3;
-  path(); g.fill(); g.stroke();
-  // bevel: light top, dark bottom (geometry unchanged from the live-draw version)
-  g.fillStyle = "rgba(255,255,255,0.30)";
-  g.fillRect(3, 2, tw - 6, Math.max(2, th * 0.18));
-  g.fillStyle = "rgba(0,0,0,0.18)";
-  g.fillRect(3, th - Math.max(2, th * 0.16) - 2, tw - 6, Math.max(2, th * 0.16));
   if (type === "wood") {
-    // grain — 4 lines at varied depths, alternating opacity 0.4-0.7 for an organic
-    // striped-beam read (mockup shows clearly banded planks, not 2 faint scratches)
-    const grains = [
-      [0.26, 0.55, 6, tw - 8],
-      [0.44, 0.4, 9, tw - 5],
-      [0.62, 0.7, 5, tw - 10],
-      [0.8, 0.45, 8, tw * 0.7]
-    ];
-    for (const gr of grains) {
-      g.strokeStyle = "rgba(74,46,16," + gr[1] + ")"; g.lineWidth = 1.5;
-      g.beginPath();
-      g.moveTo(gr[2], th * gr[0]); g.lineTo(gr[3], th * gr[0]);
+    // plank: warm honey → chestnut, wavy grain lines, one knot, light top / dark bottom
+    const wg = g.createLinearGradient(0, 0, 0, th);
+    wg.addColorStop(0, "#caa060"); wg.addColorStop(0.3, "#b27a44"); wg.addColorStop(1, "#7a4820");
+    g.fillStyle = wg; body(1.5); g.fill();
+    g.save(); body(1.5); g.clip();
+    const r = makeRng(4242);
+    g.strokeStyle = "rgba(78,42,14,0.55)"; g.lineWidth = 1.3; g.lineCap = "round";
+    for (let k = 0; k < 5; k++) {
+      const gy = th * (0.16 + k * 0.17) + (r() - 0.5) * 3;
+      g.beginPath(); g.moveTo(2, gy);
+      for (let px = 6; px <= tw - 2; px += 5) g.lineTo(px, gy + Math.sin(px * 0.33 + k * 1.7) * 1.4);
       g.stroke();
     }
-    // end-grain rings at both cut ends — this tile is a horizontal beam (tw > th)
-    if (tw > th) {
-      g.strokeStyle = "rgba(74,46,16,0.5)"; g.lineWidth = 1;
-      for (const ex of [5, tw - 5]) {
-        for (let er = 2; er <= 6; er += 2) {
-          g.beginPath(); g.arc(ex, th * 0.5, er, 0, Math.PI * 2); g.stroke();
-        }
-      }
-    }
-  } else if (type === "ice") {
-    // gloss widened from a thin scratch into a soft translucent BAND — reads as a streak
-    g.save();
-    path(); g.clip();
-    const gr = g.createLinearGradient(tw * 0.1, th * 0.85, tw * 0.5, th * 0.15);
-    gr.addColorStop(0, "rgba(255,255,255,0)");
-    gr.addColorStop(0.5, "rgba(255,255,255,0.45)");
-    gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.strokeStyle = gr; g.lineWidth = 7; g.lineCap = "round";
-    g.beginPath(); g.moveTo(tw * 0.14, th * 0.85); g.lineTo(tw * 0.5, th * 0.18); g.stroke();
+    const kx = tw * 0.7, ky = th * 0.52;
+    g.strokeStyle = "rgba(70,36,10,0.65)"; g.lineWidth = 1;
+    for (let er = 1.4; er <= 5; er += 1.8) { g.beginPath(); g.ellipse(kx, ky, er * 1.5, er, 0, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = "rgba(255,230,190,0.38)"; g.fillRect(0, 0, tw, 3);
+    g.fillStyle = "rgba(255,230,190,0.18)"; g.fillRect(0, 0, 3, th);
+    g.fillStyle = "rgba(40,20,5,0.32)"; g.fillRect(0, th - 3.5, tw, 3.5); g.fillRect(tw - 3, 0, 3, th);
     g.restore();
-  } else {
-    // stone rivets kept — per-block speckle scatter is added dynamically in drawBlocks
-    g.fillStyle = "rgba(90,94,102,0.7)";
-    g.beginPath(); g.arc(7, 7, 2, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.arc(tw - 7, 7, 2, 0, Math.PI * 2); g.fill();
-    // mortar seam lines — subdivide the block into 3 sub-rectangles (subtle, 1px)
-    g.strokeStyle = "#7A7E86"; g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(tw * 0.34, 3); g.lineTo(tw * 0.34, th - 3);
-    g.moveTo(tw * 0.67, 3); g.lineTo(tw * 0.67, th - 3);
-    g.stroke();
-    // moss tufts on the top edge — 2 clusters of short curved green blades. Baked into
-    // the shared tile (per-instance open-air detection would need a drawBlocks edit,
-    // which the spec restricts to shadows only); on stacked blocks the tufts read as
-    // moss growing along each course line, matching the mockup's mossy brickwork.
-    g.strokeStyle = "#6B9C3F"; g.lineWidth = 1.5; g.lineCap = "round";
-    for (const mx of [tw * 0.28, tw * 0.72]) {
+    g.strokeStyle = OUT; g.lineWidth = 2.5; body(1.5); g.stroke();
+    return;
+  }
+  if (type === "ice") {
+    // glass: pale translucent cyan, white top/left bevel, blue bottom/right, two streaks
+    const ig = g.createLinearGradient(0, 0, 0, th);
+    ig.addColorStop(0, "rgba(220,244,252,0.74)"); ig.addColorStop(1, "rgba(150,212,240,0.74)");
+    g.fillStyle = ig; body(1.5); g.fill();
+    g.save(); body(1.5); g.clip();
+    g.fillStyle = "rgba(255,255,255,0.78)"; g.fillRect(0, 0, tw, 3.5); g.fillRect(0, 0, 3.5, th);
+    g.fillStyle = "rgba(50,130,185,0.42)"; g.fillRect(0, th - 4, tw, 4); g.fillRect(tw - 4, 0, 4, th);
+    g.strokeStyle = "rgba(255,255,255,0.7)"; g.lineWidth = 3.2; g.lineCap = "round";
+    g.beginPath(); g.moveTo(tw * 0.22, th * 0.84); g.lineTo(tw * 0.52, th * 0.2); g.stroke();
+    g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(tw * 0.62, th * 0.88); g.lineTo(tw * 0.8, th * 0.5); g.stroke();
+    g.restore();
+    g.strokeStyle = "#3f8fb4"; g.lineWidth = 2.5; body(1.5); g.stroke();
+    g.strokeStyle = "rgba(255,255,255,0.6)"; g.lineWidth = 1; body(3.6); g.stroke();
+    return;
+  }
+  // stone: cool light grey with a 4px light bevel top/left, dark bevel bottom/right,
+  // seeded speckle grain, a soft weathering patch and two grass tufts on the top edge
+  const sg = g.createLinearGradient(0, 0, tw * 0.35, th);
+  sg.addColorStop(0, "#dcdfe3"); sg.addColorStop(0.5, "#bfc3c9"); sg.addColorStop(1, "#9ba0a7");
+  g.fillStyle = sg; body(1.5); g.fill();
+  g.save(); body(1.5); g.clip();
+  g.fillStyle = "rgba(255,255,255,0.55)"; g.fillRect(0, 0, tw, 4); g.fillRect(0, 0, 4, th);
+  g.fillStyle = "rgba(38,44,52,0.36)"; g.fillRect(0, th - 4.5, tw, 4.5); g.fillRect(tw - 4.5, 0, 4.5, th);
+  const r = makeRng(tw * 31 + th * 7 + 991);
+  for (let k = 0; k < 30; k++) {
+    const px = 3 + r() * (tw - 6), py = 3 + r() * (th - 6);
+    g.fillStyle = r() < 0.5 ? "rgba(70,76,84,0.32)" : "rgba(255,255,255,0.45)";
+    g.fillRect(px, py, 1 + r() * 1.6, 1 + r() * 1.2);
+  }
+  const pg = g.createRadialGradient(tw * 0.66, th * 0.62, 1, tw * 0.66, th * 0.62, th * 0.75);
+  pg.addColorStop(0, "rgba(90,96,104,0.24)"); pg.addColorStop(1, "rgba(90,96,104,0)");
+  g.fillStyle = pg; g.fillRect(0, 0, tw, th);
+  g.restore();
+  g.strokeStyle = OUT; g.lineWidth = 2.5; body(1.5); g.stroke();
+  drawTuft(g, tw * 0.26, 1.5, 4, 6.5);
+  drawTuft(g, tw * 0.73, 1.5, 3, 5.5);
+}
+
+function buildCloudSprites() {
+  // 4 painterly cumulus sprites: overlapping puffs on a flat base, white → pale grey
+  // vertical gradient, a lavender-grey underside and soft glowing edges. 220×120 at 2x.
+  SPRITES.clouds = [];
+  const cw = 220, ch = 120;
+  for (let k = 0; k < 4; k++) {
+    const r = makeRng(1000 + k * 77);
+    const c = mkCanvas(cw * 2, ch * 2);
+    const g = c.getContext("2d");
+    g.scale(2, 2);
+    const puffs = [];
+    const n = 6 + Math.floor(r() * 4);
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const px = 34 + t * (cw - 68);
+      const pr = 16 + 22 * Math.sin(Math.PI * (0.12 + t * 0.76)) + r() * 8;
+      puffs.push({ x: px, y: 80 - pr * 0.6 - r() * 8, r: pr });
+    }
+    const path = (dy, s) => {
       g.beginPath();
-      g.moveTo(mx - 2, 6); g.quadraticCurveTo(mx - 3, 2.5, mx - 4.5, 1.5);
-      g.moveTo(mx, 6); g.quadraticCurveTo(mx, 1.5, mx + 1, 0.5);
-      g.moveTo(mx + 2, 6); g.quadraticCurveTo(mx + 3.5, 3, mx + 4.5, 2);
+      for (const p of puffs) { g.moveTo(p.x + p.r * s, p.y + dy); g.arc(p.x, p.y + dy, p.r * s, 0, Math.PI * 2); }
+      g.rect(34, 78 + dy, cw - 68, 10 * s);
+    };
+    g.save();
+    g.shadowColor = "rgba(255,255,255,0.55)"; g.shadowBlur = 12;
+    g.fillStyle = "rgba(255,255,255,0.5)"; path(0, 1.07); g.fill();
+    g.restore();
+    g.fillStyle = "#b6c3d9"; path(6, 1.0); g.fill();                  // underside
+    const bg = g.createLinearGradient(0, 18, 0, 92);
+    bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.62, "#f3f6fb"); bg.addColorStop(1, "#d6deea");
+    g.fillStyle = bg; path(0, 1.0); g.fill();
+    for (const p of puffs) {
+      const hg = g.createRadialGradient(p.x - p.r * 0.3, p.y - p.r * 0.5, 1, p.x, p.y, p.r);
+      hg.addColorStop(0, "rgba(255,255,255,0.95)"); hg.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = hg; g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.fill();
+    }
+    SPRITES.clouds.push(c);
+  }
+}
+
+// Parallax backdrop strips (tile horizontally, periodic ridges so the seam is invisible).
+// far: hazy blue mountains + a mid green hill line. near: bright rolling hills with tree
+// clumps. Both are baked at 2x and blitted per frame at their own parallax rate.
+const HILLS = { far: null, near: null, w: 1200, farH: 210, nearH: 200 };
+function buildHillsSprite() {
+  const SW = HILLS.w, TWO = Math.PI * 2;
+  const clump = (g, x, y, rad, r, dark) => {
+    // 3-4 overlapping round tree blobs, lit from the top-left, no outline (painterly)
+    const n = 3 + Math.floor(r() * 2);
+    for (let i = 0; i < n; i++) {
+      const cx = x + (i - (n - 1) / 2) * rad * 0.8, cy = y - (i % 2) * rad * 0.35, cr = rad * (0.8 + r() * 0.4);
+      const tg = g.createRadialGradient(cx - cr * 0.3, cy - cr * 0.4, cr * 0.1, cx, cy, cr);
+      tg.addColorStop(0, dark ? "#5da53a" : "#7fc748"); tg.addColorStop(0.7, dark ? "#2f7a24" : "#3d8f2c"); tg.addColorStop(1, dark ? "#1f5a18" : "#2a6e1e");
+      g.fillStyle = tg; g.beginPath(); g.arc(cx, cy, cr, 0, TWO); g.fill();
+    }
+    g.fillStyle = "rgba(20,60,15,0.35)";
+    g.beginPath(); g.ellipse(x, y + rad * 0.55, rad * n * 0.5, rad * 0.25, 0, 0, TWO); g.fill();
+  };
+  const ridgePath = (g, fn, h) => {
+    g.beginPath(); g.moveTo(0, fn(0));
+    for (let x = 4; x <= SW; x += 4) g.lineTo(x, fn(x));
+    g.lineTo(SW, h); g.lineTo(0, h); g.closePath();
+  };
+  // ---- far strip: mountains + mid hills ----
+  {
+    const H = HILLS.farH;
+    const c = mkCanvas(SW * 2, H * 2); const g = c.getContext("2d"); g.scale(2, 2);
+    const r = makeRng(31337);
+    const mtn = (x) => 46 + 24 * Math.sin(TWO * 3 * x / SW) + 12 * Math.sin(TWO * 7 * x / SW + 1.2) + 6 * Math.sin(TWO * 13 * x / SW + 2);
+    const mg = g.createLinearGradient(0, 10, 0, H);
+    mg.addColorStop(0, "#7796c9"); mg.addColorStop(0.5, "#95b2d9"); mg.addColorStop(1, "#b7cde6");
+    g.fillStyle = mg; ridgePath(g, mtn, H); g.fill();
+    // hazy snow/light along the mountain tops
+    g.strokeStyle = "rgba(230,240,255,0.5)"; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(0, mtn(0)); for (let x = 4; x <= SW; x += 4) g.lineTo(x, mtn(x)); g.stroke();
+    const mid = (x) => 108 + 26 * Math.sin(TWO * 2 * x / SW + 2.3) + 12 * Math.sin(TWO * 5 * x / SW) + 5 * Math.sin(TWO * 11 * x / SW + 1);
+    const hg = g.createLinearGradient(0, 80, 0, H);
+    hg.addColorStop(0, "#9fd24c"); hg.addColorStop(0.45, "#6cb134"); hg.addColorStop(1, "#4c9328");
+    g.fillStyle = hg; ridgePath(g, mid, H); g.fill();
+    // painterly slope shading: darker bands following the ridge
+    g.strokeStyle = "rgba(40,110,25,0.22)"; g.lineWidth = 9;
+    for (const off of [14, 34]) { g.beginPath(); g.moveTo(0, mid(0) + off); for (let x = 4; x <= SW; x += 4) g.lineTo(x, mid(x) + off + Math.sin(x * 0.05) * 2); g.stroke(); }
+    for (let x = 30; x < SW - 30; x += 55 + r() * 70) clump(g, x, mid(x) + 4 + r() * 20, 6 + r() * 5, r, true);
+    HILLS.far = c;
+  }
+  // ---- near strip: bright rolling hills + bigger tree clumps + hedge lines ----
+  {
+    const H = HILLS.nearH;
+    const c = mkCanvas(SW * 2, H * 2); const g = c.getContext("2d"); g.scale(2, 2);
+    const r = makeRng(8086);
+    const near = (x) => 40 + 22 * Math.sin(TWO * 2 * x / SW + 5) + 10 * Math.sin(TWO * 6 * x / SW + 2) + 4 * Math.sin(TWO * 14 * x / SW);
+    const ng = g.createLinearGradient(0, 20, 0, H);
+    ng.addColorStop(0, "#b6df52"); ng.addColorStop(0.35, "#7cc23a"); ng.addColorStop(1, "#4d9a28");
+    g.fillStyle = ng; ridgePath(g, near, H); g.fill();
+    g.strokeStyle = "rgba(220,245,150,0.45)"; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(0, near(0) + 2); for (let x = 4; x <= SW; x += 4) g.lineTo(x, near(x) + 2); g.stroke();
+    g.strokeStyle = "rgba(40,110,25,0.25)"; g.lineWidth = 12;
+    for (const off of [22, 50, 82]) { g.beginPath(); g.moveTo(0, near(0) + off); for (let x = 4; x <= SW; x += 4) g.lineTo(x, near(x) + off + Math.sin(x * 0.03 + off) * 3); g.stroke(); }
+    // hedge rows: dark wavy strokes
+    g.strokeStyle = "rgba(35,95,22,0.5)"; g.lineWidth = 5; g.lineCap = "round";
+    for (let k = 0; k < 5; k++) {
+      const hx = 60 + r() * (SW - 200), hl = 60 + r() * 120, hy = near(hx) + 30 + r() * 60;
+      g.beginPath(); g.moveTo(hx, hy);
+      for (let x = hx; x <= hx + hl; x += 8) g.lineTo(x, hy + Math.sin(x * 0.2) * 1.5 + (near(x) - near(hx)) * 0.6);
       g.stroke();
     }
-    g.lineCap = "butt";
+    for (let x = 40; x < SW - 40; x += 70 + r() * 90) clump(g, x, near(x) + 6 + r() * 26, 9 + r() * 7, r, false);
+    HILLS.near = c;
   }
+}
+
+// Y-fork slingshot sprite (bark + cut tips + green cord wraps) in local coords relative
+// to the trunk anchor (sx, sy): tips at (∓24,-82), trunk bottom at +22. 110×130 canvas,
+// origin at (55,104). Rocks sprite for the foot is baked alongside.
+const SLING = { back: null, front: null, ox: 65, oy: 110, w: 130, h: 130, rocks: null };
+// The fork is split in two sprites around the loaded worm: BACK = far (left) arm, drawn
+// before the worm; FRONT = near (right) arm + crotch patch, drawn after it, so the worm
+// sits IN the fork like the mockup's bird. Local coords are relative to the crotch
+// reference point (drawSlingshot's `sy`); the trunk is painted per frame underneath.
+const SLING_L = { x1: 0, y1: -8, x2: -44, y2: -104, w1: 14, w2: 10 };
+const SLING_R = { x1: 0, y1: -8, x2: 44, y2: -104, w1: 14, w2: 10 };
+function drawSlingArm(g, A, side, seed, notch) {
+  drawBranch(g, A.x1, A.y1, A.x2, A.y2, A.w1, A.w2, seed, { noOutline: true });
+  if (side > 0) {
+    // crotch patch blends the joint (front sprite only — it must sit over both arms)
+    const cg = g.createRadialGradient(-3, -14, 1, 0, -11, 13);
+    cg.addColorStop(0, "#a06a38"); cg.addColorStop(0.6, "#7d4e26"); cg.addColorStop(1, "rgba(90,52,24,0)");
+    g.fillStyle = cg; g.beginPath(); g.ellipse(0, -11, 12, 10, 0, 0, Math.PI * 2); g.fill();
+  }
+  // outline: outer edge from the trunk up to the tip, across the tip, inner edge down to
+  // the notch where the two arms meet — never across the root (it grows out of the trunk)
+  const c = branchCorners(A.x1, A.y1, A.x2, A.y2, A.w1, A.w2);
+  g.strokeStyle = "#241408"; g.lineWidth = 2.8; g.lineJoin = "round"; g.lineCap = "round";
+  g.beginPath();
+  g.moveTo(c.oRoot[0], c.oRoot[1]); g.lineTo(c.oTip[0], c.oTip[1]); g.lineTo(c.iTip[0], c.iTip[1]);
+  g.lineTo(notch[0], notch[1]);
+  g.stroke();
+  // cut end: pale wood face with rings
+  const ang = Math.atan2(A.y2 - A.y1, A.x2 - A.x1) + Math.PI / 2;
+  g.save(); g.translate(A.x2, A.y2); g.rotate(ang);
+  g.fillStyle = "#e0b57e"; g.strokeStyle = "#241408"; g.lineWidth = 2.2;
+  g.beginPath(); g.ellipse(0, 0, A.w2 + 0.5, 4.2, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.strokeStyle = "rgba(120,70,30,0.6)"; g.lineWidth = 1;
+  g.beginPath(); g.ellipse(0, 0, A.w2 * 0.6, 2.4, 0, 0, Math.PI * 2); g.stroke();
+  g.beginPath(); g.ellipse(0, 0, A.w2 * 0.25, 1, 0, 0, Math.PI * 2); g.stroke();
+  g.restore();
+  // green cord wraps: 6 chunky coils just below the tip, following the arm's angle
+  const len = Math.hypot(A.x2 - A.x1, A.y2 - A.y1);
+  const ax = (A.x2 - A.x1) / len, ay = (A.y2 - A.y1) / len;   // toward the tip
+  const px = ay, py = -ax;                                     // across the arm
+  for (let k = 0; k < 6; k++) {
+    const d = 7 + k * 5.2;                                     // distance down from the tip
+    const cx = A.x2 - ax * d, cy = A.y2 - ay * d;
+    const hw = A.w2 + 2.4 + k * 0.2;
+    g.lineCap = "round";
+    g.strokeStyle = "#274f10"; g.lineWidth = 5.6;
+    g.beginPath(); g.moveTo(cx - px * hw, cy - py * hw + 1.2); g.lineTo(cx + px * hw, cy + py * hw + 1.2); g.stroke();
+    g.strokeStyle = "#6db332"; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(cx - px * hw, cy - py * hw); g.lineTo(cx + px * hw, cy + py * hw); g.stroke();
+    g.strokeStyle = "rgba(210,255,150,0.6)"; g.lineWidth = 1.3;
+    g.beginPath(); g.moveTo(cx - px * hw * 0.8, cy - py * hw * 0.8 - 1.2); g.lineTo(cx + px * hw * 0.8, cy + py * hw * 0.8 - 1.2); g.stroke();
+  }
+}
+function buildSlingSprite() {
+  const cl = branchCorners(SLING_L.x1, SLING_L.y1, SLING_L.x2, SLING_L.y2, SLING_L.w1, SLING_L.w2);
+  const cr = branchCorners(SLING_R.x1, SLING_R.y1, SLING_R.x2, SLING_R.y2, SLING_R.w1, SLING_R.w2);
+  const notch = segIntersect(cl.iRoot, cl.iTip, cr.iRoot, cr.iTip) || [0, -40];
+  for (const side of [-1, 1]) {
+    const c = mkCanvas(SLING.w * 2, SLING.h * 2);
+    const g = c.getContext("2d");
+    g.scale(2, 2); g.translate(SLING.ox, SLING.oy);
+    drawSlingArm(g, side < 0 ? SLING_L : SLING_R, side, side < 0 ? 12 : 13, notch);
+    if (side < 0) SLING.back = c; else SLING.front = c;
+  }
+  // rock base: grey boulders + tufts, 160×48, anchored so (80,36) is the ground line
+  const rc = mkCanvas(320, 96);
+  const rg = rc.getContext("2d"); rg.scale(2, 2);
+  const r = makeRng(555);
+  const rocks = [[-40, -1, 17, 11, 0.2], [34, 0, 19, 12, -0.15], [-8, 4, 15, 9, 0.1], [12, -9, 11, 8, 0.3], [-60, 2, 12, 8, -0.2], [58, 3, 12, 7.5, 0.1], [-24, -12, 9, 6.5, 0.4], [30, -14, 8, 6, -0.3]];
+  for (const rk of rocks) drawStone(rg, 80 + rk[0], 36 + rk[1], rk[2], rk[3], rk[4], 0.72 + r() * 0.25, [165, 160, 150]);
+  drawTuft(rg, 80 - 50, 33, 3, 8, r); drawTuft(rg, 80 + 48, 34, 3, 7, r); drawTuft(rg, 80 + 2, 28, 3, 7, r); drawTuft(rg, 80 - 22, 27, 2, 6, r);
+  SLING.rocks = rc;
 }
 
 function buildSprites() {
   const mats = { stone: [40, 30], wood: [40, 30], ice: [40, 30], barrel: [26, 34] };
+  SPRITES.pad = TILE_PAD;
   for (const m in mats) {
     const tw = mats[m][0], th = mats[m][1];
-    const c = document.createElement("canvas");
-    c.width = tw * 2; c.height = th * 2;
+    const c = mkCanvas((tw + TILE_PAD * 2) * 2, (th + TILE_PAD * 2) * 2);
     const g = c.getContext("2d");
-    g.scale(2, 2);
+    g.scale(2, 2); g.translate(TILE_PAD, TILE_PAD);
     drawBlockTile(g, m, tw, th);
     SPRITES.blocks[m] = c;
   }
   // ammo portraits — rendered via the shared worm recipe (gloss highlight included)
   const types = ["red", "bomber", "splitter", "bouncer", "trooper", "cluster"];
   for (const t of types) {
-    const c = document.createElement("canvas");
-    c.width = 156; c.height = 156;
+    const c = mkCanvas(156, 156);
     const g = c.getContext("2d");
     const old = ctx;
     ctx = g;
     g.save();
-    g.translate(88, 84);                 // tail extends left — bias the head right of centre
+    g.translate(82, 80);
     g.scale(2.0, 2.0);
     drawWormBody({ x: 0, y: 0, radius: 16, team: "player", type: t, facing: 1,
       wiggle: 0, alive: true, hp: 100, maxHp: 100, flashTimer: 0 });
@@ -472,32 +769,33 @@ function buildSprites() {
     ctx = old;
     SPRITES.icons[t] = c;
   }
-  // Soft drop-shadow sprite (AW_MOCKUP_V3) — the crater recipe's radial-gradient-for-
-  // soft-edge technique (GAME_BIBLE: "radial gradient = soft edge"), baked ONCE so the
-  // per-frame shadows under worms / TNT barrels / the slingshot base are plain
-  // drawImage blits with zero gradient math in the draw loops.
+  // Soft drop-shadow sprite — radial gradient baked ONCE so per-frame shadows under
+  // worms / TNT barrels / the slingshot base are plain drawImage blits.
   {
-    const c = document.createElement("canvas");
-    c.width = 64; c.height = 32;
+    const c = mkCanvas(64, 32);
     const g = c.getContext("2d");
     g.save();
     g.translate(32, 16);
     g.scale(1, 0.5);
     const sg = g.createRadialGradient(0, 0, 0, 0, 0, 32);
-    sg.addColorStop(0, "rgba(0,0,0,0.28)");
-    sg.addColorStop(0.65, "rgba(0,0,0,0.16)");
+    sg.addColorStop(0, "rgba(0,0,0,0.30)");
+    sg.addColorStop(0.65, "rgba(0,0,0,0.17)");
     sg.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = sg;
     g.beginPath(); g.arc(0, 0, 32, 0, Math.PI * 2); g.fill();
     g.restore();
     SPRITES.shadow = c;
   }
+  buildCloudSprites();
+  buildHillsSprite();
+  buildSlingSprite();
 }
 
 // ====== LEVEL BUILD ======
 function buildLevel(lvl, rollover) {
   level = lvl;
   terrain = generateTerrain(lvl);
+  terrainDirty = true;
   blocks = [];
   worms = [];
   particles = [];
@@ -2104,6 +2402,7 @@ function craterTerrain(x, y, r) {
       if (terrain[i].y > WATER_Y + 15) terrain[i].y = WATER_Y + 15;
     }
   }
+  terrainDirty = true;   // the baked painterly terrain layer must follow the new profile
 }
 
 // ====== TURN SYSTEM ======
@@ -2447,29 +2746,22 @@ function render() {
 }
 
 function drawSky() {
-  // Bright Angry-Birds daytime — mockup-exact 2-stop blend, no mid-stop kink
-  const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  grad.addColorStop(0, "#4FA8D8");
-  grad.addColorStop(1, "#8ED4F0");
+  // AW_PAINT_V9 — mockup sky: deep saturated blue at the top falling to a pale, almost
+  // white haze at the horizon (4-stop blend), no sun — the light in the mockup is
+  // ambient. Then two pre-baked parallax strips (hazy mountains + green hills).
+  const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y + 40);
+  grad.addColorStop(0, "#1c6fd4");
+  grad.addColorStop(0.42, "#43a0e6");
+  grad.addColorStop(0.78, "#8fd3f4");
+  grad.addColorStop(1, "#cdeefb");
   ctx.fillStyle = grad;
   ctx.fillRect(camera.x - 10, 0, VIEW.w + 20, GROUND_Y + 140);
 
-  // Sun (parallax — barely moves with the camera)
-  const sunX = camera.x * 0.1 + 120, sunY = 90;
-  const sg = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 70);
-  sg.addColorStop(0, "rgba(255,246,180,0.95)");
-  sg.addColorStop(0.4, "rgba(255,238,140,0.55)");
-  sg.addColorStop(1, "rgba(255,238,140,0)");
-  ctx.fillStyle = sg;
-  ctx.beginPath(); ctx.arc(sunX, sunY, 70, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#fff3ae";
-  ctx.beginPath(); ctx.arc(sunX, sunY, 26, 0, Math.PI * 2); ctx.fill();
-
-  // Distant bird silhouettes — fixed spots riding the sun's parallax rate
-  ctx.strokeStyle = "rgba(20,30,40,0.7)";
-  ctx.lineWidth = 2; ctx.lineCap = "round";
+  // Distant bird silhouettes — tiny dark V's riding a slow parallax
+  ctx.strokeStyle = "rgba(20,30,40,0.75)";
+  ctx.lineWidth = 1.8; ctx.lineCap = "round";
   const birdBase = camera.x * 0.1;
-  const BIRDS = [[430, 122, 7], [540, 156, 5], [890, 112, 6], [1190, 144, 5]];   // below the HUD pill at phone scale
+  const BIRDS = [[430, 122, 6], [540, 156, 4.5], [890, 112, 5.5], [1190, 144, 4.5]];
   for (const bd of BIRDS) {
     const bxp = birdBase + bd[0], byp = bd[1], bs = bd[2];
     const flap = Math.sin(performance.now() / 320 + bd[0]) * 2;
@@ -2481,58 +2773,34 @@ function drawSky() {
   }
   ctx.lineCap = "butt";
 
-  // Parallax hill bands behind the playfield (AB backdrop depth)
-  ctx.fillStyle = "rgba(120,190,140,0.45)";
-  ctx.beginPath();
-  ctx.moveTo(camera.x - 10, GROUND_Y + 40);
-  for (let x = -10; x <= VIEW.w + 20; x += 8) {
-    const wx = camera.x * 0.35 + x;
-    ctx.lineTo(camera.x + x, GROUND_Y - 60 - 45 * Math.sin(wx * 0.006) - 20 * Math.sin(wx * 0.013 + 2));
-  }
-  ctx.lineTo(camera.x + VIEW.w + 20, GROUND_Y + 40);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "rgba(90,170,115,0.55)";
-  ctx.beginPath();
-  ctx.moveTo(camera.x - 10, GROUND_Y + 60);
-  for (let x = -10; x <= VIEW.w + 20; x += 8) {
-    const wx = camera.x * 0.6 + x;
-    ctx.lineTo(camera.x + x, GROUND_Y - 20 - 35 * Math.sin(wx * 0.008 + 4) - 15 * Math.sin(wx * 0.02));
-  }
-  ctx.lineTo(camera.x + VIEW.w + 20, GROUND_Y + 60);
-  ctx.closePath(); ctx.fill();
+  // Parallax strips — each tiles horizontally; the strip's bottom edge sits below the
+  // terrain's highest ridge so the baked ground always covers it.
+  drawHillStrip(HILLS.far, 0.22, GROUND_Y + 40 - HILLS.farH - 4, HILLS.farH);
+  drawHillStrip(HILLS.near, 0.45, GROUND_Y + 60 - HILLS.nearH, HILLS.nearH);
+}
+
+function drawHillStrip(img, par, y, h) {
+  if (!img) return;
+  const SW = HILLS.w;
+  // world x of the strip's tile origin, shifted by the parallax fraction of the camera
+  const x0 = camera.x - ((((camera.x * par) % SW) + SW) % SW);
+  for (let x = x0; x < camera.x + VIEW.w + 10; x += SW) ctx.drawImage(img, x, y, SW, h);
 }
 
 function drawStars() { /* retired — daytime sky (Osimo 2026-07-02: AB look) */ }
 
 function drawClouds() {
-  // Volumetric AB clouds — 3 passes over the SAME puff geometry (no outline anywhere):
-  // 1) oversized low-alpha halo = soft rim falloff, 2) light-gray undershadow offset
-  // down 4px = bottom volume, 3) white body on top. 8 clouds × 3 passes = trivial cost.
-  const puffs = (c, s, dy) => {
-    ctx.beginPath();
-    ctx.arc(c.x, c.y + dy, c.r * s, 0, Math.PI * 2);
-    ctx.arc(c.x + c.r * 0.85, c.y + c.r * 0.15 + dy, c.r * 0.75 * s, 0, Math.PI * 2);
-    ctx.arc(c.x - c.r * 0.85, c.y + c.r * 0.15 + dy, c.r * 0.75 * s, 0, Math.PI * 2);
-    ctx.arc(c.x + c.r * 0.35, c.y - c.r * 0.45 + dy, c.r * 0.65 * s, 0, Math.PI * 2);
-    ctx.arc(c.x - c.r * 0.4, c.y - c.r * 0.35 + dy, c.r * 0.55 * s, 0, Math.PI * 2);
-    ctx.fill();
-  };
+  // Pre-rendered painterly cumulus sprites (buildCloudSprites) with per-cloud drift,
+  // scale and parallax depth. One drawImage per cloud, nothing computed per frame.
+  const sp = SPRITES.clouds;
+  if (!sp.length) return;
   for (const c of clouds) {
     c.x += c.s;
-    if (c.x > WORLD_W + 50) c.x = -50;
-    // soft rim halo
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    puffs(c, 1.14, 0);
-    ctx.fillRect(c.x - c.r * 1.5, c.y, c.r * 3.0, c.r * 0.62);
-    // undershadow — drawn behind the white puffs, peeks out along the bottom ~30%
-    ctx.fillStyle = "#E5EDF3";
-    puffs(c, 1.05, 4);
-    ctx.fillRect(c.x - c.r * 1.45, c.y + 4, c.r * 2.9, c.r * 0.55);
-    // white body
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    puffs(c, 1, 0);
-    // flat base
-    ctx.fillRect(c.x - c.r * 1.4, c.y, c.r * 2.8, c.r * 0.55);
+    if (c.x > WORLD_W + 200) c.x = -300;
+    const w = 220 * c.sc, h = 120 * c.sc;
+    const dx = c.x + camera.x * c.par;
+    if (dx + w < camera.x - 20 || dx > camera.x + VIEW.w + 20) continue;
+    ctx.drawImage(sp[c.k % sp.length], dx, c.y, w, h);
   }
 }
 
@@ -2564,131 +2832,150 @@ function drawSea(t) {
   ctx.stroke();
 }
 
-function drawTerrain() {
-  // Bounding-box precompute — gradient anchors track the ACTUAL ridge height so
-  // tall hills don't clamp the blend (one min/max pass over the array we already walk)
-  let terrainYMin = Infinity, terrainYMax = -Infinity;
-  for (const t of terrain) {
-    if (t.y < terrainYMin) terrainYMin = t.y;
-    if (t.y > terrainYMax) terrainYMax = t.y;
-  }
-  // Grass — ridge-to-shadow gradient (mockup: #7CC142 top ridge → #4F9530 underside)
-  const grassGrad = ctx.createLinearGradient(0, terrainYMin, 0, terrainYMin + 15);
-  grassGrad.addColorStop(0, "#7CC142");
-  grassGrad.addColorStop(1, "#4F9530");
-  ctx.fillStyle = grassGrad;
-  ctx.strokeStyle = "#1a4a0a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-TERRAIN_PAD, GROUND_Y + 200);
-  for (const t of terrain) {
-    ctx.lineTo(t.x, t.y);
-  }
-  ctx.lineTo(WORLD_W + TERRAIN_PAD, GROUND_Y + 200);
-  ctx.closePath();
-  ctx.fill();
+// ====== BAKED PAINTERLY TERRAIN (AW_PAINT_V9) ======
+// The mockup's ground is a grass-capped earth plateau whose cliff face is packed with
+// embedded rounded stones, topped by hundreds of individual grass blades, flowers and
+// bushes. Drawing that per frame is impossible at 60fps, so the whole world-width strip
+// is baked ONCE into an offscreen canvas (2x) and re-baked only when a crater changes
+// the profile (terrainDirty). drawTerrain() is then a single windowed drawImage.
+const TERRAIN = { c: null, g: null, x0: 0, y0: 0, w: 0, h: 0, S: 2 };
+let terrainDirty = true;
 
-  // Grass strip highlight — same ridge-anchored gradient (one createLinearGradient, reused)
-  ctx.fillStyle = grassGrad;
-  ctx.beginPath();
-  for (let i = 0; i < terrain.length; i++) {
-    const t = terrain[i];
-    if (i === 0) ctx.moveTo(t.x, t.y);
-    else ctx.lineTo(t.x, t.y);
+function bakeTerrain() {
+  terrainDirty = false;
+  if (!terrain || !terrain.length) return;
+  let yMin = Infinity;
+  for (const t of terrain) if (t.y < yMin) yMin = t.y;
+  const x0 = -TERRAIN_PAD, x1 = WORLD_W + TERRAIN_PAD;
+  const y0 = Math.floor(yMin) - 40, y1 = WORLD_H + 20;
+  const S = 2, w = x1 - x0, h = y1 - y0;
+  if (!TERRAIN.c || TERRAIN.w !== w || TERRAIN.h !== h) {
+    TERRAIN.c = mkCanvas(w * S, h * S);
+    TERRAIN.g = TERRAIN.c.getContext("2d");
   }
+  TERRAIN.x0 = x0; TERRAIN.y0 = y0; TERRAIN.w = w; TERRAIN.h = h; TERRAIN.S = S;
+  const g = TERRAIN.g;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, w * S, h * S);
+  g.setTransform(S, 0, 0, S, -x0 * S, -y0 * S);   // draw in WORLD coordinates from here
+  g.lineJoin = "round"; g.lineCap = "round";
+  const ridge = (dy) => {
+    g.beginPath();
+    g.moveTo(terrain[0].x, terrain[0].y + (dy || 0));
+    for (let i = 1; i < terrain.length; i++) g.lineTo(terrain[i].x, terrain[i].y + (dy || 0));
+  };
+  const earthPath = () => { ridge(0); g.lineTo(x1, y1); g.lineTo(x0, y1); g.closePath(); };
+
+  // 1) earth body — warm brown at the top falling to near-black at the sea line
+  earthPath();
+  const eg = g.createLinearGradient(0, yMin, 0, WORLD_H);
+  eg.addColorStop(0, "#8d5c30"); eg.addColorStop(0.3, "#6e4222"); eg.addColorStop(0.7, "#4b2c13"); eg.addColorStop(1, "#2a170a");
+  g.fillStyle = eg; g.fill();
+
+  // 2) cliff face: embedded stones (dense just under the grass, sparser with depth),
+  //    dirt speckle and a few cracks — all clipped to the earth body
+  g.save(); earthPath(); g.clip();
+  const r = makeRng(9137 + level * 101);
+  // Mockup density: a packed band of fist-sized stones just under the grass, thinning
+  // fast with depth so the lower cliff reads as earth with the odd boulder, not gravel.
+  for (let i = 0; i < terrain.length; i += 4) {
+    const t = terrain[i];
+    for (let k = 0; k < 3; k++) {
+      const depth = 22 + r() * 160;
+      if (r() < depth / 150) continue;
+      const sx = t.x + (r() - 0.5) * 18, sy = t.y + depth;
+      const rx = 5 + r() * 12, ry = rx * (0.6 + r() * 0.35);
+      drawStone(g, sx, sy, rx, ry, (r() - 0.5) * 0.9, 0.55 + r() * 0.4, [172, 150, 122]);
+    }
+  }
+  g.fillStyle = "rgba(28,14,5,0.38)";
+  for (let i = 0; i < terrain.length; i += 2) {
+    const t = terrain[i];
+    for (let k = 0; k < 3; k++) g.fillRect(t.x + (r() - 0.5) * 10, t.y + 22 + r() * 190, 1.5 + r() * 2.2, 1 + r() * 1.6);
+  }
+  g.strokeStyle = "rgba(20,10,3,0.5)"; g.lineWidth = 1.2;
+  for (let i = 8; i < terrain.length; i += 40 + Math.floor(r() * 30)) {
+    const t = terrain[i];
+    g.beginPath(); g.moveTo(t.x, t.y + 30 + r() * 40);
+    for (let k = 0; k < 4; k++) g.lineTo(t.x + (r() - 0.5) * 18, t.y + 60 + k * 22 + r() * 14);
+    g.stroke();
+  }
+  // soft shade right under the grass cap (grass throws a shadow onto the cliff)
+  g.strokeStyle = "rgba(20,10,4,0.45)"; g.lineWidth = 10; ridge(25); g.stroke();
+  g.restore();
+
+  // 3) grass cap: mid green fill with a wavy hanging lower edge, bright top band that
+  //    follows the ridge, dark fringe along the underside
+  g.beginPath();
+  g.moveTo(terrain[0].x, terrain[0].y - 3);
+  for (let i = 1; i < terrain.length; i++) g.lineTo(terrain[i].x, terrain[i].y - 3);
   for (let i = terrain.length - 1; i >= 0; i--) {
-    ctx.lineTo(terrain[i].x, terrain[i].y + 20);
-  }
-  ctx.closePath();
-  ctx.fill();
-  // grass tufts on the lip (deterministic — no per-frame flicker)
-  ctx.strokeStyle = "#2f8a12"; ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 8; i < terrain.length - 8; i += 14) {
     const t = terrain[i];
-    ctx.moveTo(t.x, t.y + 2); ctx.lineTo(t.x - 3, t.y - 7);
-    ctx.moveTo(t.x + 4, t.y + 2); ctx.lineTo(t.x + 6, t.y - 6);
+    g.lineTo(t.x, t.y + 15 + 5 * Math.sin(t.x * 0.09) + 3 * Math.sin(t.x * 0.31 + 1) + 2 * Math.sin(t.x * 0.53));
   }
-  ctx.stroke();
-  // tiny flower dots piggybacked on the same deterministic loop (no per-frame flicker)
-  for (let i = 8; i < terrain.length - 8; i += 42) {
-    const t = terrain[i];
-    const fseed = (i * 2654435761) % 97;
-    ctx.fillStyle = fseed % 2 ? "#c9a0e8" : "#ffffff";
-    const fs = fseed % 3 ? 2 : 3;
-    ctx.fillRect(t.x + (fseed % 9) - 4, t.y - 3, fs, fs);
-  }
-  // dark blade/tick marks hatched along the ridge line (deterministic seed — no flicker)
-  ctx.strokeStyle = "#2E5A1C"; ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i = 8; i < terrain.length - 8; i += 3) {   // points are 4px apart → 12px stride
-    const t = terrain[i];
-    const tseed = (i * 2654435761) % 97;
-    const th2 = tseed % 3 ? 2 : 3;                 // 2-3px tall
-    const tox = (tseed % 7) - 3;                   // small jitter so the hatch isn't a comb
-    ctx.moveTo(t.x + tox, t.y + 1);
-    ctx.lineTo(t.x + tox, t.y + 1 + th2);
-  }
-  ctx.stroke();
+  g.closePath();
+  g.fillStyle = "#5fa82a"; g.fill();
+  g.strokeStyle = "#3a7a1a"; g.lineWidth = 2.2; g.stroke();
+  g.strokeStyle = "#9fd43c"; g.lineWidth = 7; ridge(3); g.stroke();
+  g.strokeStyle = "#bde84f"; g.lineWidth = 3; ridge(1); g.stroke();
+  g.strokeStyle = "rgba(30,70,15,0.6)"; g.lineWidth = 1.6; ridge(-1); g.stroke();
 
-  // Soil layer — top-lit dirt gradient (mockup: #A66B3F → #7A4A26)
-  const dirtGrad = ctx.createLinearGradient(0, terrainYMin + 20, 0, GROUND_Y + 220);
-  dirtGrad.addColorStop(0, "#A66B3F");
-  dirtGrad.addColorStop(1, "#7A4A26");
-  ctx.fillStyle = dirtGrad;
-  ctx.beginPath();
-  ctx.moveTo(-TERRAIN_PAD, GROUND_Y + 220);
-  for (const t of terrain) ctx.lineTo(t.x, t.y + 20);
-  ctx.lineTo(WORLD_W + TERRAIN_PAD, GROUND_Y + 220);
-  ctx.closePath();
-  ctx.fill();
+  // 4) grass blades — hundreds of tapered leaning blades in five greens
+  const r2 = makeRng(4711 + level * 7);
+  for (let x = x0 + 2; x < x1; x += 2.6 + r2() * 2.6) {
+    const y = terrainHeightAt(x);
+    if (y > WATER_Y + 8) continue;
+    const hgt = 5 + r2() * 10, lean = (r2() - 0.5) * 1.1;
+    drawBlade(g, x, y, hgt, lean, 1.1 + r2() * 1.3, GRASS_GREENS[Math.floor(r2() * GRASS_GREENS.length)]);
+  }
+  // 5) flowers: white daisies with a yellow heart, pink and purple four-petal blooms
+  for (let x = x0 + 30; x < x1 - 30; x += 60 + r2() * 110) {
+    const y = terrainHeightAt(x) - 3;
+    if (y > WATER_Y) continue;
+    const kind = r2();
+    g.strokeStyle = "#3f8a1c"; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x + 0.5, y - 3); g.stroke();
+    const fy = y - 4;
+    if (kind < 0.5) {
+      g.fillStyle = "#ffffff";
+      for (let p = 0; p < 6; p++) { const a = p / 6 * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * 2.6, fy + Math.sin(a) * 2.6, 1.7, 1.1, a, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = "#ffcf2a"; g.beginPath(); g.arc(x, fy, 1.6, 0, Math.PI * 2); g.fill();
+    } else {
+      g.fillStyle = kind < 0.75 ? "#ff6fb0" : "#b57cff";
+      for (let p = 0; p < 4; p++) { const a = p / 4 * Math.PI * 2 + 0.4; g.beginPath(); g.ellipse(x + Math.cos(a) * 2.4, fy + Math.sin(a) * 2.4, 2, 1.4, a, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = "#fff3b0"; g.beginPath(); g.arc(x, fy, 1.2, 0, Math.PI * 2); g.fill();
+    }
+  }
+  // 6) sparse bushes — 3-4 round blobs, top-lit; never on the slingshot's plot
+  for (let x = x0 + 120; x < x1 - 80; x += 260 + r2() * 260) {
+    if (Math.abs(x - SLING_X) < 110) continue;
+    const y = terrainHeightAt(x);
+    if (y > WATER_Y - 10) continue;
+    const n = 3 + Math.floor(r2() * 2), rad = 8 + r2() * 6;
+    g.fillStyle = "rgba(20,50,10,0.35)";
+    g.beginPath(); g.ellipse(x, y + 2, rad * 1.8, rad * 0.35, 0, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < n; i++) {
+      const cx = x + (i - (n - 1) / 2) * rad * 0.85, cy = y - rad * 0.55 - (i % 2) * rad * 0.35, cr = rad * (0.75 + r2() * 0.4);
+      const bg = g.createRadialGradient(cx - cr * 0.3, cy - cr * 0.45, cr * 0.1, cx, cy, cr);
+      bg.addColorStop(0, "#9fdb46"); bg.addColorStop(0.6, "#5aa52a"); bg.addColorStop(1, "#2d6e1a");
+      g.fillStyle = bg; g.beginPath(); g.arc(cx, cy, cr, 0, Math.PI * 2); g.fill();
+    }
+    g.strokeStyle = "rgba(25,60,12,0.55)"; g.lineWidth = 1.2;
+    for (let i = 0; i < n; i++) {
+      const cx = x + (i - (n - 1) / 2) * rad * 0.85, cy = y - rad * 0.55 - (i % 2) * rad * 0.35;
+      g.beginPath(); g.arc(cx, cy, rad * 0.95, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+    }
+  }
+}
 
-  // Soil to rock gradient — this fill covers the soil band above, so its top stops
-  // carry the SAME dirt gradient (#A66B3F → #7A4A26) before darkening into rock
-  const rgTop = terrainYMin + 20;
-  const rg = ctx.createLinearGradient(0, rgTop, 0, WORLD_H);
-  const fRock = Math.min(0.9, Math.max(0.1, (GROUND_Y + 100 - rgTop) / (WORLD_H - rgTop)));
-  rg.addColorStop(0, "#A66B3F");
-  rg.addColorStop(fRock, "#7A4A26");
-  rg.addColorStop(fRock + (1 - fRock) * 0.3, "#5a3a1a");
-  rg.addColorStop(1, "#2a1a0a");
-  ctx.fillStyle = rg;
-  ctx.beginPath();
-  ctx.moveTo(-TERRAIN_PAD, WORLD_H);
-  for (const t of terrain) ctx.lineTo(t.x, t.y + 20);
-  ctx.lineTo(WORLD_W + TERRAIN_PAD, WORLD_H);
-  ctx.closePath();
-  ctx.fill();
-  // dirt speckles (Worms texture — deterministic pseudo-random)
-  ctx.fillStyle = "rgba(60,36,14,0.55)";
-  for (let i = 0; i < terrain.length; i += 10) {
-    const t = terrain[i];
-    const seed = (i * 2654435761) % 97;
-    ctx.fillRect(t.x + (seed % 30), t.y + 28 + (seed % 46), 3, 3);
-    ctx.fillRect(t.x + ((seed * 7) % 34), t.y + 60 + ((seed * 3) % 38), 4, 3);
-  }
-  // pebble dots — deliberately different stride/modulo phase (i+=17, %89) so the
-  // scatter never stacks 1:1 on the square speckles above
-  ctx.fillStyle = "#5C3A1E";
-  for (let i = 0; i < terrain.length; i += 17) {
-    const t = terrain[i];
-    const pseed = (i * 2654435761) % 89;
-    const pr = pseed % 3 ? 1.5 : 2;
-    ctx.beginPath();
-    ctx.arc(t.x + (pseed % 38), t.y + 34 + (pseed % 52), pr, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Top outline
-  ctx.strokeStyle = "#1a4a0a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < terrain.length; i++) {
-    const t = terrain[i];
-    if (i === 0) ctx.moveTo(t.x, t.y);
-    else ctx.lineTo(t.x, t.y);
-  }
-  ctx.stroke();
+function drawTerrain() {
+  if (terrainDirty || !TERRAIN.c) bakeTerrain();
+  if (!TERRAIN.c) return;
+  const vx0 = Math.max(TERRAIN.x0, camera.x - 10);
+  const vx1 = Math.min(TERRAIN.x0 + TERRAIN.w, camera.x + VIEW.w + 10);
+  if (vx1 <= vx0) return;
+  const S = TERRAIN.S;
+  ctx.drawImage(TERRAIN.c, (vx0 - TERRAIN.x0) * S, 0, (vx1 - vx0) * S, TERRAIN.h * S, vx0, TERRAIN.y0, vx1 - vx0, TERRAIN.h);
 }
 
 function drawBlocks() {
@@ -2708,6 +2995,7 @@ function drawBlocks() {
     if (b.type === "barrel" && b.settled && SPRITES.shadow) {
       ctx.drawImage(SPRITES.shadow, b.x - b.w * 0.18, b.y + b.h - 3, b.w * 1.36, 10);
     }
+    const P = SPRITES.pad || 0;   // tiles carry TILE_PAD headroom for tufts + baked shadow
     ctx.save();
     if (b.rot) {
       ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
@@ -2716,7 +3004,7 @@ function drawBlocks() {
       ctx.translate(-b.x, -b.y);
     }
     const tile = SPRITES.blocks[b.type];
-    if (tile) ctx.drawImage(tile, b.x, b.y, b.w, b.h);
+    if (tile) ctx.drawImage(tile, b.x - P, b.y - P, b.w + P * 2, b.h + P * 2);
     if (b.type === "barrel") {
       // fuse nub on every live barrel + small ambient flicker (slower period + smaller
       // radius than drawBarrelFuse's urgent chain-telegraph spark — must stay distinct)
@@ -2730,7 +3018,7 @@ function drawBlocks() {
     } else if (b.type === "stone") {
       // per-block speckle scatter — same deterministic seed trick as the terrain speckle
       const sd = b.seed || 0;
-      ctx.fillStyle = "rgba(110,114,122,0.55)";
+      ctx.fillStyle = "rgba(90,96,104,0.45)";
       for (let k = 0; k < 4; k++) {
         const s2 = ((sd + k * 31) * 2654435761) % 97;
         ctx.fillRect(b.x + 6 + (s2 % Math.max(1, b.w - 14)),
@@ -2759,8 +3047,8 @@ function drawBarrelFuse(b) {
   const x = b.fx !== undefined ? b.fx : b.x;
   const y = b.fy !== undefined ? b.fy : b.y;
   ctx.save();
-  const tile = SPRITES.blocks.barrel;
-  if (tile) ctx.drawImage(tile, x, y, b.w, b.h);
+  const tile = SPRITES.blocks.barrel, P = SPRITES.pad || 0;
+  if (tile) ctx.drawImage(tile, x - P, y - P, b.w + P * 2, b.h + P * 2);
   ctx.fillStyle = "#3a2a1a";
   ctx.fillRect(x + b.w / 2 - 2, y - 6, 4, 7);
   const fl = 0.6 + 0.4 * Math.sin(performance.now() / 40);
@@ -2800,145 +3088,108 @@ function drawWorms() {
 }
 
 function drawWormBody(w) {
-  // 2026-07-02 look pass: BIGGER cartoon worms, 3px outlines, Angry-Birds brows on the
-  // player team, army-green Worms grunts with helmets + sweat on the other side.
-  const x = w.x;
-  const y = w.y;
-  const S = 1.35;                      // visual scale (hitbox radius unchanged)
-  const wiggle = Math.sin(w.wiggle) * 2;
-  const F = w.facing;
-
-  // Colours come from the shared TYPE_COLOR / ENEMY_PALETTES lookups (top of script) —
-  // same constants the ammo carousel reads, no duplicated hex literals.
-  // (cluster keeps its own colour or it renders as the splitter's blue and the player
-  // cannot tell the two apart in the tray.)
-  let bodyColor, darkColor, bellyColor;
+  // AW_PAINT_V9 — the mockup's creatures: one glossy teardrop blob (tail to the back,
+  // fat head forward), radial "3D" shading light top-left → base → dark rim, darker
+  // spots, a hot specular, thick dark outline, big white eyes with V brows and an open
+  // angry frown. Same signature/callers as before; colours still come from TYPE_COLOR /
+  // ENEMY_PALETTES (single source for the tray, the strip and the field).
+  const F = w.facing || 1;
+  const x = w.x, y = w.y + Math.sin(w.wiggle || 0) * 1.5;
+  let base, dark;
   if (w.team === "enemy") {
     const pal = ENEMY_PALETTES[(w.paletteSeed || 0) % ENEMY_PALETTES.length];
-    bodyColor = w.flashTimer > 0 ? "#fff" : pal.body;
-    darkColor = pal.dark; bellyColor = pal.belly;
+    base = pal.body; dark = pal.dark;
   } else {
     const tc = TYPE_COLOR[w.type] || TYPE_COLOR.splitter;
-    bodyColor = tc.body; darkColor = tc.dark; bellyColor = tc.belly;
-    if (w.type === "trooper" && w.flashTimer > 0) bodyColor = "#fff";
+    base = tc.body; dark = tc.dark;
   }
+  const flash = w.flashTimer > 0 && (w.team === "enemy" || w.type === "trooper");
 
-  ctx.fillStyle = bodyColor;
-  ctx.strokeStyle = "#1a1208";
-  ctx.lineWidth = 3;
-  // Tail tip (curled)
-  ctx.beginPath();
-  ctx.ellipse(x - 20 * S * F, y + 8 * 1 + wiggle, 5 * S, 6 * S, 0.5 * F, 0, Math.PI * 2);
-  ctx.fill(); ctx.stroke();
-  // Back segment
-  ctx.beginPath();
-  ctx.ellipse(x - 12 * S * F, y + 5 + wiggle, 8 * S, 10 * S, 0, 0, Math.PI * 2);
-  ctx.fill(); ctx.stroke();
-  // Mid segment
-  ctx.beginPath();
-  ctx.ellipse(x - 4 * S * F, y + wiggle, 10 * S, 12 * S, 0, 0, Math.PI * 2);
-  ctx.fill(); ctx.stroke();
-  // Head segment (big — AB energy)
-  ctx.beginPath();
-  ctx.ellipse(x + 7 * S * F, y - 2 + wiggle, 13 * S, 14 * S, 0, 0, Math.PI * 2);
-  ctx.fill(); ctx.stroke();
-  // Belly patch on the head (AB signature)
-  ctx.fillStyle = bellyColor;
-  ctx.beginPath();
-  ctx.ellipse(x + 7 * S * F, y + 6 * S + wiggle, 8 * S, 5.5 * S, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const hx = x + 7 * S * F, hy = y - 2 + wiggle;
-
-  // Glossy specular highlight — top-left of the head (mockup recipe). AW_MOCKUP_V3:
-  // upgraded from a flat 0.35-alpha ellipse to a radial-gradient falloff (full strength
-  // at centre fading to 0 at the rim — no hard edge). Lives in this shared function so
-  // it appears on the loaded worm, in-flight projectiles, HP-bar'd worms, death-fade
-  // corpses AND every ammo-tray/carousel icon automatically (icons bake it in).
   ctx.save();
-  ctx.translate(hx - 6 * S * F, hy - 8 * S);
-  ctx.rotate(-0.5 * F);
-  ctx.scale(1, 0.62);
-  const spec = ctx.createRadialGradient(0, 0, 0, 0, 0, 5.5 * S);
-  spec.addColorStop(0, "rgba(255,255,255,0.5)");
-  spec.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = spec;
-  ctx.beginPath(); ctx.arc(0, 0, 5.5 * S, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-
-  // Eyes — big whites
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(hx + 4.5 * S * F, hy - 4 * S, 5.5 * S, 0, Math.PI * 2);
-  ctx.arc(hx - 3 * S * F, hy - 4 * S, 5 * S, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 2; ctx.stroke();
-  // Pupils
-  ctx.fillStyle = "#1a1208";
-  ctx.beginPath();
-  ctx.arc(hx + 5.5 * S * F, hy - 4 * S, 2.4 * S, 0, Math.PI * 2);
-  ctx.arc(hx - 2 * S * F, hy - 4 * S, 2.2 * S, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (w.team === "player") {
-    // ANGRY unibrow — the Angry Birds signature
-    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 4.5; ctx.lineCap = "round";
+  ctx.translate(x, y);
+  ctx.scale(F, 1);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const body = () => {
     ctx.beginPath();
-    ctx.moveTo(hx - 8 * S * F, hy - 12 * S);
-    ctx.lineTo(hx + 1 * S * F, hy - 8 * S);
-    ctx.moveTo(hx + 10 * S * F, hy - 12 * S);
-    ctx.lineTo(hx + 2 * S * F, hy - 8 * S);
-    ctx.stroke();
-    ctx.lineCap = "butt";
-    // Determined frown-grin
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(hx + 1 * S * F, hy + 6 * S, 4 * S, 0.15 * Math.PI, 0.85 * Math.PI);
-    ctx.stroke();
-  } else {
-    // Worried brows + wobbly mouth
-    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(hx - 7 * S * F, hy - 9 * S);
-    ctx.lineTo(hx - 1 * S * F, hy - 11 * S);
-    ctx.moveTo(hx + 8 * S * F, hy - 9 * S);
-    ctx.lineTo(hx + 3 * S * F, hy - 11 * S);
-    ctx.stroke();
-    ctx.lineCap = "butt";
-    ctx.beginPath();
-    ctx.moveTo(hx - 3 * S * F, hy + 7 * S);
-    ctx.quadraticCurveTo(hx + 1 * S * F, hy + 4 * S, hx + 5 * S * F, hy + 7 * S);
-    ctx.stroke();
-    // Sweat drop
-    ctx.fillStyle = "#7cc4f0";
-    ctx.beginPath();
-    ctx.ellipse(hx - 10 * S * F, hy - 10 * S + (w.wiggle % 6), 2.2, 3.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Army helmet
-    ctx.fillStyle = "#5d6b46";
-    ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(hx, hy - 8 * S, 12 * S, Math.PI, 0);
-    ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = "#3d4930"; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(hx - 12 * S, hy - 8 * S); ctx.lineTo(hx + 12 * S, hy - 8 * S);
-    ctx.stroke();
-    ctx.fillStyle = "#77875a";
-    ctx.beginPath(); ctx.arc(hx - 4 * S, hy - 13 * S, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.moveTo(-31, 9);
+    ctx.bezierCurveTo(-32, -14, -12, -25, 6, -23);
+    ctx.bezierCurveTo(26, -21, 28, 12, 9, 21);
+    ctx.bezierCurveTo(-6, 26, -22, 20, -31, 9);
+    ctx.closePath();
+  };
+  if (flash) ctx.fillStyle = "#ffffff";
+  else {
+    const gr = ctx.createRadialGradient(-6, -10, 2, 0, 0, 32);
+    gr.addColorStop(0, shade(base, 0.55));
+    gr.addColorStop(0.4, base);
+    gr.addColorStop(0.82, shade(base, -0.25));
+    gr.addColorStop(1, dark);
+    ctx.fillStyle = gr;
   }
+  body(); ctx.fill();
 
-  // Bomber stripes / splitter dots
-  if (w.team === "player" && w.type === "bomber") {
-    ctx.fillStyle = "#1a1208";
-    for (let i = -1; i <= 1; i++) ctx.fillRect(x - (14 - i * 9) * F - 2, y - 5 + wiggle, 4, 11);
-  }
-  if (w.team === "player" && w.type === "splitter") {
-    ctx.fillStyle = "#fff";
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath(); ctx.arc(x - (14 - i * 8) * F, y + wiggle, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); body(); ctx.clip();
+  if (!flash) {
+    // darker freckles / spots along the back and belly
+    ctx.fillStyle = rgbaOf(dark, 0.42);
+    const SPOTS = [[-15, 5, 4.2], [-6, 13, 3.2], [3, 15, 2.4], [-21, -3, 2.6], [-10, -4, 1.8], [-24, 7, 1.8]];
+    for (const s of SPOTS) { ctx.beginPath(); ctx.arc(s[0], s[1], s[2], 0, Math.PI * 2); ctx.fill(); }
+    // rim darkening bottom-right (ambient occlusion)
+    const rim = ctx.createRadialGradient(4, 6, 13, 3, 5, 31);
+    rim.addColorStop(0, "rgba(0,0,0,0)"); rim.addColorStop(1, "rgba(0,0,0,0.38)");
+    ctx.fillStyle = rim; ctx.fillRect(-34, -28, 68, 56);
+    // type markers (player only) — drawn under the gloss so they read as part of the skin
+    if (w.team === "player" && w.type === "bomber") {
+      ctx.fillStyle = "rgba(20,12,6,0.6)";
+      for (let i = 0; i < 3; i++) ctx.fillRect(-26 + i * 8, -18, 3.5, 40);
+    } else if (w.team === "player" && w.type === "splitter") {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      for (const s of [[-23, 4, 2.6], [-15, 10, 2.4], [-6, 15, 2.2]]) { ctx.beginPath(); ctx.arc(s[0], s[1], s[2], 0, Math.PI * 2); ctx.fill(); }
+    } else if (w.team === "player" && w.type === "cluster") {
+      ctx.fillStyle = "rgba(20,12,6,0.5)";
+      for (const s of [[-22, 2, 2.2], [-14, 8, 2.2], [-6, 13, 2.2], [-18, -6, 1.8]]) { ctx.beginPath(); ctx.arc(s[0], s[1], s[2], 0, Math.PI * 2); ctx.fill(); }
     }
   }
+  // glossy specular — soft ellipse top-left plus a hard pinpoint
+  const hl = ctx.createRadialGradient(0, 0, 0, 0, 0, 12);
+  hl.addColorStop(0, "rgba(255,255,255,0.85)"); hl.addColorStop(0.45, "rgba(255,255,255,0.35)"); hl.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.save();
+  ctx.translate(-9, -13); ctx.rotate(-0.45); ctx.scale(1, 0.55);
+  ctx.fillStyle = hl; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.beginPath(); ctx.ellipse(-13, -16, 3.2, 1.8, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = "#1c1814"; ctx.lineWidth = 3; body(); ctx.stroke();
+
+  // eyes
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#1c1814"; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.ellipse(2, -6, 5.6, 6.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(13, -5, 6, 6.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#17120e";
+  ctx.beginPath(); ctx.arc(3.5, -5, 2.7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(14.5, -4, 2.9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(2.6, -6.2, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(13.6, -5.2, 0.9, 0, Math.PI * 2); ctx.fill();
+  // angry V brows
+  ctx.strokeStyle = "#17120e"; ctx.lineWidth = 3.6;
+  ctx.beginPath();
+  ctx.moveTo(-5, -17.5); ctx.lineTo(6.5, -12.5);
+  ctx.moveTo(21.5, -16.5); ctx.lineTo(10, -12.5);
+  ctx.stroke();
+  // open frown mouth with a tongue hint
+  ctx.fillStyle = "#2a1410"; ctx.strokeStyle = "#17120e"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(2, 7); ctx.quadraticCurveTo(9.5, 1.5, 17.5, 6);
+  ctx.quadraticCurveTo(10, 13.5, 2, 7);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = "#d9505a";
+  ctx.beginPath(); ctx.ellipse(10, 11, 4.5, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.restore();
 }
 
 function drawHPBar(w) {
@@ -2964,147 +3215,71 @@ function drawHPBar(w) {
 }
 
 function drawSlingshot() {
+  // AW_PAINT_V9 — the mockup's slingshot: a tall bark-textured Y planted straight into
+  // the hillside on a pile of grey boulders, green cord wraps at the tips, a red rubber
+  // band. The launch anchor (SLING_X / SLING_Y) is exactly where the old watchtower put
+  // it, so the aiming maths and the "clear of the hill" guarantee (Osimo 2026-07-02) are
+  // untouched — only the wood underneath changed. The worm nests INSIDE the fork: the far
+  // arm is drawn here, the near arm over the worm (drawSlingFront).
   const sx = SLING_X;
-  // Watchtower turret — lifts the launch clear of the hillside (Osimo 2026-07-02:
-  // low pulls used to bury the worm in the hill and it exploded at your feet)
   const gy = terrainHeightAt(sx);
-  const platY = SLING_Y + 70;          // deck the slingshot stands on
-  // Base drop shadow (AW_MOCKUP_V3) — baked soft radial-gradient sprite under the
-  // tower footing on the hillside (crater soft-edge technique, blit only)
-  if (SPRITES.shadow) ctx.drawImage(SPRITES.shadow, sx - 46, gy - 1, 92, 14);
-  ctx.strokeStyle = "#4a2808";
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  // crossed legs down to the hill
-  ctx.moveTo(sx - 34, gy + 4); ctx.lineTo(sx - 16, platY);
-  ctx.moveTo(sx + 34, gy + 4); ctx.lineTo(sx + 16, platY);
-  ctx.moveTo(sx - 26, gy - (gy - platY) * 0.35); ctx.lineTo(sx + 26, gy - (gy - platY) * 0.7);
-  ctx.moveTo(sx + 26, gy - (gy - platY) * 0.35); ctx.lineTo(sx - 26, gy - (gy - platY) * 0.7);
-  ctx.stroke();
-  // deck
-  ctx.fillStyle = "#7a5230"; ctx.lineWidth = 3;
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(sx - 44, platY - 6, 88, 14, 4); else ctx.rect(sx - 44, platY - 6, 88, 14);
-  ctx.fill(); ctx.stroke();
-  ctx.strokeStyle = "rgba(74,40,8,0.5)"; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  for (let px = sx - 34; px < sx + 40; px += 12) { ctx.moveTo(px, platY - 5); ctx.lineTo(px, platY + 7); }
-  ctx.stroke();
-
-  // Slingshot Y on the deck
-  const sy = platY - 24;               // trunk top reference
-  ctx.fillStyle = "#7a5230";
-  ctx.strokeStyle = "#4a2808";
-  ctx.lineWidth = 3;
-  // Trunk (+ thin front-face highlight stripe — mockup polish)
-  ctx.fillRect(sx - 8, sy - 20, 16, 40);
-  ctx.strokeRect(sx - 8, sy - 20, 16, 40);
-  ctx.fillStyle = "#9a7040";
-  ctx.fillRect(sx - 6, sy - 19, 4, 38);
-  // trunk wood-grain streaks (AW_MOCKUP_V3) — dark lines along the long axis
-  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(sx + 1, sy - 17); ctx.lineTo(sx + 1, sy + 17);
-  ctx.moveTo(sx + 5, sy - 13); ctx.lineTo(sx + 5, sy + 18);
-  ctx.stroke();
-  ctx.strokeStyle = "#4a2808";       // restore outline colour for the fork strokeRects
-  ctx.fillStyle = "#7a5230";
-  // Left fork
-  ctx.save();
-  ctx.translate(sx, sy - 20);
-  ctx.rotate(-0.4);
-  ctx.fillRect(-7, -63, 14, 68);
-  ctx.strokeRect(-7, -63, 14, 68);
-  ctx.fillStyle = "#9a7040";
-  ctx.fillRect(-5, -62, 4, 66);
-  // fork wood-grain streaks (AW_MOCKUP_V3) — follow the post's long axis
-  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(1, -59); ctx.lineTo(1, 3);
-  ctx.moveTo(4, -52); ctx.lineTo(4, 4);
-  ctx.moveTo(-2, -46); ctx.lineTo(-2, 2);
-  ctx.stroke();
-  ctx.restore();
-  // Right fork
-  ctx.save();
-  ctx.translate(sx, sy - 20);
-  ctx.rotate(0.4);
-  ctx.fillStyle = "#7a5230";
-  ctx.fillRect(-7, -63, 14, 68);
-  ctx.strokeRect(-7, -63, 14, 68);
-  ctx.fillStyle = "#9a7040";
-  ctx.fillRect(-5, -62, 4, 66);
-  ctx.strokeStyle = "#5A3A1A"; ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(1, -59); ctx.lineTo(1, 3);
-  ctx.moveTo(4, -52); ctx.lineTo(4, 4);
-  ctx.moveTo(-2, -46); ctx.lineTo(-2, 2);
-  ctx.stroke();
-  ctx.restore();
+  const sy = SLING_Y + 70;             // fork crotch reference (sprite origin)
+  if (SPRITES.shadow) ctx.drawImage(SPRITES.shadow, sx - 60, gy - 3, 120, 18);
+  // trunk — painted per frame because its height follows the hillside; the arm sprites
+  // overlap its top so the joint reads as one piece of wood
+  drawBranch(ctx, sx, gy + 6, sx, sy - 26, 24, 17, 11);
+  if (SLING.back) ctx.drawImage(SLING.back, sx - SLING.ox, sy - SLING.oy, SLING.w, SLING.h);
+  if (SLING.rocks) ctx.drawImage(SLING.rocks, sx - 80, gy - 36, 160, 48);
 
   // Fork tips (band anchors — SLING_Y is the launch anchor between them)
-  const leftTip = { x: sx - 24, y: sy - 82 };
-  const rightTip = { x: sx + 24, y: sy - 82 };
+  const leftTip = { x: sx + SLING_L.x2, y: sy + SLING_L.y2 };
+  const rightTip = { x: sx + SLING_R.x2, y: sy + SLING_R.y2 };
 
-  // Twine lash-wraps (AW_MOCKUP_V3) — short diagonal hatch strokes at the two points
-  // where the elastic anchors to the fork tips. Axis vectors are the ±0.4-rad fork
-  // rotations applied to (0,−1): left = (−0.389,−0.921), right = (0.389,−0.921).
-  ctx.strokeStyle = "#3A2A1A"; ctx.lineWidth = 2; ctx.lineCap = "round";
-  ctx.beginPath();
-  for (const wd of [{ t: leftTip, dx: -0.389, dy: -0.921 },
-                    { t: rightTip, dx: 0.389, dy: -0.921 }]) {
-    const px2 = -wd.dy, py2 = wd.dx;                 // perpendicular across the post
-    for (let k = 0; k < 4; k++) {
-      const d = 3 + k * 4.5;                          // step down the post from the tip
-      const cxx = wd.t.x - wd.dx * d, cyy = wd.t.y - wd.dy * d;
-      ctx.moveTo(cxx - px2 * 7 + wd.dx * 2, cyy - py2 * 7 + wd.dy * 2);
-      ctx.lineTo(cxx + px2 * 7 - wd.dx * 2, cyy + py2 * 7 - wd.dy * 2);
-    }
-  }
-  ctx.stroke();
-  ctx.lineCap = "butt";
-
-  // Tapered rubber strand (AW_MOCKUP_V3): filled quad + round end caps — thicker at the
-  // fork anchor, thinner toward the pouch — plus a thin white gloss stripe offset toward
-  // the top edge for the rubber sheen. (The FRONT strand lives in drawLoadedWorm, which
-  // is off-limits this pass — it keeps its original flat stroke and is deliberately the
-  // darker #a02818 layer, so the mismatch is invisible.)
-  function strand(x1, y1, x2, y2, hw1, hw2, color) {
-    const dx = x2 - x1, dy = y2 - y1;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const nx = -dy / len, ny = dx / len;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(x1 + nx * hw1, y1 + ny * hw1);
-    ctx.lineTo(x2 + nx * hw2, y2 + ny * hw2);
-    ctx.lineTo(x2 - nx * hw2, y2 - ny * hw2);
-    ctx.lineTo(x1 - nx * hw1, y1 - ny * hw1);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.arc(x1, y1, hw1, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x2, y2, hw2, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
-    ctx.lineWidth = Math.max(1, hw2 * 0.7);
-    ctx.beginPath();
-    ctx.moveTo(x1 + nx * hw1 * 0.45, y1 + ny * hw1 * 0.45);
-    ctx.lineTo(x2 + nx * hw2 * 0.45, y2 + ny * hw2 * 0.45);
-    ctx.stroke();
-  }
-
-  // Elastic band (same endpoints/anchors as always — only the strand rendering changed)
+  // Elastic band — the far (left) strand is drawn here, behind the worm; the near
+  // (right) strand is drawn over the worm in drawLoadedWorm. Same anchors as always.
   if (loadedWorm && aiming && dragCurrent) {
-    // Stretched - back band (was flat lineWidth-7 strokes → tapered glossy strands)
-    strand(leftTip.x, leftTip.y, loadedWorm.x, loadedWorm.y, 4, 2.4, "#c0392b");
-    strand(rightTip.x, rightTip.y, loadedWorm.x, loadedWorm.y, 4, 2.4, "#c0392b");
-    // Front band (drawn after worm)
+    drawStrand(leftTip.x, leftTip.y, loadedWorm.x, loadedWorm.y, 4.6, 2.8);
   } else if (loadedWorm) {
-    // Relaxed band — two strands converging on the launch anchor (SLING_X/SLING_Y, NOT
-    // loadedWorm.x/y: drawSlingshot runs before drawLoadedWorm resets those this frame)
-    strand(leftTip.x, leftTip.y, SLING_X, SLING_Y, 3.5, 2.2, "#c0392b");
-    strand(rightTip.x, rightTip.y, SLING_X, SLING_Y, 3.5, 2.2, "#c0392b");
+    // Relaxed: converge on the launch anchor (SLING_X/SLING_Y, NOT loadedWorm.x/y —
+    // drawSlingshot runs before drawLoadedWorm resets those this frame)
+    drawStrand(leftTip.x, leftTip.y, SLING_X, SLING_Y, 4.2, 2.6);
   }
 
   // Store tips for later
-  slingTips = { left: leftTip, right: rightTip, base: { x: sx, y: sy - 82 } };
+  slingTips = { left: leftTip, right: rightTip, base: { x: sx, y: sy - 104 } };
+  if (!loadedWorm) drawSlingFront();   // nothing in the pouch — near arm goes straight on
+}
+
+function drawSlingFront() {
+  if (SLING.front) ctx.drawImage(SLING.front, SLING_X - SLING.ox, SLING_Y + 70 - SLING.oy, SLING.w, SLING.h);
+}
+
+// Tapered rubber strand: dark outline pass, red body (filled quad + round caps — thicker
+// at the fork anchor, thinner toward the pouch), thin gloss stripe along the top edge.
+function drawStrand(x1, y1, x2, y2, hw1, hw2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const body = (a, b) => {
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * a, y1 + ny * a);
+    ctx.lineTo(x2 + nx * b, y2 + ny * b);
+    ctx.lineTo(x2 - nx * b, y2 - ny * b);
+    ctx.lineTo(x1 - nx * a, y1 - ny * a);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x1, y1, a, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x2, y2, b, 0, Math.PI * 2); ctx.fill();
+  };
+  ctx.fillStyle = "#4a1a10"; body(hw1 + 1.3, hw2 + 1.3);
+  ctx.fillStyle = "#c0452c"; body(hw1, hw2);
+  ctx.strokeStyle = "rgba(255,200,180,0.45)";
+  ctx.lineWidth = Math.max(1, hw2 * 0.6);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1 + nx * hw1 * 0.45, y1 + ny * hw1 * 0.45);
+  ctx.lineTo(x2 + nx * hw2 * 0.45, y2 + ny * hw2 * 0.45);
+  ctx.stroke();
+  ctx.lineCap = "butt";
 }
 
 let slingTips = null;
@@ -3139,28 +3314,13 @@ function drawLoadedWorm() {
   const tempWorm = { x: wx, y: wy, radius: 16, team: "player", type: loadedWorm.type, facing: 1, wiggle: 0, alive: true, hp: 100, maxHp: 100 };
   drawWormBody(tempWorm);
 
-  // Front elastic band (over worm)
-  if (aiming && dragCurrent && slingTips) {
-    ctx.strokeStyle = "#a02818";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(slingTips.right.x, slingTips.right.y);
-    ctx.lineTo(wx, wy);
-    ctx.stroke();
-  } else if (slingTips) {
-    // Idle cradle pass — drawn AFTER drawWormBody so both strands sit on top of the
-    // opaque sprite instead of vanishing behind it
-    ctx.strokeStyle = "#a02818";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(slingTips.left.x, slingTips.left.y);
-    ctx.lineTo(wx, wy);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(slingTips.right.x, slingTips.right.y);
-    ctx.lineTo(wx, wy);
-    ctx.stroke();
+  // Near (right) strand — drawn AFTER drawWormBody so it wraps over the worm; the far
+  // strand is already under it (drawSlingshot). Then the near fork arm over everything.
+  if (slingTips) {
+    const s = aiming && dragCurrent;
+    drawStrand(slingTips.right.x, slingTips.right.y, wx, wy, s ? 4.6 : 4.2, s ? 2.8 : 2.6);
   }
+  drawSlingFront();
 }
 
 function drawAim() {
@@ -3297,27 +3457,34 @@ function drawParticles() {
 }
 
 function drawGravestones() {
+  // AW_PAINT_V9 — rounded grey headstone with a top-left light, mossy base and a carved
+  // cross; same anchor (g.x, g.y = ground) and footprint as before.
   for (const g of gravestones) {
-    ctx.fillStyle = "#666";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(g.x - 12, g.y);
-    ctx.lineTo(g.x - 12, g.y - 25);
-    ctx.arc(g.x, g.y - 25, 12, Math.PI, 0);
-    ctx.lineTo(g.x + 12, g.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    // Cross
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(g.x, g.y - 18);
-    ctx.lineTo(g.x, g.y - 8);
-    ctx.moveTo(g.x - 5, g.y - 14);
-    ctx.lineTo(g.x + 5, g.y - 14);
-    ctx.stroke();
+    const stone = () => {
+      ctx.beginPath();
+      ctx.moveTo(g.x - 12, g.y);
+      ctx.lineTo(g.x - 12, g.y - 25);
+      ctx.arc(g.x, g.y - 25, 12, Math.PI, 0);
+      ctx.lineTo(g.x + 12, g.y);
+      ctx.closePath();
+    };
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath(); ctx.ellipse(g.x + 2, g.y + 1, 15, 4, 0, 0, Math.PI * 2); ctx.fill();
+    const gr = ctx.createLinearGradient(g.x - 12, g.y - 37, g.x + 12, g.y);
+    gr.addColorStop(0, "#c9ccd2"); gr.addColorStop(0.5, "#9a9ea6"); gr.addColorStop(1, "#5f636b");
+    ctx.fillStyle = gr; stone(); ctx.fill();
+    ctx.strokeStyle = "#23201d"; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; stone(); ctx.stroke();
+    // moss at the foot
+    ctx.fillStyle = "rgba(90,150,50,0.75)";
+    ctx.beginPath(); ctx.ellipse(g.x - 6, g.y - 2, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(g.x + 7, g.y - 1.5, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    // carved cross: dark groove with a light lower-right edge
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(g.x + 1, g.y - 17); ctx.lineTo(g.x + 1, g.y - 7); ctx.moveTo(g.x - 4, g.y - 13); ctx.lineTo(g.x + 6, g.y - 13); ctx.stroke();
+    ctx.strokeStyle = "#2d2a27"; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(g.x, g.y - 18); ctx.lineTo(g.x, g.y - 8); ctx.moveTo(g.x - 5, g.y - 14); ctx.lineTo(g.x + 5, g.y - 14); ctx.stroke();
+    ctx.lineCap = "butt";
   }
 }
 
@@ -3457,7 +3624,7 @@ function hudLayout() {
   // fill whatever's left before the wind pill.
   const pillW = Math.min(380, Math.max(240, windX - 18 - pillX));
   const vis = Math.min(4, inventory.length);
-  const slotR = 39, slotGap = 90, slotY = H - 62, slotX0 = 70;
+  const slotR = 39, slotGap = 90, slotY = H - 68, slotX0 = 70;   // AW_PAINT_V9: raised 6px for the "x N" label under each ring
   return { btnR: btnR, btnY: btnY, gearX: gearX, sndX: sndX, pauseX: pauseX,
            windX: windX, windY: windY, windW: windW, windH: windH,
            pillX: pillX, pillY: pillY, pillH: pillH, pillW: pillW,
@@ -3477,9 +3644,12 @@ function drawHUD() {
   } else {
     // gold star + score (thousands separator)
     drawStarIcon(L.pillX + 26, 25, 10, "#ffd23d");
-    ctx.font = "17px Bungee, sans-serif"; ctx.textAlign = "left";
-    ctx.fillStyle = "#ffd23d";
+    // AW_PAINT_V9: bigger gold digits with a dark rim (mockup's chunky "3,250")
+    ctx.font = "21px Bungee, sans-serif"; ctx.textAlign = "left";
     const scoreTxt = fmtScore(score);
+    ctx.lineJoin = "round"; ctx.strokeStyle = "#3a2600"; ctx.lineWidth = 4;
+    ctx.strokeText(scoreTxt, L.pillX + 44, 22);
+    ctx.fillStyle = "#ffd23d";
     ctx.fillText(scoreTxt, L.pillX + 44, 22);
     const scoreW = ctx.measureText(scoreTxt).width;
     // level / enemies readout (carried over from the old flat bar)
@@ -3586,29 +3756,31 @@ function drawHUD() {
       const sel = idx === selectedType;
       ctx.save();
       ctx.globalAlpha = 1;   // backing plate is ALWAYS solid — armed/unarmed is a ring/glow distinction only, never a hole in the HUD panel
-      // slot backing matches the glass-pill gradient (AW_MOCKUP_V3) — 4 tiny
-      // createLinearGradient calls per frame, trivial
-      const sg2 = ctx.createLinearGradient(0, cy - L.slotR, 0, cy + L.slotR);
-      sg2.addColorStop(0, "rgba(34,54,85,0.92)");
-      sg2.addColorStop(1, "rgba(16,27,48,0.92)");
+      // AW_PAINT_V9 mockup roundel: dark navy radial plate (lighter centre), coloured
+      // ring in the worm's own colour, the real portrait sprite filling the plate, and an
+      // "x N" count label BELOW the ring (replaces the old white corner badge)
+      const sg2 = ctx.createRadialGradient(cx, cy - L.slotR * 0.3, 2, cx, cy, L.slotR);
+      sg2.addColorStop(0, "rgba(44,63,94,0.95)");
+      sg2.addColorStop(1, "rgba(15,26,44,0.95)");
       ctx.fillStyle = sg2;
       ctx.beginPath(); ctx.arc(cx, cy, L.slotR, 0, Math.PI * 2); ctx.fill();
       if (sel) { ctx.shadowColor = tc.body; ctx.shadowBlur = 14; }   // glow ONLY when armed
       ctx.strokeStyle = tc.body;
       ctx.globalAlpha = sel ? 1 : 0.85;
-      ctx.lineWidth = sel ? 5 : 3.5;
+      ctx.lineWidth = sel ? 5 : 3;
       ctx.beginPath(); ctx.arc(cx, cy, L.slotR - 2, 0, Math.PI * 2); ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.globalAlpha = sel ? 1 : 0.82;
       const ic = SPRITES.icons[it.type];
-      if (ic) ctx.drawImage(ic, cx - 33, cy - 33, 66, 66);
-      // white count badge bottom-right
+      // portrait canvas is 156px with the worm centred at (82,80) — map it to a 78px box
+      if (ic) ctx.drawImage(ic, cx - 41, cy - 40, 78, 78);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(cx + L.slotR * 0.62, cy + L.slotR * 0.62, 13, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = HUD_NAVY;
-      ctx.font = "12px Bungee, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(String(it.count), cx + L.slotR * 0.62, cy + L.slotR * 0.62 + 1);
+      const cnt = "x " + it.count;
+      ctx.font = "13px Bungee, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineJoin = "round"; ctx.strokeStyle = "#10182a"; ctx.lineWidth = 4;
+      ctx.strokeText(cnt, cx, cy + L.slotR + 12);
+      ctx.fillStyle = sel ? "#fff" : "#cfd8e6";
+      ctx.fillText(cnt, cx, cy + L.slotR + 12);
       ctx.restore();
     }
     // scroll arrows \u2014 only when the roster overflows the window (L5+, 6 types)
@@ -3636,26 +3808,33 @@ function drawHUD() {
   // ---- FIRST-AIM TUTORIAL PILL (bottom-right; retires itself after the first shot) ----
   if (!aimTaught && gameState === "playing" &&
       (aiming || (level === 1 && playStartT > 0 && performance.now() - playStartT < 5000))) {
-    const hw = 214, hh = 64, hx2 = W - hw - 14, hy2 = H - hh - 14;
-    ctx.fillStyle = "rgba(22,40,60,0.85)";
-    pillPath(hx2, hy2, hw, hh, 10); ctx.fill();
-    ctx.strokeStyle = "#2a4a68"; ctx.lineWidth = 1.5;
-    pillPath(hx2, hy2, hw, hh, 10); ctx.stroke();
-    // mini dotted arc ending in the light-blue endpoint circle
+    // AW_PAINT_V9: mockup's bottom-right hint card — navy glass panel, dotted white
+    // arc, gold curling arrow, two-line white caption
+    const hw = 236, hh = 74, hx2 = W - hw - 14, hy2 = H - hh - 14;
+    drawNavyPill(hx2, hy2, hw, hh, 12);
     ctx.fillStyle = "rgba(255,255,255,0.9)";
-    for (let k = 0; k < 6; k++) {
-      const t2 = k / 5;
-      const ax = hx2 + 14 + t2 * 56;
-      const ay = hy2 + hh - 14 - Math.sin(t2 * Math.PI * 0.85) * 30;
-      ctx.beginPath(); ctx.arc(ax, ay, 2.4 - t2 * 0.8, 0, Math.PI * 2); ctx.fill();
+    for (let k = 0; k < 7; k++) {
+      const t2 = k / 6;
+      const ax = hx2 + 16 + t2 * 60;
+      const ay = hy2 + hh - 16 - Math.sin(t2 * Math.PI * 0.85) * 36;
+      ctx.beginPath(); ctx.arc(ax, ay, 2.6 - t2 * 0.9, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.fillStyle = "#8fd4ee";
-    ctx.beginPath(); ctx.arc(hx2 + 74, hy2 + 22, 5, 0, Math.PI * 2); ctx.fill();
+    // gold curl arrow: a thick arc sweeping up and over, ending in a filled head
+    ctx.strokeStyle = "#3a2600"; ctx.lineWidth = 7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(hx2 + 52, hy2 + 36, 22, Math.PI * 0.95, Math.PI * 1.75); ctx.stroke();
+    ctx.strokeStyle = "#ffcf3a"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(hx2 + 52, hy2 + 36, 22, Math.PI * 0.95, Math.PI * 1.75); ctx.stroke();
+    ctx.lineCap = "butt";
+    const hxA = hx2 + 52 + Math.cos(Math.PI * 1.75) * 22, hyA = hy2 + 36 + Math.sin(Math.PI * 1.75) * 22;
+    ctx.fillStyle = "#ffcf3a"; ctx.strokeStyle = "#3a2600"; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(hxA + 9, hyA + 1); ctx.lineTo(hxA - 5, hyA - 8); ctx.lineTo(hxA - 3, hyA + 9); ctx.closePath();
+    ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#fff";
-    ctx.font = "10px Bungee, sans-serif";
+    ctx.font = "11px Bungee, sans-serif";
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillText("ADJUST ANGLE", hx2 + 92, hy2 + 24);
-    ctx.fillText("AND POWER!", hx2 + 92, hy2 + 42);
+    ctx.fillText("ADJUST ANGLE", hx2 + 96, hy2 + 28);
+    ctx.fillText("AND POWER!", hx2 + 96, hy2 + 48);
   }
 
   // ---- SETTINGS POPOVER ----
