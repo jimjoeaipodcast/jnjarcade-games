@@ -759,6 +759,7 @@ function setupInput() {
     const dy = wpt.y - (SLING_Y);
     if (turn === "player" && loadedWorm && Math.sqrt(dx * dx + dy * dy) < 150) {
       aiming = true;
+      aimStartT = performance.now(); dawdleSpoke = false;
       panMode = false;
       dragStart = { x: SLING_X, y: SLING_Y };
       dragCurrent = { x: wpt.x, y: wpt.y };
@@ -841,6 +842,7 @@ function setupInput() {
             trail: []
           });
         }
+        if (p.team === "player") say("splitter");
       }
     }
   }
@@ -1100,6 +1102,119 @@ VO_EX.best = VO_EX.best.concat([
   [["JIMMY", "New high score!"], ["JOE", "I'll allow the exclamation mark. Once."]],
 ]);
 
+// MORE LINES, ROUND 2 (Osimo 2026-09-01: "add more funny Jimmy Joe dialogue") — same
+// additive concat() pattern. personality-consistency-guard scored: 132 lines, 0 HARD DRIFT,
+// 4 GOLD. Five NEW event buckets (start / dawdle / bounce / trooper / splitter) get their
+// own say() call sites below — each one is a moment the game already detects (level build,
+// aim held >6s, bouncer ricochet, trooper landing, splitter tap) that previously passed in
+// silence. gameOver ALSO becomes live here: it had zero callers since ship (the lose path
+// only ever called outOfAmmo), so its 3 exchanges never played once.
+VO_EX.kill = VO_EX.kill.concat([
+  [["JIMMY", "In one side, out the other."], ["JOE", "There wasn't an other side. He exploded."]],
+  [["JOE", "Direct hit."], ["JIMMY", "Say it like you mean it."]],
+  [["JIMMY", "Textbook."], ["JOE", "Which textbook?"]],
+  [["JIMMY", "He never saw it coming."], ["JOE", "He was facing it. He saw it coming."]],
+  [["JOE", "That's one."], ["JIMMY", "One of many, Joe. Many."]],
+  [["JIMMY", "Off the crate, off the wall, into the worm."], ["JOE", "Off the crate was the plan. The rest was physics."]],
+]);
+VO_EX.miss = VO_EX.miss.concat([
+  [["JIMMY", "Warm-up shot."], ["JOE", "You've been warming up for a while."]],
+  [["JOE", "That hit nothing."], ["JIMMY", "It hit the ground. The ground counts."]],
+  [["JIMMY", "Slippery. The screen was slippery."], ["JOE", "Noted. The screen."]],
+  [["JOE", "Right."], ["JIMMY", "Don't 'right' me."]],
+  [["JIMMY", "The worm flinched."], ["JOE", "Worms don't flinch. You flinched."]],
+  [["JIMMY", "I blame the slingshot."], ["JOE", "The slingshot has been consistent all day."]],
+]);
+VO_EX.multi = VO_EX.multi.concat([
+  [["JIMMY", "That's a combo. I'm calling it a combo."], ["JOE", "Call it whatever helps."]],
+  [["JOE", "Two. In one."], ["JIMMY", "I'd like that framed."]],
+  [["JIMMY", "Did you see their little faces?"], ["JOE", "Briefly."]],
+]);
+VO_EX.water = VO_EX.water.concat([
+  [["JOE", "Splash."], ["JIMMY", "Splash is a sound. Not a verdict."]],
+  [["JIMMY", "He's in the sea."], ["JOE", "The sea was not the target."]],
+  [["JOE", "The sea has him now."], ["JIMMY", "The sea can keep him. I've got more."]],
+  [["JIMMY", "I'm feeding the fish."], ["JOE", "You're feeding the fish worms. Which is fair."]],
+]);
+VO_EX.survived = VO_EX.survived.concat([
+  [["JIMMY", "He's hurt. I can see it."], ["JOE", "He's fine. He's sweating, slightly."]],
+  [["JOE", "Winged him."], ["JIMMY", "Winged him. Next one takes the rest."]],
+  [["JIMMY", "That should have finished him."], ["JOE", "Should is doing a lot of work there."]],
+  [["JOE", "Still there."], ["JIMMY", "Still there, but rattled. Look at him."]],
+]);
+VO_EX.chain = VO_EX.chain.concat([
+  [["JOE", "That was several barrels."], ["JIMMY", "Several barrels and one very good idea."]],
+  [["JIMMY", "Boom, boom, boom."], ["JOE", "Please don't narrate the explosions."]],
+  [["JIMMY", "Who stacks TNT next to TNT?"], ["JOE", "Someone who wanted you to enjoy yourself."]],
+]);
+VO_EX.glass = VO_EX.glass.concat([
+  [["JIMMY", "Listen to that. Music."], ["JOE", "That's broken glass, Jimmy."]],
+  [["JOE", "Glass. Very brave of them."], ["JIMMY", "Very brave of me, you mean."]],
+  [["JIMMY", "Went through it like it wasn't there."], ["JOE", "Structurally, it barely was."]],
+]);
+VO_EX.cluster = VO_EX.cluster.concat([
+  [["JOE", "Little bombs. Everywhere."], ["JIMMY", "Little bombs are my favourite bombs."]],
+  [["JIMMY", "Carpet bombing. Tiny carpet."], ["JOE", "That's a rug, then."]],
+  [["JOE", "Where did all those go?"], ["JIMMY", "Everywhere. That's the feature."]],
+]);
+VO_EX.collapse = VO_EX.collapse.concat([
+  [["JIMMY", "Jenga!"], ["JOE", "Wrong game. Right outcome."]],
+  [["JOE", "The floor went. Then the rest."], ["JIMMY", "Bottom up. That's how I do things."]],
+  [["JIMMY", "Look at it fall. Look at it."], ["JOE", "I'm looking. It's still falling."]],
+]);
+VO_EX.clear = VO_EX.clear.concat([
+  [["JOE", "Done. Next."], ["JIMMY", "You're rushing me now? Since when?"]],
+  [["JIMMY", "Flawless."], ["JOE", "I have notes."]],
+  [["JOE", "Level cleared. I'm noting the time."], ["JIMMY", "Note the style too."]],
+  [["JIMMY", "Told you."], ["JOE", "You told me several things. One of them happened."]],
+]);
+VO_EX.last = VO_EX.last.concat([
+  [["JOE", "Last worm. Choose wisely."], ["JIMMY", "I've chosen. It's this one."]],
+  [["JIMMY", "One left. I've got a feeling about this."], ["JOE", "You had a feeling about the last one."]],
+]);
+VO_EX.outOfAmmo = VO_EX.outOfAmmo.concat([
+  [["JOE", "Nothing left to throw."], ["JIMMY", "I'd throw you if you'd fit in the slingshot."]],
+  [["JIMMY", "Empty. Completely empty."], ["JOE", "Like the plan."]],
+  [["JOE", "That's every worm."], ["JIMMY", "They gave their all."]],
+]);
+VO_EX.gameOver = VO_EX.gameOver.concat([
+  [["JIMMY", "Rematch."], ["JOE", "It's the same game. Every time is a rematch."]],
+  [["JOE", "Over."], ["JIMMY", "Over for now."]],
+  [["JIMMY", "I want it noted the wind was against me."], ["JOE", "Noted. So is the score."]],
+  [["JOE", "That's the end."], ["JIMMY", "That's a pause. Ends are for quitters."]],
+]);
+VO_EX.best = VO_EX.best.concat([
+  [["JOE", "New record. Written down."], ["JIMMY", "In pen?"]],
+  [["JIMMY", "Best ever. Say it."], ["JOE", "Best so far. I'll say that."]],
+]);
+// NEW buckets — each has exactly one say() call site (grep `say("start")` etc.)
+VO_EX.start = [
+  [["JOE", "New level. Same slingshot."], ["JIMMY", "Same slingshot, better me."]],
+  [["JIMMY", "Look at that fortress."], ["JOE", "It's crates. It's always crates."]],
+  [["JOE", "They've rebuilt."], ["JIMMY", "They always rebuild. It's inspiring, honestly."]],
+  [["JIMMY", "Right. Fresh level. Clean slate."], ["JOE", "The score carries over. Nothing is clean."]],
+];
+VO_EX.dawdle = [
+  [["JOE", "Any time."], ["JIMMY", "I'm lining it up."]],
+  [["JIMMY", "Hold on. Doing maths."], ["JOE", "You're doing a drag gesture."]],
+  [["JOE", "The worm is getting bored."], ["JIMMY", "The worm is being patient. Like a professional."]],
+  [["JIMMY", "Shh. Concentrating."], ["JOE", "You're pulling a rubber band."]],
+];
+VO_EX.bounce = [
+  [["JOE", "He's bounced."], ["JIMMY", "He's meant to bounce. That's the whole worm."]],
+  [["JIMMY", "And again!"], ["JOE", "Once more and he's a ball."]],
+  [["JIMMY", "Watch him go. Skimming."], ["JOE", "That's a stone technique. He's a worm."]],
+];
+VO_EX.trooper = [
+  [["JIMMY", "He's dug in. Look at him."], ["JOE", "He's landed. Digging in implies a shovel."]],
+  [["JOE", "He's stopped."], ["JIMMY", "He's deployed, Joe. There's a difference."]],
+  [["JIMMY", "Three shots from there. Three."], ["JOE", "From the floor. Ambitious."]],
+];
+VO_EX.splitter = [
+  [["JIMMY", "Split! Three worms now."], ["JOE", "Three problems now."]],
+  [["JOE", "It's multiplied."], ["JIMMY", "Isn't it lovely?"]],
+];
+
 const JIMMY_GAIN = 1.15, JOE_GAIN = 1.0;
 function djb2vo(s) {
   let h = 5381;
@@ -1110,7 +1225,7 @@ const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: 
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch("angry-worms-pack.json?v=4").then(r => r.json())
+  fetch("angry-worms-pack.json?v=5").then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
 }
@@ -1205,6 +1320,20 @@ function shotResolved() {
   if (shotCollapse >= 3) { say("collapse"); return; }
   const hurt = worms.some(w => w.team === "enemy" && w.alive && w.hp < w.maxHp);
   say(hurt ? "survived" : "miss");
+}
+// Level-start exchange. Delayed so it queues BEHIND the previous level's "clear"/"best"
+// lines (which are priority and ~3s of speech) instead of being dropped by the busy
+// check; non-priority, so if the player has already fired and something more
+// interesting is being said, it simply doesn't play.
+function queueStartLine() {
+  const lv = level;
+  setTimeout(() => { if (gameState === "playing" && level === lv && !paused) say("start"); }, 3800);
+}
+// Aim held too long (>6s without release) — Joe gets impatient, once per pull.
+let aimStartT = 0, dawdleSpoke = false;
+function checkDawdle() {
+  if (!aiming || dawdleSpoke || !loadedWorm) return;
+  if (performance.now() - aimStartT > 6000) { dawdleSpoke = true; say("dawdle"); }
 }
 const sfx = {
   launch:  () => { playTone(180, 0.25, "sawtooth", 0.12, 900); },                              // slingshot whoosh
@@ -1414,9 +1543,13 @@ function updatePhysics(dt) {
         p.vy = -Math.abs(p.vy) * 0.65;
         p.vx *= 0.85;
         sfx.boing();
+        // first ricochet only, and not every time — shotSpoke is left alone so the
+        // kill/miss line for this same shot still gets its turn once the dust settles
+        if (p.bounces === 1 && p.team === "player" && Math.random() < 0.5) say("bounce");
       } else if (p.type === "trooper") {
         // TROOPER: no boom — deploys where he lands and shoots from there
         deployTrooper(p.x, groundY);
+        if (p.team === "player" && !shotSpoke) { shotSpoke = true; say("trooper"); }
         p.dead = true;
       } else {
       // Hit ground
@@ -2088,7 +2221,9 @@ function showEndScreen(won) {
       }
     }, 2200);
   } else {
-    say("outOfAmmo", true);
+    // Running dry and losing are the same moment in this game (no enemy turn), so both
+    // banks apply — alternate them. gameOver had no caller at all before 2026-09-01.
+    say(Math.random() < 0.5 ? "gameOver" : "outOfAmmo", true);
     // straight to the scoreboard on death — no INSERT COIN detour (Osimo 2026-07-03)
     sfx.lose();
     if (window.ArcadeScores) {
@@ -2113,6 +2248,7 @@ function onEndBtn() {
     wind = rollWind(6);
     gameState = "playing";
     camera.targetX = 0;
+    queueStartLine();
   } else {
     // Game over - use ArcadeScores
     if (window.ArcadeScores) {
@@ -2196,6 +2332,7 @@ function startGame() {
     camera.x = 0;
     camera.targetX = 0;
     gameState = "playing";
+    queueStartLine();
   }, 700);
 }
 
@@ -3569,6 +3706,7 @@ function gameLoop(time) {
       if (slowMoT > 0) slowMoT--;
       if (!slowSkip) updatePhysics(dt);
       updateCamera();
+      checkDawdle();
       // Reload the sling when idle; lose only when ammo AND deployed troopers are spent
       if (!loadedWorm && projectiles.length === 0 && turnTimer === 0) {
         const hasShots = inventory.reduce((s, i) => s + i.count, 0);
