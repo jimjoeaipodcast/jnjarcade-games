@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_PAINT_V9_20260901';
+window.__ANGRYWORMS_BUILD='AW_FOCUS_V10_20260902';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -259,6 +259,22 @@ function init() {
 }
 
 const VIEW = { scale: 1, w: WORLD_W, h: WORLD_H };
+// Furthest right the camera may travel. On a phone-landscape viewport VIEW.w is ~1560 of a
+// 1800-wide world, so a strict `WORLD_W - VIEW.w` clamp gave only ~240px of scroll — tapping
+// an enemy at x=1780 in the HUD strip moved the view a token amount and left the worm pinned
+// half-off the right edge, so the tap looked broken (Osimo 2026-09-02: "I pressed on blue
+// worm it would take me there, screen needs to scroll to players even too far ones"). The
+// terrain is baked out to WORLD_W + TERRAIN_PAD, so letting the camera run to that same edge
+// buys the extra scroll with real ground under it — never empty space.
+function camMaxX() { return Math.max(0, WORLD_W + TERRAIN_PAD - VIEW.w); }
+function clampCam(x) { return Math.max(0, Math.min(camMaxX(), x)); }
+// Centre the view on a worm and ping it, so the tap reads even when the world can't scroll
+// far enough to put it dead centre.
+let camPing = null;   // { x, y, t } — expanding ring drawn over the focused worm
+function focusWorm(w) {
+  camera.targetX = clampCam(w.x - VIEW.w / 2);
+  camPing = { x: w.x, y: w.y, t: 0 };
+}
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth;
@@ -1086,7 +1102,7 @@ function setupInput() {
     if (panMode) {
       // map-style drag: finger right = look left
       camera.targetX -= (p.x - lastPanX) / VIEW.scale;
-      camera.x = camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, camera.targetX));
+      camera.x = camera.targetX = clampCam(camera.targetX);
       lastPanX = p.x;
       return;
     }
@@ -1519,7 +1535,10 @@ function djb2vo(s) {
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(16);
 }
-const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: false, src: null };
+const VO = { b64: null, loading: false, buffers: {}, last: {}, queue: [], busy: false, src: null, pending: null };
+// How long a deferred exchange stays worth saying. Longer than the ~4s an exchange takes
+// to speak, short enough that commentary never lands on a moment the player has forgotten.
+const VO_PENDING_TTL = 9000;
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
@@ -1550,7 +1569,20 @@ function voBuffer(who, text, cb) {
 // second line can never start before the first has finished — this is what stopped Joe
 // talking over Jimmy, rather than guessing at fixed delays.
 function drainVo() {
-  if (!VO.queue.length) { VO.busy = false; return; }
+  if (!VO.queue.length) {
+    // Nothing left to say — pick up whatever got deferred while the channel was busy, so
+    // an exchange lands late rather than never (Osimo 2026-09-02: "make sure all those
+    // chatterbox phrases land when ready"). Stale moments are dropped, not queued forever.
+    const pend = VO.pending;
+    VO.pending = null;
+    if (pend && performance.now() - pend.at < VO_PENDING_TTL && gameState === "playing" && !paused) {
+      VO.queue = pend.lines.slice();
+      drainVo();
+      return;
+    }
+    VO.busy = false;
+    return;
+  }
   VO.busy = true;
   const [who, text] = VO.queue.shift();
   voBuffer(who, text, buf => {
@@ -1581,15 +1613,21 @@ function say(key, priority) {
                            : ex === VO_MISS_WINDY ? Math.abs(wind) >= 1.0 : true);
     if (!bank.length) return;
   }
-  // An exchange in progress is never interrupted by an ordinary event; only a priority
-  // moment (level clear, personal best, game over) clears the floor.
-  if (VO.busy && !priority) return;
-  if (priority && VO.src) { try { VO.src.stop(); } catch (e) {} }
   let i = Math.floor(Math.random() * bank.length);
   if (bank.length > 1 && i === VO.last[key]) i = (i + 1) % bank.length;
   VO.last[key] = i;
+  // An exchange in progress is never cut off by an ordinary event — but the new line is
+  // now HELD instead of thrown away, and drainVo() speaks it the moment the channel is
+  // free (if it hasn't gone stale). Only a priority moment clears the floor outright.
+  if (VO.busy && !priority) {
+    VO.pending = { lines: bank[i].slice(), at: performance.now() };
+    return;
+  }
+  if (priority && VO.src) { try { VO.src.stop(); } catch (e) {} }
+  if (priority) VO.pending = null;   // a big moment supersedes anything queued behind it
   VO.queue = bank[i].slice();
-  if (!VO.busy || priority) { VO.busy = false; drainVo(); }
+  VO.busy = false;
+  drainVo();
 }
 
 // Per-shot commentary state. A single fling can kill several worms across a
@@ -1816,7 +1854,7 @@ function updatePhysics(dt) {
     p.y += p.vy;
 
     // Camera follows EVERY shot — enemy fire was happening off-screen (Osimo 2026-07-02)
-    camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, p.x - VIEW.w / 2));
+    camera.targetX = clampCam(p.x - VIEW.w / 2);
 
     // Water splash — the sea eats worms, no boom
     if (p.y > WATER_Y) {
@@ -2624,8 +2662,11 @@ function startGame() {
   turn = "player";
   wind = rollWind(6);
   gameState = "intro";
-  // Teleport to enemy side, hold 700ms, snap back to catapult
-  camera.x = Math.max(0, WORLD_W - VIEW.w);
+  // Teleport to enemy side, hold 700ms, snap back to catapult. Framed on the furthest enemy
+  // rather than the raw camera limit — camMaxX() now runs 260px past the world edge (see
+  // camMaxX above), and parking the intro there would open the game on padded empty ground.
+  const farFoe = worms.filter(w => w.team === "enemy").reduce((m, w) => w.x > m ? w.x : m, 0);
+  camera.x = clampCam((farFoe || WORLD_W) - VIEW.w / 2);
   camera.targetX = camera.x;
   setTimeout(() => {
     camera.x = 0;
@@ -2664,7 +2705,7 @@ function updateAttract() {
     attractProj.x += attractProj.vx;
     attractProj.y += attractProj.vy;
     // Camera follow
-    camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, attractProj.x - VIEW.w / 2));
+    camera.targetX = clampCam(attractProj.x - VIEW.w / 2);
     const gy = terrainHeightAt(attractProj.x);
     if (attractProj.y > gy - 10) {
       // Explode on structure area
@@ -2686,10 +2727,9 @@ function updateAttract() {
 
 // ====== CAMERA ======
 function updateCamera() {
-  camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, camera.targetX));
+  camera.targetX = clampCam(camera.targetX);
   camera.x += (camera.targetX - camera.x) * 0.08;
-  if (camera.x < 0) camera.x = 0;
-  if (camera.x > WORLD_W - W) camera.x = Math.max(0, WORLD_W - VIEW.w);
+  camera.x = clampCam(camera.x);
   camera.y = 0;
 }
 
@@ -2735,6 +2775,7 @@ function render() {
   drawProjectiles();
   drawSea();
   drawParticles();
+  drawCamPing();
 
   ctx.restore();
 
@@ -3416,6 +3457,27 @@ function drawProjectiles() {
   }
 }
 
+// Two rings pulsing outward over the worm the player just tapped in the HUD strip. The
+// camera glide alone is ambiguous on a wide viewport (the world may only have a few hundred
+// pixels of scroll left), so the ping is what actually answers "which one did I tap".
+function drawCamPing() {
+  if (!camPing) return;
+  camPing.t++;
+  if (camPing.t > 150) { camPing = null; return; }
+  ctx.save();
+  for (let k = 0; k < 2; k++) {
+    const t = ((camPing.t + k * 26) % 52) / 52;
+    const r = 22 + t * 46;
+    ctx.globalAlpha = (1 - t) * 0.9 * Math.min(1, (150 - camPing.t) / 34);
+    ctx.strokeStyle = "#ffe27a";
+    ctx.lineWidth = 4 - t * 2.4;
+    ctx.beginPath();
+    ctx.arc(camPing.x, camPing.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const pt of particles) {
     const a = pt.life / pt.maxLife;
@@ -3605,7 +3667,7 @@ function checkEnemyStripTap(p) {
   for (const item of es.items) {
     const dx = p.x - item.cx, dy = p.y - item.cy;
     if (dx * dx + dy * dy < (item.r + 4) * (item.r + 4)) {
-      camera.targetX = Math.max(0, Math.min(WORLD_W - VIEW.w, item.w.x - VIEW.w / 2));
+      focusWorm(item.w);
       return true;
     }
   }
