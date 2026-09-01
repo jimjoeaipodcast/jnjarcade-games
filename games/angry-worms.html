@@ -125,7 +125,7 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_FOCUS_V10_20260902';
+window.__ANGRYWORMS_BUILD='AW_FORK_V11_20260902';
 
 // ====== CONFIG ======
 const WORLD_W = 1800;
@@ -3276,19 +3276,32 @@ function drawSlingshot() {
   const leftTip = { x: sx + SLING_L.x2, y: sy + SLING_L.y2 };
   const rightTip = { x: sx + SLING_R.x2, y: sy + SLING_R.y2 };
 
+  // `loadedWorm` is set the moment a level is built, but the worm only actually RENDERS
+  // during play — render() gates drawLoadedWorm() on gameState === "playing", and
+  // drawLoadedWorm() is what puts the near fork arm back on top. So in attract and intro
+  // the old `if (!loadedWorm)` test was false, nothing drew the near arm, and the fork
+  // rendered as half a Y with the band running to a tip that wasn't there — which is what
+  // the cassette recorded (Osimo 2026-09-02: "in the cassette the catapult half rendered").
+  // Test the same condition render() does, not just the variable.
+  const wormInPouch = loadedWorm && gameState === "playing";
+
   // Elastic band — the far (left) strand is drawn here, behind the worm; the near
   // (right) strand is drawn over the worm in drawLoadedWorm. Same anchors as always.
-  if (loadedWorm && aiming && dragCurrent) {
+  if (wormInPouch && aiming && dragCurrent) {
     drawStrand(leftTip.x, leftTip.y, loadedWorm.x, loadedWorm.y, 4.6, 2.8);
-  } else if (loadedWorm) {
+  } else if (wormInPouch) {
     // Relaxed: converge on the launch anchor (SLING_X/SLING_Y, NOT loadedWorm.x/y —
     // drawSlingshot runs before drawLoadedWorm resets those this frame)
     drawStrand(leftTip.x, leftTip.y, SLING_X, SLING_Y, 4.2, 2.6);
+  } else {
+    // Empty pouch: the band hangs slack straight across the fork, tip to tip — the near
+    // arm's cord wrap then draws over its right anchor.
+    drawStrand(leftTip.x, leftTip.y, rightTip.x, rightTip.y, 4.2, 4.2);
   }
 
   // Store tips for later
   slingTips = { left: leftTip, right: rightTip, base: { x: sx, y: sy - 104 } };
-  if (!loadedWorm) drawSlingFront();   // nothing in the pouch — near arm goes straight on
+  if (!wormInPouch) drawSlingFront();   // nothing in the pouch — near arm goes straight on
 }
 
 function drawSlingFront() {

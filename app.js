@@ -2402,13 +2402,16 @@ function jimmyRunAttract(ctx, w, h, t, world, s) {
    the game's real daylight palette, not the dark/neon house look the DRAWN attract
    animations follow — that is the cost of showing genuine footage. */
 function angryWormsVideoAttract(ctx, w, h, t, world, s) {
+  // v5 (2026-09-02): v4 caught the slingshot mid-bug — the near fork arm only drew while
+  // gameState was 'playing', so attract (which is all the cassette records) filmed half a Y
+  // (Osimo: "in the cassette the catapult half rendered"). Fixed in the game, re-recorded.
   // v4 (2026-09-02): re-recorded against the AW_PAINT_V9 hand-painted art. Recorded on a
   // LEVEL 4 board, not attract's own level 1 — level 1's single small structure left most
   // of the frame as bare hillside, so the clip never showed the stone/wood/TNT material art
   // the cassette exists to advertise (see scratchpad aw-attract-level.js: buildLevel is
   // wrapped so attract's hard-coded buildLevel(1) seeds level 4 instead; attract logic and
   // the shipped game are untouched).
-  videoAttract(ctx, w, h, t, s, 'assets/footage/angry-worms-attract.mp4?v=4', '#100604');
+  videoAttract(ctx, w, h, t, s, 'assets/footage/angry-worms-attract.mp4?v=5', '#100604');
 }
 
 function pinVadersAttract(ctx, w, h, t, world, s) {
