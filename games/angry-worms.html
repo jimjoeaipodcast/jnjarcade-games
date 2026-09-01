@@ -130,7 +130,11 @@ window.__ANGRYWORMS_BUILD='AW_MOCKUP_V8_20260824';
 // ====== CONFIG ======
 const WORLD_W = 1800;
 const WORLD_H = 720;
-const GRAVITY = 0.25;
+const GRAVITY = 0.30;   // Osimo 2026-09-01: "gravity still lacking a little" — was 0.25,
+                         // the documented floor of the house 0.25-0.40 range; nudged up
+                         // within spec rather than adding new collapse logic (see the
+                         // fan-out-cap incident note below for why runtime physics rules
+                         // are handled carefully in this file).
 const SLING_X = 220;
 const GROUND_Y = 600;
 const MAX_PULL = 120;
@@ -502,7 +506,23 @@ function buildLevel(lvl, rollover) {
 
   // Difficulty curve v3 (Osimo 2026-07-03): early levels EASY — no structures, targets
   // close and in the open. Distance + defenses + ammo pressure all grow with level.
-  const zoneStart = Math.min(1450, 600 + lvl * 100);   // enemies start close, drift right
+  // v5 (Osimo 2026-09-01: "the more you progress the further back their worms move" +
+  // levels were visibly repeating past ~level 9): zoneStart used to hard-cap at 1450,
+  // which — combined with the buildStructure loop's own `bx<1700` boundary — meant only
+  // ~2 structures could ever physically fit once a level hit that cap, no matter how high
+  // baseCount's nominal value climbed. Every level past ~9 was generating the same shape
+  // from the same start point, which is exactly what read as "levels repeat themselves."
+  // Cap raised to 1550, AND a score-driven top-up keeps pushing zoneStart further right
+  // for a high-scoring session specifically (not just level number), so the endgame keeps
+  // feeling like real progression instead of flatlining.
+  // zoneStart drives STRUCTURE placement only — kept purely level-based so the
+  // structure-packing loop below always has the same room to work with regardless of
+  // score. bonusReach is applied ONLY to the open/bonus worms' position (further
+  // decoupled below) so "worms move further back" doesn't fight "more of them fit" —
+  // live-tested: applying both to the same zoneStart silently cancelled the bonus-worm
+  // count gain out (structures lost exactly what bonus worms gained, same total).
+  const zoneStart = Math.min(1550, 600 + lvl * 100);
+  const bonusReach = score >= 40000 ? 150 : score >= 30000 ? 90 : score >= 10000 ? 40 : 0;
   if (lvl <= 2) {
     // Open ground — just worms on the terrain, nothing to knock down
     const n = 1 + lvl;                                  // L1: 2 worms · L2: 3 worms
@@ -513,13 +533,21 @@ function buildLevel(lvl, rollover) {
   } else {
     const baseCount = Math.min(5, lvl - 1);
     let bx = zoneStart;
-    for (let i = 0; i < baseCount && bx < 1700; i++) {
+    for (let i = 0; i < baseCount && bx < 1750; i++) {
       buildStructure(bx, 120 + Math.random() * 60, lvl);
-      bx += 180 + Math.random() * 30;
+      bx += 160 + Math.random() * 30;   // tightened from 180-210 so more structures
+                                         // actually fit before the 1750 world edge
     }
-    // one bonus worm in the open between bunkers
-    const ox = zoneStart - 90;
-    worms.push(makeWorm(ox, terrainHeightAt(ox) - 20, "enemy", "green"));
+    // Bonus open worms (Osimo 2026-09-01: "after 10k start adding a 4th enemy worm,
+    // after 30k add a 5th") — was a flat 1, now score-gated. Kept as open-ground worms
+    // (not more structures) since structures are already packing the zone as tight as
+    // buildStructure's own geometry allows — this is the low-risk lever that doesn't
+    // touch the structure/physics side at all.
+    const bonusWorms = 1 + (score >= 10000 ? 1 : 0) + (score >= 30000 ? 1 : 0);
+    for (let bi = 0; bi < bonusWorms; bi++) {
+      const ox = zoneStart - 90 - bi * 70 + bonusReach;
+      worms.push(makeWorm(ox, terrainHeightAt(ox) - 20, "enemy", "green"));
+    }
   }
 
   // Ammo per level — generous early, tight later; TROOPERS unlock at L3
@@ -1304,6 +1332,49 @@ function trooperFire(w) {
   sfx.launch();
 }
 
+// ENEMY RETURN FIRE (Osimo 2026-09-01: "after 40k you take it in turns with the enemy,
+// they start shooting back") — mirrors trooperFire()'s ballistic solve exactly (same
+// fixed-flight-time formula, same gravity/wind compensation), fired the other direction.
+// Targets the player's own DEPLOYED TROOPERS specifically, not an invented "player avatar"
+// — troopers are the one case of a persistent, damageable player-team worm sitting in the
+// world once landed (mirrors makeWorm/team symmetry: worms.js's own collision skip is
+// `if (w.team === p.team) continue`, already team-agnostic, so an "enemy"-team projectile
+// correctly damages "player"-team worms with zero collision-code changes needed). If no
+// trooper is currently deployed there is nothing on the player's side to shoot at that
+// turn — the enemy simply doesn't fire, so most turns before a trooper is out still feel
+// exactly like "our turn only" and the new pressure lands specifically on the long-range
+// trooper strategy, which is the one player action that leaves something exposed.
+const COMBAT_MODE_SCORE = 40000;
+function enemyReturnFire() {
+  const targets = worms.filter(w => w.team === "player" && w.alive && w.onGround && !w.dying);
+  if (!targets.length) return false;
+  const shooters = worms.filter(w => w.team === "enemy" && w.alive && !w.dying);
+  if (!shooters.length) return false;
+  const w = shooters[Math.floor(Math.random() * shooters.length)];
+  let t = targets[0], best = 1e9;
+  for (const e of targets) {
+    const d = Math.abs(e.x - w.x);
+    if (d < best) { best = d; t = e; }
+  }
+  const T = 46;
+  const dx = (t.x - w.x) + (Math.random() - 0.5) * 60;
+  const dy = (t.y - (w.y - 24)) + (Math.random() - 0.5) * 20;
+  projectiles.push({
+    x: w.x, y: w.y - 24,
+    vx: dx / T - 0.5 * (wind * 0.03) * T,
+    vy: dy / T - 0.5 * GRAVITY * T,
+    type: "trooperShot",
+    team: "enemy",
+    radius: 7,
+    dead: false,
+    abilityUsed: true,
+    trail: []
+  });
+  w.facing = t.x > w.x ? 1 : -1;
+  sfx.launch();
+  return true;
+}
+
 // ====== PHYSICS ======
 function updatePhysics(dt) {
   // Update projectiles
@@ -1971,6 +2042,19 @@ function switchTurn() {
   }
   wind = rollWind(4 + level);
   if (!troopersBusy) camera.targetX = 0;   // glide home unless a trooper's mid-barrage
+  // COMBAT MODE (Osimo 2026-09-01, score >= 40000): the enemy gets a shot back at any
+  // deployed player trooper before the next player worm loads — a real "your turn, their
+  // turn" beat rather than the open-ended real-time flinging every level before this.
+  // Guarded on no enemy shot already in flight so this can't re-fire on switchTurn()'s own
+  // re-entrant anyDying-delay path above.
+  if (score >= COMBAT_MODE_SCORE && !projectiles.some(p => p.team === "enemy")) {
+    const camWasHome = !troopersBusy;
+    if (enemyReturnFire()) {
+      if (camWasHome) camera.targetX = worms.find(w => w.team === "enemy" && w.alive)?.x || 0;
+      turnTimer = 70;   // let the incoming shot fly + land before the player's next worm loads
+      return;
+    }
+  }
   loadNextWorm();
 }
 
