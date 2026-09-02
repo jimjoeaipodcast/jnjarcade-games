@@ -409,7 +409,8 @@ function loadPack() {
   // keep serving the old pack forever, so a sprite or VO fix ships to the CDN and the
   // player still sees and hears the previous build — the game HTML updates, its assets
   // silently do not. v2 = 2026-08-03 walk-cycle frames + caps-fixed voice takes.
-  fetch('jnj-on-air-pack.json?v=5').then(r => r.json()).then(p => {
+  // v6 = 2026-09-02 wall portraits swapped for the two AI-pioneer easter-egg faces.
+  fetch('jnj-on-air-pack.json?v=6').then(r => r.json()).then(p => {
     for (const k of ['studio', 'corridor', 'prop'])
       if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
     // Osimo's kettle-free shelf plate — overlaid on the shelves once the kettle is taken.
