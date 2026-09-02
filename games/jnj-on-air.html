@@ -410,7 +410,9 @@ function loadPack() {
   // player still sees and hears the previous build — the game HTML updates, its assets
   // silently do not. v2 = 2026-08-03 walk-cycle frames + caps-fixed voice takes.
   // v6 = 2026-09-02 wall portraits swapped for the two AI-pioneer easter-egg faces.
-  fetch('jnj-on-air-pack.json?v=6').then(r => r.json()).then(p => {
+  // v7 = 2026-09-02 examine dialogue names the portraits for real (McCarthy/Hinton) +
+  // Chatterbox voice lines for both.
+  fetch('jnj-on-air-pack.json?v=7').then(r => r.json()).then(p => {
     for (const k of ['studio', 'corridor', 'prop'])
       if (p.art && p.art[k]) mkImg(p.art[k], im => { PLATES[k] = im; });
     // Osimo's kettle-free shelf plate — overlaid on the shelves once the kettle is taken.
@@ -463,8 +465,8 @@ const LOOKS = {
         ['JOE', "I can hear you describing me."]],
   screen: [['JIMMY', "Our name in forty-inch letters. I never get tired of it. Joe says he does."]],
   clock: [['JIMMY', "The clock. Roman numerals, because apparently time is classier in Latin."]],
-  portraitL: [['JIMMY', "Pipe guy. Nobody knows who he is. He came with the wall."]],
-  portraitR: [['JIMMY', "Cigar man. He judges me. I can feel it from here."]],
+  portraitL: [['JIMMY', "That's John McCarthy. Coined 'artificial intelligence,' ran the Dartmouth conference that started the field, then built LISP because nothing existed to run the idea on yet. Blueprint AND the tool — same guy."]],
+  portraitR: [['JIMMY', "That's Geoffrey Hinton. They call him the godfather of AI — decades pushing neural networks before anyone believed they'd actually work. Turned out he was right the whole time."]],
   table: [['JIMMY', "The desk. Two mics, one candle, and the exact spot where the lollipop should be."]],
   decanter: [['JIMMY', "The decanter. Joe calls it 'set dressing'. The level goes down every week."]],
   // STALENESS FIX (Osimo 2026-09-01, same class as changeMachine/propDoor below): the
