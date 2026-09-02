@@ -18,6 +18,14 @@
      and every successful shift/rotate/colour-cycle while grounded (player, keyboard or
      attract AI) restarts the window via armLockDelay(). hardDrop stays INSTANT.
      Pause + mid-piece cascades freeze the timer exactly like they freeze lastDrop. -->
+<!-- CT_ART_V4_20260902 — render-quality pass against Osimo's reference mockup, hand-painted
+     in-session (no fleet). Mechanics untouched. Surfaces: stacked CRUSH/TRIS logo on a
+     magenta splash with jelly beans; bevel-cube candies with a lit top facet + face;
+     solid glossy booster coins (lollipop / bean / wrapped candy / swap) with dark count
+     badges; glossy capsule PAUSE / SOUND pills; HUD cards with thin translucent borders,
+     glossy gold star, recessed level bar, glossy restart sphere; near-black purple ground
+     with a 26px grid, corner bokeh, pin-dots and a vignette; recessed board sockets and
+     NEXT slots. Fonts stay vendored-only (Bungee / Bungee Shade / Barlow Condensed). -->
 
 <link rel="stylesheet" href="../cabinet.css">
 <script src="../vendor/gsap.min.js"></script>
@@ -25,29 +33,33 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
-html,body{width:100%;height:100dvh;overflow:hidden;background:#16092e;touch-action:none}
+html,body{width:100%;height:100dvh;overflow:hidden;background:#110722;touch-action:none}
 /* #stage is a FLEX COLUMN. Height + padding + gap are owned by layout() in JS.
    No box below duplicates any geometry number — single source of truth. */
 #stage{position:absolute;left:0;top:0;width:390px;transform-origin:top left;
   display:flex;flex-direction:column;overflow:hidden;
-  background:linear-gradient(180deg,#16092e 0%,#1e0f38 100%)}
+  background:linear-gradient(180deg,#110722 0%,#180b30 100%)}
 #bg{position:absolute;left:0;top:0;pointer-events:none;z-index:0}
 canvas{display:block}
 #topbar{position:relative;z-index:1;flex:0 0 auto;display:flex;min-height:0}
-#logocard{position:relative;flex:0 0 auto;background:#241145;border:2px solid #6b3fb8;
-  border-radius:20px;overflow:hidden}
+#logocard{position:relative;flex:0 0 auto;background:#1b1236;border:2px solid rgba(150,120,230,0.30);
+  border-radius:20px;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.07),0 5px 14px rgba(0,0,0,0.45)}
 #logo{position:absolute;left:0;top:0}
 #hudcol{flex:1 1 auto;display:flex;flex-direction:column;gap:7px;min-width:0;min-height:0}
 #mainrow{position:relative;z-index:1;flex:1 1 auto;display:flex;min-height:0}
-#boardpanel{position:relative;flex:0 0 auto;background:#1c0f36;border:2px solid #7a4fd0;
-  border-radius:18px;padding:4px}
+#boardpanel{position:relative;flex:0 0 auto;background:#170d2e;border:2px solid rgba(150,120,230,0.34);
+  border-radius:18px;padding:4px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 6px 18px rgba(0,0,0,0.45)}
 #c{border-radius:14px}
-#railpanel{flex:0 0 auto;background:#1d1040;border:2px solid #7a4fd0;border-radius:16px;
+#railpanel{flex:0 0 auto;background:#1b1236;border:2px solid rgba(150,120,230,0.30);border-radius:16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 5px 14px rgba(0,0,0,0.45);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 #nextpan{border-radius:12px}
 #dim{position:absolute;inset:0;border-radius:18px;background:rgba(0,0,0,0.30);display:none;
   pointer-events:none;z-index:3}
-#bststrip{position:relative;z-index:1;flex:0 0 auto;background:#1d1040;border-radius:18px;
+#bststrip{position:relative;z-index:1;flex:0 0 auto;background:#1a1238;border-radius:20px;
+  border:2px solid #3a2e66;box-shadow:inset 0 2px 6px rgba(0,0,0,0.40),0 4px 12px rgba(0,0,0,0.35);
   display:flex;flex-wrap:wrap;row-gap:8px;align-items:center;justify-content:space-around}
 #pillrow{position:relative;z-index:1;flex:0 0 auto;display:flex;align-items:stretch;
   justify-content:space-between}
@@ -57,14 +69,15 @@ canvas{display:block}
 /* row flex: label+value stack on the LEFT, the control (star / bar / button)
    centres across the FULL card height on the right — a 34px button and an 11px
    label cannot both fit in a stacked 36px card */
-.card{position:relative;flex:1 1 0;min-height:0;overflow:hidden;background:#241542;
-  border:2px solid #7a4fd0;border-radius:14px;padding:0 8px;color:#fff;
+.card{position:relative;flex:1 1 0;min-height:0;overflow:hidden;background:#1b1236;
+  border:2px solid rgba(150,120,230,0.30);border-radius:14px;padding:0 8px;color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.07),0 4px 10px rgba(0,0,0,0.40);
   display:flex;flex-direction:row;align-items:center;gap:7px}
 .cleft{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center}
 #card-level .cleft{flex:0 0 auto}
 .card .lbl{font-family:'Barlow Condensed','Arial Narrow',sans-serif;
   font-size:var(--lblfs);line-height:calc(var(--lblfs) + 1px);letter-spacing:1px;
-  color:#b9a3e3;font-variant:small-caps;flex:0 0 auto}
+  color:#b9a0f0;font-weight:700;text-transform:uppercase;flex:0 0 auto}
 .card .val{font-family:'Bungee','Arial Black',sans-serif;font-size:var(--valfs);
   line-height:var(--valfs);color:#fff}
 #score-val{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:800;
@@ -72,9 +85,12 @@ canvas{display:block}
   overflow:hidden;text-overflow:clip}
 #score-star{flex:0 0 auto;width:18px;height:18px}
 #lvl-right{flex:1 1 auto;min-width:0}
-#lvl-bar{width:100%;height:var(--barh);background:#180d33;border-radius:999px;overflow:hidden}
-#lvl-fill{width:0%;height:100%;background:linear-gradient(90deg,#8b45e8,#a86bff);
-  border-radius:999px;transition:width .25s}
+#lvl-bar{width:100%;height:var(--barh);background:#100822;border-radius:999px;overflow:hidden;
+  border:1px solid rgba(140,100,220,0.28);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,0.60),inset 0 -1px 0 rgba(255,255,255,0.05)}
+#lvl-fill{width:0%;height:100%;background:linear-gradient(180deg,#c992ff 0%,#a55cf7 48%,#8236dc 100%);
+  border-radius:999px;transition:width .25s;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.40),inset 0 -1px 1px rgba(0,0,0,0.25)}
 #lvl-goal{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:var(--goalfs);
   line-height:calc(var(--goalfs) + 1px);color:#fff;text-align:center;margin-top:1px}
 #moves-val{display:inline-block;flex:0 0 auto}
@@ -83,14 +99,20 @@ canvas{display:block}
 @keyframes redpulse{0%,100%{color:#fff}50%{color:#ff4444;text-shadow:0 0 10px #ff4444}}
 @keyframes redflash{0%{color:#ff4444;text-shadow:0 0 12px #ff4444;transform:scale(1.25)}100%{color:#fff;transform:scale(1)}}
 #restart-btn{flex:0 0 auto;width:var(--rbtn);height:var(--rbtn);border-radius:50%;
-  border:2px solid rgba(255,255,255,0.35);background:linear-gradient(180deg,#2f7bf5,#1b4fd6);
+  border:none;background:radial-gradient(circle at 36% 28%,#9ad6ff 0%,#3f8ffb 38%,#1c55d8 72%,#123a9a 100%);
+  box-shadow:inset 0 -3px 5px rgba(0,0,0,0.38),inset 0 2px 3px rgba(255,255,255,0.40),
+    0 0 0 1px rgba(0,0,0,0.30),0 3px 8px rgba(0,0,0,0.50);
   color:#fff;cursor:pointer;
   display:flex;align-items:center;justify-content:center}
 /* drawn circular-arrow — an emoji/text ↻ renders in the platform's own metrics
    and never centres identically across iOS/Android. SVG is deterministic. */
 #restart-btn svg{width:62%;height:62%;display:block;pointer-events:none}
+/* CT_ART_V4: the coin face (rim bevel, gloss, edge) is painted INTO the canvas by
+   paintBoosterIcons — the div carries only the drop shadow. No CSS border: a 2px
+   ring outside the painted coin read as a second, flat rim around the 3D one. */
 .booster{position:relative;flex:0 0 auto;width:56px;height:56px;border-radius:50%;cursor:pointer;
-  border:2px solid #7a4fd0;color:#fff;font-size:22px;text-align:center;
+  border:none;color:#fff;font-size:22px;text-align:center;
+  box-shadow:0 4px 8px rgba(0,0,0,0.45);
   display:flex;align-items:center;justify-content:center}
 /* ⛔ CONTRACT: the .booster DIV stays the tap target and the class carrier.
    updateBoosterUI toggles .cnt/.off/.locked/.aim BY CLASS, the GSAP bounce
@@ -98,33 +120,37 @@ canvas{display:block}
    gate on closest('.ui'). The canvas is ART ONLY: pointer-events:none so every
    tap resolves to the .booster div exactly as it did with the emoji text node. */
 .booster canvas{width:100%;height:100%;display:block;border-radius:50%;pointer-events:none}
-.booster .cnt{position:absolute;bottom:-2px;right:-6px;min-width:18px;height:18px;border-radius:9px;
-  background:#1a0e30;border:1px solid rgba(255,255,255,.7);
+.booster .cnt{position:absolute;bottom:-4px;right:-6px;min-width:24px;height:24px;border-radius:12px;
+  background:#262044;border:2px solid #4a4380;box-shadow:0 2px 5px rgba(0,0,0,0.55);
   color:#fff;font-family:'Barlow Condensed','Arial Narrow',sans-serif;
-  font-weight:bold;font-size:10px;line-height:16px;padding:0 4px;text-align:center}
+  font-weight:bold;font-size:14px;line-height:20px;padding:0 5px;text-align:center}
 .booster.off{filter:grayscale(1);opacity:.45}
-.booster.aim{box-shadow:0 0 0 3px #fff,0 0 18px #fff}
+.booster.aim{box-shadow:0 0 0 3px #fff,0 0 18px #fff,0 4px 8px rgba(0,0,0,0.45)}
 .booster .lock{position:absolute;inset:0;border-radius:50%;background:rgba(10,0,18,0.6);
   font-size:18px;display:none;align-items:center;justify-content:center}
 .booster .lock svg{width:46%;height:46%;display:block;pointer-events:none}
 .booster.locked .lock{display:flex}
-#b-hammer{background:radial-gradient(circle at 35% 30%,#c98ef7,#a44df0 60%,#5c2a8a)}
-#b-shuffle{background:radial-gradient(circle at 35% 30%,#8be89c,#3fca55 60%,#1d7a2e)}
-#b-wrap{background:radial-gradient(circle at 35% 30%,#f7ce8e,#f2a935 60%,#9a6414)}
+/* CT_ART_V4 pills: glossy capsule — light band across the top (inset 2px white),
+   a darker lip along the bottom (inset -4px black), drop shadow, dark outer edge.
+   Every shadow is inset or outside the box: pillH from layout() is untouched. */
 .pill{flex:0 0 48%;border-radius:999px;cursor:pointer;
-  border:2px solid rgba(255,255,255,0.2);color:#fff;text-align:center;
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:14px;
-  letter-spacing:2px;text-transform:uppercase;
+  border:2px solid #1b45c0;color:#fff;text-align:center;
+  box-shadow:inset 0 2px 0 rgba(255,255,255,0.38),inset 0 -4px 0 rgba(0,0,0,0.24),
+    inset 0 0 0 1px rgba(255,255,255,0.08),0 5px 10px rgba(0,0,0,0.45);
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  font-family:'Bungee','Arial Black',sans-serif;font-size:16px;
+  letter-spacing:1px;text-transform:uppercase;text-shadow:0 2px 2px rgba(0,0,0,0.40);
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-#pill-pause{background:linear-gradient(180deg,#2f7bf5,#1b4fd6)}
-#pill-sound{background:linear-gradient(180deg,#8a4df0,#6a2fd0)}
+.pill:active{transform:translateY(1px)}
+#pill-pause{background:linear-gradient(180deg,#63aeff 0%,#2f7bf5 42%,#1b4fd6 100%)}
+#pill-sound{border-color:#4a20a8;background:linear-gradient(180deg,#b382ff 0%,#8a4df0 42%,#5e2ac2 100%)}
 /* ⛔ PLATFORM CONSTRAINT, not taste: ❚❚ and 🔊 are rendered by iOS in Apple's
    OWN glyph colours (the speaker comes out grey/blue) and can NEVER be forced
    white by `color:`. Both pill glyphs are therefore CSS-drawn shapes. */
 .pill .ptxt{pointer-events:none}
 .ico-pause{display:flex;align-items:center;gap:4px;flex:0 0 auto;pointer-events:none}
-.ico-pause i{display:block;width:5px;height:18px;background:#fff;border-radius:2px}
+.ico-pause i{display:block;width:6px;height:20px;background:#fff;border-radius:2px;
+  box-shadow:0 2px 2px rgba(0,0,0,0.40)}
 .ico-snd{position:relative;display:block;width:22px;height:18px;flex:0 0 auto;pointer-events:none}
 .ico-snd .cone{position:absolute;left:0;top:2px;width:10px;height:14px;background:#fff;
   clip-path:polygon(0% 28%,38% 28%,100% 0%,100% 100%,38% 72%,0% 72%)}
@@ -312,7 +338,7 @@ canvas{display:block}
 </div>
 <script>
 'use strict';
-window.__CRUSHTRIS_BUILD='CT_SAGA_V3_4_20260824';
+window.__CRUSHTRIS_BUILD='CT_ART_V4_20260902';
 
 // ── GEOMETRY HEADER — single source of truth ───────────────────────────────
 // DW is the LOCKED design width. DH is fluid between DH_MIN/DH_MAX so the stage
@@ -328,7 +354,7 @@ const ATTRACT=/[?&]attract=1/.test(location.search);
 
 // ── Themes: 5-color palette tables (art mandate — 5 colors exactly) ────────
 const THEMES={
-  classic:['#b44df5','#f04141','#ff9f2e','#3fca55','#2f9df5'],  // spec hexes, 5 that map
+  classic:['#b44df5','#f04141','#ff9f2e','#4ccc30','#2f9df5'],  // spec hexes, 5 that map (green limed to the CT_ART_V4 reference)
   pastel:['#c9a0f5','#f5a3a3','#f7d59b','#a8e6b3','#a3cef5'],
   neon:['#c026ff','#ff2d55','#ffd60a','#39ff14','#00c8ff'],
   retro:['#9d2bd6','#d63333','#d6c72b','#33d65e','#2b7fd6']
@@ -487,7 +513,9 @@ function layout(){
   L.barH  =Math.max(6, Math.min(10,Math.round(inner*0.26)));
   L.goalFs=Math.max(9, Math.min(12,Math.round(inner*0.30)));
   L.rbtn  =Math.max(24,Math.min(34,Math.floor(inner)));
-  L.starS =Math.max(11,Math.min(18,Math.floor(inner*0.50)));
+  // CT_ART_V4: the reference star fills ~75% of its card; it is a flex 0 0 auto
+  // decoration, so its size moves nothing else in the card
+  L.starS =Math.max(11,Math.min(30,Math.floor(inner*0.78)));
 
   // ── Push L onto the DOM ──────────────────────────────────────────────────
   stage.style.height=DH+'px';
@@ -522,7 +550,7 @@ function layout(){
   if(npan.width!==nw*RES||npan.height!==nh*RES){npan.width=nw*RES;npan.height=nh*RES;}
   npan.style.width=nw+'px';npan.style.height=nh+'px';
 
-  if(bgCanvas.width!==DW||bgCanvas.height!==DH){bgCanvas.width=DW;bgCanvas.height=DH;}
+  if(bgCanvas.width!==DW*RES||bgCanvas.height!==DH*RES){bgCanvas.width=DW*RES;bgCanvas.height=DH*RES;}
   bgCanvas.style.width=DW+'px';bgCanvas.style.height=DH+'px';
 
   // Everything static that depends on CELL is rebaked HERE, once — never in a frame.
@@ -534,23 +562,93 @@ function layout(){
 }
 
 // ── Logo card art — painted ONCE at boot and once per size change ──────────
-// ⛔ THIS PALETTE IS FIXED AND MUST NOT READ FROM COLORS. It contains cyan
-// (#35d6e8) and pink (#ff6bc4) that exist in NO theme; sourcing it from COLORS
-// would recolour the logo every time the player switches theme.
-const LOGO_LINES=['CRUSH','TRIS'];   // stacked bubble title — CRUSH over TRIS
-const LOGO_COLS=['#f04141','#ff9f2e','#ffd23d','#3fca55','#2f9df5',
-                 '#b44df5','#ff6bc4','#35d6e8','#f04141'];
-// three kawaii sweets tucked into the card corners — drawn with the SAME
-// glossy-jelly recipe as the gameplay candies (renderJellyBody: round body,
-// radial gloss, kawaii face). [fx,fy,fr,rot,colour,faceIdx] — colours FIXED,
-// never theme-sourced (see the palette law above).
-const LOGO_SWEETS=[[0.12,0.15,0.100,-0.35,'#3fca55',3],
-                   [0.88,0.14,0.092, 0.42,'#ff6bc4',1],
-                   [0.87,0.85,0.105,-0.22,'#ffd23d',0]];
-// tiny 4-point sparkle glints scattered around the title [fx,fy,fr,colour]
-const LOGO_SPARKS=[[0.24,0.28,0.030,'#ffffff'],[0.79,0.24,0.022,'#ffd23d'],
-                   [0.10,0.60,0.020,'#ffd23d'],[0.91,0.58,0.026,'#ffffff'],
-                   [0.50,0.08,0.018,'#ffffff'],[0.16,0.88,0.022,'#ff6bc4']];
+// ⛔ THIS PALETTE IS FIXED AND MUST NOT READ FROM COLORS. It contains hot pink,
+// cyan and gold that exist in NO theme; sourcing it from COLORS would recolour
+// the logo every time the player switches theme.
+// CT_ART_V4 reference: "CrushTris" — CRUSH runs hot-pink → orange, TRIS runs
+// cyan → blue, glossy bubble letters on a magenta paint splash, five jelly beans
+// tucked into the corners, a scatter of satellite droplets. Bungee is a caps-only
+// face (lowercase renders as caps) and this card is ~1.1:1, so the title stacks
+// CRUSH over TRIS instead of the reference's single line — same per-letter
+// colour story, fitted to the card.
+const LOGO_LINES=['CRUSH','TRIS'];
+const LOGO_COLS=['#ff4fa0','#ff8a1f','#ffa128','#ffb52e','#ff9526',
+                 '#3dd0f5','#2f9df5','#3cc3f5','#2b8cf0'];
+// jelly beans [fx,fy,len/w,rot,colour] — fixed reference colours, never theme-sourced
+const LOGO_BEANS=[[0.16,0.15,0.19,-0.55,'#5ccc2a'],[0.85,0.15,0.19, 0.50,'#ffc21e'],
+                  [0.15,0.85,0.19,-0.30,'#ffc21e'],[0.53,0.91,0.17, 0.60,'#e63a2e'],
+                  [0.84,0.84,0.19,-0.45,'#9b3ee8']];
+// satellite paint droplets [fx,fy,r/w]
+const LOGO_DROPS=[[0.08,0.32,0.014],[0.30,0.07,0.011],[0.62,0.05,0.016],[0.93,0.40,0.012],
+                  [0.36,0.95,0.013],[0.70,0.96,0.011],[0.05,0.62,0.010],[0.94,0.66,0.014],
+                  [0.22,0.52,0.009],[0.80,0.30,0.009]];
+// splash lobes [angle rad (y-down: -π/2 = up), length/R, tip radius/R]
+const LOGO_LOBES=[[-1.57,1.32,0.28],[-1.15,1.05,0.20],[-0.75,1.18,0.24],[-0.30,1.10,0.26],
+                  [ 0.20,0.98,0.20],[ 0.62,1.22,0.28],[ 1.10,1.02,0.22],[ 1.57,1.15,0.26],
+                  [ 2.05,1.20,0.28],[ 2.55,0.98,0.20],[ 3.00,1.12,0.26],[-2.60,1.10,0.24],
+                  [-2.10,0.95,0.20]];
+
+// Glossy jelly bean: a thick round-capped arc (the bend is what makes it a bean,
+// not a capsule) shaded in bands that step up-left toward the light — dark base
+// with a drop shadow, body, light zone, then a white gloss streak and a dot.
+function drawBean(g,x,y,len,rot,col){
+  const wid=len*0.56, bendR=len*1.15, th=len/(2*bendR);
+  const a0=-Math.PI/2-th, a1=-Math.PI/2+th;
+  const arcAt=(ox,oy,r,b0,b1)=>{g.beginPath();g.arc(ox,oy,r,b0,b1);};
+  g.save();g.translate(x,y);g.rotate(rot);g.lineCap='round';
+  g.save();g.shadowColor='rgba(0,0,0,0.50)';g.shadowBlur=len*0.25;g.shadowOffsetY=len*0.12;
+  g.strokeStyle=shade(col,-0.48);g.lineWidth=wid;arcAt(0,bendR,bendR,a0,a1);g.stroke();g.restore();
+  g.strokeStyle=col;g.lineWidth=wid*0.84;arcAt(-wid*0.05,bendR-wid*0.07,bendR,a0,a1);g.stroke();
+  g.strokeStyle=shade(col,0.34);g.lineWidth=wid*0.46;
+  arcAt(-wid*0.10,bendR-wid*0.16,bendR,a0+th*0.15,a1-th*0.30);g.stroke();
+  g.strokeStyle='rgba(255,255,255,0.86)';g.lineWidth=wid*0.17;
+  arcAt(-wid*0.12,bendR-wid*0.24,bendR,a0+th*0.25,a0+th*1.05);g.stroke();
+  g.fillStyle='rgba(255,255,255,0.70)';
+  g.beginPath();g.arc(Math.sin(th)*bendR*0.55,-wid*0.16,wid*0.085,0,Math.PI*2);g.fill();
+  g.restore();
+}
+
+// Magenta paint splash: core ellipse + tapered arms + round tips over-painted in
+// one flat colour on an OFFSCREEN canvas (union by overpaint, no winding games),
+// then every shading pass lands through source-atop so it can never bleed past
+// the silhouette. Composited onto the card with a soft drop shadow.
+function paintSplash(g,w,h,cx,cy,R){
+  const sc=document.createElement('canvas');sc.width=w*RES;sc.height=h*RES;
+  const s=sc.getContext('2d');s.setTransform(RES,0,0,RES,0,0);
+  s.translate(cx,cy);s.scale(1.12,1);s.translate(-cx,-cy);   // the reference splash is wider than tall
+  s.fillStyle='#e8339f';
+  s.beginPath();s.ellipse(cx,cy,R*0.72,R*0.62,0.25,0,Math.PI*2);s.fill();
+  for(const[a,ln,tr]of LOGO_LOBES){
+    const tx=cx+Math.cos(a)*R*ln,ty=cy+Math.sin(a)*R*ln;
+    const px=-Math.sin(a),py=Math.cos(a),wb=R*tr*1.15,wt=R*tr*0.80;
+    s.beginPath();
+    s.moveTo(cx+px*wb,cy+py*wb);s.lineTo(tx+px*wt,ty+py*wt);
+    s.lineTo(tx-px*wt,ty-py*wt);s.lineTo(cx-px*wb,cy-py*wb);s.closePath();s.fill();
+    s.beginPath();s.arc(tx,ty,R*tr,0,Math.PI*2);s.fill();
+  }
+  s.globalCompositeOperation='source-atop';
+  const gv=s.createLinearGradient(0,cy-R*1.6,0,cy+R*1.6);
+  gv.addColorStop(0,'#ff62c4');gv.addColorStop(0.45,'#ea38a4');gv.addColorStop(1,'#a8207a');
+  s.fillStyle=gv;s.fillRect(0,0,w,h);
+  // the reference splash cools toward violet where it pools bottom-right
+  const gp=s.createRadialGradient(cx+R*0.55,cy+R*0.75,0,cx+R*0.55,cy+R*0.75,R*1.25);
+  gp.addColorStop(0,'rgba(150,50,215,0.70)');gp.addColorStop(1,'rgba(150,50,215,0)');
+  s.fillStyle=gp;s.fillRect(0,0,w,h);
+  const gd=s.createRadialGradient(cx-R*0.35,cy-R*0.45,0,cx-R*0.35,cy-R*0.45,R*1.05);
+  gd.addColorStop(0,'rgba(255,170,230,0.60)');gd.addColorStop(1,'rgba(255,170,230,0)');
+  s.fillStyle=gd;s.fillRect(0,0,w,h);
+  // specular streaks: one on the core, one on each upper lobe tip
+  s.fillStyle='rgba(255,255,255,0.72)';
+  s.beginPath();s.ellipse(cx-R*0.22,cy-R*0.36,R*0.42,R*0.15,-0.45,0,Math.PI*2);s.fill();
+  for(const[a,ln,tr]of LOGO_LOBES){
+    if(Math.sin(a)>-0.3)continue;
+    const tx=cx+Math.cos(a)*R*ln,ty=cy+Math.sin(a)*R*ln;
+    s.beginPath();s.ellipse(tx-R*tr*0.28,ty-R*tr*0.30,R*tr*0.42,R*tr*0.18,a,0,Math.PI*2);s.fill();
+  }
+  g.save();g.shadowColor='rgba(0,0,0,0.50)';g.shadowBlur=R*0.30;g.shadowOffsetY=R*0.14;
+  g.drawImage(sc,0,0,w,h);g.restore();
+}
+
 function paintLogo(){
   if(!logoCv)return;
   const w=Math.max(24,Math.round((L.logoW||140)-4));
@@ -561,93 +659,85 @@ function paintLogo(){
   g.setTransform(RES,0,0,RES,0,0);
   g.clearRect(0,0,w,h);
 
-  // 1. purple paint-splash blob — same 9-point closed bezier, wobble SOFTENED to
-  //    roughly half its old amplitude so the splash reads as a puffy rounded cloud
-  const cx=w/2,cy=h*0.50,rx=w*0.445,ry=h*0.42,NP=9;
-  const wob=[1.00,0.90,1.07,0.93,1.03,0.88,1.08,0.95,0.99];
-  g.save();g.globalAlpha=0.55;g.fillStyle='#4a1f8a';
-  g.beginPath();
-  for(let i=0;i<=NP;i++){
-    const a=(i/NP)*Math.PI*2,k=wob[i%NP];
-    const px=cx+Math.cos(a)*rx*k,py=cy+Math.sin(a)*ry*k;
-    if(i===0){g.moveTo(px,py);continue;}
-    const pa=((i-1)/NP)*Math.PI*2,pk=wob[(i-1)%NP];
-    const ma=(pa+a)/2,mk=(pk+k)/2*1.20;
-    g.quadraticCurveTo(cx+Math.cos(ma)*rx*mk,cy+Math.sin(ma)*ry*mk,px,py);
-  }
-  g.closePath();g.fill();g.restore();
+  // 1. card wash — the reference card is lit from the centre, corners fall dark
+  const gc=g.createRadialGradient(w/2,h*0.45,0,w/2,h*0.45,w*0.72);
+  gc.addColorStop(0,'rgba(120,70,210,0.26)');gc.addColorStop(1,'rgba(120,70,210,0)');
+  g.fillStyle=gc;g.fillRect(0,0,w,h);
 
-  // 2. TWO stacked bubble lines — CRUSH over TRIS. Two short lines buy vertical
-  //    room, so the type runs MUCH bigger than the old single-line fit. Per-letter
-  //    colour + thick soft dark outline + gloss cap + a tiny alternating tilt/bob
-  //    (the tilt/bob is what makes it read "sticker-cute" instead of typeset).
-  let fs=Math.max(8,Math.round(h*0.30));
+  // 2. satellite droplets, then the splash on top
+  for(const[fx,fy,fr]of LOGO_DROPS){
+    const dx=fx*w,dy=fy*h,dr=Math.max(1.2,fr*w);
+    g.fillStyle='#e8339f';g.beginPath();g.arc(dx,dy,dr,0,Math.PI*2);g.fill();
+    g.fillStyle='rgba(255,255,255,0.70)';
+    g.beginPath();g.arc(dx-dr*0.30,dy-dr*0.30,dr*0.34,0,Math.PI*2);g.fill();
+  }
+  paintSplash(g,w,h,w*0.50,h*0.49,Math.min(w,h)*0.29);
+
+  // 3. TWO stacked bubble lines — CRUSH over TRIS. Per-letter body gradient
+  //    (lit top, saturated middle, deep bottom) + thick dark outline carrying a
+  //    soft drop shadow + a white gloss cap and a thin bright ridge on the upper
+  //    third, on a near-level arc with a micro tilt/bob per letter so it reads
+  //    "sticker" rather than typeset.
+  let fs=Math.max(8,Math.round(h*0.31));
   const lineW=[0,0],lineWidths=[[],[]];
   const measure=()=>{
     g.font='700 '+fs+'px Bungee,"Arial Black",sans-serif';
     for(let li=0;li<2;li++){
       const word=LOGO_LINES[li],ws=[];let tot=0;
       for(const chr of word){const m=g.measureText(chr).width;ws.push(m);tot+=m;}
-      tot+=fs*0.03*(word.length-1);
+      tot+=fs*0.02*(word.length-1);
       lineWidths[li]=ws;lineW[li]=tot;
     }
   };
   measure();
-  for(let pass=0;pass<4&&Math.max(lineW[0],lineW[1])>w*0.86;pass++){
-    fs=Math.max(7,Math.floor(fs*(w*0.86)/Math.max(lineW[0],lineW[1])));
+  for(let pass=0;pass<4&&Math.max(lineW[0],lineW[1])>w*0.88;pass++){
+    fs=Math.max(7,Math.floor(fs*(w*0.88)/Math.max(lineW[0],lineW[1])));
     measure();
   }
-  const track=fs*0.03, Rarc=Math.max(w*1.6,1);
-  const outlineW=Math.max(3,fs*0.14);
-  const y1=h*0.42, y2=y1+fs*1.06;    // stacked baselines, tight for all-caps Bungee
-  let gi=0;                          // global letter index into LOGO_COLS
+  const track=fs*0.02, Rarc=Math.max(w*2.4,1);
+  const outlineW=Math.max(3,fs*0.15);
+  const capH=fs*0.736, lineGap=fs*1.04;        // Bungee cap height ≈ 0.736em
+  const y1=h*0.50-(capH+lineGap)/2+capH, y2=y1+lineGap;
+  let gi=0;                                    // global letter index into LOGO_COLS
   for(let li=0;li<2;li++){
     const word=LOGO_LINES[li],ws=lineWidths[li],total=lineW[li];
     g.save();
-    g.translate(w/2,(li?y2:y1)+Rarc); // arc centre BELOW the word => middle rides highest
+    g.translate(w/2,(li?y2:y1)+Rarc);          // arc centre BELOW the word
     g.textAlign='center';g.textBaseline='alphabetic';
     g.lineJoin='round';g.miterLimit=2;
     let ang=-total/(2*Rarc);
     for(let i=0;i<word.length;i++){
-      const aw=ws[i]+track;
+      const aw=ws[i]+track, ch=word[i], col=LOGO_COLS[gi%LOGO_COLS.length];
       g.save();
       g.rotate(ang+aw/(2*Rarc));
       g.translate(0,-Rarc);
-      g.rotate((i%2?1:-1)*0.045);          // alternating micro-tilt
-      g.translate(0,(i%2?1:-1)*fs*0.035);  // gentle per-letter bob
-      g.lineWidth=outlineW;g.strokeStyle='#1a0a2e';g.strokeText(word[i],0,0);
-      g.fillStyle=LOGO_COLS[gi%LOGO_COLS.length];g.fillText(word[i],0,0);
-      g.save();                            // white gloss cap on the upper third
-      g.beginPath();g.rect(-aw,-fs*0.78,aw*2,fs*0.28);g.clip();
-      g.fillStyle='rgba(255,255,255,0.60)';g.fillText(word[i],0,0);
+      g.rotate((i%2?1:-1)*0.03);
+      g.translate(0,(i%2?1:-1)*fs*0.02);
+      g.save();                                // outline + its drop shadow in one stroke
+      g.shadowColor='rgba(20,6,40,0.55)';g.shadowBlur=fs*0.16;
+      g.shadowOffsetX=fs*0.05;g.shadowOffsetY=fs*0.10;
+      g.lineWidth=outlineW;g.strokeStyle='#2a0d4e';g.strokeText(ch,0,0);
       g.restore();
+      const gl=g.createLinearGradient(0,-capH,0,0);
+      gl.addColorStop(0,shade(col,0.42));gl.addColorStop(0.50,col);gl.addColorStop(1,shade(col,-0.22));
+      g.fillStyle=gl;g.fillText(ch,0,0);
+      g.save();                                // lower inner shade
+      g.beginPath();g.rect(-aw,-capH*0.30,aw*2,capH*0.30+fs*0.12);g.clip();
+      g.fillStyle='rgba(60,0,60,0.10)';g.fillText(ch,0,0);g.restore();
+      g.save();                                // gloss cap on the upper third
+      g.beginPath();g.rect(-aw,-capH*1.06,aw*2,capH*0.38);g.clip();
+      g.fillStyle='rgba(255,255,255,0.42)';g.fillText(ch,0,0);g.restore();
+      g.save();                                // thin bright ridge at the very top
+      g.beginPath();g.rect(-aw,-capH*1.06,aw*2,capH*0.13);g.clip();
+      g.fillStyle='rgba(255,255,255,0.40)';g.fillText(ch,0,0);g.restore();
       g.restore();
       ang+=aw/Rarc;gi++;
     }
     g.restore();
   }
 
-  // 2b. sparkle glints — classic 4-point concave-diamond twinkles
-  for(const[fx,fy,fr,scol]of LOGO_SPARKS){
-    const sx=fx*w,sy=fy*h,sr=Math.max(2,fr*w);
-    g.save();g.globalAlpha=0.9;g.fillStyle=scol;
-    g.beginPath();
-    g.moveTo(sx,sy-sr);g.quadraticCurveTo(sx,sy,sx+sr,sy);
-    g.quadraticCurveTo(sx,sy,sx,sy+sr);g.quadraticCurveTo(sx,sy,sx-sr,sy);
-    g.quadraticCurveTo(sx,sy,sx,sy-sr);
-    g.closePath();g.fill();g.restore();
-  }
-
-  // 3. three kawaii sweets tucked into the card corners — the gameplay candies'
-  //    own glossy-jelly body + face (renderJellyBody), so the banner sweets match
-  //    the candies falling in the board. Colours are the FIXED logo palette.
-  for(const[fx,fy,fr,rot,col,face]of LOGO_SWEETS){
-    const bx=fx*w,by=fy*h,br=Math.max(5,fr*w);
-    const C={body:col,light:shade(col,0.45),dark:shade(col,-0.5)};
-    g.save();g.translate(bx,by);g.rotate(rot);
-    renderJellyBody(g,face,0,0,br,C,true);
-    g.restore();
-  }
+  // 4. five glossy jelly beans in the corners, on top of everything
+  for(const[fx,fy,fl,rot,col]of LOGO_BEANS)drawBean(g,fx*w,fy*h,Math.max(10,fl*w),rot,col);
 }
 // Bungee arrives from cabinet.css asynchronously; the boot paint can land on the
 // fallback face. One repaint when the fonts settle — never a per-frame repaint.
@@ -663,18 +753,32 @@ function drawScoreStar(){
   const g=starCv.getContext('2d');
   g.setTransform(RES,0,0,RES,0,0);
   g.clearRect(0,0,s,s);
-  const cx=s/2,cy=s/2,R=s*0.46,r=R*0.42;
-  g.beginPath();
-  for(let i=0;i<10;i++){
-    const rr=i%2?r:R,ang=-Math.PI/2+i*Math.PI/5;
-    const x=cx+Math.cos(ang)*rr,y=cy+Math.sin(ang)*rr;
-    if(i)g.lineTo(x,y);else g.moveTo(x,y);
-  }
-  g.closePath();
-  const grd=g.createLinearGradient(0,0,0,s);
-  grd.addColorStop(0,'#ffe27a');grd.addColorStop(1,'#f0a800');
-  g.fillStyle=grd;g.fill();
-  g.strokeStyle='rgba(90,50,0,0.55)';g.lineWidth=1;g.stroke();
+  const cx=s/2,cy=s/2+s*0.02,R=s*0.47,r=R*0.46;
+  const star=()=>{
+    g.beginPath();
+    for(let i=0;i<10;i++){
+      const rr=i%2?r:R,ang=-Math.PI/2+i*Math.PI/5;
+      const x=cx+Math.cos(ang)*rr,y=cy+Math.sin(ang)*rr;
+      if(i)g.lineTo(x,y);else g.moveTo(x,y);
+    }
+    g.closePath();
+  };
+  // CT_ART_V4: glossy gold star — soft shadow, radial pale-yellow → amber body,
+  // rounded dark-amber outline, top-left specular. Was a flat 2-stop fill.
+  g.lineJoin='round';
+  g.save();g.shadowColor='rgba(0,0,0,0.45)';g.shadowBlur=s*0.16;g.shadowOffsetY=s*0.06;
+  g.fillStyle='#8a5000';star();g.fill();g.restore();
+  const grd=g.createRadialGradient(cx-R*0.35,cy-R*0.45,R*0.05,cx,cy,R*1.15);
+  grd.addColorStop(0,'#fff6b0');grd.addColorStop(0.45,'#ffd23f');grd.addColorStop(1,'#e88a00');
+  g.fillStyle=grd;star();g.fill();
+  g.strokeStyle='#8a5000';g.lineWidth=Math.max(1,s*0.07);star();g.stroke();
+  g.save();star();g.clip();
+  const gl=g.createLinearGradient(0,cy-R,0,cy);
+  gl.addColorStop(0,'rgba(255,255,255,0.45)');gl.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gl;g.beginPath();g.ellipse(cx-R*0.05,cy-R*0.40,R*0.62,R*0.36,0,0,Math.PI*2);g.fill();
+  g.restore();
+  g.fillStyle='rgba(255,255,255,0.85)';
+  g.beginPath();g.ellipse(cx-R*0.30,cy-R*0.38,R*0.13,R*0.08,-0.6,0,Math.PI*2);g.fill();
 }
 
 let layoutDone=false;
@@ -701,23 +805,44 @@ function resize(){
 }
 function paintBG(){
   const g=bgCanvas.getContext('2d');
+  g.setTransform(RES,0,0,RES,0,0);
   const grd=g.createLinearGradient(0,0,0,DH);
-  grd.addColorStop(0,'#16092e');grd.addColorStop(1,'#1e0f38');
+  grd.addColorStop(0,'#110722');grd.addColorStop(1,'#180b30');
   g.fillStyle=grd;g.fillRect(0,0,DW,DH);
-  // Static bokeh — drawn once, never per frame. Positions are FRACTIONS of DW/DH
-  // (the old 390/844 literals do not survive a fluid stage). Alpha raised to
-  // .10-.16: at 5-10% the field was genuinely imperceptible on a phone.
-  // Weighting: 4 circles lower-left, 4 upper-right, per spec.
+  // CT_ART_V4 ground: faint 26px grid over the whole stage (the reference's
+  // subtle graph-paper texture), purple bokeh weighted to the bottom corners
+  // (behind PAUSE / SOUND) with a lighter top-right cluster, a scatter of
+  // sharp pin-dots, and a radial vignette. All static — painted once, never
+  // per frame. Positions are FRACTIONS of DW/DH so they survive a fluid stage.
+  g.strokeStyle='rgba(160,120,255,0.07)';g.lineWidth=1;
+  for(let x=0.5;x<DW;x+=26){g.beginPath();g.moveTo(x,0);g.lineTo(x,DH);g.stroke();}
+  for(let y=0.5;y<DH;y+=26){g.beginPath();g.moveTo(0,y);g.lineTo(DW,y);g.stroke();}
   const bok=[
-    [0.10,0.63,46,.14],[0.05,0.79,34,.16],[0.23,0.88,52,.12],[0.16,0.71,24,.15],
-    [0.86,0.09,58,.13],[0.94,0.22,38,.15],[0.72,0.05,30,.12],[0.90,0.34,26,.11]
+    [0.07,0.90,48,.26],[0.19,0.96,32,.22],[0.03,0.76,26,.18],[0.14,0.82,18,.20],
+    [0.93,0.91,56,.30],[0.80,0.98,30,.22],[0.97,0.72,24,.20],[0.86,0.80,16,.18],
+    [0.88,0.07,42,.16],[0.96,0.19,26,.16],[0.72,0.03,20,.12],[0.05,0.40,22,.12]
   ];
   for(const[fx,fy,r,a]of bok){
     const x=fx*DW, yy=fy*DH;
     const rg=g.createRadialGradient(x,yy,0,x,yy,r);
-    rg.addColorStop(0,'rgba(180,140,255,'+a+')');rg.addColorStop(1,'rgba(180,140,255,0)');
+    rg.addColorStop(0,'rgba(150,80,240,'+a+')');rg.addColorStop(0.55,'rgba(130,60,220,'+(a*0.55)+')');
+    rg.addColorStop(1,'rgba(120,50,210,0)');
     g.fillStyle=rg;g.beginPath();g.arc(x,yy,r,0,Math.PI*2);g.fill();
   }
+  // pin-dots live in the side margins only (fx ≤ .03 / ≥ .975): a dot that
+  // lands in the 7px gap between two cards reads as a defect on the card edge
+  const dots=[
+    [0.015,0.86,1.8],[0.028,0.92,1.3],[0.012,0.70,1.4],[0.025,0.97,1.6],[0.018,0.40,1.2],
+    [0.985,0.85,1.8],[0.978,0.94,1.4],[0.990,0.64,1.3],[0.982,0.13,1.5],[0.992,0.28,1.2],
+    [0.015,0.55,1.0],[0.986,0.48,1.1]
+  ];
+  for(const[fx,fy,r]of dots){
+    g.fillStyle='rgba(215,190,255,0.55)';
+    g.beginPath();g.arc(fx*DW,fy*DH,r,0,Math.PI*2);g.fill();
+  }
+  const vg=g.createRadialGradient(DW*0.5,DH*0.45,DH*0.25,DW*0.5,DH*0.5,DH*0.72);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.42)');
+  g.fillStyle=vg;g.fillRect(0,0,DW,DH);
 }
 
 // ── Core state ──────────────────────────────────────────────────────────────
@@ -1956,10 +2081,10 @@ for(const k of ['hammer','shuffle','wrap','swap']){
 //    and CSS scales it to whatever L.bstD layout() picked, so a resize needs
 //    no repaint either. ───────────────────────────────────────────────────
 const BOOSTER_RING={
-  hammer :['#e6bcff','#a44df0','#5c2a8a'],
-  shuffle:['#b6f3c2','#3fca55','#1d7a2e'],
-  wrap   :['#ffe3ac','#f2a935','#9a6414'],
-  swap   :['#bfeeff','#3fd0ff','#0d6d8a']
+  hammer :['#ee8fea','#c43fcf','#5e1a78'],
+  shuffle:['#9de88c','#3cbe3e','#1a6a1f'],
+  wrap   :['#ffd36a','#f0a020','#8f4e08'],
+  swap   :['#a9e6ff','#3fc4f5','#0d5f86']
 };
 function bRR(g,x,y,w,h,r){
   g.beginPath();
@@ -1969,112 +2094,181 @@ function bRR(g,x,y,w,h,r){
   g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);
   g.closePath();
 }
-// 1 — LOLLIPOP: white disc + purple archimedean swirl + straight stick.
-// The stick points STRAIGHT DOWN, not down-right: .cnt now sits bottom-right,
-// and a diagonal stick collided with the count badge.
+// 1 — LOLLIPOP: glossy white sphere striped with a purple spiral, gold rim,
+// stick angled DOWN-LEFT. The .cnt badge owns the bottom-right corner, so the
+// stick leans away from it (straight down grazed the badge; down-right hid
+// behind it).
 function drawLollyIcon(g,cx,cy,R){
-  const dy=cy-R*0.20, r=R*0.74;
+  const sx=cx+R*0.02, sy=cy-R*0.06, r=R*0.80;
+  const ex=cx-R*0.60, ey=cy+R*0.98;
   g.save();
   g.lineCap='round';
-  g.strokeStyle='#f3e6ff';g.lineWidth=R*0.15;
-  g.beginPath();g.moveTo(cx,dy);g.lineTo(cx,cy+R*0.90);g.stroke();
-  g.fillStyle='#ffffff';g.beginPath();g.arc(cx,dy,r,0,Math.PI*2);g.fill();
-  // swirl turn-spacing (0.86r/2.7 = 0.32r) must exceed the stroke width or the
-  // disc fills solid purple and stops reading as a swirl
-  g.strokeStyle='#a44df0';g.lineWidth=r*0.16;g.lineJoin='round';
-  g.beginPath();
-  const steps=170,turns=2.7;
-  for(let i=0;i<=steps;i++){
-    const t=i/steps,ang=t*turns*Math.PI*2,rad=t*r*0.86;
-    const x=cx+Math.cos(ang)*rad,y=dy+Math.sin(ang)*rad;
-    if(i)g.lineTo(x,y);else g.moveTo(x,y);
-  }
-  g.stroke();
-  g.fillStyle='rgba(255,255,255,0.6)';
-  g.beginPath();g.ellipse(cx-r*0.36,dy-r*0.42,r*0.26,r*0.13,-0.6,0,Math.PI*2);g.fill();
-  g.restore();
-}
-// 2 — JELLYBEAN: green rotated ellipse + white specular
-function drawBeanIcon(g,cx,cy,R){
+  g.strokeStyle='#6e3f0e';g.lineWidth=R*0.20;
+  g.beginPath();g.moveTo(sx,sy);g.lineTo(ex,ey);g.stroke();
+  g.strokeStyle='#f8e9c8';g.lineWidth=R*0.10;
+  g.beginPath();g.moveTo(sx,sy);g.lineTo(ex,ey);g.stroke();
+  // sphere: base radial (pink TL → deep purple BR), pale meridian bands, then a
+  // rim-darkening overlay so the bands curve INTO the shadow side
   g.save();
-  g.translate(cx,cy);g.rotate(-0.62);
-  const grd=g.createLinearGradient(-R*0.8,-R*0.5,R*0.8,R*0.5);
-  grd.addColorStop(0,'#a6f0b4');grd.addColorStop(0.48,'#3fca55');grd.addColorStop(1,'#1a7a2c');
-  g.fillStyle=grd;
-  g.beginPath();g.ellipse(0,0,R*0.84,R*0.50,0,0,Math.PI*2);g.fill();
-  g.strokeStyle='rgba(8,48,18,0.45)';g.lineWidth=R*0.07;g.stroke();
+  g.beginPath();g.arc(sx,sy,r,0,Math.PI*2);g.clip();
+  const base=g.createRadialGradient(sx-r*0.40,sy-r*0.42,r*0.05,sx,sy,r*1.05);
+  base.addColorStop(0,'#f9c4f6');base.addColorStop(0.45,'#b24ad8');base.addColorStop(1,'#3a0866');
+  g.fillStyle=base;g.fillRect(sx-r,sy-r,r*2,r*2);
+  // a meridian at longitude p projects to the ellipse (r·|sin p|, r): right
+  // half when sin p ≥ 0, left half otherwise; thinner toward the limb
+  g.strokeStyle='rgba(255,236,255,0.82)';g.lineCap='butt';
+  for(const p of [-0.95,-0.32,0.34,0.88]){
+    const sn=Math.sin(p),rx=r*Math.abs(sn);
+    g.lineWidth=r*0.19*(0.45+0.55*Math.cos(p));
+    g.beginPath();
+    if(sn>=0)g.ellipse(sx,sy,rx,r,-0.30,-Math.PI/2,Math.PI/2);
+    else g.ellipse(sx,sy,rx,r,-0.30,Math.PI/2,Math.PI*1.5);
+    g.stroke();
+  }
+  const sh=g.createRadialGradient(sx-r*0.35,sy-r*0.40,r*0.10,sx,sy,r*1.05);
+  sh.addColorStop(0,'rgba(255,255,255,0.18)');sh.addColorStop(0.50,'rgba(120,40,170,0)');
+  sh.addColorStop(1,'rgba(40,0,80,0.62)');
+  g.fillStyle=sh;g.fillRect(sx-r,sy-r,r*2,r*2);
+  g.restore();
+  // gold rim: dark bead, then a lit gradient band on top of it
+  g.strokeStyle='#7a4a0c';g.lineWidth=r*0.15;
+  g.beginPath();g.arc(sx,sy,r,0,Math.PI*2);g.stroke();
+  const gr=g.createLinearGradient(sx-r,sy-r,sx+r,sy+r);
+  gr.addColorStop(0,'#ffe98f');gr.addColorStop(0.5,'#f2b52c');gr.addColorStop(1,'#b0721a');
+  g.strokeStyle=gr;g.lineWidth=r*0.08;
+  g.beginPath();g.arc(sx,sy,r,0,Math.PI*2);g.stroke();
   g.fillStyle='rgba(255,255,255,0.85)';
-  g.beginPath();g.ellipse(-R*0.30,-R*0.18,R*0.26,R*0.11,-0.25,0,Math.PI*2);g.fill();
+  g.beginPath();g.ellipse(sx-r*0.40,sy-r*0.44,r*0.24,r*0.11,-0.65,0,Math.PI*2);g.fill();
+  g.fillStyle='rgba(255,255,255,0.50)';
+  g.beginPath();g.arc(sx+r*0.34,sy+r*0.42,r*0.07,0,Math.PI*2);g.fill();
   g.restore();
 }
-// 3 — WRAPPED CANDY: orange rounded square + two triangular twist ends.
-// The ends are ORANGE and short. First pass drew them dark brown and full
-// height, which read as two black wings eating the button, not as wrapper.
+// 2 — JELLYBEAN: thick round-capped arc (the logo bean's construction) with a
+// dark outline, TL→BR body gradient, a thin gloss arc hugging the top edge.
+// Brighter green than the coin so the bean separates from it.
+function drawBeanIcon(g,cx,cy,R){
+  const len=R*1.58, wid=len*0.58, bendR=len*0.95, th=len/(2*bendR);
+  const a0=-Math.PI/2-th, a1=-Math.PI/2+th;
+  const arc=(ox,oy,r,b0,b1)=>{g.beginPath();g.arc(ox,oy,r,b0,b1);};
+  g.save();g.translate(cx,cy-R*0.08);g.rotate(-0.50);g.lineCap='round';
+  g.save();g.shadowColor='rgba(0,0,0,0.50)';g.shadowBlur=len*0.20;g.shadowOffsetY=len*0.10;
+  g.strokeStyle='#145a18';g.lineWidth=wid;arc(0,bendR,bendR,a0,a1);g.stroke();g.restore();
+  const gr=g.createLinearGradient(-len*0.5,-wid*0.7,len*0.4,wid*0.9);
+  gr.addColorStop(0,'#a4f582');gr.addColorStop(0.45,'#4fd23c');gr.addColorStop(1,'#1f8c24');
+  g.strokeStyle=gr;g.lineWidth=wid*0.84;arc(-wid*0.04,bendR-wid*0.06,bendR,a0,a1);g.stroke();
+  g.strokeStyle='rgba(255,255,255,0.85)';g.lineWidth=wid*0.14;
+  arc(-wid*0.10,bendR-wid*0.26,bendR,a0+th*0.25,a0+th*1.15);g.stroke();
+  g.fillStyle='rgba(255,255,255,0.75)';
+  g.beginPath();g.arc(Math.sin(th)*bendR*0.55,-wid*0.12,wid*0.09,0,Math.PI*2);g.fill();
+  g.restore();
+}
+// 3 — WRAPPED CANDY: orange glossy body, two red-orange twist ends, tilted like
+// the reference. Ends stay inside 1.06R so the coin's rim still shows around it.
 function drawWrapIcon(g,cx,cy,R){
   g.save();
-  // ends stop at 0.84R, NOT at the inner circle's edge: an orange tip touching
-  // the gold ring has zero separation and the whole icon reads as a bowtie
-  // fused to the button rim.
-  const w=R*0.86,h=R*0.86,rr=R*0.24,hw=w/2;
-  const eg=g.createLinearGradient(0,cy-R*0.28,0,cy+R*0.28);
-  eg.addColorStop(0,'#ffbe63');eg.addColorStop(1,'#c97f10');
-  g.fillStyle=eg;
-  g.beginPath();g.moveTo(cx-hw*0.86,cy);g.lineTo(cx-R*0.84,cy-R*0.28);g.lineTo(cx-R*0.84,cy+R*0.28);g.closePath();g.fill();
-  g.beginPath();g.moveTo(cx+hw*0.86,cy);g.lineTo(cx+R*0.84,cy-R*0.28);g.lineTo(cx+R*0.84,cy+R*0.28);g.closePath();g.fill();
-  const grd=g.createLinearGradient(cx-hw,cy-h/2,cx+hw,cy+h/2);
-  grd.addColorStop(0,'#ffcd80');grd.addColorStop(0.5,'#ff9f2e');grd.addColorStop(1,'#c96a00');
-  g.fillStyle=grd;bRR(g,cx-hw,cy-h/2,w,h,rr);g.fill();
-  g.strokeStyle='rgba(88,44,0,0.5)';g.lineWidth=R*0.07;g.stroke();
-  g.fillStyle='rgba(255,255,255,0.5)';
-  g.beginPath();g.ellipse(cx-w*0.19,cy-h*0.24,w*0.20,h*0.10,-0.5,0,Math.PI*2);g.fill();
+  g.translate(cx,cy);g.rotate(-0.55);g.scale(1.10,1.10);
+  g.lineJoin='round';
+  const body=()=>{g.beginPath();g.ellipse(0,0,R*0.58,R*0.44,0,0,Math.PI*2);};
+  g.save();g.shadowColor='rgba(0,0,0,0.45)';g.shadowBlur=R*0.22;g.shadowOffsetY=R*0.12;
+  g.fillStyle='#8a2a10';
+  body();g.fill();
+  g.beginPath();g.arc(-R*0.80,0,R*0.26,0,Math.PI*2);g.fill();
+  g.beginPath();g.arc( R*0.80,0,R*0.26,0,Math.PI*2);g.fill();
+  g.restore();
+  g.fillStyle='#d84418';
+  g.beginPath();g.moveTo(-R*0.50,-R*0.17);g.lineTo(-R*0.80,-R*0.10);g.lineTo(-R*0.80,R*0.10);g.lineTo(-R*0.50,R*0.17);g.closePath();g.fill();
+  g.beginPath();g.moveTo( R*0.50,-R*0.17);g.lineTo( R*0.80,-R*0.10);g.lineTo( R*0.80,R*0.10);g.lineTo( R*0.50,R*0.17);g.closePath();g.fill();
+  for(const s of [-1,1]){
+    const ex=s*R*0.80, er=R*0.26;
+    const eg=g.createRadialGradient(ex-er*0.35,-er*0.40,er*0.05,ex,0,er);
+    eg.addColorStop(0,'#ffb27e');eg.addColorStop(0.45,'#ff5a2a');eg.addColorStop(1,'#a0200a');
+    g.fillStyle=eg;g.beginPath();g.arc(ex,0,er,0,Math.PI*2);g.fill();
+    g.fillStyle='rgba(255,255,255,0.72)';
+    g.beginPath();g.ellipse(ex-er*0.30,-er*0.36,er*0.30,er*0.15,-0.6,0,Math.PI*2);g.fill();
+  }
+  const bg=g.createRadialGradient(-R*0.22,-R*0.20,R*0.05,0,0,R*0.62);
+  bg.addColorStop(0,'#ffe28e');bg.addColorStop(0.45,'#ffa21e');bg.addColorStop(1,'#bf5000');
+  g.fillStyle=bg;body();g.fill();
+  g.save();body();g.clip();
+  g.strokeStyle='rgba(222,62,20,0.55)';g.lineWidth=R*0.10;
+  g.beginPath();g.ellipse(-R*0.22,0,R*0.10,R*0.48,0,0,Math.PI*2);g.stroke();
+  g.beginPath();g.ellipse( R*0.22,0,R*0.10,R*0.48,0,0,Math.PI*2);g.stroke();
+  g.restore();
+  g.strokeStyle='rgba(120,40,0,0.55)';g.lineWidth=R*0.05;body();g.stroke();
+  g.fillStyle='rgba(255,255,255,0.78)';
+  g.beginPath();g.ellipse(-R*0.20,-R*0.20,R*0.26,R*0.11,-0.35,0,Math.PI*2);g.fill();
   g.restore();
 }
-// 4 — FREE SWAP: two candy squares (blue/orange, echoing the two colours players
-// most often want to trade) with a curved double-arrow cycling between them.
+// 4 — FREE SWAP: two glossy candy squares (blue/orange) with a white cycling
+// double-arrow, arrows haloed dark so they stay legible over the cyan coin.
 function drawSwapIcon(g,cx,cy,R){
   g.save();
-  const s=R*0.62,rr=R*0.16;
-  const bx=cx-R*0.42,by=cy+R*0.10,ox=cx+R*0.42,oy=cy-R*0.10;
-  const bg=g.createLinearGradient(bx-s/2,by-s/2,bx+s/2,by+s/2);
-  bg.addColorStop(0,'#8fe0ff');bg.addColorStop(1,'#1a9fd6');
-  g.fillStyle=bg;bRR(g,bx-s/2,by-s/2,s,s,rr);g.fill();
-  g.strokeStyle='rgba(6,50,70,0.5)';g.lineWidth=R*0.055;g.stroke();
-  const og=g.createLinearGradient(ox-s/2,oy-s/2,ox+s/2,oy+s/2);
-  og.addColorStop(0,'#ffcd80');og.addColorStop(1,'#e08420');
-  g.fillStyle=og;bRR(g,ox-s/2,oy-s/2,s,s,rr);g.fill();
-  g.strokeStyle='rgba(88,44,0,0.5)';g.lineWidth=R*0.055;g.stroke();
-  // two curved arrows forming a swap cycle
-  g.strokeStyle='#ffffff';g.lineWidth=R*0.10;g.lineCap='round';
-  g.beginPath();g.arc(cx,cy,R*0.62,Math.PI*1.15,Math.PI*1.85);g.stroke();
-  g.beginPath();g.arc(cx,cy,R*0.62,Math.PI*0.15,Math.PI*0.85);g.stroke();
-  const ah=R*0.14;
-  g.beginPath();
-  g.moveTo(cx+R*0.62*Math.cos(Math.PI*1.85),cy+R*0.62*Math.sin(Math.PI*1.85));
-  g.lineTo(cx+R*0.62*Math.cos(Math.PI*1.85)-ah,cy+R*0.62*Math.sin(Math.PI*1.85)-ah*0.4);
-  g.lineTo(cx+R*0.62*Math.cos(Math.PI*1.85)-ah*0.2,cy+R*0.62*Math.sin(Math.PI*1.85)+ah*0.9);
-  g.closePath();g.fillStyle='#ffffff';g.fill();
-  g.beginPath();
-  g.moveTo(cx+R*0.62*Math.cos(Math.PI*0.85),cy+R*0.62*Math.sin(Math.PI*0.85));
-  g.lineTo(cx+R*0.62*Math.cos(Math.PI*0.85)+ah,cy+R*0.62*Math.sin(Math.PI*0.85)+ah*0.4);
-  g.lineTo(cx+R*0.62*Math.cos(Math.PI*0.85)+ah*0.2,cy+R*0.62*Math.sin(Math.PI*0.85)-ah*0.9);
-  g.closePath();g.fill();
+  const s=R*0.60,rr=R*0.16;
+  const bx=cx-R*0.40,by=cy+R*0.12,ox=cx+R*0.40,oy=cy-R*0.12;
+  const sq=(x,y,c0,c1,c2,edge)=>{
+    g.save();g.shadowColor='rgba(0,0,0,0.45)';g.shadowBlur=R*0.16;g.shadowOffsetY=R*0.08;
+    g.fillStyle=c2;bRR(g,x-s/2,y-s/2,s,s,rr);g.fill();g.restore();
+    const gr=g.createRadialGradient(x-s*0.25,y-s*0.28,s*0.05,x,y,s*0.75);
+    gr.addColorStop(0,c0);gr.addColorStop(0.55,c1);gr.addColorStop(1,c2);
+    g.fillStyle=gr;bRR(g,x-s/2,y-s/2,s,s,rr);g.fill();
+    g.strokeStyle=edge;g.lineWidth=R*0.05;g.stroke();
+    g.fillStyle='rgba(255,255,255,0.6)';
+    g.beginPath();g.ellipse(x-s*0.18,y-s*0.24,s*0.22,s*0.10,-0.5,0,Math.PI*2);g.fill();
+  };
+  sq(bx,by,'#c8f0ff','#3fb8f0','#0d5f9a','rgba(4,40,70,0.6)');
+  sq(ox,oy,'#ffe6a8','#ffa02a','#b85400','rgba(88,40,0,0.6)');
+  const arrows=(col,w)=>{
+    g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';g.lineJoin='round';
+    g.beginPath();g.arc(cx,cy,R*0.64,Math.PI*1.15,Math.PI*1.85);g.stroke();
+    g.beginPath();g.arc(cx,cy,R*0.64,Math.PI*0.15,Math.PI*0.85);g.stroke();
+    g.fillStyle=col;g.lineWidth=w*0.6;
+    for(const[a,d]of[[Math.PI*1.85,1],[Math.PI*0.85,-1]]){
+      const px=cx+R*0.64*Math.cos(a),py=cy+R*0.64*Math.sin(a),ah=R*0.16;
+      g.beginPath();g.moveTo(px,py);g.lineTo(px-d*ah,py-d*ah*0.45);g.lineTo(px-d*ah*0.2,py+d*ah*0.95);
+      g.closePath();g.fill();g.stroke();
+    }
+  };
+  arrows('rgba(8,30,60,0.55)',R*0.17);
+  arrows('#ffffff',R*0.10);
   g.restore();
 }
 const BOOSTER_ICON={hammer:drawLollyIcon,shuffle:drawBeanIcon,wrap:drawWrapIcon,swap:drawSwapIcon};
+// CT_ART_V4 coin: the whole circle is the coloured face (the old dark inner disc
+// with a thin coloured ring is gone — the reference boosters are solid glossy
+// coins with the icon sitting ON the colour). Light from top-left: radial face,
+// a rim band lit TL / dark BR, an inner lip shadow, a soft gloss cap, and the
+// icon composited from its own layer with one drop shadow.
 function paintBoosterIcons(){
   for(const k of ['hammer','shuffle','wrap','swap']){
     const el=boosterEls[k];if(!el)continue;
     const cv=el.querySelector('canvas');if(!cv)continue;
     const g=cv.getContext('2d');if(!g)continue;
-    const S=cv.width,cx=S/2,cy=S/2;
+    const S=cv.width,cx=S/2,cy=S/2,R=S*0.5;
     g.setTransform(1,0,0,1,0,0);
     g.clearRect(0,0,S,S);
     const c=BOOSTER_RING[k];
-    const rg=g.createRadialGradient(cx-S*0.16,cy-S*0.20,S*0.04,cx,cy,S*0.50);
-    rg.addColorStop(0,c[0]);rg.addColorStop(0.60,c[1]);rg.addColorStop(1,c[2]);
-    g.fillStyle=rg;g.beginPath();g.arc(cx,cy,S*0.5,0,Math.PI*2);g.fill();
-    g.fillStyle='#16092e';g.beginPath();g.arc(cx,cy,S*0.365,0,Math.PI*2);g.fill();
-    BOOSTER_ICON[k](g,cx,cy,S*0.365);   // R = the dark inner circle's radius
+    const rg=g.createRadialGradient(cx-R*0.34,cy-R*0.38,R*0.04,cx,cy,R*1.08);
+    rg.addColorStop(0,c[0]);rg.addColorStop(0.40,c[1]);rg.addColorStop(1,c[2]);
+    g.fillStyle=rg;g.beginPath();g.arc(cx,cy,R,0,Math.PI*2);g.fill();
+    const lg=g.createLinearGradient(cx-R*0.7,cy-R*0.7,cx+R*0.7,cy+R*0.7);
+    lg.addColorStop(0,'rgba(255,255,255,0.50)');lg.addColorStop(0.5,'rgba(255,255,255,0.04)');
+    lg.addColorStop(1,'rgba(0,0,0,0.38)');
+    g.strokeStyle=lg;g.lineWidth=R*0.10;
+    g.beginPath();g.arc(cx,cy,R*0.93,0,Math.PI*2);g.stroke();
+    g.strokeStyle='rgba(0,0,0,0.16)';g.lineWidth=R*0.05;
+    g.beginPath();g.arc(cx,cy,R*0.855,0,Math.PI*2);g.stroke();
+    g.strokeStyle='rgba(255,255,255,0.10)';g.lineWidth=R*0.025;
+    g.beginPath();g.arc(cx,cy,R*0.82,0,Math.PI*2);g.stroke();
+    const gl=g.createLinearGradient(0,cy-R,0,cy-R*0.15);
+    gl.addColorStop(0,'rgba(255,255,255,0.22)');gl.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gl;g.beginPath();g.ellipse(cx,cy-R*0.50,R*0.66,R*0.40,0,0,Math.PI*2);g.fill();
+    g.strokeStyle='rgba(0,0,0,0.35)';g.lineWidth=2;
+    g.beginPath();g.arc(cx,cy,R-1,0,Math.PI*2);g.stroke();
+    const ic=document.createElement('canvas');ic.width=S;ic.height=S;
+    const ig=ic.getContext('2d');
+    BOOSTER_ICON[k](ig,cx,cy,S*0.365);
+    g.save();g.shadowColor='rgba(0,0,0,0.40)';g.shadowBlur=S*0.05;g.shadowOffsetY=S*0.025;
+    g.drawImage(ic,0,0);g.restore();
   }
 }
 
@@ -2103,13 +2297,26 @@ function buildBoardBase(){
   const g=boardBase.getContext('2d');
   g.setTransform(RES,0,0,RES,0,0);
   g.clearRect(0,0,w,h);
-  g.fillStyle='#1c0f36';g.fillRect(0,0,w,h);
-  // Faint violet grid — .05 alpha was literally invisible; #2a1a4e @ 1px reads
-  g.strokeStyle='#2a1a4e';g.lineWidth=1;
-  for(let r=0;r<=ROWS;r++){g.beginPath();g.moveTo(0,r*CELL);g.lineTo(w,r*CELL);g.stroke();}
-  for(let c=0;c<=COLS;c++){g.beginPath();g.moveTo(c*CELL,0);g.lineTo(c*CELL,h);g.stroke();}
-  // inner border — seats the play area inside the panel's 2px violet frame
-  g.strokeStyle='rgba(122,79,208,0.45)';g.lineWidth=1;
+  // CT_ART_V4: near-black well with a faint violet grid; every cell carries a
+  // soft rounded inset so the empty board reads as a tray of sockets (the
+  // reference's grid), not a flat sheet with lines on it.
+  g.fillStyle='#120a24';g.fillRect(0,0,w,h);
+  const ins=Math.max(1,CELL*0.06), rad=Math.max(2,CELL*0.18);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=c*CELL+ins,y=r*CELL+ins,d=CELL-ins*2;
+    g.fillStyle='rgba(255,255,255,0.025)';
+    g.beginPath();
+    if(g.roundRect)g.roundRect(x,y,d,d,rad);else g.rect(x,y,d,d);
+    g.fill();
+  }
+  g.strokeStyle='rgba(150,120,230,0.13)';g.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){g.beginPath();g.moveTo(0,r*CELL+0.5);g.lineTo(w,r*CELL+0.5);g.stroke();}
+  for(let c=0;c<=COLS;c++){g.beginPath();g.moveTo(c*CELL+0.5,0);g.lineTo(c*CELL+0.5,h);g.stroke();}
+  // top-edge shadow — the well sits BELOW the panel lip
+  const tg=g.createLinearGradient(0,0,0,CELL*0.5);
+  tg.addColorStop(0,'rgba(0,0,0,0.35)');tg.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=tg;g.fillRect(0,0,w,CELL*0.5);
+  g.strokeStyle='rgba(150,120,230,0.30)';g.lineWidth=1;
   g.strokeRect(0.5,0.5,w-1,h-1);
 }
 
@@ -2174,48 +2381,93 @@ function jellyBodyPath(g,cx,cy,h,rad){
     g.moveTo(x0+rad,y0);g.arcTo(x0+w,y0,x0+w,y0+w,rad);g.arcTo(x0+w,y0+w,x0,y0+w,rad);
     g.arcTo(x0,y0+w,x0,y0,rad);g.arcTo(x0,y0,x0+w,y0,rad);g.closePath();}
 }
-function drawFace(g,idx,cx,cy,R){
+// Face ink: near-black warm brown, as in the reference art (not pure black — pure
+// black reads as a hole on a saturated body).
+// Face ink is a deep shade of the body colour (orange face = dark brown, purple face
+// = dark plum) exactly as in the reference art — a universal black reads as a hole.
+function faceInk(C){return shade(C.body,-0.70);}
+function drawFace(g,idx,cx,cy,R,ink){
   const f=FACES[idx%FACES.length];
-  const ex=R*f.ex,ey=cy-R*f.ey*0.5+R*0.02,ew=R*0.11*f.er,eh=R*0.16*f.er;
-  g.fillStyle='#3a2410';
+  ink=ink||faceInk(CANDY[idx%CANDY.length]);
+  const ex=R*f.ex*1.15,ey=cy-R*f.ey*0.5-R*0.06,ew=R*0.105*f.er,eh=R*0.145*f.er;
+  g.fillStyle=ink;
   if(f.mouth==='happy'){ // closed happy eyes: arcs
-    g.strokeStyle='#3a2410';g.lineWidth=Math.max(1,R*0.07);g.lineCap='round';
+    g.strokeStyle=ink;g.lineWidth=Math.max(1,R*0.085);g.lineCap='round';
     g.beginPath();g.arc(cx-ex,ey,ew*1.4,Math.PI*1.15,Math.PI*1.85);g.stroke();
     g.beginPath();g.arc(cx+ex,ey,ew*1.4,Math.PI*1.15,Math.PI*1.85);g.stroke();
   }else{
     g.beginPath();g.ellipse(cx-ex,ey,ew,eh,0,0,Math.PI*2);g.fill();
     g.beginPath();g.ellipse(cx+ex,ey,ew,eh,0,0,Math.PI*2);g.fill();
-    g.fillStyle='rgba(255,255,255,0.85)';
-    g.beginPath();g.arc(cx-ex-ew*0.3,ey-eh*0.35,ew*0.3,0,Math.PI*2);g.fill();
-    g.beginPath();g.arc(cx+ex-ew*0.3,ey-eh*0.35,ew*0.3,0,Math.PI*2);g.fill();
+    // specular dot top-left of each pupil
+    g.fillStyle='rgba(255,255,255,0.92)';
+    g.beginPath();g.arc(cx-ex-ew*0.30,ey-eh*0.36,ew*0.36,0,Math.PI*2);g.fill();
+    g.beginPath();g.arc(cx+ex-ew*0.30,ey-eh*0.36,ew*0.36,0,Math.PI*2);g.fill();
   }
-  const my=cy+R*0.28;
-  g.strokeStyle='#3a2410';g.lineWidth=Math.max(1,R*0.07);g.lineCap='round';
-  if(f.mouth==='smile'){g.beginPath();g.arc(cx,my-R*0.10,R*0.20,0.35,Math.PI-0.35);g.stroke();}
-  else if(f.mouth==='open'){g.fillStyle='#3a2410';g.beginPath();g.arc(cx,my-R*0.04,R*0.14,0,Math.PI);g.closePath();g.fill();}
-  else if(f.mouth==='o'){g.beginPath();g.arc(cx,my-R*0.02,R*0.09,0,Math.PI*2);g.stroke();}
-  else if(f.mouth==='happy'){g.beginPath();g.arc(cx,my-R*0.12,R*0.24,0.30,Math.PI-0.30);g.stroke();}
-  else{g.beginPath();g.moveTo(cx-R*0.14,my);g.quadraticCurveTo(cx,my+R*0.07,cx+R*0.14,my);g.stroke();}
+  const my=cy+R*0.30;
+  g.strokeStyle=ink;g.lineWidth=Math.max(1,R*0.09);g.lineCap='round';
+  if(f.mouth==='smile'){g.beginPath();g.arc(cx,my-R*0.14,R*0.26,0.40,Math.PI-0.40);g.stroke();}
+  else if(f.mouth==='open'){ // big laughing D-mouth with a tongue
+    g.fillStyle=ink;g.beginPath();g.arc(cx,my-R*0.08,R*0.22,0,Math.PI);g.closePath();g.fill();
+    g.fillStyle='#ff6b8a';g.beginPath();g.ellipse(cx,my+R*0.06,R*0.11,R*0.06,0,0,Math.PI*2);g.fill();}
+  else if(f.mouth==='o'){g.beginPath();g.arc(cx,my-R*0.02,R*0.10,0,Math.PI*2);g.stroke();}
+  else if(f.mouth==='happy'){g.beginPath();g.arc(cx,my-R*0.16,R*0.28,0.35,Math.PI-0.35);g.stroke();}
+  else{g.beginPath();g.moveTo(cx-R*0.18,my);g.quadraticCurveTo(cx,my+R*0.10,cx+R*0.18,my);g.stroke();}
 }
+// Body extents are shared by the fill and by the stripe clip in renderCandySprite —
+// ONE owner so the special-candy stripes can never outgrow / undershoot the body.
+function jellyExt(R){return {h:R*1.15,rad:R*0.30};}
+// Rounded glossy CUBE (CT_ART_V4): a bevelled rim (light top-left, dark bottom-right)
+// around an inset face, blurred drop shadow below, a broad diffuse highlight in the
+// top-left quadrant, a crisp specular, an inner shadow toward the bottom-right and a
+// faint rim-light along the bottom edge. Every call site is a pre-render (sprite
+// cache / logo), so shadowBlur and the five gradients here cost nothing per frame.
 function renderJellyBody(g,idx,cx,cy,R,C,withFace){
-  const h=R*0.92,rad=R*0.44;
-  // radial light→body→dark gradient fill
-  jellyBodyPath(g,cx,cy,h,rad);
-  const grd=g.createRadialGradient(cx-R*0.32,cy-R*0.40,R*0.08,cx,cy,R*1.35);
-  grd.addColorStop(0,C.light);grd.addColorStop(0.5,C.body);grd.addColorStop(1,C.dark);
-  g.fillStyle=grd;g.fill();
-  g.lineWidth=Math.max(1,R*0.06);g.strokeStyle='rgba(0,0,0,0.30)';g.stroke();
-  // darker shade at the bottom
-  g.save();jellyBodyPath(g,cx,cy,h,rad);g.clip();
-  g.fillStyle='rgba(0,0,0,0.18)';
-  g.beginPath();g.ellipse(cx,cy+h*1.05,h*1.2,h*0.55,0,0,Math.PI*2);g.fill();
-  // white gloss highlight sweeping the top edge
-  g.fillStyle='rgba(255,255,255,0.40)';
-  g.beginPath();g.ellipse(cx,cy-h*0.72,h*0.82,h*0.30,0,0,Math.PI*2);g.fill();
-  g.fillStyle='rgba(255,255,255,0.85)';
-  g.beginPath();g.ellipse(cx-h*0.48,cy-h*0.52,h*0.16,h*0.09,-0.6,0,Math.PI*2);g.fill();
+  const {h,rad}=jellyExt(R);
+  const bw=h*0.11, hi=h-bw, ri=Math.max(1,rad-bw*0.6);
+  // 1. drop shadow — the body path drawn dark with a blurred, downward-offset shadow
+  g.save();
+  g.shadowColor='rgba(0,0,0,0.55)';g.shadowBlur=h*0.28;g.shadowOffsetY=h*0.14;
+  jellyBodyPath(g,cx,cy,h,rad);g.fillStyle=C.dark;g.fill();
   g.restore();
-  if(withFace)drawFace(g,idx,cx,cy,R);
+  // 2. bevel rim — diagonal gradient, light top-left → dark bottom-right
+  jellyBodyPath(g,cx,cy,h,rad);
+  const gb=g.createLinearGradient(cx-h,cy-h,cx+h,cy+h);
+  gb.addColorStop(0,shade(C.body,0.62));gb.addColorStop(0.40,shade(C.body,0.10));
+  gb.addColorStop(0.62,shade(C.body,-0.28));gb.addColorStop(1,shade(C.body,-0.62));
+  g.fillStyle=gb;g.fill();
+  // 3. inset face — radial, lit from top-left
+  jellyBodyPath(g,cx,cy,hi,ri);
+  const gf=g.createRadialGradient(cx-hi*0.40,cy-hi*0.45,hi*0.05,cx,cy,hi*1.5);
+  gf.addColorStop(0,shade(C.body,0.24));gf.addColorStop(0.55,C.body);
+  gf.addColorStop(1,shade(C.body,-0.12));
+  g.fillStyle=gf;g.fill();
+  // 4. lighting passes, clipped to the inset face
+  g.save();jellyBodyPath(g,cx,cy,hi,ri);g.clip();
+  // inner shadow hugging the bottom-right of the face (the cube's far edges)
+  const gs=g.createRadialGradient(cx+hi*0.55,cy+hi*0.60,hi*0.3,cx+hi*0.3,cy+hi*0.3,hi*1.7);
+  gs.addColorStop(0,'rgba(0,0,0,0.26)');gs.addColorStop(0.55,'rgba(0,0,0,0.08)');gs.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=gs;g.fillRect(cx-h,cy-h,h*2,h*2);
+  // broad diffuse highlight, top-left quadrant
+  const gd=g.createRadialGradient(cx-hi*0.42,cy-hi*0.42,0,cx-hi*0.42,cy-hi*0.42,hi*0.95);
+  gd.addColorStop(0,'rgba(255,255,255,0.55)');gd.addColorStop(0.45,'rgba(255,255,255,0.22)');gd.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gd;g.fillRect(cx-h,cy-h,h*2,h*2);
+  // glass lip along the top edge of the face
+  const gl=g.createLinearGradient(0,cy-hi,0,cy-hi+hi*0.22);
+  gl.addColorStop(0,'rgba(255,255,255,0.55)');gl.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gl;g.fillRect(cx-hi,cy-hi,hi*2,hi*0.22);
+  // crisp specular
+  g.fillStyle='rgba(255,255,255,0.80)';
+  g.beginPath();g.ellipse(cx-hi*0.52,cy-hi*0.58,hi*0.22,hi*0.11,-0.55,0,Math.PI*2);g.fill();
+  // faint rim light along the bottom edge
+  g.fillStyle='rgba(255,255,255,0.16)';
+  g.beginPath();g.ellipse(cx,cy+hi*0.86,hi*0.58,hi*0.12,0,0,Math.PI*2);g.fill();
+  g.restore();
+  // 5. edges: soft inner corner line + dark outline
+  jellyBodyPath(g,cx,cy,hi,ri);
+  g.lineWidth=Math.max(1,h*0.03);g.strokeStyle='rgba(0,0,0,0.12)';g.stroke();
+  jellyBodyPath(g,cx,cy,h,rad);
+  g.lineWidth=Math.max(1,h*0.045);g.strokeStyle='rgba(20,6,40,0.60)';g.stroke();
+  if(withFace)drawFace(g,idx,cx,cy,R,faceInk(C));
 }
 function drawWrapper(g,cx,cy,sz,C){
   // foil wrapper square with pinched sides behind the candy
@@ -2296,24 +2548,29 @@ function renderCandySprite(g,idx,type,sz){
   if(idx<0||type===CB){drawBombSprite(g,cx,cy,sz);return;}
   paintWrapper(g,idx,sz);   // FIRST — everything below composites on top of it
   const C=CANDY[idx];
-  g.fillStyle='rgba(0,0,0,0.25)';
-  g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
-  if(type===FISH){drawFish(g,cx,cy,sz,C);return;}
+  if(type===FISH){
+    g.fillStyle='rgba(0,0,0,0.25)';
+    g.beginPath();g.ellipse(cx,sz*0.9,R*0.8,sz*0.055,0,0,Math.PI*2);g.fill();
+    drawFish(g,cx,cy,sz,C);return;
+  }
   if(type===WR){
     drawWrapper(g,cx,cy,sz,C);
     renderJellyBody(g,idx,cx,cy,R*0.74,C,true);  // jelly at 0.74 scale, face kept
     return;
   }
-  renderJellyBody(g,idx,cx,cy,R,C,type===N);
+  renderJellyBody(g,idx,cx,cy,R,C,type===N);   // owns its own blurred drop shadow
   if(type===SH||type===SV){
     // 3 bold white stripes clipped to the jelly body, direction = blast direction
-    g.save();jellyBodyPath(g,cx,cy,R*0.92,R*0.44);g.clip();
-    g.fillStyle='rgba(255,255,255,0.85)';
+    const e=jellyExt(R);
+    g.save();jellyBodyPath(g,cx,cy,e.h,e.rad);g.clip();
+    g.fillStyle='rgba(255,255,255,0.82)';
     const w=R*0.26;
-    for(const off of[-R*0.55,0,R*0.55]){
+    for(const off of[-R*0.62,0,R*0.62]){
       if(type===SH)g.fillRect(cx-R*1.3,cy+off-w/2,R*2.6,w);
       else g.fillRect(cx+off-w/2,cy-R*1.3,w,R*2.6);
     }
+    // stripes sit UNDER the gloss in the real thing — re-lay a faint top sheen
+    g.fillStyle='rgba(255,255,255,0.18)';g.fillRect(cx-e.h,cy-e.h,e.h*2,e.h*0.5);
     g.restore();
   }
 }
@@ -2538,8 +2795,8 @@ function drawNext(){
   const RW=npan.width/RES, RH=npan.height/RES;
   nctx.setTransform(RES,0,0,RES,0,0);
   nctx.clearRect(0,0,RW,RH);
-  nctx.fillStyle='#1d1040';nctx.fillRect(0,0,RW,RH);
-  nctx.fillStyle='#b9a3e3';
+  nctx.fillStyle='#1b1236';nctx.fillRect(0,0,RW,RH);
+  nctx.fillStyle='#b784ff';
   nctx.font='10px Bungee,"Arial Black",sans-serif';
   nctx.textAlign='center';
   nctx.fillText('NEXT',RW/2,20);
@@ -2547,11 +2804,15 @@ function drawNext(){
   const gp=(RH-26-3*sh0)/4;
   for(let s=0;s<3;s++){
     const y0=26+gp+s*(sh0+gp), x0=4, w=RW-8;
-    nctx.fillStyle='rgba(255,255,255,0.04)';
-    nctx.strokeStyle='rgba(122,79,208,0.35)';nctx.lineWidth=1;
+    // CT_ART_V4: recessed slot — dark well, thin violet lip, soft top shadow
+    nctx.fillStyle='rgba(0,0,0,0.32)';
+    nctx.strokeStyle='rgba(150,120,230,0.30)';nctx.lineWidth=1;
     nctx.beginPath();
-    if(nctx.roundRect)nctx.roundRect(x0,y0,w,sh0,10);else nctx.rect(x0,y0,w,sh0);
+    if(nctx.roundRect)nctx.roundRect(x0+0.5,y0+0.5,w-1,sh0-1,10);else nctx.rect(x0+0.5,y0+0.5,w-1,sh0-1);
     nctx.fill();nctx.stroke();
+    const sg=nctx.createLinearGradient(0,y0,0,y0+10);
+    sg.addColorStop(0,'rgba(0,0,0,0.30)');sg.addColorStop(1,'rgba(0,0,0,0)');
+    nctx.save();nctx.clip();nctx.fillStyle=sg;nctx.fillRect(x0,y0,w,10);nctx.restore();
     const p=nextQueue[s];
     if(!p)continue;
     const sh=pshape(p),rows=sh.length,cols=sh[0].length;
