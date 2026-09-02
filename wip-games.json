@@ -44,12 +44,12 @@
   "games": [
     {
       "id": "on-air-service",
-      "name": "ORDER UP",
-      "emoji": "🛎️",
-      "genre": "Service Rush",
+      "name": "JIMMY & JOE'S",
+      "emoji": "🎙️",
+      "genre": "Studio Diner",
       "url": "games/on-air-service.html",
       "status": "wip",
-      "note": "Walk-and-serve rush across Galley to Studio to Arcade: cook, tray-carry and deliver to Jimmy, Joe and 10 other regulars before their thought-bubble patience pops red -- direct control only, waves escalate by the clock, never by reputation."
+      "note": "Run the JnJ studio like a diner: guests queue for SHORTS, EPISODES and Halloween SPECIALS -- shoot at the rig, cut in the edit bay, deliver before patience runs out, make rent, buy floor pads, hire Joe. Pseudo-3D isometric, 100-second days, stars by rent ratio."
     },
     {
       "id": "pin-vaders-2",

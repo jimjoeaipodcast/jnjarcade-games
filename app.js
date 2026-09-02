@@ -170,10 +170,10 @@ const WORLDS = {
     attract: chromeFlipperAttract,
   },
   'on-air-service': {
-    ink: '#c97a3d', dim: '#5c3416', pit: '#140b04', glowsoft: 'rgba(201,122,61,0.22)',
-    genre: 'SERVICE RUSH',
-    quote: '"Actually, according to my own reputation meter, I\'ve never once been served before I hit red — and Joe keeps \'forgetting\' which couch is mine."',
-    by: 'JIMMY',
+    ink: '#ffb545', dim: '#5c3e10', pit: '#140f04', glowsoft: 'rgba(255,181,69,0.22)',
+    genre: 'OVERCOOKED × DINER DASH',
+    quote: '“Jimmy delivers the tapes himself. So the queue is realistic.”',
+    by: 'JOE',
     attract: onAirServiceAttract,
   },
 };
@@ -2551,11 +2551,12 @@ function pinVaders2Attract(ctx, w, h, t, world, s) {
   ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill(); ctx.restore();
 }
 
-/* ── Attract: ORDER UP (on-air-service) ─────────────────────────
-   Real recorded gameplay (render_game_footage.py --serve --start-js, 2026-09-01):
-   the game's own scripted attract loop — galley cook → tray carry → serve Jimmy
-   in the studio → wander the arcade corridor. 16:9 clip, same treatment as
-   jnj-on-air (identical 960×540 world); videoAttract cover-fits the 4:3 screen. */
+/* ── Attract: JIMMY & JOE'S (on-air-service) ────────────────────
+   Real recorded gameplay (render_game_footage.py --serve, 2026-09-02): the game's
+   own attract bot runs the studio diner — shoot at the rig, cut in the bay, deliver
+   to the tables, pay off a floor pad. Portrait 540-wide world recorded through a
+   camera-follow inject (tools/show/cameras/on-air-service-follow.js) so the 4:3
+   cassette window tracks Jimmy; videoAttract cover-fits it. */
 function onAirServiceAttract(ctx, w, h, t, world, s) {
-  videoAttract(ctx, w, h, t, s, 'assets/footage/on-air-service-attract.mp4?v=1', '#140b04');
+  videoAttract(ctx, w, h, t, s, 'assets/footage/on-air-service-attract.mp4?v=2', '#140b04');
 }
