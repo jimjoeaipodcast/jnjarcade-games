@@ -267,9 +267,14 @@ const MEGA_BOUNCE_GRACE_MS = 500;   // brief post-mega-bounce grace — the stro
                                      // when the bomb spawns near the top of the screen
 const GHOST_SPAWN_MS    = 5000;     // ghost parachute: spawns this often once level 5+
 const STAR_CHAIN_NEED   = 5;        // consecutive stomps (any type, no miss) → star power
-const STAR_CHAIN_NEED_REVERSED = 10; // Osimo 2026-08-29: "after the reversal starts you
-                                      // need to hit 10 consecutive shoots" — doubled once
-                                      // scrollDir flips at REVERSAL_LEVEL
+const STAR_CHAIN_NEED_HARD = 10;    // Osimo 2026-08-29: "after the reversal starts you
+                                     // need to hit 10 consecutive shoots" — doubled once
+                                     // scrollDir flips at REVERSAL_LEVEL. Osimo 2026-09-02:
+                                     // "once someone reaches 80k points make sure they need
+                                     // 10 shoots" — the same 10 also kicks in on score alone,
+                                     // so the Lv30 un-reversal can't hand the 5-chain back to
+                                     // a player who's already deep into the run.
+const STAR_CHAIN_HARD_SCORE = 80000;
 const STAR_CHUTE_MS_MIN = 70000, STAR_CHUTE_MS_MAX = 100000; // rare Lv20+ instant-star pickup
 // GREY CHUTE (Osimo 2026-08-30 v4): "once you collect buddy power, make grey dark grey
 // shoots appear, rarely, if the hit them you loose a buddy" — a hazard, not a reward,
@@ -1052,8 +1057,13 @@ function pipePassed(p, margin) {
 }
 
 // star chain requirement doubles once the world has reversed (Osimo 2026-08-29: "after
-// the reversal starts you need to hit 10 consecutive shoots to get star power")
-function currentStarChainNeed() { return scrollDir === -1 ? STAR_CHAIN_NEED_REVERSED : STAR_CHAIN_NEED; }
+// the reversal starts you need to hit 10 consecutive shoots to get star power") OR once
+// the score reaches STAR_CHAIN_HARD_SCORE (Osimo 2026-09-02: "once someone reaches 80k
+// points make sure they need 10 shoots to get star power") — either trigger alone is
+// enough, so a post-Lv30 (un-reversed) run past 80k still needs the full 10.
+function currentStarChainNeed() {
+  return (scrollDir === -1 || score >= STAR_CHAIN_HARD_SCORE) ? STAR_CHAIN_NEED_HARD : STAR_CHAIN_NEED;
+}
 const STAR_COUNTDOWN_WORDS = { 1:'One!', 2:'Two!', 3:'Three!', 4:'Four!', 5:'Five!',
                                 6:'Six!', 7:'Seven!', 8:'Eight!', 9:'Nine!' };
 
@@ -3293,7 +3303,7 @@ function showOverlay(finalScore) {
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="26" data-h="34"></canvas><span>Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything!</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything! (10 once reversed, or past 80k)</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. Thread a gap edge-close, unaided, for a free ghost too!</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="26" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die.</span></div>
