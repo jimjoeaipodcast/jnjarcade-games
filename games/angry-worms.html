@@ -125,10 +125,12 @@ html, body { width: 100%; height: 100dvh; overflow: hidden; background: #000; fo
 
 <script>
 "use strict";
-window.__ANGRYWORMS_BUILD='AW_FORK_V11_20260902';
+window.__ANGRYWORMS_BUILD='AW_LEVELS_V12_20260902';
 
 // ====== CONFIG ======
-const WORLD_W = 1800;
+let WORLD_W = 1800;
+let lastWorldW = 0;   // stars/clouds are seeded once at init; regenerated whenever a level
+                       // actually widens the world so the extra space isn't empty sky
 const WORLD_H = 720;
 const GRAVITY = 0.30;   // Osimo 2026-09-01: "gravity still lacking a little" — was 0.25,
                          // the documented floor of the house 0.25-0.40 range; nudged up
@@ -810,6 +812,17 @@ function buildSprites() {
 // ====== LEVEL BUILD ======
 function buildLevel(lvl, rollover) {
   level = lvl;
+  // AW_LEVELS_V12 (Osimo 2026-09-02: "after a short while levels becomes stale and
+  // repetitive... more worms with harder levels, some further out... as it gets very hard
+  // there are some structures where there's worms above and below"). Root cause of the
+  // staleness: ONE structure shape existed at all (a centered stack), and the old
+  // zoneStart/1700 boundary meant only ~2 of them could ever physically fit past level 9
+  // no matter how high the nominal count climbed — see git history for the full old
+  // comment. Now: the world itself widens for hard levels (real "further out"), a small
+  // template library replaces the single shape, and levels 10+ guarantee at least one
+  // structure with a worm sheltered below a roof and a second worm exposed on top of it.
+  WORLD_W = 1800 + Math.min(600, Math.max(0, lvl - 6) * 120);   // caps at 2400 (lvl 11+)
+  if (WORLD_W !== lastWorldW) { generateStars(); generateClouds(); lastWorldW = WORLD_W; }
   terrain = generateTerrain(lvl);
   terrainDirty = true;
   blocks = [];
@@ -818,48 +831,56 @@ function buildLevel(lvl, rollover) {
   projectiles = [];
   gravestones = [];
 
-  // Difficulty curve v3 (Osimo 2026-07-03): early levels EASY — no structures, targets
-  // close and in the open. Distance + defenses + ammo pressure all grow with level.
-  // v5 (Osimo 2026-09-01: "the more you progress the further back their worms move" +
-  // levels were visibly repeating past ~level 9): zoneStart used to hard-cap at 1450,
-  // which — combined with the buildStructure loop's own `bx<1700` boundary — meant only
-  // ~2 structures could ever physically fit once a level hit that cap, no matter how high
-  // baseCount's nominal value climbed. Every level past ~9 was generating the same shape
-  // from the same start point, which is exactly what read as "levels repeat themselves."
-  // Cap raised to 1550, AND a score-driven top-up keeps pushing zoneStart further right
-  // for a high-scoring session specifically (not just level number), so the endgame keeps
-  // feeling like real progression instead of flatlining.
-  // zoneStart drives STRUCTURE placement only — kept purely level-based so the
-  // structure-packing loop below always has the same room to work with regardless of
-  // score. bonusReach is applied ONLY to the open/bonus worms' position (further
-  // decoupled below) so "worms move further back" doesn't fight "more of them fit" —
-  // live-tested: applying both to the same zoneStart silently cancelled the bonus-worm
-  // count gain out (structures lost exactly what bonus worms gained, same total).
-  const zoneStart = Math.min(1550, 600 + lvl * 100);
+  // Three separate anchors, deliberately not one shared `zoneStart` (that was the old
+  // shape and it's what caused the level-9+ plateau bug: the placement loop's own end
+  // boundary and its start point converged to the same cap, so past a certain level the
+  // loop's `bx < end` check was never even true once). openStart/bonusAnchor keep Osimo's
+  // 2026-09-01-approved "worms move further back" formula/cap exactly, unchanged feel;
+  // structStart is new and stays well clear of NEAR_END on purpose so the structure loop
+  // always has real room, no matter how high the level.
+  const openStart = Math.min(1550, 600 + lvl * 100);
+  const bonusAnchor = openStart;
+  const structStart = Math.min(900, 500 + lvl * 40);
+  const NEAR_END = 1450;   // ~zero-wind reach at power 18; the far band below needs wind,
+                            // which rerolls every turn (switchTurn) so it's reachable often
   const bonusReach = score >= 40000 ? 150 : score >= 30000 ? 90 : score >= 10000 ? 40 : 0;
+  let placeEnd = NEAR_END;
   if (lvl <= 2) {
     // Open ground — just worms on the terrain, nothing to knock down
     const n = 1 + lvl;                                  // L1: 2 worms · L2: 3 worms
     for (let i = 0; i < n; i++) {
-      const wx = zoneStart + i * (120 + Math.random() * 60);
+      const wx = openStart + i * (120 + Math.random() * 60);
       worms.push(makeWorm(wx, terrainHeightAt(wx) - 20, "enemy", "green"));
     }
   } else {
-    const baseCount = Math.min(5, lvl - 1);
-    let bx = zoneStart;
-    for (let i = 0; i < baseCount && bx < 1750; i++) {
-      buildStructure(bx, 120 + Math.random() * 60, lvl);
-      bx += 160 + Math.random() * 30;   // tightened from 180-210 so more structures
-                                         // actually fit before the 1750 world edge
+    let pool, count, farCount;
+    if (lvl <= 5)       { pool = ["tower"];                                 count = lvl - 1; farCount = 0; }
+    else if (lvl <= 9)  { pool = ["tower", "tower", "twin"];                count = 3;        farCount = 0; }
+    else if (lvl <= 14) { pool = ["tower", "twin", "twin", "bunker"];       count = 4;        farCount = 0; }
+    else                { pool = ["twin", "bunker", "bunker", "fortress"];  count = 4;        farCount = 1 + (lvl >= 20 ? 1 : 0); }
+
+    let bx = structStart;
+    for (let i = 0; i < count && bx < NEAR_END; i++) {
+      // levels 10+ guarantee the above/below chamber structure rather than leaving it to
+      // the pool's random draw — it's the headline ask, not a maybe
+      const tmpl = (i === 0 && lvl >= 10) ? "bunker" : pool[Math.floor(Math.random() * pool.length)];
+      bx += placeTemplate(tmpl, bx, lvl) + 30 + Math.random() * 30;
     }
+    if (farCount > 0) {
+      placeEnd = WORLD_W - 150;
+      let fx = Math.max(NEAR_END + 250, WORLD_W - 550);
+      for (let i = 0; i < farCount && fx < placeEnd; i++) {
+        const tmpl = i === 0 ? "fortress" : pool[Math.floor(Math.random() * pool.length)];
+        fx += placeTemplate(tmpl, fx, lvl) + 40 + Math.random() * 40;
+      }
+    }
+
     // Bonus open worms (Osimo 2026-09-01: "after 10k start adding a 4th enemy worm,
-    // after 30k add a 5th") — was a flat 1, now score-gated. Kept as open-ground worms
-    // (not more structures) since structures are already packing the zone as tight as
-    // buildStructure's own geometry allows — this is the low-risk lever that doesn't
-    // touch the structure/physics side at all.
+    // after 30k add a 5th") — score-gated, kept as open-ground worms so they don't fight
+    // the structure loop's own geometry.
     const bonusWorms = 1 + (score >= 10000 ? 1 : 0) + (score >= 30000 ? 1 : 0);
     for (let bi = 0; bi < bonusWorms; bi++) {
-      const ox = zoneStart - 90 - bi * 70 + bonusReach;
+      const ox = bonusAnchor - 90 - bi * 70 + bonusReach;
       worms.push(makeWorm(ox, terrainHeightAt(ox) - 20, "enemy", "green"));
     }
   }
@@ -881,7 +902,7 @@ function buildLevel(lvl, rollover) {
   if (lvl >= 3) {
     const nBarrels = 1 + Math.floor((lvl - 2) / 2);
     for (let bi = 0; bi < nBarrels; bi++) {
-      const bxp = zoneStart - 40 + Math.random() * (1700 - zoneStart);
+      const bxp = structStart - 40 + Math.random() * (placeEnd - structStart);
       blocks.push({ x: bxp, y: terrainHeightAt(bxp + 13) - 34, w: 26, h: 34,
         hp: 10, maxHp: 10, type: "barrel", vx: 0, vy: 0,
         falling: false, settled: true, rot: 0,
@@ -893,7 +914,7 @@ function buildLevel(lvl, rollover) {
   // so firepower = 2 per enemy + 1 spare. A trooper is worth 3 (his landed barrage).
   // Top up reds until the budget holds — no level can ship short.
   // v3 (Osimo: "lev 3 was impossible"): a worm ON a bunker costs ~3 (blocks shield
-  // it) vs 2 in the open. makeWorm tags bunkered=true from buildStructure.
+  // it) vs 2 in the open. Every structure template tags its worms bunkered=true.
   const openFoes = worms.filter(w => w.team === "enemy" && !w.bunkered).length;
   const bunkFoes = worms.filter(w => w.team === "enemy" && w.bunkered).length;
   // v4 (Osimo 2026-08-21: "the first ten levels should at least have 2 then 1 more worms
@@ -928,13 +949,14 @@ function generateTerrain(lvl) {
   const arr = [];
   // Slingshot hill
   const hillX = SLING_X;
+  const sh = terrainShapeParams(lvl);
   for (let x = -TERRAIN_PAD; x <= WORLD_W + TERRAIN_PAD; x += 4) {
     let y = GROUND_Y;
     // Big slingshot hill
     y -= 80 * Math.exp(-Math.pow((x - hillX) / 140, 2));
-    // Rolling hills between
-    y -= 40 * Math.sin(x * 0.008) * Math.cos(x * 0.003);
-    y -= 30 * Math.sin(x * 0.015 + 1);
+    // Rolling hills between — level-seeded amplitude/frequency, see terrainShapeParams
+    y -= sh.amp1 * Math.sin(x * sh.freq1) * Math.cos(x * 0.003);
+    y -= sh.amp2 * Math.sin(x * sh.freq2 + sh.phase2);
     // Right side elevated plateau for structures
     if (x > 1050) {
       const t = Math.min(1, (x - 1050) / 100);
@@ -945,51 +967,156 @@ function generateTerrain(lvl) {
   return arr;
 }
 
-function buildStructure(x, width, lvl) {
-  const groundY = terrainHeightAt(x + width / 2);
+// AW_LEVELS_V12 — seeded per-level hill variation (Osimo 2026-09-02: levels read as
+// identical past the first few — because the terrain math never once read `lvl`). Only the
+// rolling-hills terms vary; the slingshot hill and the structure plateau stay put so launch
+// feel and structure footprints don't drift. Amplitude/frequency stay close to the original
+// fixed values (40/30) so a structure's single-point groundY sample is still a fair
+// approximation across its footprint — flattenTerrain() below is the real guarantee, this
+// is just what makes the hills look and play different level to level.
+function terrainShapeParams(lvl) {
+  const r = makeRng(lvl * 7919 + 13);
+  return {
+    amp1: 32 + r() * 20, freq1: 0.006 + r() * 0.004,
+    amp2: 22 + r() * 16, freq2: 0.012 + r() * 0.008, phase2: r() * Math.PI * 2
+  };
+}
+
+// Flattens a structure's footprint to one Y with short blended ramps at the edges, so a
+// wide multi-tier structure (bunker/fortress) always stands on level ground regardless of
+// the hill terms above — without this, half a pillar could rest a few px higher than its
+// twin and read as floating.
+function flattenTerrain(x0, x1, y, ramp) {
+  ramp = ramp || 30;
+  for (const t of terrain) {
+    if (t.x >= x0 && t.x <= x1) t.y = y;
+    else if (t.x > x0 - ramp && t.x < x0) {
+      const f = (t.x - (x0 - ramp)) / ramp;
+      t.y = t.y * (1 - f) + y * f;
+    } else if (t.x > x1 && t.x < x1 + ramp) {
+      const f = (x1 + ramp - t.x) / ramp;
+      t.y = t.y * (1 - f) + y * f;
+    }
+  }
+}
+
+function pickMaterial(lvl) {
+  const roll = Math.random();
+  // AB material mix: wood default, stone tanky, ice (lvl 2+) shatters in one hit
+  // GLASS-HEAVY EARLY GAME (Osimo 2026-08-21: glass "more predominant in first ten
+  // levels"). Glass is the forgiving material — one blast wave clears it and it chain-
+  // shatters off its neighbours — so a heavy early mix is what makes levels 1-10 read
+  // as learnable. From level 11 the old stone/wood-led mix returns.
+  const glassy = lvl <= 10;
+  return glassy
+    ? (roll < 0.18 ? "stone" : roll < 0.62 ? "ice" : "wood")
+    : (roll < 0.30 ? "stone" : (lvl >= 2 && roll < 0.48 ? "ice" : "wood"));
+}
+
+function pushBlock(x, y, type) {
+  const hp = type === "stone" ? 60 : type === "ice" ? 12 : 30;
+  blocks.push({
+    x: x, y: y, w: 40, h: 30, hp: hp, maxHp: hp, type: type,
+    vx: 0, vy: 0, falling: false, settled: false, rot: 0,
+    seed: Math.floor(Math.random() * 97)   // deterministic per-block speckle seed
+  });
+}
+
+// ── STRUCTURE TEMPLATES ──────────────────────────────────────────────────────
+// Each takes (x0, lvl), places its blocks/worms, and returns the footprint width so the
+// caller can advance past it without overlap.
+
+function tmplTower(x0, lvl) {
+  const width = 120 + Math.random() * 60;
+  const groundY = terrainHeightAt(x0 + width / 2);
+  flattenTerrain(x0 - 10, x0 + width + 10, groundY);
   const layers = 2 + Math.min(3, lvl);
-  const blockW = 40;
-  const blockH = 30;
   let placed = 0;
   for (let row = 0; row < layers; row++) {
     const count = 2 + Math.floor(Math.random() * 2);
-    const rowW = count * blockW;
-    const startX = x + (width - rowW) / 2;
+    const rowW = count * 40;
+    const startX = x0 + (width - rowW) / 2;
     for (let c = 0; c < count; c++) {
       if (placed >= 6 + lvl * 2) break;
-      const roll = Math.random();
-      // AB material mix: wood default, stone tanky, ice (lvl 2+) shatters in one hit
-      // GLASS-HEAVY EARLY GAME (Osimo 2026-08-21: glass "more predominant in first ten
-      // levels"). Glass is the forgiving material — one blast wave clears it and it chain-
-      // shatters off its neighbours — so a heavy early mix is what makes levels 1-10 read
-      // as learnable. From level 11 the old stone/wood-led mix returns.
-      const glassy = lvl <= 10;
-      const btype = glassy
-        ? (roll < 0.18 ? "stone" : roll < 0.62 ? "ice" : "wood")
-        : (roll < 0.30 ? "stone" : (lvl >= 2 && roll < 0.48 ? "ice" : "wood"));
-      const bhp = btype === "stone" ? 60 : btype === "ice" ? 12 : 30;
-      blocks.push({
-        x: startX + c * blockW,
-        y: groundY - (row + 1) * blockH,
-        w: blockW,
-        h: blockH,
-        hp: bhp,
-        maxHp: bhp,
-        type: btype,
-        vx: 0, vy: 0,
-        falling: false,
-        settled: false,
-        rot: 0,
-        seed: Math.floor(Math.random() * 97)   // deterministic per-block speckle seed
-      });
+      pushBlock(startX + c * 40, groundY - (row + 1) * 30, pickMaterial(lvl));
       placed++;
     }
   }
-  // Place enemy worm on top
-  const topBlock = blocks.filter(b => b.x >= x && b.x < x + width).reduce((a, b) => a.y > b.y ? a : b, { y: groundY });
-  const bw = makeWorm(x + width / 2, topBlock.y - 20, "enemy", "green");
+  const topBlock = blocks.filter(b => b.x >= x0 && b.x < x0 + width).reduce((a, b) => a.y > b.y ? a : b, { y: groundY });
+  const bw = makeWorm(x0 + width / 2, topBlock.y - 20, "enemy", "green");
   bw.bunkered = true;   // shielded by blocks — costs more ammo in the budget
   worms.push(bw);
+  return width;
+}
+
+function tmplTwin(x0, lvl) {
+  const gap = 60 + Math.random() * 40;
+  const width = 40 + gap + 40;
+  const groundY = terrainHeightAt(x0 + width / 2);
+  flattenTerrain(x0 - 10, x0 + width + 10, groundY);
+  const layers = 2 + Math.min(2, Math.floor(lvl / 5));
+  for (const cx of [x0, x0 + 40 + gap]) {
+    for (let row = 0; row < layers; row++) pushBlock(cx, groundY - (row + 1) * 30, pickMaterial(lvl));
+    const bw = makeWorm(cx + 20, groundY - layers * 30 - 20, "enemy", "green");
+    bw.bunkered = true;
+    worms.push(bw);
+  }
+  return width;
+}
+
+// Two 2-high pillars either side of a 40px gap, half-offset roof bridging them. Each roof
+// block overlaps a pillar top by 20px (0.5 held span — comfortably past the 0.34 tipping
+// floor in the physics below); a grid-aligned roof block sitting purely over the gap has
+// nothing under it (same-row blocks don't support each other) and falls the instant the
+// level loads. topY is the surface the pillars stand on, so this can stack on real ground
+// OR on top of another call's own roof (that's how tmplFortress builds its second tier).
+function buildPillarGapRoof(x0, topY, lvl) {
+  const gap = 40, pillarH = 2;
+  for (const px of [x0, x0 + gap + 40]) {
+    for (let row = 0; row < pillarH; row++) pushBlock(px, topY - (row + 1) * 30, pickMaterial(lvl));
+  }
+  const roofY = topY - pillarH * 30 - 30;
+  pushBlock(x0 + 20, roofY, pickMaterial(lvl));
+  pushBlock(x0 + 60, roofY, pickMaterial(lvl));
+  return { gapCenterX: x0 + 60, roofTopY: roofY, width: gap + 80 };
+}
+
+// The "worms above and below" ask, literally: one worm sheltered in the gap, one exposed
+// on the roof above it.
+function tmplBunker(x0, lvl) {
+  const groundY = terrainHeightAt(x0 + 60);
+  flattenTerrain(x0 - 10, x0 + 130, groundY);
+  const r = buildPillarGapRoof(x0, groundY, lvl);
+  const below = makeWorm(r.gapCenterX, terrainHeightAt(r.gapCenterX) - 20, "enemy", "green");
+  below.bunkered = true; worms.push(below);
+  const above = makeWorm(r.gapCenterX, r.roofTopY - 20, "enemy", "green");
+  above.bunkered = true; worms.push(above);
+  return r.width;
+}
+
+// 3-tier stone fortress for very hard levels — ground chamber, a second chamber stacked
+// directly on the first roof, and a worm exposed on the peak. Same bunker unit twice,
+// stacked, since the first roof is a solid 80px-wide surface the second tier's pillars
+// land on cleanly.
+function tmplFortress(x0, lvl) {
+  const groundY = terrainHeightAt(x0 + 60);
+  flattenTerrain(x0 - 10, x0 + 130, groundY);
+  const base = buildPillarGapRoof(x0, groundY, lvl);
+  const mid = buildPillarGapRoof(x0, base.roofTopY, lvl);
+  const below = makeWorm(base.gapCenterX, terrainHeightAt(base.gapCenterX) - 20, "enemy", "green");
+  below.bunkered = true; worms.push(below);
+  const midW = makeWorm(mid.gapCenterX, base.roofTopY - 20, "enemy", "green");
+  midW.bunkered = true; worms.push(midW);
+  const peak = makeWorm(mid.gapCenterX, mid.roofTopY - 20, "enemy", "green");
+  peak.bunkered = true; worms.push(peak);
+  return base.width;
+}
+
+function placeTemplate(name, x0, lvl) {
+  if (name === "twin") return tmplTwin(x0, lvl);
+  if (name === "bunker") return tmplBunker(x0, lvl);
+  if (name === "fortress") return tmplFortress(x0, lvl);
+  return tmplTower(x0, lvl);
 }
 
 function makeWorm(x, y, team, type) {
