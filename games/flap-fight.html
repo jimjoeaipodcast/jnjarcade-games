@@ -108,7 +108,7 @@
   .pause-btn.hidden { display:none; }
   #pauseL { left:6px; }
   #pauseR { right:6px; }
-  @media (max-width:820px) { #pauseL { left:2px; } #pauseR { right:2px; } .pause-btn { bottom:2px; } }
+  @media (max-width:820px), (max-height:560px) { #pauseL { left:2px; } #pauseR { right:2px; } .pause-btn { bottom:2px; } }
   canvas {
     display:block; border:2px solid var(--dim); border-radius:10px;
     box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
@@ -117,9 +117,38 @@
   /* Phone-sized screens: drop the decorative frame and the last few px of padding so the
      playfield genuinely fills the device. The framed look is kept on tablet/desktop where
      there is room to spare. Adaptive by viewport, not by hardcoded device. */
-  @media (max-width:820px) {
+  /* also fires on any SHORT viewport, not just a narrow one (Osimo 2026-09-03: "landscape
+     mode could benefit from having more game play area") — his Pixel in landscape is
+     851px wide, which sailed past a width-only test and kept the desktop frame + padding
+     on the one orientation with the least height to spare. */
+  @media (max-width:820px), (max-height:560px) {
     .canvas-wrap { padding:0; }
     canvas { border:none; border-radius:0; box-shadow:inset 0 0 24px rgba(0,0,0,.6); }
+  }
+  /* ─── LANDSCAPE: no header row at all (Osimo 2026-09-03) ────────────────────────
+     "extend the roof all the way to the top in landscape mode, get rid of flap fight,
+     and over impose the rest over the game play area". The header stops being a flex
+     row (which cost the playfield its own height) and becomes a transparent strip
+     floating ON the canvas: the FLAP FIGHT wordmark is dropped, ‹ ARCADE + 🔊 keep the
+     top-left, LEVEL + score the top-right. pointer-events:none on the strip so a tap
+     over the score still reaches the canvas and flaps — only the two real controls take
+     their own taps back. Portrait is untouched (Osimo: "portrait mode is perfect"). */
+  @media (orientation:landscape) and (max-height:560px) {
+    .game-shell { position:relative; }
+    .game-header {
+      position:absolute; top:0; left:0; right:0; z-index:4;
+      background:none; border-bottom:none; pointer-events:none;
+      padding:calc(4px + env(safe-area-inset-top,0px))
+              calc(10px + env(safe-area-inset-right,0px)) 4px
+              calc(10px + env(safe-area-inset-left,0px));
+      /* legible over sky, clouds and pipes alike */
+      text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.6);
+    }
+    .game-name { display:none; }
+    .back-btn, .mute-btn { pointer-events:auto; }
+    .score-val { text-shadow:0 1px 3px rgba(0,0,0,.85); }
+    /* the combo readout would otherwise sit under the floating LEVEL/score line */
+    .combo-display { top:26px; }
   }
   .overlay {
     position:absolute; inset:0; display:flex; flex-direction:column;
