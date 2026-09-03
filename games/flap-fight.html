@@ -76,7 +76,6 @@
     color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px;
   }
   .hdr-right { display:flex; align-items:center; gap:14px; text-align:right; }
-  .score-label { font-size:9px; letter-spacing:.18em; opacity:.55; }
   .score-val { font-size:18px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
   /* combo readout now floats over the top-centre of the playfield (the HUD row it lived
      in is gone) — pointer-events:none so it never eats a flap tap */
@@ -92,11 +91,13 @@
     flex:1; position:relative; padding:4px 6px; overflow:hidden;
     display:flex; align-items:center; justify-content:center;
   }
-  /* ⏸️ pause buttons (Osimo 2026-09-03): "add 2 pause buttons, on the edge of the corner
-     up on the top left and one up on the top right" — one per thumb. Sit on the canvas's
-     own top corners, above it (z 3) but below the overlay (z 5). Hidden until play starts. */
+  /* ⏸️ pause buttons (Osimo 2026-09-03): one per thumb, on the canvas's own corners,
+     above it (z 3) but below the overlay (z 5). Hidden until play starts. Moved from the
+     top corners to the BOTTOM corners the same day ("place the two pause buttons on the
+     bottom of the screen instead of the top") — the bird flies at cw*0.22-0.30, so a
+     38px button in a bottom corner never sits under it. */
   .pause-btn {
-    position:absolute; top:6px; z-index:3; width:38px; height:38px; border-radius:10px;
+    position:absolute; bottom:6px; z-index:3; width:38px; height:38px; border-radius:10px;
     background:rgba(3,15,24,.55); border:1px solid rgba(77,217,245,.35); color:var(--ink);
     font-size:18px; line-height:1; cursor:pointer; padding:0;
     display:flex; align-items:center; justify-content:center;
@@ -107,7 +108,7 @@
   .pause-btn.hidden { display:none; }
   #pauseL { left:6px; }
   #pauseR { right:6px; }
-  @media (max-width:820px) { #pauseL { left:2px; } #pauseR { right:2px; } .pause-btn { top:2px; } }
+  @media (max-width:820px) { #pauseL { left:2px; } #pauseR { right:2px; } .pause-btn { bottom:2px; } }
   canvas {
     display:block; border:2px solid var(--dim); border-radius:10px;
     box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
@@ -184,7 +185,11 @@
     <div class="game-name">FLAP FIGHT</div>
     <div class="hdr-right">
       <div class="lvl" id="lvl">LEVEL 1</div>
-      <div><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+      <!-- no "SCORE" caption above the number (Osimo 2026-09-03: "remove the word SCORE
+           above the score we achieve neater looking bar and more game play space") — the
+           header row is now one line tall, and resize() measures the wrap so the canvas
+           takes the height back automatically -->
+      <div class="score-val" id="score">0</div>
     </div>
   </header>
   <div class="canvas-wrap" id="wrap">
@@ -450,7 +455,12 @@ const BONUS_CHUTES     = 18;        // parachutes seeded into the bonus room at 
 // return to the regular game instead of a life lost).
 const GAUNTLET_LEVEL = 20;
 const GAUNTLET_GAP_MIN = 85;              // narrower floor than normal play's 105
-const GAUNTLET_GAP_SHRINK_PER_MIN = 60;   // vs normal play's 25/min — shrinks faster
+// Osimo 2026-09-03: "make their gap smaller by a millimetre every 10 seconds" — a
+// discrete step, not a continuous slope. The canvas is CSS px (no DPR scaling in
+// resize()) and a Pixel-class phone is ~5.5 CSS px per mm, so one step = 5 px. Was a
+// continuous 60 px/min (10 px per 10 s) — this is half that rate, in visible notches.
+const GAUNTLET_GAP_STEP_PX = 5;
+const GAUNTLET_GAP_STEP_MS = 10000;
 
 // ─── DOM ─────────────────────────────────────────────────────────────────────
 const canvas  = document.getElementById('c');
@@ -650,9 +660,7 @@ const VO_LINES = [
   ["JIMMY", "Level twenty five! The gaps move now. Watch the hole, not the pipe!"],
   ["JIMMY", "Level forty! Fifteen catches for star power now. Fifteen! Start counting!"],
   ["JIMMY", "Fire pipes! Touch one and every buddy you've got goes up in smoke!"],
-  ["JIMMY", "Pipes on fire this level! Don't touch them. Genuinely, don't!"],
   ["JIMMY", "Burning pipes! Your buddies are flammable. All of them!"],
-  ["JIMMY", "Your buddies! Smoke! I said don't touch the fire!"],
   ["JIMMY", "Puff! Every buddy, gone! The fire pipe doesn't negotiate!"],
   ["JIMMY", "Double yellow! Shrunk! Same as a purple, twice the work!"],
   ["JIMMY", "Three purples in a row! Tiny AND ghosted. Fly through everything!"],
@@ -858,11 +866,12 @@ const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
 // spoken phrase for all the new stuff").
 const JIMMY_OSC_VO        = "Level twenty five! The gaps move now. Watch the hole, not the pipe!";
 const JIMMY_CHAIN15_VO    = "Level forty! Fifteen catches for star power now. Fifteen! Start counting!";
+// The two "don't touch" lines were cut the same day (Osimo: "don't mention don't touch
+// fire pipes, it's self explanatory") — their pack keys stay in flap-fight-pack.json
+// unreferenced, harmless.
 const JIMMY_FIRE_LEVEL_VO = ["Fire pipes! Touch one and every buddy you've got goes up in smoke!",
-                             "Pipes on fire this level! Don't touch them. Genuinely, don't!",
                              "Burning pipes! Your buddies are flammable. All of them!"];
-const JIMMY_FIRE_HIT_VO   = ["Your buddies! Smoke! I said don't touch the fire!",
-                             "Puff! Every buddy, gone! The fire pipe doesn't negotiate!"];
+const JIMMY_FIRE_HIT_VO   = ["Puff! Every buddy, gone! The fire pipe doesn't negotiate!"];
 const JIMMY_DOUBLE_SPECIAL_VO = "Double yellow! Shrunk! Same as a purple, twice the work!";
 const JIMMY_TRIPLE_SHRINK_VO  = "Three purples in a row! Tiny AND ghosted. Fly through everything!";
 const JIMMY_FOREVER_VO    = "Forever buddy! He stays till the end. Your end, specifically!";
@@ -1279,9 +1288,12 @@ function initClouds() {
 function currentGapSize() {
   // gauntlet bonus room (Lv20+) shrinks faster and floors narrower than normal play —
   // "the gaps on the pipes in these bonus levels get smaller faster" (Osimo 2026-08-30)
+  // — now one GAUNTLET_GAP_STEP_PX notch per GAUNTLET_GAP_STEP_MS (Osimo 2026-09-03),
+  // measured from gauntletStartTime, which pauseGame()/resumeGame() shift by the paused
+  // span so a pause never eats a notch.
   if (gauntletActive) {
-    const gMins = (Date.now() - gauntletStartTime) / 60000;
-    return Math.max(GAUNTLET_GAP_MIN, Math.round(GAP_START - gMins * GAUNTLET_GAP_SHRINK_PER_MIN));
+    const steps = Math.floor((Date.now() - gauntletStartTime) / GAUNTLET_GAP_STEP_MS);
+    return Math.max(GAUNTLET_GAP_MIN, GAP_START - steps * GAUNTLET_GAP_STEP_PX);
   }
   const mins = (Date.now() - gapResetTime) / 60000;
   return Math.max(GAP_MIN, Math.round(GAP_START - mins * 25));
@@ -1513,8 +1525,9 @@ function setLevel(n) {
   // FIRE LEVEL (Osimo 2026-09-03): from Lv30, every 3rd level burns — 30, 33, 36, 39…
   const wasFire = fireLevel;
   fireLevel = n >= FIRE_LEVEL_FROM && (n - FIRE_LEVEL_FROM) % FIRE_LEVEL_EVERY === 0;
+  // No on-screen "DON'T TOUCH" banner (Osimo 2026-09-03: "don't mention don't touch fire
+  // pipes, it's self explanatory") — the flames are the telegraph; Jimmy just remarks.
   if (fireLevel && !wasFire && running) {
-    floaters.push({ x: cw / 2, y: ch * 0.30, text: '🔥 FIRE PIPES! DON\'T TOUCH!', alpha: 1.5, vy: -0.8, color: '#ff7a1a' });
     if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(jimmyPick(JIMMY_FIRE_LEVEL_VO), true);
   }
   // one-off Jimmy heads-ups for the new rule changes (spoken modes only, priority so
@@ -2700,7 +2713,7 @@ function update(dt) {
       p.oscPhase += p.oscSpeed * dt;
       p.oscY = Math.sin(p.oscPhase) * p.oscAmp;
     }
-    if (p.firePipe) p.firePhase += 0.16 * dt;
+    if (p.firePipe || p.flashPipe) p.firePhase += 0.16 * dt;   // flash pipes burn while solid
 
     // score pipe — ×4 value during the combo rocket (+40/pipe for its 10 pipes)
     if (!p.counted && pipePassed(p, 0)) {
@@ -3154,18 +3167,13 @@ function draw() {
     drawPipe(p.x + xOff, 0,    PIPE_W, topH, false, gauntletActive || (p.warpPipe && p.warpSide === 'top'));
     drawPipe(p.x,         botY, PIPE_W, botH, true,  gauntletActive || (p.warpPipe && p.warpSide === 'bottom'));
     if (showGhostly) ctx.globalAlpha = 1;
-    // flash-through pipe outline — cyan glow while translucent (safe to fly through),
-    // dim red pulse while solid (armed, telegraphs it's about to switch back)
-    if (p.flashPipe) {
-      ctx.save();
-      ctx.shadowColor = showGhostly ? '#9fe8ff' : '#ff4400';
-      ctx.shadowBlur  = showGhostly ? 16 : 10;
-      ctx.strokeStyle = showGhostly ? 'rgba(159,232,255,0.85)' : 'rgba(255,68,0,0.5)';
-      ctx.lineWidth   = showGhostly ? 3 : 2;
-      ctx.strokeRect(p.x + xOff - PIPE_CAP_OVR, 0,    PIPE_W + PIPE_CAP_OVR * 2, topH);
-      ctx.strokeRect(p.x - PIPE_CAP_OVR,        botY, PIPE_W + PIPE_CAP_OVR * 2, botH);
-      ctx.restore();
-    }
+    // flash-through pipe (Lv10+): no outline any more. It used to carry a cyan glow
+    // while translucent and a red pulse while solid — Osimo 2026-09-03: "the pipes that
+    // go from red border to white border, just make those blink between fire and
+    // translucent pipe, no red white border". So: translucent phase = the 0.35-alpha
+    // body above, nothing else; solid phase = the fire treatment. Visual only — hitting
+    // it solid is still an ordinary pipe hit (inflate), not a buddy burn; that stays
+    // with the real Lv30+ fire pipes.
     // danger glow on wobble pipe
     if (p.wobble && !p.falling) {
       const pulse = 0.3 + 0.3 * Math.abs(Math.sin(p.wobblePhase * 1.4));
@@ -3176,8 +3184,9 @@ function draw() {
       ctx.restore();
     }
     // FIRE PIPE (Lv30+, every 3rd level): the whole pair burns — heat tint, glow, and
-    // flame tongues licking out of both mouths into the gap
-    if (p.firePipe) drawFireOverlay(p.x + xOff, topH, botY, botH, p.firePhase);
+    // flame tongues licking out of both mouths into the gap. A flash pipe borrows the
+    // same treatment for its solid phase (see above) and drops it while translucent.
+    if (p.firePipe || (p.flashPipe && !showGhostly)) drawFireOverlay(p.x + xOff, topH, botY, botH, p.firePhase);
   }
 
   // smoke puffs — what's left of buddies that met a fire pipe
@@ -4222,14 +4231,22 @@ function drawIcon(canvasEl, kind) {
     ctx.scale(pS, pS);
     drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, kind === 'warpPipe');
   } else if (kind === 'flashPipe') {
-    // no standalone flash-pipe render path exists (its translucent-open look is drawn
-    // inline in the main per-frame loop, not a reusable function) — approximate with a
-    // pulsing alpha on the regular pipe body so it still visibly "flashes".
-    ctx.globalAlpha = Math.floor(Date.now() / 280) % 2 === 0 ? 1 : 0.3;
+    // mirrors the in-game look since 2026-09-03: the pipe blinks between its translucent
+    // (safe) body and the fire treatment (solid) — no outline in either phase
+    const solid = Math.floor(Date.now() / 420) % 2 === 0, ph = Date.now() / 1000;
     const pS = 0.34, pH = 80;
-    ctx.translate(w / 2, (h - pH * pS) / 2);
+    ctx.translate(w / 2, (h - pH * pS) / 2 + (solid ? 6 : 0));
     ctx.scale(pS, pS);
+    if (!solid) ctx.globalAlpha = 0.35;
     drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, false);
+    if (solid) {
+      ctx.fillStyle = 'rgba(255,90,0,' + (0.25 + 0.08 * Math.sin(ph * 2.3)) + ')';
+      ctx.fillRect(-PIPE_W / 2 - PIPE_CAP_OVR, 0, PIPE_W + PIPE_CAP_OVR * 2, pH);
+      for (let i = 0; i < 5; i++) {
+        const fx = -PIPE_W / 2 + 6 + i * (PIPE_W - 12) / 4;
+        flameTongue(fx, -2, 16 + 8 * Math.abs(Math.sin(ph * 5 + i * 1.7)), -1, i);
+      }
+    }
   } else if (kind === 'firePipe') {
     // bottom pipe segment with the live fire treatment: heat tint + flames off the mouth
     const pS = 0.34, pH = 80, ph = Date.now() / 1000;
@@ -4275,13 +4292,13 @@ function showOverlay(finalScore) {
   ovTitle.textContent = 'FLAP FIGHT';
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
-    : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level. <b>⏸</b> in either top corner pauses; <b>double-tap</b> to resume.</span></div>
+    : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level. <b>⏸</b> in either bottom corner pauses; <b>double-tap</b> to resume.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="26" data-h="34"></canvas><span>Hit a pipe or the <b>ceiling</b> → bird <b>inflates</b> &amp; flashes (2 lives before pop!). The floor just bounces you back up.</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b> — quick stomps chain into a <b>×COMBO</b>.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them! <b>Two in a row</b> shrink you tiny.</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything! (10 once reversed, <b>15 past Lv40</b>)</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. <b>3 shrink bombs</b> in a row = ghost time; a <b>grey then a star</b> (or star then grey) = ghost for <b>5 levels</b>!</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="26" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="26" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes blink between fire and see-through — fly through while they're see-through; bombs shrink you tiny.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die. <b>3 in a row</b> = a ♾️ FOREVER buddy.</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="26" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫 Lv15 flips the world; it flips back at 30, then every 5.</span></div>
        <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="firePipe" data-w="26" data-h="40"></canvas><span><b>Lv25+:</b> gaps drift up and down. <b>Lv30+, every 3rd level:</b> pipes catch <b>FIRE</b> — touch one and every buddy goes up in smoke. 💨</span></div>`;
