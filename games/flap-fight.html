@@ -4444,6 +4444,43 @@ function restartToWaiting() {
 }
 playBtn.addEventListener('click', restartToWaiting);
 
+// ─── shell height = the LIVE viewport, measured by JS, not CSS vh units ──────
+// Osimo 2026-09-03 (Pixel, Android Chrome, portrait, first load): "I have to rotate
+// into landscape and then back into portrait for the floor to appear, can we make
+// sure it finds out the size of my screen correctly from the beginning". His
+// screenshots: on the cold load the page sits under a ~46px black band at the top
+// (Android's display-cutout letterbox — the punch-hole camera row — drawn OUTSIDE the
+// page, pure #000, not our --bg) with safe-area-inset-top reading 0, and the shell
+// laid out for the FULL screen height, so the floor + ⏸ buttons hang ~46px below the
+// bottom edge. After a rotate-and-back the same page runs edge to edge under the
+// status bar with a real 46px inset and everything fits. Two defences, both cheap:
+//
+//  1. The shell's height is set from the smallest live viewport figure the browser
+//     will give us (innerHeight / visualViewport.height / documentElement.clientHeight)
+//     and re-applied whenever any of them moves — never trusted to `100dvh`, which is
+//     one derived value with its own update timing. The 250ms poll below compares
+//     these figures directly, so a viewport change that never fires a resize event
+//     (or fires it before the browser has settled its insets) still lands within a
+//     quarter second.
+//  2. A one-shot display-cutout nudge after fullscreen entry (nudgeDisplayCutout).
+const shellEl = document.querySelector('.game-shell');
+function viewportH() {
+  let h = window.innerHeight || 0;
+  const vv = window.visualViewport;
+  if (vv && vv.height) h = h ? Math.min(h, vv.height) : vv.height;
+  const dh = document.documentElement.clientHeight;
+  if (dh) h = h ? Math.min(h, dh) : dh;
+  return Math.round(h);
+}
+let lastViewportH = 0;
+function fitShell() {
+  const h = viewportH();
+  if (!h || h === lastViewportH) return;
+  lastViewportH = h;
+  shellEl.style.height = h + 'px';
+}
+fitShell();
+
 // Auto-start in waiting state on load
 initGame();
 loop();
@@ -4465,26 +4502,72 @@ loop();
 // listener added after the fact works every time — isolated and reproduced via
 // direct instrumentation, not guessed). Rather than ship something whose correctness
 // can't be verified end-to-end, the actual guarantee here is a lightweight poll:
-// compare the live wrap box every 250ms, independent of any event ever firing at
-// all. The listeners stay as a same-frame fast path when they do work; the poll is
-// what's actually proven.
+// compare the live viewport + wrap box every 250ms, independent of any event ever
+// firing at all. The listeners stay as a same-frame fast path when they do work; the
+// poll is what's actually proven.
 let lastWrapW = wrap.clientWidth, lastWrapH = wrap.clientHeight;
-setInterval(() => {
+function syncViewport() {
+  fitShell();                       // may move the wrap box measured just below
   const w = wrap.clientWidth, h = wrap.clientHeight;
   if (w !== lastWrapW || h !== lastWrapH) {
     lastWrapW = w; lastWrapH = h;
     if (running) resize(); else initGame();
   }
-}, 250);
-let resizeTimer;
-window.addEventListener('resize', () => {
-  if (!running) { initGame(); return; }
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(resize, 120);
-});
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => window.dispatchEvent(new Event('resize')));
 }
+setInterval(syncViewport, 250);
+// same-frame fast path, plus a delayed re-check for browsers that report the new
+// size a beat before they settle the safe-area insets around it
+function onViewportEvent() { syncViewport(); setTimeout(syncViewport, 120); }
+window.addEventListener('resize', onViewportEvent);
+window.addEventListener('orientationchange', onViewportEvent);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', onViewportEvent);
+}
+
+// ─── display-cutout nudge (defence 2) ─────────────────────────────────────────
+// The cold-load state above is Android Chrome entering fullscreen with the cutout
+// still in its default (letterboxed) mode even though this page asks for
+// viewport-fit=cover, while the renderer is laid out for the whole screen. The page
+// cannot resize a window it is not told the true size of — but it CAN ask the browser
+// to re-apply the cutout mode, and the one page-level input to that subsystem is the
+// viewport-fit value itself. So, once per fullscreen entry, in portrait, on Android,
+// when the page claims the full screen height yet reads a ZERO top inset (a phone with
+// a cutout would report ~46px there — the rotate-and-back state in Osimo's own
+// screenshot), flip viewport-fit to auto for one frame and back to cover. On a phone
+// without a cutout both modes are the same window, so the flip is a no-op there; in
+// the healthy cover state the inset is non-zero and the nudge never fires. Unproven
+// on-device at the time of writing (no Pixel in the harness) — defence 1 is the part
+// verified in Playwright; this is the best available lever for the letterbox case.
+const IS_ANDROID = /android/i.test(navigator.userAgent);
+const viewportMeta = document.querySelector('meta[name="viewport"]');
+const satProbe = document.createElement('div');
+satProbe.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;visibility:hidden;' +
+                         'pointer-events:none;padding-top:env(safe-area-inset-top,0px)';
+document.body.appendChild(satProbe);
+function safeAreaTop() { return parseFloat(getComputedStyle(satProbe).paddingTop) || 0; }
+function inFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+let cutoutNudged = false;
+function nudgeDisplayCutout() {
+  if (cutoutNudged || !IS_ANDROID || !viewportMeta || !inFullscreen()) return;
+  const portrait = window.innerHeight > window.innerWidth;
+  const claimsWholeScreen = window.innerHeight >= (screen.height || 0) - 2;
+  if (!portrait || !claimsWholeScreen || safeAreaTop() > 0) return;
+  cutoutNudged = true;
+  const cover = viewportMeta.content;
+  viewportMeta.content = cover.replace('viewport-fit=cover', 'viewport-fit=auto');
+  requestAnimationFrame(() => {
+    viewportMeta.content = cover;
+    [100, 300, 700].forEach(ms => setTimeout(syncViewport, ms));
+  });
+}
+function onFullscreenChange() {
+  if (!inFullscreen()) cutoutNudged = false;   // re-arm for the next entry
+  syncViewport();
+  [100, 300, 700, 1500].forEach(ms => setTimeout(syncViewport, ms));
+  if (inFullscreen()) setTimeout(nudgeDisplayCutout, 350);
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
 // iOS detection incl. iPadOS 13+, which reports itself as MacIntel with touch points.
 const IS_IOS = /iphone|ipod|ipad/i.test(navigator.userAgent) ||
