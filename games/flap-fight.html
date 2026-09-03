@@ -1400,7 +1400,12 @@ function spawnPipe() {
   // warp pipe: the armed ordinal of a 5th level. Mutually exclusive with wobble AND
   // flash — the dark shade is its whole telegraph, stacking motion/flashing on it
   // would bury the tell (same fairness rule as wobble×flash below).
-  const warpPipe = warpAtPipe > 0 && levelPipeCount === warpAtPipe;
+  // Never inside the gauntlet: levels now advance in there (Osimo 2026-09-03), so a
+  // 5th level can be reached mid-room and would otherwise arm a warp pipe that warps you
+  // into a bonus room you are already standing in. The ordinal is NOT consumed while
+  // suppressed (>= instead of ===) so the level still gets its warp on the first pipe
+  // after the gauntlet spits you out, instead of silently losing it.
+  const warpPipe = warpAtPipe > 0 && levelPipeCount >= warpAtPipe && !gauntletActive;
   if (warpPipe) warpAtPipe = 0;   // one per band — consumed on spawn
   // flash-through pipe (level 10+, 1-in-5): mutually exclusive with wobble — stacking
   // both effects on one pipe would compound two learn-the-pattern mechanics at once,
@@ -1937,15 +1942,36 @@ function floorBounce(inBonus, soft) {
 // Pure background dressing — no collision, drawn behind the pipes. Flies WITH the
 // scroll direction so it reads as passing traffic, not a head-on. Jimmy says the
 // distance; the banner carries the name + score (the voice pack can't speak a name).
+const BANNER_SCALE   = 2;      // Osimo 2026-09-03: "make plane with banner twice the size"
+const BANNER_FONT_PX = 13;     // the original (1×) banner type size
+const BANNER_BOB_AMP = 11;     // Osimo 2026-09-03: "move up and down a little"
+const BANNER_BOB_SPD = 0.045;  // radians per frame — one lazy cycle every ~2.3s
+function bannerFont(px) { return `bold ${px}px "Barlow Condensed","Arial Narrow",sans-serif`; }
 function launchRecordBanner(step) {
   const kLabel = `${step / 1000}K`;
   const who = topName || 'THE RECORD';
+  const text = `YOU'RE ${kLabel} AWAY TO BEAT ${who} ${topScore.toLocaleString()}`;
+  // The PLANE is a true 2×. The BANNER is text-width driven, so a full 2× line can be
+  // wider than a portrait phone — the type eases back just enough to fit the screen
+  // (never below the old 1× size), which on a 412px Pixel lands around 1.7×.
+  let fs = BANNER_FONT_PX * BANNER_SCALE;
+  ctx.font = bannerFont(fs);
+  const pad = 9 * BANNER_SCALE;                 // per side
+  let w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  const maxW = cw - 12;
+  if (w > maxW) {
+    fs = Math.max(BANNER_FONT_PX, fs * ((maxW - pad * 2) / (w - pad * 2)));
+    ctx.font = bannerFont(fs);
+    w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  }
   bannerPlane = {
-    text: `YOU'RE ${kLabel} AWAY TO BEAT ${who} ${topScore.toLocaleString()}`,
-    y: Math.max(84, ch * 0.2), dir: scrollDir, x: 0, w: 0, speed: 2.1,
+    text, fs, w, h: Math.round(fs * 1.5),
+    // headroom for the doubled plane + its bob, so a short landscape canvas can't fly it
+    // into the top edge
+    y: Math.max(66 + BANNER_BOB_AMP, ch * 0.2),
+    dir: scrollDir, x: 0, speed: 2.1,
+    bobPhase: Math.random() * Math.PI * 2, bobY: 0, bannerBobY: 0,
   };
-  ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
-  bannerPlane.w = Math.ceil(ctx.measureText(bannerPlane.text).width) + 18;
   // start fully off-screen on the side it enters from (plane leads, banner trails)
   bannerPlane.x = scrollDir === 1 ? cw + 40 : -(bannerPlane.w + 90);
   if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_CHASE_VO[step], true);
@@ -1954,32 +1980,40 @@ function launchRecordBanner(step) {
 function updateBannerPlane(dt) {
   const b = bannerPlane;
   b.x -= b.dir * b.speed * dt;   // moves against the world scroll like everything else
+  // gentle rise-and-fall; the banner lags the plane by ~0.55 rad so the tow line reads
+  // as dragging the strip up after it rather than the pair moving as one rigid block
+  b.bobPhase += BANNER_BOB_SPD * dt;
+  b.bobY       = Math.sin(b.bobPhase) * BANNER_BOB_AMP;
+  b.bannerBobY = Math.sin(b.bobPhase - 0.55) * BANNER_BOB_AMP;
   const gone = b.dir === 1 ? b.x < -(b.w + 100) : b.x > cw + b.w + 100;
   if (gone) bannerPlane = null;
 }
 function drawBannerPlane() {
   const b = bannerPlane;
   const d = b.dir;                     // 1 = plane travels right→left (world scrolls left)
-  const px = b.x, py = b.y;            // plane nose position
+  const S = BANNER_SCALE;              // plane geometry, doubled (Osimo 2026-09-03)
+  const px = b.x, py = b.y + b.bobY;   // plane nose position, riding its own bob
+  const byC = b.y + b.bannerBobY;      // banner centre line — lags the plane's climb
+  const bh = b.h;
   ctx.save();
   ctx.globalAlpha = 0.92;
   // tow line + banner (trails BEHIND the plane, i.e. on the side it came from)
-  const bx = d === 1 ? px + 34 : px - 34 - b.w;
-  const wave = Math.sin(Date.now() / 160) * 2;
-  ctx.strokeStyle = '#d9d9d9'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(px + d * 12, py + 2); ctx.lineTo(d === 1 ? bx : bx + b.w, py + wave); ctx.stroke();   // from the tail
+  const bx = d === 1 ? px + 34 * S : px - 34 * S - b.w;
+  const wave = Math.sin(Date.now() / 160) * 2 * S;
+  ctx.strokeStyle = '#d9d9d9'; ctx.lineWidth = 1 * S;
+  ctx.beginPath(); ctx.moveTo(px + d * 12 * S, py + 2 * S); ctx.lineTo(d === 1 ? bx : bx + b.w, byC + wave); ctx.stroke();   // from the tail
   ctx.fillStyle = '#fff7d6';
-  ctx.fillRect(bx, py - 9 + wave, b.w, 18);
-  ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx, py - 9 + wave, b.w, 18);
+  ctx.fillRect(bx, byC - bh / 2 + wave, b.w, bh);
+  ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1.5 * S;
+  ctx.strokeRect(bx, byC - bh / 2 + wave, b.w, bh);
   ctx.fillStyle = '#7a1f1f';
-  ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
+  ctx.font = bannerFont(b.fs);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(b.text, bx + b.w / 2, py + wave + 1);
+  ctx.fillText(b.text, bx + b.w / 2, byC + wave + 1);
   ctx.textBaseline = 'alphabetic';
   // the plane: fuselage, wing, tail, spinning prop — mirrored by direction
   ctx.translate(px, py);
-  ctx.scale(-d, 1);                    // nose points in the direction of travel
+  ctx.scale(-d * S, S);                // nose points in the direction of travel, at 2×
   ctx.fillStyle = '#e8412c';
   ctx.beginPath(); ctx.ellipse(0, 0, 16, 6, 0, 0, Math.PI * 2); ctx.fill();   // fuselage
   ctx.fillStyle = '#ffd24d';
@@ -1988,7 +2022,7 @@ function drawBannerPlane() {
   ctx.fillStyle = '#9fe8ff';
   ctx.beginPath(); ctx.arc(4, -3, 3, 0, Math.PI * 2); ctx.fill();             // canopy
   const spin = (Date.now() / 30) % Math.PI;
-  ctx.strokeStyle = 'rgba(220,220,220,0.8)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(220,220,220,0.8)'; ctx.lineWidth = 2;   // scales with the 2× context
   ctx.beginPath(); ctx.moveTo(17, -8 * Math.cos(spin)); ctx.lineTo(17, 8 * Math.cos(spin)); ctx.stroke();  // prop
   ctx.restore();
   ctx.textAlign = 'left';
@@ -2722,13 +2756,29 @@ function update(dt) {
       score += rocketPipe ? 40 : 10;
       scoreEl.textContent = score;
       sfx.score();
-      // level progression PAUSES inside the gauntlet (Osimo 2026-08-30 v2: "near
-      // infinite") — you're AT level 20+, not climbing past it while in there; this
-      // also sidesteps a real edge case where levelling to exactly 30 mid-gauntlet
-      // would fire the un-reversal cutscene while still nominally inside a bonus room
-      if (!gauntletActive) {
-        pipesUntilLevel--;
-        if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
+      // Levels climb inside the gauntlet too (Osimo 2026-09-03: "make the levels progress
+      // even while in bonus pipes"). The Lv20+ gauntlet spawns real pipes through the
+      // ordinary cadence, so every pipe passed in there counts exactly like a normal one
+      // — it is a harder level, not a paused one. (Was frozen 2026-08-30 v2 "near
+      // infinite"; the safe Lv5/10/15 rooms are unaffected either way — they spawn no
+      // pipes, so nothing in them can be counted.)
+      pipesUntilLevel--;
+      if (pipesUntilLevel <= 0) {
+        // Reaching a REVERSAL level (15/30/every 5 after) while still inside the room:
+        // the cutscene flips the world and repositions the bird itself, so it IS the way
+        // out — drop the room here rather than firing a spit-out exit pipe that the
+        // glitter flash would erase a frame later. Star time frozen at entry is handed
+        // back exactly as the normal spit exit would.
+        if (gauntletActive && reversalDirForLevel(level + 1) !== 0 && !reversalLevelsFired.has(level + 1)) {
+          if (warp && warp.starRemainMs > 0) {
+            starPower = true;
+            starPowerUntil = Date.now() + warp.starRemainMs;
+            lastStarSec = 99;
+          }
+          warp = null;
+          gauntletActive = false;
+        }
+        setLevel(level + 1); sfx.levelup();
       }
       floaters.push({ x: p.x + PIPE_W / 2, y: pipeGapTop(p) + p.gapSize / 2,
                       text: rocketPipe ? '+40 🚀' : '+10', alpha: 1, vy: -1.4,
