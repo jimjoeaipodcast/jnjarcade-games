@@ -521,12 +521,26 @@ const pauseBtns = [document.getElementById('pauseL'), document.getElementById('p
 // he never clashes with Jimmy), while Jimmy is the helpful one: counts the star chain
 // down ("four… three… two… one… star power!"), counts the star's final seconds, and
 // speaks Personal Best / Top Scorer announcements.
+// DEFAULT = Jimmy and Joe talking (Osimo 2026-09-03: "make, in this game all the others
+// Jimmy and Joe talking the default, pressing it again will change to music or jingle or
+// just sound FX depending on the game"). Was 'tones' since the mode system was built —
+// the hosts are the reason this cabinet exists, so a first-time player now hears them
+// without having to find the speaker button. VOICE_DEFAULT_KEY makes the switch land once
+// on devices that already have a mode stored: without it, every device that has ever
+// opened this game keeps its old 'tones' and would never see the change.
 let audioCtx = null;
-let sfxMode = 'tones';   // 'tones' | 'hybrid' | 'voice' | 'mute'
+let sfxMode = 'voice';   // 'voice' | 'hybrid' | 'tones' | 'mute'
 try {
   const m = localStorage.getItem('sfxMode_flapfight');
-  if (m === 'voice' || m === 'mute' || m === 'tones' || m === 'hybrid') sfxMode = m;
-  else if (localStorage.getItem('sfxMuted_flapfight') === '1') sfxMode = 'mute'; // migrate old flag
+  if (localStorage.getItem('ff_voiceDefault_v2') !== '1') {
+    localStorage.setItem('ff_voiceDefault_v2', '1');
+    localStorage.setItem('sfxMode_flapfight', 'voice');
+    localStorage.setItem('sfxMuted_flapfight', '0');
+  } else if (m === 'voice' || m === 'mute' || m === 'tones' || m === 'hybrid') {
+    sfxMode = m;                                                      // a real choice — respected
+  } else if (localStorage.getItem('sfxMuted_flapfight') === '1') {
+    sfxMode = 'mute';                                                 // migrate the old flag
+  }
 } catch (e) {}
 let muted = sfxMode === 'mute';   // playTone() keys off this — kept in sync by the cycle
 // The 2026-08-18 double-tap "silence Joe's flap barks" toggle is REMOVED (Osimo
@@ -1186,11 +1200,14 @@ function updateMuteUI() {
 updateMuteUI();
 
 function cycleSfxMode() {
-  // strictly linear (Osimo 2026-08-19 v2): 🔊 normal tones → 🗣️ Jimmy counts +
-  // beep flaps → 🎙️ Jimmy counts + Joe flap sounds → 🔇 mute → 🔊 …
-  sfxMode = sfxMode === 'tones' ? 'hybrid'
-          : sfxMode === 'hybrid' ? 'voice'
-          : sfxMode === 'voice' ? 'mute' : 'tones';
+  // Still strictly linear, single-tap (Osimo 2026-08-19 v2) — only the STARTING POINT
+  // moved (Osimo 2026-09-03): 🎙️ both hosts talking incl. Joe's flap sounds (DEFAULT) →
+  // 🗣️ hosts talking, tone flaps → 🔊 pure sound FX → 🔇 mute → 🎙️ …
+  // All four tested modes survive; the two spoken ones now come FIRST, so one press off
+  // the default gets you the quieter talking mode and two gets you sound FX only.
+  sfxMode = sfxMode === 'voice' ? 'hybrid'
+          : sfxMode === 'hybrid' ? 'tones'
+          : sfxMode === 'tones' ? 'mute' : 'voice';
   muted = sfxMode === 'mute';
   try {
     localStorage.setItem('sfxMode_flapfight', sfxMode);

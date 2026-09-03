@@ -155,14 +155,20 @@ const FLOORS = [
 
 // ── SFX MODES + VOICE (house pattern; clips shared with DAD/flap-fight) ──────
 let audioCtx = null;
-let sfxMode = 'tones';
+// DEFAULT = the hosts talking (Osimo 2026-09-03: "Jimmy and Joe talking the default,
+// pressing it again will change to music or jingle or just sound FX"). The one-shot
+// jr_voiceDefault_v2 flag lands the new default on devices that already stored a mode.
+let sfxMode = 'voice';
 try {
   const m = localStorage.getItem('sfxMode_' + SLUG);
-  if (m === 'voice' || m === 'mute' || m === 'tones') sfxMode = m;
+  if (localStorage.getItem('jr_voiceDefault_v2') !== '1') {
+    localStorage.setItem('jr_voiceDefault_v2', '1');
+    localStorage.setItem('sfxMode_' + SLUG, 'voice');
+  } else if (m === 'voice' || m === 'mute' || m === 'tones') sfxMode = m;
 } catch (e) {}
 let muted = sfxMode === 'mute';
-let stepVoiceOff = false;     // double-tap mic: hush Joe's footstep/jump barks only
-try { stepVoiceOff = localStorage.getItem('jr_stepVoiceOff') === '1'; } catch (e) {}
+const stepVoiceOff = false;   // retired 2026-09-03 — see onMicTap(); kept as a const so the
+try { localStorage.removeItem('jr_stepVoiceOff'); } catch (e) {}   // draw/gate call sites below still read false
 
 function unlockAudio() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
@@ -755,7 +761,7 @@ function initGame() {
 
 // ── INPUT — swipes; mic 3-way + double-tap ───────────────────────────────────
 const DEADZONE = 17;
-let touchStart = null, micTapTimer = null;
+let touchStart = null;
 function toWorld(px, py) {
   const r = canvas.getBoundingClientRect();
   return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
@@ -763,21 +769,21 @@ function toWorld(px, py) {
 }
 const MIC_ZONE = { x: WORLD_W - 52, y: 6, w: 46, h: 40 };
 function cycleSfxMode() {
-  sfxMode = sfxMode === 'tones' ? 'voice' : sfxMode === 'voice' ? 'mute' : 'tones';
+  // 🎙️ hosts talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
+  sfxMode = sfxMode === 'voice' ? 'tones' : sfxMode === 'tones' ? 'mute' : 'voice';
   muted = sfxMode === 'mute';
   try { localStorage.setItem('sfxMode_' + SLUG, sfxMode); } catch (e) {}
   if (sfxMode !== 'mute') loadVoicePack();
 }
 function onMicTap() {
+  // Strictly LINEAR single tap — every tap advances the cycle, nothing is hidden
+  // behind a double tap (FLAP_FIGHT_BIBLE hard rule 1). The old double-tap toggle for
+  // Joe's footstep/jump barks is gone: it persisted in localStorage, so a device that once
+  // double-tapped kept part of the voice silenced forever with no way to tell, and
+  // now that voice is the DEFAULT that trap would be the state everyone starts in.
+  // It also cost every real tap a 260ms wait for the double-tap window to expire.
   unlockAudio();
-  if (sfxMode !== 'voice') { cycleSfxMode(); return; }
-  if (micTapTimer) {
-    clearTimeout(micTapTimer); micTapTimer = null;
-    stepVoiceOff = !stepVoiceOff;
-    try { localStorage.setItem('jr_stepVoiceOff', stepVoiceOff ? '1' : '0'); } catch (e) {}
-    return;
-  }
-  micTapTimer = setTimeout(() => { micTapTimer = null; cycleSfxMode(); }, 260);
+  cycleSfxMode();
 }
 function doLane(dir) {
   const nl = Math.max(-1, Math.min(1, lane + dir));

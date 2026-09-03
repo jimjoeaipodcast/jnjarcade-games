@@ -118,7 +118,34 @@ function resize() {
 addEventListener('resize', resize); resize();
 
 // ── SFX — house style ────────────────────────────────────────────────────────
-let audioCtx = null, muted = localStorage.getItem('sfxMuted_' + SLUG) === '1';
+// SPEAKER CYCLE (Osimo 2026-09-03: "Jimmy and Joe talking the default, pressing it again
+// will change to music or jingle or just sound FX depending on the game") — this cabinet
+// had only mute/unmute, so it gains the house 3-state linear cycle:
+//   🎙️ voice — Jimmy + Joe speak every line, plus sound FX  (DEFAULT)
+//   🔊 tones — sound FX only, hosts silent (subtitles still show)
+//   🔇 mute  — silence
+let audioCtx = null, sfxMode = 'voice';
+try {
+  if (localStorage.getItem('onair_voiceDefault_v2') !== '1') {
+    localStorage.setItem('onair_voiceDefault_v2', '1');            // land the new default once
+    localStorage.setItem('sfxMode_' + SLUG, 'voice');
+    localStorage.setItem('sfxMuted_' + SLUG, '0');                 // legacy key must not disagree
+  } else {
+    const m = localStorage.getItem('sfxMode_' + SLUG);
+    if (m === 'voice' || m === 'tones' || m === 'mute') sfxMode = m;
+    else if (localStorage.getItem('sfxMuted_' + SLUG) === '1') sfxMode = 'mute';   // legacy flag
+  }
+} catch (e) {}
+let muted = sfxMode === 'mute';   // tone() keys off this — kept in sync by cycleSfxMode()
+function cycleSfxMode() {
+  sfxMode = sfxMode === 'voice' ? 'tones' : sfxMode === 'tones' ? 'mute' : 'voice';
+  muted = sfxMode === 'mute';
+  if (sfxMode !== 'voice') stopVoice();          // don't leave a half-spoken line running
+  try {
+    localStorage.setItem('sfxMode_' + SLUG, sfxMode);
+    localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0');   // keep the legacy key honest
+  } catch (e) {}
+}
 function unlockAudio() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -438,7 +465,7 @@ function stopVoice() {
 function playVoice(who, text) {
   stopVoice();
   dlg.audioDur = 0;
-  if (!VOICE || !audioCtx || muted || state === 'attract') return;
+  if (!VOICE || !audioCtx || sfxMode !== 'voice' || state === 'attract') return;
   const key = djb2(who + '|' + text);
   const b64 = VOICE[key];
   if (!b64) return;
@@ -901,7 +928,7 @@ function onUp(e) {
 
   // mute button (all states)
   if (w.x > WORLD_W - 60 && w.y < 50) {
-    muted = !muted; localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0'); return;
+    cycleSfxMode(); return;
   }
   // fullscreen toggle beside it — without this, leaving fullscreen mid-game left no
   // way back in short of restarting the cassette
@@ -1848,7 +1875,7 @@ function drawHUD() {
   ctx.fillText('COMEBACKS ' + counters.length + '/6', 14, 34);
   // mute
   ctx.textAlign = 'right'; ctx.font = '20px serif';
-  ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 10);
+  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 14, 10);
   ctx.fillText('⛶', WORLD_W - 106, 10);
 }
 function drawDuelUI() {
@@ -1962,7 +1989,7 @@ function render() {
 }
 function drawHUDMuteOnly() {
   ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.font = '20px serif';
-  ctx.fillStyle = '#fff'; ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 10);
+  ctx.fillStyle = '#fff'; ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 14, 10);
 }
 
 // ── LOOP ─────────────────────────────────────────────────────────────────────

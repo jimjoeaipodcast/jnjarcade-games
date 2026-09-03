@@ -1331,7 +1331,10 @@ function checkInventoryTap(p) {
 // SPEAKER CYCLE body extracted so the top-bar button AND the settings popover share it
 function cycleSfx() {
   initAudio();
-  sfxMode = sfxMode === "tones" ? "voice" : sfxMode === "voice" ? "mute" : "tones";
+  // 🎙️ Jimmy + Joe talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
+  // Osimo 2026-09-03: the hosts lead in every cabinet that has them; one press off the
+  // default drops to plain sound FX.
+  sfxMode = sfxMode === "voice" ? "tones" : sfxMode === "tones" ? "mute" : "voice";
   muted = sfxMode === "mute";
   try {
     localStorage.setItem("aw_sfxMode", sfxMode);
@@ -1372,11 +1375,21 @@ function checkSettingsTap(p) {
 }
 
 // SPEAKER CYCLE — strictly LINEAR single tap (flap-fight hard rule 1):
-// 🔊 tones → 🎙️ tones + JnJ commentary → 🔇 mute → 🔊 …
+// 🎙️ tones + JnJ commentary (DEFAULT, Osimo 2026-09-03) → 🔊 tones → 🔇 mute → 🎙️ …
+// The one-shot aw_voiceDefault_v2 flag lands the new default on devices that already
+// have a mode stored — without it they would keep their old "tones" forever.
 let sfxMode = (() => {
+  try {
+    if (localStorage.getItem("aw_voiceDefault_v2") !== "1") {
+      localStorage.setItem("aw_voiceDefault_v2", "1");
+      localStorage.setItem("aw_sfxMode", "voice");
+      localStorage.setItem("aw_muted", "0");
+      return "voice";
+    }
+  } catch (e) {}
   const m = localStorage.getItem("aw_sfxMode");
   if (m === "tones" || m === "voice" || m === "mute") return m;
-  return localStorage.getItem("aw_muted") === "1" ? "mute" : "tones";   // migrate old flag
+  return localStorage.getItem("aw_muted") === "1" ? "mute" : "voice";   // migrate old flag
 })();
 let muted = sfxMode === "mute";   // playTone() keys off this — kept in sync by the cycle
 let audioCtx = null;
