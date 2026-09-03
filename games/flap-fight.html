@@ -53,8 +53,14 @@
   }
   .game-header {
     flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
-    /* only the header clears the notch — the canvas below it does not need to */
-    padding:calc(9px + env(safe-area-inset-top,0px)) 14px 9px;
+    /* only the header clears the notch — the canvas below it does not need to.
+       Osimo 2026-09-03: "move the level where the score is and remove that line the
+       level is sitting on making the screen larger, and slightly squeeze the above
+       line giving a little extra game play area" — the second HUD row (combo + LEVEL +
+       its own rule) is gone: LEVEL now sits in this row beside SCORE, the combo readout
+       floats over the canvas, and this row's padding is squeezed 9px→5px top/bottom.
+       Pipe gaps are untouched (GAP_START/GAP_MIN) — only the canvas got taller. */
+    padding:calc(5px + env(safe-area-inset-top,0px)) 12px 5px;
     background:linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.2));
     border-bottom:2px solid var(--dim);
   }
@@ -69,21 +75,39 @@
     font-family:'Bungee',cursive; letter-spacing:.14em;
     color:var(--ink); text-shadow:0 0 12px var(--glow); font-size:17px;
   }
-  .hdr-right { text-align:right; }
+  .hdr-right { display:flex; align-items:center; gap:14px; text-align:right; }
   .score-label { font-size:9px; letter-spacing:.18em; opacity:.55; }
-  .score-val { font-size:19px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
-  .hud-bar {
-    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
-    padding:0 16px 5px; font-size:12px;
-    border-bottom:1px solid rgba(77,217,245,.1);
+  .score-val { font-size:18px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  /* combo readout now floats over the top-centre of the playfield (the HUD row it lived
+     in is gone) — pointer-events:none so it never eats a flap tap */
+  .combo-display {
+    position:absolute; left:50%; top:8px; transform:translateX(-50%); z-index:3;
+    color:var(--ink); font-weight:700; font-size:13px; opacity:0; transition:opacity .3s;
+    letter-spacing:.06em; pointer-events:none; white-space:nowrap;
+    text-shadow:0 0 8px var(--glow), 0 1px 2px #000;
   }
-  .combo-display { color:var(--ink); font-weight:700; font-size:13px; opacity:0; transition:opacity .3s; letter-spacing:.06em; }
   .combo-display.on { opacity:1; }
-  .lvl { opacity:.65; letter-spacing:.1em; font-size:11px; }
+  .lvl { opacity:.7; letter-spacing:.1em; font-size:11px; font-variant-numeric:tabular-nums; }
   .canvas-wrap {
     flex:1; position:relative; padding:4px 6px; overflow:hidden;
     display:flex; align-items:center; justify-content:center;
   }
+  /* ⏸️ pause buttons (Osimo 2026-09-03): "add 2 pause buttons, on the edge of the corner
+     up on the top left and one up on the top right" — one per thumb. Sit on the canvas's
+     own top corners, above it (z 3) but below the overlay (z 5). Hidden until play starts. */
+  .pause-btn {
+    position:absolute; top:6px; z-index:3; width:38px; height:38px; border-radius:10px;
+    background:rgba(3,15,24,.55); border:1px solid rgba(77,217,245,.35); color:var(--ink);
+    font-size:18px; line-height:1; cursor:pointer; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+    box-shadow:0 0 10px rgba(0,0,0,.5);
+  }
+  .pause-btn:active { background:rgba(77,217,245,.25); }
+  .pause-btn.hidden { display:none; }
+  #pauseL { left:6px; }
+  #pauseR { right:6px; }
+  @media (max-width:820px) { #pauseL { left:2px; } #pauseR { right:2px; } .pause-btn { top:2px; } }
   canvas {
     display:block; border:2px solid var(--dim); border-radius:10px;
     box-shadow:0 0 30px var(--glow), inset 0 0 24px rgba(0,0,0,.6);
@@ -112,6 +136,10 @@
   /* instructions sprite icons (Osimo 2026-08-29) — real in-game sprites, not emoji */
   .ovrow { display:flex; align-items:center; gap:8px; text-align:left; margin:4px 0; }
   .ovrow-rev { flex-direction:row-reverse; }
+  /* 2026-09-03: ten instruction rows — let the list scroll inside the overlay rather
+     than push the title/button off a 393px-tall landscape phone */
+  .overlay-sub { max-height:calc(100% - 118px); overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .overlay-sub::-webkit-scrollbar { width:0; }
   /* Osimo 2026-08-30: "still not making PNG images of the sprites, instead it's still
      using square images" — the generic `canvas {}` rule above (game-viewport frame:
      dark bg, border, rounded corners, glow) was matching these icon canvases too, since
@@ -154,14 +182,16 @@
       <button class="mute-btn" id="muteBtn" aria-label="Toggle sound">🔊</button>
     </div>
     <div class="game-name">FLAP FIGHT</div>
-    <div class="hdr-right"><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+    <div class="hdr-right">
+      <div class="lvl" id="lvl">LEVEL 1</div>
+      <div><div class="score-label">SCORE</div><div class="score-val" id="score">0</div></div>
+    </div>
   </header>
-  <div class="hud-bar">
-    <div class="combo-display" id="combo"></div>
-    <div class="lvl" id="lvl">LEVEL 1</div>
-  </div>
   <div class="canvas-wrap" id="wrap">
     <canvas id="c"></canvas>
+    <div class="combo-display" id="combo"></div>
+    <button class="pause-btn hidden" id="pauseL" aria-label="Pause">⏸</button>
+    <button class="pause-btn hidden" id="pauseR" aria-label="Pause">⏸</button>
     <div class="overlay hidden" id="ov">
       <div class="overlay-emoji" id="ovEmoji">
         <canvas class="ovicon" data-kind="bird" data-w="48" data-h="48"></canvas>
@@ -229,10 +259,21 @@ const BIRD_R       = 11;
 const ENEMY_R      = 14;
 const POP_DIST     = BIRD_R + ENEMY_R + 3;
 const COMBO_WINDOW = 2600;          // ms between pops to keep combo alive (2200→2600 2026-08-30: Osimo — sparse spacing sometimes outran the old window)
+// COMBO ACCURACY PASS (Osimo 2026-09-03: "make sure the combo counting is more
+// accurate"). The window is now measured in GAME TICKS (`frame`, 60fps-equivalent)
+// instead of wall-clock ms: a lag spike or a throttled tab no longer eats the chain
+// (the world covered less distance in those 2.6 real seconds, so the same on-screen
+// spacing used to outrun the window), and a pause can't break it either — `frame`
+// simply doesn't advance while paused.
+const COMBO_WINDOW_TICKS = Math.round(COMBO_WINDOW / (1000 / 60));   // 156
 const BASE_SPEED   = 2.1;
 const PIPE_FRAMES  = 130;           // frames between pipe spawns
 const CELL         = 18;            // resize cell buffer (convention)
-const GROUND_H     = 26;            // scrolling ground strip height
+const GROUND_H     = 13;            // scrolling ground strip height (Osimo 2026-09-03:
+                                     // "reduce the height of the floor too by half giving
+                                     // more play area" — was 26; every spawn band / bounce
+                                     // band / collision floor reads ch - GROUND_H, so the
+                                     // whole playfield grows 13px with this one number)
 const MAX_ENEMIES  = 7;             // cap on simultaneous balloon fighters
 const STAR_COUNT   = 60;            // parallax background stars
 const CHUTE_R      = 22;            // parachute dome radius
@@ -245,15 +286,69 @@ const GAP_MIN      = 105;           // narrowest pipe gap
 // transitions and starts moving right to left (going backwards)... placed on the right
 // hand side so he can see what's coming from the left... a full screen glitter pipe...
 // bird comes out of a pipe on the right and starts bouncing left." Each level in
-// REVERSAL_LEVELS fires the cutscene ONCE and TOGGLES scrollDir (15 flips to reversed,
-// 30 flips back to normal — Osimo 2026-08-30 v2: "should anyone reach level 30 reverse
-// the flow once again to how it is at start left to right"). scrollDir is the single
-// source of truth for which way the world scrolls — 1 = normal (world scrolls left,
-// bird anchored near the left), -1 = reversed (world scrolls right, bird anchored near
-// the right). Every spawn-edge/movement/despawn/scoring/trail check that cares about
-// direction reads this ONE variable rather than a hardcoded sign, so each reversal is
-// one flip, not a dozen independent ones that could drift out of sync.
-const REVERSAL_LEVELS        = [15, 30];
+// reversalDirForLevel(n) says whether level n fires the cutscene and which direction it
+// sets (v1 toggled a fixed [15, 30] list — 15 reversed, 30 back to normal per Osimo
+// 2026-08-30 v2). Osimo 2026-09-03: "start the first reverse and back to normal at the
+// current levels then repeat every 5 change of direction" — so 15 → reversed, 30 →
+// normal, then 35 → reversed, 40 → normal, 45 → reversed… every 5 levels forever.
+// Returns an explicit direction rather than "toggle" so a level can never fire the
+// wrong way if setLevel is ever called out of order. scrollDir is the single source of
+// truth for which way the world scrolls — 1 = normal (world scrolls left, bird anchored
+// near the left), -1 = reversed (world scrolls right, bird anchored near the right).
+// Every spawn-edge/movement/despawn/scoring/trail check that cares about direction reads
+// this ONE variable rather than a hardcoded sign, so each reversal is one flip, not a
+// dozen independent ones that could drift out of sync.
+const REVERSAL_FIRST_LEVEL   = 15;   // first flip (to reversed)
+const REVERSAL_SECOND_LEVEL  = 30;   // back to normal
+const REVERSAL_REPEAT_EVERY  = 5;    // …then alternate every N levels after that
+function reversalDirForLevel(n) {
+  if (n === REVERSAL_FIRST_LEVEL)  return -1;
+  if (n === REVERSAL_SECOND_LEVEL) return 1;
+  if (n > REVERSAL_SECOND_LEVEL && (n - REVERSAL_SECOND_LEVEL) % REVERSAL_REPEAT_EVERY === 0) {
+    return ((n - REVERSAL_SECOND_LEVEL) / REVERSAL_REPEAT_EVERY) % 2 === 1 ? -1 : 1;
+  }
+  return 0;   // no flip at this level
+}
+// ─── Lv25+ MOVING GAPS (Osimo 2026-09-03) ─────────────────────────────────────
+// "after level 25 while retaining whatever happened there is between the pipes make the
+// gap move up and down, say one set of pipes both move upwards at the same time and same
+// rate." Per-pipe sine drift applied to the WHOLE pair (top + bottom together, so the
+// gap size never changes — only where it sits). Stacks with the wobble/falling-top
+// behaviour that already exists at Lv25 (that stays top-half-only, on top of this).
+const OSC_LEVEL      = 25;
+const OSC_AMP_MIN    = 28, OSC_AMP_MAX = 60;   // px of vertical travel either side of gapY
+const OSC_SPEED_MIN  = 0.018, OSC_SPEED_MAX = 0.034; // radians per 60fps tick
+// ─── Lv30+ FIRE PIPES (Osimo 2026-09-03) ───────────────────────────────────────
+// "after level 30, every 3 levels, pipes on fire appear, if you hit them you and all your
+// buddies die, you might go larger but all your buddies turn to smoke, puff." A fire pipe
+// is a normal hit for the player (inflate as usual) but the buddy chain — trailing AND
+// forever buddies — is wiped in one smoke puff, and no buddy can take the hit for you.
+const FIRE_LEVEL_FROM  = 30;
+const FIRE_LEVEL_EVERY = 3;
+const FIRE_PIPE_EVERY  = 4;   // on a fire level, 1 in every N spawned pipes burns
+// ─── PICKUP CHAINS (Osimo 2026-09-03) ──────────────────────────────────────────
+// Consecutive catches of the same kind (nothing else in between) unlock extras:
+//   2 × yellow flashing (special)  → shrink stack, like the purple one does
+//   3 × purple flashing (shrink)   → ghost power too
+//   3 × buddy chutes               → a FOREVER buddy (stays till you die, never takes your
+//                                    place, dies with you; the 3 trailing buddies are still
+//                                    yours on top of any forever buddies you bank)
+//   grey ↔ star, either order      → ghost power for GHOST_FROM_GREYSTAR_LEVELS levels
+const CHAIN_SPECIAL_NEED  = 2;
+const CHAIN_SHRINK_NEED   = 3;
+const CHAIN_BUDDY_NEED    = 3;
+const GHOST_FROM_GREYSTAR_LEVELS = 5;
+const MAX_FOREVER_BUDDIES = 6;   // sanity cap on banked forever buddies (draw cost)
+// ─── RECORD CHASE (Osimo 2026-09-03) ───────────────────────────────────────────
+// "when you're 50K 30k 20k and 10k away from beating the score record holder, a plane in
+// the background should fly by with a banner saying: YOU'RE 50K AWAY TO BEAT {NAME}
+// {SCORE}" — each threshold fires once per run, the moment topScore - score dips to it.
+const RECORD_CHASE_STEPS = [50000, 30000, 20000, 10000];
+// ─── PAUSE (Osimo 2026-09-03) ──────────────────────────────────────────────────
+// "make sure that when they return they can resume from exactly where they paused:
+// double tap the screen to unfreeze". Every Date.now()-based deadline is shifted by the
+// paused duration on resume (shiftTimers), so nothing expires while frozen.
+const PAUSE_DOUBLE_TAP_MS = 380;
 const REVERSAL_SUCK_FRAMES   = 33;  // phase 1: bird flies toward centre, glitter builds
 const REVERSAL_GLITTER_FRAMES = 42; // phase 2: full-screen glitter flash — the "glitter pipe"
 const REVERSAL_POPOUT_FRAMES = 30;  // phase 3: bird rockets out the new side, world flips
@@ -275,6 +370,8 @@ const STAR_CHAIN_NEED_HARD = 10;    // Osimo 2026-08-29: "after the reversal sta
                                      // so the Lv30 un-reversal can't hand the 5-chain back to
                                      // a player who's already deep into the run.
 const STAR_CHAIN_HARD_SCORE = 80000;
+const STAR_CHAIN_NEED_MAX   = 15;   // Osimo 2026-09-03: "after level 40 you need 15 shoots
+const STAR_CHAIN_MAX_LEVEL  = 40;   // to get star power"
 const STAR_CHUTE_MS_MIN = 70000, STAR_CHUTE_MS_MAX = 100000; // rare Lv20+ instant-star pickup
 // GREY CHUTE (Osimo 2026-08-30 v4): "once you collect buddy power, make grey dark grey
 // shoots appear, rarely, if the hit them you loose a buddy" — a hazard, not a reward,
@@ -372,6 +469,7 @@ const scoreEl = document.getElementById('score');
 const comboEl = document.getElementById('combo');
 const lvlEl   = document.getElementById('lvl');
 const muteBtn = document.getElementById('muteBtn');
+const pauseBtns = [document.getElementById('pauseL'), document.getElementById('pauseR')];
 
 // ─── sound (pure WebAudio procedural sfx — no files) ─────────────────────────
 // FOUR-WAY speaker cycle, strictly LINEAR — no double-tap anything (Osimo
@@ -545,6 +643,52 @@ const VO_LINES = [
   ["JOE", "twenty five. I'm counting."], ["JOE", "thirty thousand. respect."],
   ["JOE", "still going. remarkable."],
   ["JOE", "one hundred thousand. I have no jokes. Well done."],
+  // 2026-09-03 batch (Osimo: moving gaps, 15-chain, fire pipes, consecutive-pickup
+  // chains, forever buddy, floor bounce, pause, record-chase plane, 100k–200k death
+  // tiers) — personality-consistency-guard scored in-session, see project_flapfight.md.
+  ["JIMMY", "Ten!"], ["JIMMY", "Eleven!"], ["JIMMY", "Twelve!"], ["JIMMY", "Thirteen!"], ["JIMMY", "Fourteen!"],
+  ["JIMMY", "Level twenty five! The gaps move now. Watch the hole, not the pipe!"],
+  ["JIMMY", "Level forty! Fifteen catches for star power now. Fifteen! Start counting!"],
+  ["JIMMY", "Fire pipes! Touch one and every buddy you've got goes up in smoke!"],
+  ["JIMMY", "Pipes on fire this level! Don't touch them. Genuinely, don't!"],
+  ["JIMMY", "Burning pipes! Your buddies are flammable. All of them!"],
+  ["JIMMY", "Your buddies! Smoke! I said don't touch the fire!"],
+  ["JIMMY", "Puff! Every buddy, gone! The fire pipe doesn't negotiate!"],
+  ["JIMMY", "Double yellow! Shrunk! Same as a purple, twice the work!"],
+  ["JIMMY", "Three purples in a row! Tiny AND ghosted. Fly through everything!"],
+  ["JIMMY", "Forever buddy! He stays till the end. Your end, specifically!"],
+  ["JIMMY", "Grey and star, back to back! Five levels of ghost. Untouchable!"],
+  ["JIMMY", "Fifty K off the record! Look at the plane! Look at it!"],
+  ["JIMMY", "Thirty K away from the record! This is getting real!"],
+  ["JIMMY", "Twenty K away! The record holder is sweating. I can feel it!"],
+  ["JIMMY", "Ten K away! Ten! Do not blink now!"],
+  ["JIMMY", "Two hundred thousand! I have nothing left. You've broken the commentary!"],
+  ["JIMMY", "One ninety thousand! Ten short of two hundred. So close it hurts!"],
+  ["JIMMY", "One eighty thousand! Ridiculous. Beautiful. Ridiculous!"],
+  ["JIMMY", "One seventy thousand! The pipes have filed a complaint!"],
+  ["JIMMY", "One sixty thousand! Someone check the bird for engines!"],
+  ["JIMMY", "One fifty thousand! Halfway to three hundred, and I'm not joking!"],
+  ["JIMMY", "One forty thousand points! I've stopped pretending this is normal!"],
+  ["JIMMY", "One thirty thousand! Tell your family. Tell mine!"],
+  ["JIMMY", "One twenty thousand! Legend was twenty thousand ago!"],
+  ["JIMMY", "One ten thousand! Past legend. Into folklore!"],
+  ["JIMMY", "A hundred thousand at the end! Legend status, confirmed and framed!"],
+  ["JOE", "puff."], ["JOE", "that was your whole entourage."], ["JOE", "buddies. former."],
+  ["JOE", "boing. courtesy of the floor."], ["JOE", "up you go."], ["JOE", "floor says up."],
+  ["JOE", "bounced. no charge."],
+  ["JOE", "forever. that's a big word for a bird."],
+  ["JOE", "paused. take your time."], ["JOE", "frozen. like my enthusiasm."],
+  ["JOE", "two hundred thousand. I'm going to lie down."],
+  ["JOE", "one ninety thousand. nearly round. annoying."],
+  ["JOE", "one eighty. I'd have stopped at a hundred. you didn't."],
+  ["JOE", "one seventy. the pipes want a word."],
+  ["JOE", "one sixty thousand. I checked. no engines."],
+  ["JOE", "one fifty thousand. half of a number nobody's reached."],
+  ["JOE", "one forty. normal left a while ago."],
+  ["JOE", "one thirty thousand. my family's been told."],
+  ["JOE", "one twenty. legend was earlier. this is something else."],
+  ["JOE", "one ten thousand. folklore. sure."],
+  ["JOE", "a hundred thousand. I'll allow it."],
 ];
 const JOE_BARKS = {
   // flap: rotating variety (Osimo 2026-08-18 v3: aerodynamics/effort/wing OUT,
@@ -564,12 +708,43 @@ const JOE_BARKS = {
   bonus:   ["ooh.", "shiny.", "nice."],
   warp:    ["wheee.", "down we go."],
   warpOut: ["and we're back.", "we return."],
+  // 2026-09-03: fire-pipe hit (buddies to smoke), the auto floor bounce, pause/resume.
+  // `resume` deliberately shares warpOut's recorded clips — same "we're back" beat.
+  fireHit:     ["puff.", "that was your whole entourage.", "buddies. former."],
+  floorBounce: ["boing. courtesy of the floor.", "up you go.", "floor says up.", "bounced. no charge."],
+  pause:       ["paused. take your time.", "frozen. like my enthusiasm."],
+  resume:      ["and we're back.", "we return."],
 };
 // END-OF-GAME MONOLOGUE (Osimo 2026-08-18 v6: "enrich what they say about your score at
 // the end… use them in BOTH regular sound and mic sound… random monologue based on score,
 // more funny stuff bigger repertoire"). Four score tiers, both hosts alternating, spoken
 // in 🔊 tones mode AND 🎙️ voice mode (mute stays silent). Tiers checked top-down.
 const DEATH_TIERS = [
+  // MEGA tiers (Osimo 2026-09-03: "a few more for mega scores 100k 110k 120k etc up to
+  // 200k for when they die") — one bespoke pair per 10k step, checked top-down like the
+  // rest, so a 137k run gets the 130k lines.
+  { min: 200000, JIMMY: ["Two hundred thousand! I have nothing left. You've broken the commentary!"],
+                 JOE:   ["two hundred thousand. I'm going to lie down."] },
+  { min: 190000, JIMMY: ["One ninety thousand! Ten short of two hundred. So close it hurts!"],
+                 JOE:   ["one ninety thousand. nearly round. annoying."] },
+  { min: 180000, JIMMY: ["One eighty thousand! Ridiculous. Beautiful. Ridiculous!"],
+                 JOE:   ["one eighty. I'd have stopped at a hundred. you didn't."] },
+  { min: 170000, JIMMY: ["One seventy thousand! The pipes have filed a complaint!"],
+                 JOE:   ["one seventy. the pipes want a word."] },
+  { min: 160000, JIMMY: ["One sixty thousand! Someone check the bird for engines!"],
+                 JOE:   ["one sixty thousand. I checked. no engines."] },
+  { min: 150000, JIMMY: ["One fifty thousand! Halfway to three hundred, and I'm not joking!"],
+                 JOE:   ["one fifty thousand. half of a number nobody's reached."] },
+  { min: 140000, JIMMY: ["One forty thousand points! I've stopped pretending this is normal!"],
+                 JOE:   ["one forty. normal left a while ago."] },
+  { min: 130000, JIMMY: ["One thirty thousand! Tell your family. Tell mine!"],
+                 JOE:   ["one thirty thousand. my family's been told."] },
+  { min: 120000, JIMMY: ["One twenty thousand! Legend was twenty thousand ago!"],
+                 JOE:   ["one twenty. legend was earlier. this is something else."] },
+  { min: 110000, JIMMY: ["One ten thousand! Past legend. Into folklore!"],
+                 JOE:   ["one ten thousand. folklore. sure."] },
+  { min: 100000, JIMMY: ["A hundred thousand at the end! Legend status, confirmed and framed!"],
+                 JOE:   ["a hundred thousand. I'll allow it."] },
   { min: 15000,   // EPIC — the runs that deserve a speech
     JIMMY: ["Legendary flight! Frame it!",
             "The pipes will tell stories about you!",
@@ -679,6 +854,33 @@ const JIMMY_PB_VO  = ["Personal best!", "New personal best!", "That's a record!"
 const JIMMY_TOP_VO = ["Top scorer!", "Number one!", "Top of the board!",
                       "You're number one!", "Highest score in the whole arcade!",
                       "The record is yours!"];
+// 2026-09-03 batch — every new mechanic gets a Jimmy heads-up (Osimo: "add Jimmy Joe
+// spoken phrase for all the new stuff").
+const JIMMY_OSC_VO        = "Level twenty five! The gaps move now. Watch the hole, not the pipe!";
+const JIMMY_CHAIN15_VO    = "Level forty! Fifteen catches for star power now. Fifteen! Start counting!";
+const JIMMY_FIRE_LEVEL_VO = ["Fire pipes! Touch one and every buddy you've got goes up in smoke!",
+                             "Pipes on fire this level! Don't touch them. Genuinely, don't!",
+                             "Burning pipes! Your buddies are flammable. All of them!"];
+const JIMMY_FIRE_HIT_VO   = ["Your buddies! Smoke! I said don't touch the fire!",
+                             "Puff! Every buddy, gone! The fire pipe doesn't negotiate!"];
+const JIMMY_DOUBLE_SPECIAL_VO = "Double yellow! Shrunk! Same as a purple, twice the work!";
+const JIMMY_TRIPLE_SHRINK_VO  = "Three purples in a row! Tiny AND ghosted. Fly through everything!";
+const JIMMY_FOREVER_VO    = "Forever buddy! He stays till the end. Your end, specifically!";
+const JOE_FOREVER_VO      = "forever. that's a big word for a bird.";
+const JIMMY_GREYSTAR_VO   = "Grey and star, back to back! Five levels of ghost. Untouchable!";
+// star-chain countdown words — Jimmy counts DOWN to the star (need − chain); Ten..Fourteen
+// added 2026-09-03 for the Lv40+ fifteen-catch chain. Declared here (not next to
+// currentStarChainNeed()) because voSelfCheck() below reads it at parse time.
+const STAR_COUNTDOWN_WORDS = { 1:'One!', 2:'Two!', 3:'Three!', 4:'Four!', 5:'Five!',
+                                6:'Six!', 7:'Seven!', 8:'Eight!', 9:'Nine!',
+                                10:'Ten!', 11:'Eleven!', 12:'Twelve!', 13:'Thirteen!', 14:'Fourteen!' };
+// record-chase plane (Osimo: "SAY the 50 or others respectively when he's that far")
+const JIMMY_CHASE_VO = {
+  50000: "Fifty K off the record! Look at the plane! Look at it!",
+  30000: "Thirty K away from the record! This is getting real!",
+  20000: "Twenty K away! The record holder is sweating. I can feel it!",
+  10000: "Ten K away! Ten! Do not blink now!",
+};
 // Osimo 2026-08-18: Joe −20%, Jimmy +15%
 const JIMMY_GAIN = 1.15, JOE_GAIN = 0.4;
 
@@ -692,7 +894,7 @@ const VO = { b64: null, loading: false, buffers: {}, rot: {}, jimmySrc: null, la
 function loadVoicePack() {
   if (VO.b64 || VO.loading) return;
   VO.loading = true;
-  fetch('flap-fight-pack.json?v=6')
+  fetch('flap-fight-pack.json?v=7')
     .then(r => r.json())
     .then(d => { VO.b64 = d.voice || {}; VO.loading = false; })
     .catch(() => { VO.loading = false; });
@@ -855,13 +1057,18 @@ function dispatch(event, tonesFn, arg) {
     // (Osimo 2026-08-19: "after I hit 20 combos in a row Joe just says the same
     // thing over and over" — the combo caps at 20, so every stomp past it re-fired
     // the ×20 line; lastComboAnnounced resets when the chain breaks)
-    if (event === 'stomp' && COMBO_VO[arg] && lastComboAnnounced !== arg) {
-      lastComboAnnounced = arg;
+    // 2026-09-03: power-chute stomps now count toward the chain too, so a count can
+    // SKIP a tier (9 → 10 on a star chute, whose own voice line wins that beat, then
+    // 11 on the next normal). Speak the highest tier at-or-below the count that
+    // hasn't been spoken this chain, rather than only an exact match.
+    const comboTier = event === 'stomp' ? comboTierFor(arg) : 0;
+    if (comboTier && lastComboAnnounced !== comboTier) {
+      lastComboAnnounced = comboTier;
       // 0.5s delay (Osimo 2026-08-19 v4: "clashes with Jimmy counting") — a bounce
       // on a chute can ALSO be a star-chain beat, and Jimmy's countdown fires
       // synchronously in the same collision handler; letting Joe land half a
       // second later keeps both audible instead of talking over each other
-      setTimeout(() => voicePlay('JOE', COMBO_VO[arg], JOE_GAIN), 500);
+      setTimeout(() => voicePlay('JOE', COMBO_VO[comboTier], JOE_GAIN), 500);
       return;
     }
     if (event === 'stomp') { setTimeout(() => joeSay('stomp'), 500); return; }
@@ -871,6 +1078,12 @@ function dispatch(event, tonesFn, arg) {
   tonesFn();
 }
 let lastComboAnnounced = 0;   // highest combo tier spoken this chain (reset on chain break)
+// highest COMBO_VO tier ≤ count (0 if below the first tier)
+function comboTierFor(count) {
+  let tier = 0;
+  for (const k in COMBO_VO) { const n = +k; if (n <= count && n > tier) tier = n; }
+  return tier;
+}
 const sfx = {
   flap:    ()      => dispatch('flap',    TONES.flap),
   score:   ()      => dispatch('score',   TONES.score),
@@ -887,6 +1100,11 @@ const sfx = {
   best:    ()      => dispatch('best',    TONES.best),
   warp:    ()      => dispatch('warp',    TONES.warp),
   warpOut: ()      => dispatch('warpOut', TONES.warpOut),
+  // 2026-09-03: each maps to its own JOE_BARKS bank in the spoken modes
+  fireHit:     ()  => dispatch('fireHit',     TONES.death),
+  floorBounce: ()  => dispatch('floorBounce', () => TONES.bonus(1)),
+  pause:       ()  => dispatch('pause',       TONES.warp),
+  resume:      ()  => dispatch('resume',      TONES.warpOut),
 };
 
 // every bank string must exist in VO_LINES or its clip silently never plays — assert at
@@ -911,6 +1129,14 @@ const sfx = {
   JIMMY_TOP_VO.forEach(t => chk('JIMMY', t));
   Object.values(COMBO_VO).forEach(t => chk('JOE', t));
   ['bippidi.', 'bopoidi.'].forEach(t => chk('JOE', t));
+  // 2026-09-03 banks
+  Object.values(STAR_COUNTDOWN_WORDS).forEach(t => chk('JIMMY', t));
+  [JIMMY_OSC_VO, JIMMY_CHAIN15_VO, JIMMY_DOUBLE_SPECIAL_VO, JIMMY_TRIPLE_SHRINK_VO,
+   JIMMY_FOREVER_VO, JIMMY_GREYSTAR_VO].forEach(t => chk('JIMMY', t));
+  JIMMY_FIRE_LEVEL_VO.forEach(t => chk('JIMMY', t));
+  JIMMY_FIRE_HIT_VO.forEach(t => chk('JIMMY', t));
+  Object.values(JIMMY_CHASE_VO).forEach(t => chk('JIMMY', t));
+  chk('JOE', JOE_FOREVER_VO);
   if (miss.length) console.error('VO_LINES missing:', miss);
 })();
 
@@ -954,8 +1180,21 @@ let cw, ch;
 let bird, pipes, enemies, particles, floaters, stars, clouds;
 let score, frame, running, dead, waiting, bestScore, gameStartTime;
 let pipeSpeed, level, pipesUntilLevel;
-let scrollDir = 1;        // 1 = normal, -1 = reversed (see REVERSAL_LEVEL block above)
-let reversalLevelsFired = new Set(); // which REVERSAL_LEVELS entries already fired this run
+let scrollDir = 1;        // 1 = normal, -1 = reversed (see reversalDirForLevel() above)
+let reversalLevelsFired = new Set(); // which reversal levels already fired this run
+let reversalTargetDir = 1; // direction the in-flight cutscene will set (explicit, not toggle)
+// ─── 2026-09-03 batch state ───────────────────────────────────────────────────
+let foreverBuddies = [];   // {x,y} banked companions — never consumed, never replace you, die with you
+let lastPickupKind = '';   // consecutive-catch tracker: kind of the previous pickup this run
+let pickupStreak = 0;      // …and how many of that kind in a row (resets on a different kind)
+let ghostLevelsUntil = 0;  // grey↔star chain: birdGhost-style pass-through until level > this
+let recordChaseFired = new Set(); // RECORD_CHASE_STEPS already announced this run
+let topName = '';          // record holder's name from the scoreboard (for the banner plane)
+let bannerPlane = null;    // {x, y, text, dir, w} — background plane towing the record banner
+let smokePuffs = [];       // {x,y,r,vx,vy,life,max} — buddies turning to smoke on a fire pipe
+let paused = false, pausedAt = 0, lastTapMs = 0;   // ⏸️ pause + double-tap resume
+let lastFloorBounceMs = 0; // throttles Joe's floor-bounce bark (tone still every bounce)
+let fireLevel = false;     // true while the current level is a fire-pipe level
 let gauntletActive = false;   // true while inBonus AND this visit is the Lv20+ gauntlet
 let gauntletStartTime = 0;    // gauntletGapSize()'s own faster decay measures from here
 let reversal = null;      // {phase:'suckin'|'glitter'|'popout', t} while the cutscene plays
@@ -963,7 +1202,7 @@ let gapResetTime = 0;     // currentGapSize() measures elapsed time from here, n
                            // gameStartTime — the level-15 "gaps widen up a little (kinda
                            // reset)" moves this forward once, so the same GAP_START→GAP_MIN
                            // decay just runs again from a wider baseline
-let comboCount, lastPopMs, comboTimer;
+let comboCount, lastPopFrame, comboTimer;   // lastPopFrame: game tick of the last chain stomp (see COMBO_WINDOW_TICKS)
 let comboRocketPipes = 0, comboRocketArmed = false;   // ×20-chain rocket (Osimo 2026-08-19)
 let combo30RocketArmed = false;                        // ×30-chain mega rocket (Osimo 2026-08-29)
 let buddies = [];          // chain of {x,y} companions, front-to-back — [] when none trail
@@ -994,6 +1233,7 @@ let lastMilestone = 0;  // biggest score milestone already celebrated this run
 let popping, popRingR, popRingX, popRingY;
 let animId;
 let groundX = 0;
+let hillX = 0;            // far-ridge parallax scroll (drawHorizon)
 
 // ─── stars init ──────────────────────────────────────────────────────────────
 function initStars() {
@@ -1013,11 +1253,14 @@ function initStars() {
 // ─── clouds init ─────────────────────────────────────────────────────────────
 function initClouds() {
   clouds = [];
+  // alphas lifted 2026-09-03 with the pre-rendered soft-edged sprites (drawCloud) —
+  // a gradient puff carries far less ink than the old flat discs at the same alpha
   const layers = [
-    { count: 4, wMin: 55,  wMax: 90,  spMin: 0.10, spMax: 0.20, alpha: 0.10 },
-    { count: 4, wMin: 80,  wMax: 130, spMin: 0.25, spMax: 0.42, alpha: 0.20 },
-    { count: 3, wMin: 110, wMax: 170, spMin: 0.50, spMax: 0.75, alpha: 0.28 },
+    { count: 4, wMin: 55,  wMax: 90,  spMin: 0.10, spMax: 0.20, alpha: 0.16 },
+    { count: 4, wMin: 80,  wMax: 130, spMin: 0.25, spMax: 0.42, alpha: 0.30 },
+    { count: 3, wMin: 110, wMax: 170, spMin: 0.50, spMax: 0.75, alpha: 0.44 },
   ];
+  let v = 0;
   for (const l of layers) {
     for (let i = 0; i < l.count; i++) {
       clouds.push({
@@ -1026,6 +1269,7 @@ function initClouds() {
         w:     rnd(l.wMin, l.wMax),
         speed: rnd(l.spMin, l.spMax),
         alpha: l.alpha,
+        v:     v++,               // sprite variant — cycles so neighbours never twin
       });
     }
   }
@@ -1061,11 +1305,14 @@ function pipePassed(p, margin) {
 // the score reaches STAR_CHAIN_HARD_SCORE (Osimo 2026-09-02: "once someone reaches 80k
 // points make sure they need 10 shoots to get star power") — either trigger alone is
 // enough, so a post-Lv30 (un-reversed) run past 80k still needs the full 10.
+// Osimo 2026-09-03: "after level 40 you need 15 shoots to get star power" — the 15 wins
+// over everything else from STAR_CHAIN_MAX_LEVEL on.
 function currentStarChainNeed() {
+  if (level >= STAR_CHAIN_MAX_LEVEL) return STAR_CHAIN_NEED_MAX;
   return (scrollDir === -1 || score >= STAR_CHAIN_HARD_SCORE) ? STAR_CHAIN_NEED_HARD : STAR_CHAIN_NEED;
 }
-const STAR_COUNTDOWN_WORDS = { 1:'One!', 2:'Two!', 3:'Three!', 4:'Four!', 5:'Five!',
-                                6:'Six!', 7:'Seven!', 8:'Eight!', 9:'Nine!' };
+// (STAR_COUNTDOWN_WORDS lives up with the VO banks — voSelfCheck() runs at parse time
+// and reads it, so it has to be declared before that IIFE, not down here.)
 
 // grantStarPower — extracted once the rare Lv20+ star chute needed the identical
 // activation the chain-completion already does (feedback_extract_dont_inline).
@@ -1119,6 +1366,18 @@ function resize() {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 function rnd(a, b) { return a + Math.random() * (b - a); }
+// seeded RNG (mulberry32) for the pre-rendered art — clouds/hills must look the same
+// every frame, reload and device, so they can't draw through Math.random()
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function spawnPipe() {
   const gap    = currentGapSize();
@@ -1139,6 +1398,14 @@ function spawnPipe() {
   // one-day misfire, not the intended target.
   const flashPipe = !warpPipe && level >= 10 && pipeSpawnCount % FLASH_PIPE_EVERY === 0;
   const wobble = !warpPipe && !flashPipe && level >= 6 && Math.random() < 0.35;
+  // FIRE PIPE (Osimo 2026-09-03): on a fire level, 1 in FIRE_PIPE_EVERY burns. Never the
+  // warp pipe (its dark shade is its whole telegraph) and never the gauntlet (a touch
+  // there is already a soft exit, not a hit).
+  const firePipe = !warpPipe && !gauntletActive && fireLevel && pipeSpawnCount % FIRE_PIPE_EVERY === 0;
+  // MOVING GAP (Osimo 2026-09-03, Lv25+): the whole pair drifts up and down together
+  // on its own sine — amplitude clamped so the gap can never leave the playfield.
+  const osc = level >= OSC_LEVEL && !gauntletActive;
+  const oscRoom = Math.min(gapY - 20, ch - GROUND_H - gap - gapY - 20);
   pipes.push({
     x: pipeSpawnX(), gapY, gapSize: gap, counted: false,
     minClearance: Infinity, wasProtected: false,   // near-miss tracking (Osimo 2026-08-29)
@@ -1147,8 +1414,16 @@ function spawnPipe() {
     fallTimer: wobble ? Math.round(rnd(55, 100)) : 0,
     flashPipe, translucentNow: false,
     warpPipe, warpSide: warpPipe ? (Math.random() < 0.5 ? 'top' : 'bottom') : null,
+    firePipe, firePhase: Math.random() * Math.PI * 2,
+    osc, oscAmp: osc ? Math.max(0, Math.min(rnd(OSC_AMP_MIN, OSC_AMP_MAX), oscRoom)) : 0,
+    oscSpeed: osc ? rnd(OSC_SPEED_MIN, OSC_SPEED_MAX) : 0,
+    oscPhase: Math.random() * Math.PI * 2, oscY: 0,
   });
 }
+// where the gap of pipe p actually sits THIS frame: gapY plus its moving-gap drift. The
+// top half additionally carries fallOffset (the Lv25 wobble/fall — top-only, unchanged).
+function pipeGapTop(p)    { return p.gapY + p.oscY + (p.wobble ? p.fallOffset : 0); }
+function pipeGapBottom(p) { return p.gapY + p.oscY + p.gapSize; }
 
 function spawnEnemy() {
   if (enemies.length >= MAX_ENEMIES) return;
@@ -1235,14 +1510,30 @@ function setLevel(n) {
   levelPipeCount = 0;
   warpAtPipe = (n % WARP_LEVEL_EVERY === 0) ? Math.floor(rnd(2, 10)) : 0;
   buddyPending = n >= 10;   // guaranteed one gold buddy-parachute this level (Osimo 2026-08-29)
-  // LEVEL 15 (reverse) + LEVEL 30 (un-reverse, Osimo 2026-08-30 v2) — the direction-
-  // reversal cutscene, each REVERSAL_LEVELS entry fires exactly once per run.
+  // FIRE LEVEL (Osimo 2026-09-03): from Lv30, every 3rd level burns — 30, 33, 36, 39…
+  const wasFire = fireLevel;
+  fireLevel = n >= FIRE_LEVEL_FROM && (n - FIRE_LEVEL_FROM) % FIRE_LEVEL_EVERY === 0;
+  if (fireLevel && !wasFire && running) {
+    floaters.push({ x: cw / 2, y: ch * 0.30, text: '🔥 FIRE PIPES! DON\'T TOUCH!', alpha: 1.5, vy: -0.8, color: '#ff7a1a' });
+    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(jimmyPick(JIMMY_FIRE_LEVEL_VO), true);
+  }
+  // one-off Jimmy heads-ups for the new rule changes (spoken modes only, priority so
+  // they're not swallowed by a stomp bark)
+  if (running && (sfxMode === 'voice' || sfxMode === 'hybrid')) {
+    if (n === OSC_LEVEL)            jimmySay(JIMMY_OSC_VO, true);
+    if (n === STAR_CHAIN_MAX_LEVEL) jimmySay(JIMMY_CHAIN15_VO, true);
+  }
+  // LEVEL 15 (reverse) → 30 (normal) → every 5 after (Osimo 2026-09-03) — the direction-
+  // reversal cutscene, each reversal level fires exactly once per run and sets an
+  // EXPLICIT direction (reversalTargetDir), consumed by update(dt)'s popout phase.
   // gapResetTime moves forward so currentGapSize() runs its GAP_START→GAP_MIN decay
   // again from a wider baseline ("the pipes widen up a little, kinda reset"); the
   // actual world-flip happens in the 'popout' phase of the cutscene, not here — this
   // only ARMS it, update(dt)'s reversal block does the rest while gameplay pauses.
-  if (REVERSAL_LEVELS.includes(n) && !reversalLevelsFired.has(n)) {
+  const revDir = reversalDirForLevel(n);
+  if (revDir !== 0 && !reversalLevelsFired.has(n)) {
     reversalLevelsFired.add(n);
+    reversalTargetDir = revDir;
     gapResetTime = Date.now();
     reversal = { phase: 'suckin', t: 0 };
   }
@@ -1264,6 +1555,45 @@ function recomputeBirdRadius() {
 // gesture, not a passive collection, so each caller still handles those itself. Returns
 // 'normal' for a plain chute so the caller (stomp vs buddy-catch genuinely differ only
 // for that one case) can finish the job its own way.
+// ─── consecutive-pickup chains (Osimo 2026-09-03) ────────────────────────────
+// notePickup(kind) is called by every catch (player stomp, buddy catch, scout catch —
+// all of which route through applyPickupEffect — plus the grey-chute stomp, which
+// deliberately doesn't). Returns how many of `kind` have landed in a row with nothing
+// else between; any other kind resets the run.
+function notePickup(kind) {
+  pickupStreak = (kind === lastPickupKind) ? pickupStreak + 1 : 1;
+  lastPickupKind = kind;
+  return pickupStreak;
+}
+function ghostLevelActive() { return level < ghostLevelsUntil; }
+// grey ↔ star, either order, nothing between → ghost power for GHOST_FROM_GREYSTAR_LEVELS
+// levels. Called from the star branch (prev = grey) and the grey stomp (prev = star).
+function grantLevelGhost(cx, cy) {
+  ghostLevelsUntil = level + GHOST_FROM_GREYSTAR_LEVELS;
+  spawnParticles(cx, cy, '#9fe8ff', 18);
+  floaters.push({ x: cx, y: cy - CHUTE_R - 20, text: `👻 GHOST FOR ${GHOST_FROM_GREYSTAR_LEVELS} LEVELS!`, alpha: 1.4, vy: -1.4, color: '#9fe8ff' });
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_GREYSTAR_VO, true);
+  else if (sfxMode === 'tones') TONES.star();
+}
+// three buddy chutes in a row → a FOREVER buddy: banked, never consumed by balloonPop(),
+// never takes your place, drawn with the trailing chain but gold-ringed, gone only when
+// you die (or a fire pipe burns the lot).
+function grantForeverBuddy(cx, cy) {
+  if (foreverBuddies.length < MAX_FOREVER_BUDDIES) {
+    const tail = foreverBuddies.length ? foreverBuddies[foreverBuddies.length - 1] : bird;
+    foreverBuddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y - BUDDY_TRAIL_Y - 4 });
+  }
+  spawnParticles(cx, cy, '#ffd700', 22);
+  spawnParticles(cx, cy, '#ffffff', 10);
+  floaters.push({ x: cx, y: cy - CHUTE_R - 20,
+                   text: foreverBuddies.length > 1 ? `♾️ FOREVER BUDDY ×${foreverBuddies.length}!` : '♾️ FOREVER BUDDY!',
+                   alpha: 1.4, vy: -1.4, color: '#ffd700' });
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') {
+    jimmySay(JIMMY_FOREVER_VO, true);
+    setTimeout(() => voicePlay('JOE', JOE_FOREVER_VO, JOE_GAIN), 1500);
+  } else if (sfxMode === 'tones') TONES.star();
+}
+
 function applyPickupEffect(e, cx, cy) {
   if (e.starChute) {
     // rare Lv20+ instant star power (Osimo 2026-08-29 v3: "some rare multicoloured
@@ -1272,7 +1602,10 @@ function applyPickupEffect(e, cx, cy) {
     spawnParticles(cx, cy, '#ffd700', 10);
     spawnParticles(cx, cy, '#4dd9f5', 10);
     spawnParticles(cx, cy, '#c96bff', 10);
+    const afterGrey = lastPickupKind === 'grey';
+    notePickup('star');
     grantStarPower('⭐ INSTANT STAR POWER!');
+    if (afterGrey) grantLevelGhost(cx, cy);
     return;
   }
   // star-power chain: ANY type counts, buddy catches included ("they collect for
@@ -1291,6 +1624,7 @@ function applyPickupEffect(e, cx, cy) {
   const pitchMult = 1 + birdShrink * 0.5;
 
   if (e.mega) {
+    notePickup('mega');
     sfx.bonus(pitchMult);
     spawnParticles(cx, cy, '#a855f7', 16);
     spawnParticles(cx, cy, '#ffcf3d', 8);
@@ -1298,6 +1632,7 @@ function applyPickupEffect(e, cx, cy) {
     scoreEl.textContent = score;
     floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '🚀 MEGA BOUNCE! +30', alpha: 1, vy: -1.8, color: '#a855f7' });
   } else if (e.shrink) {
+    const run = notePickup('shrink');
     sfx.shrink(pitchMult);
     spawnParticles(cx, cy, '#e879f9', 14);
     spawnParticles(cx, cy, '#7e22ce', 7);
@@ -1311,15 +1646,31 @@ function applyPickupEffect(e, cx, cy) {
       floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '+40 TINY BONUS!', alpha: 1, vy: -1.8, color: '#e879f9' });
     }
     recomputeBirdRadius();
+    // Osimo 2026-09-03: three flashing purples in a row → ghost power too (the timed
+    // window, same one the near-miss streak grants)
+    if (run >= CHAIN_SHRINK_NEED) {
+      pickupStreak = 0;
+      ghostTimerUntil = Math.max(ghostTimerUntil, Date.now()) + GHOST_TIMER_MS;
+      lastGhostWarnSec = 99;
+      if (sfxMode !== 'mute') sfx.ghostPower();
+      spawnParticles(cx, cy, '#9fe8ff', 16);
+      floaters.push({ x: cx, y: cy - CHUTE_R - 22, text: '👻 TRIPLE PURPLE — GHOST MODE!', alpha: 1.3, vy: -1.6, color: '#9fe8ff' });
+      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_TRIPLE_SHRINK_VO, true);
+    }
   } else if (e.ghost) {
+    notePickup('ghost');
     sfx.bonus(pitchMult);
     spawnParticles(cx, cy, '#9fe8ff', 14);
     birdGhost = true;
     floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '👻 GHOST!', alpha: 1, vy: -1.8, color: '#9fe8ff' });
   } else if (e.buddyChute) {
+    const run = notePickup('buddy');
     sfx.buddyTime();
     spawnParticles(cx, cy, '#ffd700', 18);
     spawnParticles(cx, cy, '#fff4c2', 8);
+    // Osimo 2026-09-03: three buddies in a row banks a FOREVER buddy on top of the
+    // normal chain/scout the chute still gives you below
+    if (run >= CHAIN_BUDDY_NEED) { pickupStreak = 0; grantForeverBuddy(cx, cy); }
     if (buddies.length < MAX_BUDDIES) {
       const tail = buddies.length ? buddies[buddies.length - 1] : bird;
       buddies.push({ x: tail.x - scrollDir * BUDDY_TRAIL_X, y: tail.y + BUDDY_TRAIL_Y });
@@ -1334,6 +1685,7 @@ function applyPickupEffect(e, cx, cy) {
       floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '⚡ SCOUT LAUNCHED!', alpha: 1, vy: -1.8, color: '#ffd700' });
     }
   } else if (e.special) {
+    const run = notePickup('special');
     sfx.bonus(pitchMult);
     spawnParticles(cx, cy, '#00ffcc', 14);
     spawnParticles(cx, cy, '#7fff00', 7);
@@ -1347,7 +1699,19 @@ function applyPickupEffect(e, cx, cy) {
       scoreEl.textContent = score;
       floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: '+50 BONUS!', alpha: 1, vy: -1.8, color: sc });
     }
+    // Osimo 2026-09-03: two flashing yellows in a row shrink you a stack, exactly like
+    // a flashing purple would
+    if (run >= CHAIN_SPECIAL_NEED) {
+      pickupStreak = 0;
+      birdShrink = Math.min(birdShrink + 1, SHRINK_MAX);
+      recomputeBirdRadius();
+      sfx.shrink(pitchMult);
+      spawnParticles(cx, cy, '#e879f9', 12);
+      floaters.push({ x: cx, y: cy - CHUTE_R - 22, text: '💛💛 DOUBLE YELLOW — TINY!', alpha: 1.3, vy: -1.6, color: '#e879f9' });
+      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_DOUBLE_SPECIAL_VO, true);
+    }
   } else {
+    notePickup('normal');
     return 'normal';
   }
 }
@@ -1458,9 +1822,223 @@ function updateScouts(dt) {
   }
 }
 
+// updateForeverBuddies — banked companions (Osimo 2026-09-03: "3 buddies in a row gives
+// a forever buddy that stays with you till you die but doesn't replace you"). They chain
+// behind the LAST regular buddy (or the bird when there are none), riding a little higher
+// so the two flocks read as separate rows. They catch pickups exactly like a regular
+// buddy — same applyPickupEffect route, same 25×combo for a plain chute — but nothing ever
+// consumes them: balloonPop() only ever shifts `buddies`, so a forever buddy can never
+// take the player's place, and die()/burnBuddiesAndInflate() are the only exits.
+function updateForeverBuddies(dt) {
+  for (let fi = 0; fi < foreverBuddies.length; fi++) {
+    const f = foreverBuddies[fi];
+    const leader = fi === 0 ? (buddies.length ? buddies[buddies.length - 1] : bird) : foreverBuddies[fi - 1];
+    const targetX = leader.x - scrollDir * BUDDY_TRAIL_X, targetY = leader.y - BUDDY_TRAIL_Y - 4;
+    f.x += (targetX - f.x) * BUDDY_LERP * dt;
+    f.y += (targetY - f.y) * BUDDY_LERP * dt;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e.alive || e.greyChute) continue;
+      const cx = e.x, cy = e.y - CHUTE_OFFSET;
+      if (Math.hypot(f.x - cx, f.y - cy) < BIRD_R + CHUTE_R) {
+        e.alive = false;
+        if (applyPickupEffect(e, cx, cy) === 'normal') {
+          const pts = 25 * Math.max(1, comboCount);
+          score += pts;
+          scoreEl.textContent = score;
+          sfx.bonus(1);
+          spawnParticles(cx, cy, '#ffd700', 10);
+          floaters.push({ x: cx, y: cy - CHUTE_R - 4, text: `♾️ +${pts}`, alpha: 1, vy: -1.6, color: '#ffd700' });
+        }
+      }
+    }
+  }
+}
+
+// updateSmokePuffs — the "puff" left behind when a fire pipe takes the entourage. Pure
+// dressing: drifts up, spreads, fades, self-removes.
+function updateSmokePuffs(dt) {
+  for (let i = smokePuffs.length - 1; i >= 0; i--) {
+    const s = smokePuffs[i];
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.r += 0.35 * dt;
+    s.life -= dt;
+    if (s.life <= 0) smokePuffs.splice(i, 1);
+  }
+}
+
+// burnBuddiesAndInflate — a FIRE PIPE hit (Osimo 2026-09-03: "if you hit them you and all
+// your buddies die… you might go larger but all your buddies turn to smoke, puff"). Every
+// companion — regular buddies, forever buddies, scouts — becomes smoke, THEN the player
+// takes the ordinary inflate hit. Order matters: inflate() → balloonPop() would otherwise
+// spend a buddy to save the player, and Osimo's rule is that fire spends them all for
+// nothing. With the arrays already empty the hit lands on the bird alone: usually a size
+// step ("you might go larger"), a death only if this was the third hit — same as any pipe.
+function burnBuddiesAndInflate(p) {
+  const victims = buddies.concat(foreverBuddies, scouts);
+  for (const v of victims) {
+    for (let k = 0; k < 4; k++) {
+      smokePuffs.push({ x: v.x + rnd(-6, 6), y: v.y + rnd(-6, 6), r: rnd(6, 11),
+                        vx: rnd(-0.6, 0.6) - scrollDir * 0.8, vy: rnd(-1.6, -0.6),
+                        life: rnd(45, 70), max: 70 });
+    }
+    spawnParticles(v.x, v.y, '#ff7a1a', 6);
+  }
+  buddies.length = 0;
+  foreverBuddies.length = 0;
+  scouts.length = 0;
+  if (victims.length) {
+    floaters.push({ x: bird.x, y: bird.y - bird.r - 22,
+                    text: victims.length > 1 ? `🔥 ${victims.length} BUDDIES → SMOKE!` : '🔥 BUDDY → SMOKE!',
+                    alpha: 1, vy: -2, color: '#ff7a1a' });
+    sfx.fireHit();
+    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(jimmyPick(JIMMY_FIRE_HIT_VO), true);
+  }
+  inflate('pipe');
+}
+
+// floorBounce — the ground is a trampoline now (Osimo 2026-09-03: "when he hits the
+// ground automatically bounce up as if he hit a purple parachute"). Same launch numbers
+// as the mega-chute stomp (-7 × MEGA_BOUNCE_MULT, halved in bonus rooms) plus the same
+// grace window, so the bounce can't chain straight into a ceiling life-loss. Costs
+// nothing — no inflate, no chain break — and the caller has already clamped bird.y onto
+// the floor line, so the bird can never sink into the ground and stay there. `soft` =
+// safe bonus room, where the old gentle rebound stays (no trampoline theatre in the
+// coin/gauntlet rooms).
+function floorBounce(inBonus, soft) {
+  if (soft) { bird.vy = -Math.abs(bird.vy) * 0.6 - 2; return; }
+  bird.vy = (inBonus ? -7 / Math.SQRT2 : -7) * MEGA_BOUNCE_MULT;
+  const now = Date.now();
+  inflateInvincible = Math.max(inflateInvincible, now + MEGA_BOUNCE_GRACE_MS);
+  // Joe's floor bark is throttled — a player riding the floor deliberately would
+  // otherwise get "up you go." every second; the tone still plays every bounce.
+  if (now - lastFloorBounceMs > 2500) { lastFloorBounceMs = now; sfx.floorBounce(); }
+  else if (sfxMode === 'tones') TONES.bonus(1);
+  spawnParticles(bird.x, bird.y + bird.r, '#b98d5a', 10);
+  floaters.push({ x: bird.x, y: bird.y - bird.r - 8, text: '⬆️ BOING!', alpha: 1, vy: -2, color: '#e8c48a' });
+}
+
+// ─── record-chase banner plane (Osimo 2026-09-03) ────────────────────────────
+// A little prop plane crosses the sky towing "YOU'RE 50K AWAY TO BEAT NAME 123,456".
+// Pure background dressing — no collision, drawn behind the pipes. Flies WITH the
+// scroll direction so it reads as passing traffic, not a head-on. Jimmy says the
+// distance; the banner carries the name + score (the voice pack can't speak a name).
+function launchRecordBanner(step) {
+  const kLabel = `${step / 1000}K`;
+  const who = topName || 'THE RECORD';
+  bannerPlane = {
+    text: `YOU'RE ${kLabel} AWAY TO BEAT ${who} ${topScore.toLocaleString()}`,
+    y: Math.max(84, ch * 0.2), dir: scrollDir, x: 0, w: 0, speed: 2.1,
+  };
+  ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
+  bannerPlane.w = Math.ceil(ctx.measureText(bannerPlane.text).width) + 18;
+  // start fully off-screen on the side it enters from (plane leads, banner trails)
+  bannerPlane.x = scrollDir === 1 ? cw + 40 : -(bannerPlane.w + 90);
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_CHASE_VO[step], true);
+  else if (sfxMode === 'tones') { TONES.best(); setTimeout(() => jimmySay(JIMMY_CHASE_VO[step], true), 500); }
+}
+function updateBannerPlane(dt) {
+  const b = bannerPlane;
+  b.x -= b.dir * b.speed * dt;   // moves against the world scroll like everything else
+  const gone = b.dir === 1 ? b.x < -(b.w + 100) : b.x > cw + b.w + 100;
+  if (gone) bannerPlane = null;
+}
+function drawBannerPlane() {
+  const b = bannerPlane;
+  const d = b.dir;                     // 1 = plane travels right→left (world scrolls left)
+  const px = b.x, py = b.y;            // plane nose position
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  // tow line + banner (trails BEHIND the plane, i.e. on the side it came from)
+  const bx = d === 1 ? px + 34 : px - 34 - b.w;
+  const wave = Math.sin(Date.now() / 160) * 2;
+  ctx.strokeStyle = '#d9d9d9'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px + d * 12, py + 2); ctx.lineTo(d === 1 ? bx : bx + b.w, py + wave); ctx.stroke();   // from the tail
+  ctx.fillStyle = '#fff7d6';
+  ctx.fillRect(bx, py - 9 + wave, b.w, 18);
+  ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, py - 9 + wave, b.w, 18);
+  ctx.fillStyle = '#7a1f1f';
+  ctx.font = 'bold 13px "Barlow Condensed","Arial Narrow",sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(b.text, bx + b.w / 2, py + wave + 1);
+  ctx.textBaseline = 'alphabetic';
+  // the plane: fuselage, wing, tail, spinning prop — mirrored by direction
+  ctx.translate(px, py);
+  ctx.scale(-d, 1);                    // nose points in the direction of travel
+  ctx.fillStyle = '#e8412c';
+  ctx.beginPath(); ctx.ellipse(0, 0, 16, 6, 0, 0, Math.PI * 2); ctx.fill();   // fuselage
+  ctx.fillStyle = '#ffd24d';
+  ctx.fillRect(-6, -3, 12, 5);                                                 // wing
+  ctx.fillRect(-16, -9, 6, 9);                                                 // tail fin
+  ctx.fillStyle = '#9fe8ff';
+  ctx.beginPath(); ctx.arc(4, -3, 3, 0, Math.PI * 2); ctx.fill();             // canopy
+  const spin = (Date.now() / 30) % Math.PI;
+  ctx.strokeStyle = 'rgba(220,220,220,0.8)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(17, -8 * Math.cos(spin)); ctx.lineTo(17, 8 * Math.cos(spin)); ctx.stroke();  // prop
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+// ─── fire pipe overlay (Osimo 2026-09-03) ────────────────────────────────────
+function drawFireOverlay(x, topH, botY, botH, phase) {
+  const w = PIPE_W + PIPE_CAP_OVR * 2, x0 = x - PIPE_CAP_OVR;
+  ctx.save();
+  // heat tint over both bodies
+  ctx.fillStyle = 'rgba(255,90,0,' + (0.22 + 0.08 * Math.sin(phase * 2.3)) + ')';
+  ctx.fillRect(x0, 0, w, topH);
+  ctx.fillRect(x0, botY, w, botH);
+  // glow outline
+  ctx.shadowColor = '#ff6a00'; ctx.shadowBlur = 22;
+  ctx.strokeStyle = 'rgba(255,140,0,' + (0.55 + 0.25 * Math.sin(phase * 2)) + ')';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x0, 0, w, topH);
+  ctx.strokeRect(x0, botY, w, botH);
+  ctx.shadowBlur = 0;
+  // flame tongues out of both mouths (into the gap) — the thing that says DON'T
+  for (let i = 0; i < 7; i++) {
+    const fx = x0 + 4 + (i / 6) * (w - 8);
+    const f = 0.5 + 0.5 * Math.sin(phase * 3 + i * 1.7);
+    const h = 9 + f * 15;
+    flameTongue(fx, topH, h, 1, i);
+    flameTongue(fx, botY, h, -1, i);
+  }
+  // a few side-licks up the pipe bodies so the whole thing reads as burning
+  for (let i = 0; i < 3; i++) {
+    const f = 0.5 + 0.5 * Math.sin(phase * 2.2 + i * 2.1);
+    const yTop = topH * (0.25 + 0.22 * i);
+    const yBot = botY + botH * (0.2 + 0.25 * i);
+    flameTongue(x0 + 2, yTop, 6 + f * 8, -1, i);
+    flameTongue(x0 + w - 2, yBot, 6 + f * 8, -1, i + 1);
+  }
+  ctx.restore();
+}
+function flameTongue(x, y, h, dir, seed) {
+  const g = ctx.createLinearGradient(0, y, 0, y + dir * h);
+  g.addColorStop(0, 'rgba(255,244,140,0.95)');
+  g.addColorStop(0.45, 'rgba(255,130,0,0.85)');
+  g.addColorStop(1, 'rgba(255,40,0,0)');
+  ctx.fillStyle = g;
+  const lean = (seed % 2 ? 2 : -2);
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y);
+  ctx.quadraticCurveTo(x - 6, y + dir * h * 0.55, x + lean, y + dir * h);
+  ctx.quadraticCurveTo(x + 6, y + dir * h * 0.55, x + 5, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // activateComboRocket — extracted 2026-08-29 (feedback_extract_dont_inline): the ×20-combo
 // chain and breaking the scoreboard record both fire the identical rocket effect, just with
 // different pipe/duration numbers and floater text, so this is the one real implementation.
+// combo HUD flash — one place, since power-chute stomps show it now too
+function showComboHud(text) {
+  comboEl.textContent = text;
+  comboEl.classList.add('on');
+  clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => comboEl.classList.remove('on'), 1400);
+}
 function activateComboRocket(pipesCount, ms, label) {
   comboRocketPipes = pipesCount;
   starPower = true;
@@ -1593,7 +2171,12 @@ const TOP_LINES = {
 // empty board → topScore stays 0 and top-callouts simply never fire.
 fetch('/api/scores?game=' + GAME_ID)
   .then(r => r.json())
-  .then(d => { if (d.scores && d.scores[0]) topScore = d.scores[0].s | 0; })
+  .then(d => {
+    if (d.scores && d.scores[0]) {
+      topScore = d.scores[0].s | 0;
+      topName  = String(d.scores[0].n || '').toUpperCase().slice(0, 12);   // for the record-chase banner
+    }
+  })
   .catch(() => {});
 
 // ─── warp pipe state machine ─────────────────────────────────────────────────
@@ -1601,7 +2184,7 @@ function startWarp(p) {
   // remember the entry pair's geometry so the exit pair can mirror it
   warp = {
     phase: 'suck', t: 0, side: p.warpSide,
-    gapY: p.gapY, gapSize: p.gapSize,
+    gapY: p.gapY + p.oscY, gapSize: p.gapSize,   // where the gap IS right now (moving gaps)
     // star power survives the warp (Osimo 2026-08-18: "didn't exit pipe with star") —
     // freeze the remaining time at entry, restore it at the exit so the bonus room
     // never eats an earned star
@@ -1609,7 +2192,7 @@ function startWarp(p) {
     // suck the bird toward the mouth of the half it touched
     fromX: bird.x, fromY: bird.y,
     toX: p.x + PIPE_W / 2,
-    toY: p.warpSide === 'bottom' ? p.gapY + p.gapSize + 10 : p.gapY - 10,
+    toY: p.warpSide === 'bottom' ? pipeGapBottom(p) + 10 : pipeGapTop(p) - 10,
   };
   starPower = false;           // paused during the bonus, restored on exit
   p.warpPipe = false;          // consumed — can't re-trigger
@@ -1693,6 +2276,9 @@ function exitBonus() {
     wobble: false, wobblePhase: 0, wobbleXOff: 0,
     fallOffset: 0, falling: false, fallTimer: 0,
     flashPipe: false, translucentNow: false, warpPipe: false, warpSide: null,
+    // exit pair never oscillates or burns — pipeGapTop/Bottom read these on EVERY pipe,
+    // so a missing oscY here would be NaN in the collision test
+    osc: false, oscY: 0, oscAmp: 0, oscSpeed: 0, oscPhase: 0, firePipe: false, firePhase: 0,
   };
   // clean slate for the pipe field too (QA 2026-08-30): a gauntlet exit could leave its
   // in-flight pipes behind — one landed exactly on the exit pair/bird, overlapping
@@ -1793,10 +2379,25 @@ function initGame() {
   bestScore     = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   comboCount  = 0;
   comboRocketPipes = 0; comboRocketArmed = false; combo30RocketArmed = false; lastComboAnnounced = 0;
-  lastPopMs   = 0;
+  lastPopFrame = -1e9;
   clearTimeout(comboTimer);
   comboEl.classList.remove('on');
   scoreEl.textContent = '0';
+  // Osimo 2026-09-03 batch state
+  reversalTargetDir = 1;
+  foreverBuddies    = [];
+  lastPickupKind    = '';
+  pickupStreak      = 0;
+  ghostLevelsUntil  = 0;
+  recordChaseFired  = new Set();
+  bannerPlane       = null;
+  smokePuffs        = [];
+  paused            = false;
+  pausedAt          = 0;
+  lastTapMs         = 0;
+  lastFloorBounceMs = 0;
+  fireLevel         = false;
+  showPauseButtons(false);
   setLevel(1);
   initStars();
   initClouds();
@@ -1814,6 +2415,7 @@ function startPlaying() {
   if (!waiting) return;
   waiting = false;
   running = true;
+  showPauseButtons(true);
   tryFullscreen();
   flap();
 }
@@ -1821,6 +2423,17 @@ function startPlaying() {
 // ─── update ──────────────────────────────────────────────────────────────────
 function update(dt) {
   frame += dt;
+
+  // COMBO EXPIRY (2026-09-03 accuracy pass): the chain dies HERE, once, when the
+  // tick window lapses — not lazily at the next stomp. Until now comboCount lingered
+  // at its last value after a chain ended, so a buddy/scout catch a minute later still
+  // scored 25 × that stale multiplier. Now `comboCount` is always the LIVE chain.
+  if (comboCount > 0 && frame - lastPopFrame >= COMBO_WINDOW_TICKS) {
+    comboCount = 0;
+    lastComboAnnounced = 0;      // new chain — the ×10/×15/×20/×25/×30 lines re-arm
+    comboRocketArmed = false;    // and so does the ×20 rocket
+    combo30RocketArmed = false;  // ...and the ×30 upgrade
+  }
 
   // pop animation — keep particles/floaters/ring alive, skip everything else
   if (popping) {
@@ -1863,17 +2476,23 @@ function update(dt) {
       }
       if (reversal.t >= REVERSAL_GLITTER_FRAMES) {
         // THE FLIP — happens once, right here, at the moment the glitter fully covers
-        // the screen so the direction-change itself is never visible mid-motion
-        scrollDir *= -1;
+        // the screen so the direction-change itself is never visible mid-motion.
+        // Assigned (not toggled) from the schedule so a missed/duplicated cutscene can
+        // never leave the direction out of step with reversalDirForLevel().
+        scrollDir = reversalTargetDir;
         pipes.length = 0;
         enemies.length = 0;
         bird.x = Math.round(cw * (scrollDir === 1 ? 0.22 : 0.78));
         bird.y = Math.round(ch / 2);
         bird.vy = -3;
         bird.rot = 0;
+        // the chains snap to the new side too — a 0.2 lerp from the far edge would
+        // otherwise drag every buddy across the whole screen through the popout
+        for (const b of buddies)        { b.x = bird.x - scrollDir * BUDDY_TRAIL_X; b.y = bird.y + BUDDY_TRAIL_Y; }
+        for (const b of foreverBuddies) { b.x = bird.x - scrollDir * BUDDY_TRAIL_X; b.y = bird.y - BUDDY_TRAIL_Y - 4; }
         sfx.warpOut();
         spawnParticles(bird.x, bird.y, '#ffd700', 24);
-        floaters.push({ x: cw / 2, y: ch * 0.35, text: '🔄 REVERSED!', alpha: 1, vy: -1.4, color: '#ffd700' });
+        floaters.push({ x: cw / 2, y: ch * 0.35, text: scrollDir === -1 ? '🔄 REVERSED!' : '🔄 BACK TO NORMAL!', alpha: 1, vy: -1.4, color: '#ffd700' });
         reversal.phase = 'popout';
         reversal.t = 0;
       }
@@ -1938,14 +2557,26 @@ function update(dt) {
   // never "the player's fault in hindsight"). In bonus the edges bounce softly
   // instead of hurting. EXCEPT the Lv20+ gauntlet (Osimo 2026-08-30 v2: "resemble a
   // normal level") — that one keeps real consequences, same as regular play.
-  if (bird.y - bird.r < 0 || bird.y + bird.r > ch - GROUND_H) {
-    if (inBonus && !gauntletActive) {
-      if (bird.y - bird.r < 0) { bird.y = bird.r; bird.vy = Math.abs(bird.vy) * 0.4; }
-      else { bird.y = ch - GROUND_H - bird.r; bird.vy = -Math.abs(bird.vy) * 0.6 - 2; }
-    } else {
-      if (Date.now() >= inflateInvincible) inflate(bird.y - bird.r < 0 ? 'ceiling' : 'floor');
-      return;
+  // Osimo 2026-09-03 rewrite: CEILING costs a life (or a shrink stack) with NO downward
+  // recoil — the bird just stops rising and gravity takes it from there; FLOOR never
+  // hurts any more, it auto-launches the bird like a mega (purple) chute stomp. Both
+  // edges CLAMP the bird inside the play area every frame and neither early-returns,
+  // so the world keeps scrolling while the bird is on an edge — the old `return` froze
+  // pipes/enemies for as long as an invincible bird stayed overlapped, which is exactly
+  // the "stuck on the ceiling/floor" Osimo saw. Safe bonus rooms keep their soft edges.
+  if (bird.y - bird.r < 0) {
+    bird.y = bird.r;
+    if (inBonus && !gauntletActive) bird.vy = Math.abs(bird.vy) * 0.4;
+    else {
+      bird.vy = Math.max(bird.vy, 0);   // kill the climb, don't shove it down
+      if (Date.now() >= inflateInvincible) {
+        inflate('ceiling');
+        bird.y = Math.max(bird.y, bird.r);   // inflate grew the radius — re-seat under the ceiling
+      }
     }
+  } else if (bird.y + bird.r > ch - GROUND_H) {
+    bird.y = ch - GROUND_H - bird.r;
+    floorBounce(inBonus, inBonus && !gauntletActive);
   }
 
   // 🚀 combo rocket: world runs ~2.6× while it lasts, star stays lit, sparks stream
@@ -1979,6 +2610,8 @@ function update(dt) {
     c.x -= c.speed * dt;
     if (c.x + c.w < -30) { c.x = cw + 30; c.y = rnd(18, ch * 0.60); }
   }
+  // far ridges — land, so they follow the ground's direction, at a fraction of its speed
+  hillX += scrollDir * pipeSpeed * 0.07 * rocketMult * dt;
 
   // spawn pipes/enemies — leaky-bucket accumulators, not frame%N, so cadence holds at
   // any frame rate (a stalled tick can't skip clean past an exact modulo boundary).
@@ -2059,6 +2692,16 @@ function update(dt) {
       p.translucentNow = ((Date.now() - gameStartTime) % FLASH_PIPE_CYCLE_MS) < FLASH_PIPE_OPEN_MS;
     }
 
+    // MOVING GAP (Osimo 2026-09-03): Lv25+ the whole pipe pair slides up and down as one
+    // — top and bottom move together at the same rate, so the gap itself never changes
+    // size (wobble/flash/warp all stack on top exactly as before). oscY is the shared
+    // offset every gap-edge read goes through (pipeGapTop/pipeGapBottom).
+    if (p.osc) {
+      p.oscPhase += p.oscSpeed * dt;
+      p.oscY = Math.sin(p.oscPhase) * p.oscAmp;
+    }
+    if (p.firePipe) p.firePhase += 0.16 * dt;
+
     // score pipe — ×4 value during the combo rocket (+40/pipe for its 10 pipes)
     if (!p.counted && pipePassed(p, 0)) {
       p.counted = true;
@@ -2074,7 +2717,7 @@ function update(dt) {
         pipesUntilLevel--;
         if (pipesUntilLevel <= 0) { setLevel(level + 1); sfx.levelup(); }
       }
-      floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2,
+      floaters.push({ x: p.x + PIPE_W / 2, y: pipeGapTop(p) + p.gapSize / 2,
                       text: rocketPipe ? '+40 🚀' : '+10', alpha: 1, vy: -1.4,
                       color: rocketPipe ? '#ff9900' : '#4dd9f5' });
       if (rocketPipe) {
@@ -2115,8 +2758,10 @@ function update(dt) {
       }
     }
 
-    // collision: rect vs circle (dynamic bird.r)
-    const effGapY = p.gapY + (p.wobble ? p.fallOffset : 0);
+    // collision: rect vs circle (dynamic bird.r). Both gap edges go through the
+    // helpers so the Lv25+ oscillation is honoured everywhere at once.
+    const effGapY = pipeGapTop(p);
+    const effGapBot = pipeGapBottom(p);
     const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W;
 
     // GHOST LIFECYCLE (Osimo 2026-08-02 v2: "he dies when he touched the second half of
@@ -2128,11 +2773,11 @@ function update(dt) {
     if (birdGhost && inX) p.ghostPipe = true;
     if (birdGhost && p.ghostPipe && pipePassed(p, bird.r)) {
       birdGhost = false;
-      floaters.push({ x: p.x + PIPE_W / 2, y: p.gapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
+      floaters.push({ x: p.x + PIPE_W / 2, y: effGapY + p.gapSize / 2 - 20, text: '👻 faded', alpha: 1, vy: -1.6, color: '#9fe8ff' });
     }
 
     if (inX) {
-      const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= p.gapY + p.gapSize;
+      const inGap = bird.y - bird.r >= effGapY && bird.y + bird.r <= effGapBot;
       if (!inGap) {
         // WARP PIPE: touching the dark half doesn't hurt — it sucks you in (Mario
         // style) and opens the bonus room. Checked BEFORE the safe-passes so a
@@ -2142,18 +2787,21 @@ function update(dt) {
           const hitSide = hitTop ? 'top' : 'bottom';
           if (hitSide === p.warpSide) { startWarp(p); return; }
         }
-        // 4 independent ways to pass a pipe unharmed: ghost phase (stays true for the
+        // 5 independent ways to pass a pipe unharmed: ghost phase (stays true for the
         // ENTIRE traversal now — cleared only after full exit above), timed star power,
-        // this pipe currently flashing translucent, or the near-miss-streak ghost timer.
+        // this pipe currently flashing translucent, the near-miss-streak ghost timer, or
+        // the grey↔star level-ghost (Osimo 2026-09-03).
         const safePass = birdGhost || (starPower && Date.now() < starPowerUntil) ||
-          (p.flashPipe && p.translucentNow) || Date.now() < ghostTimerUntil;
+          (p.flashPipe && p.translucentNow) || Date.now() < ghostTimerUntil || ghostLevelActive();
         if (safePass) p.wasProtected = true;   // disqualifies this pipe from near-miss credit
         // GAUNTLET (Osimo 2026-08-31 v3): every pipe in here is the "glittery" hazard —
         // touching one's body sends you back to the regular game instead of costing a
         // life, exactly the old floating-glitter-pipe consequence, just triggered by the
         // real pipes players are already flying through rather than a separate decoy.
         if (!safePass && Date.now() >= inflateInvincible) {
-          if (gauntletActive) exitBonus(); else inflate();
+          if (gauntletActive) exitBonus();
+          else if (p.firePipe) burnBuddiesAndInflate(p);
+          else inflate();
         }
         return;
       } else {
@@ -2161,11 +2809,16 @@ function update(dt) {
         // inside the gap this traversal (evaluated once the pipe is confirmed passed,
         // in the scoring block above)
         const topClear = (bird.y - bird.r) - effGapY;
-        const botClear = (p.gapY + p.gapSize) - (bird.y + bird.r);
+        const botClear = effGapBot - (bird.y + bird.r);
         p.minClearance = Math.min(p.minClearance, topClear, botClear);
       }
     }
   }
+
+  // FOREVER BUDDIES (Osimo 2026-09-03): tail the trailing chain, never consumed by a
+  // death — but a fire pipe burns them with everyone else.
+  if (foreverBuddies.length) updateForeverBuddies(dt);
+  if (smokePuffs.length) updateSmokePuffs(dt);
 
   // enemies
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -2229,24 +2882,23 @@ function update(dt) {
           // this chute spawning and you reaching it — nothing left to lose
           floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: 'DODGED', alpha: 1, vy: -1.8, color: '#9ca3af' });
         }
-      } else if (applyPickupEffect(e, e.x, cy) === 'normal') {
-        // normal stomp — combo + points
-        // pitchMult lives inside applyPickupEffect()'s own scope now; the normal
-        // branch stayed here (it owns the stomp-combo counter), so it needs its own
-        const pitchMult = 1 + birdShrink * 0.5;
-        const now = Date.now();
-        if (now - lastPopMs < COMBO_WINDOW) {
-          // cap 20 → 30 (Osimo 2026-08-29) so the ×25/×30 acknowledgments + the ×30
-          // mega rocket upgrade are reachable; stomp-squeak pitch still clamps at 9
-          // inside TONES
-          comboCount = Math.min(comboCount + 1, 30);
-        } else {
-          comboCount = 1;
-          lastComboAnnounced = 0;      // new chain — the ×10/×15/×20/×25/×30 lines re-arm
-          comboRocketArmed = false;    // and so does the ×20 rocket
-          combo30RocketArmed = false;  // ...and the ×30 upgrade
-        }
-        lastPopMs = now;
+        // Osimo 2026-09-03: a star chute then a grey (or grey then star — see the
+        // starChute branch of applyPickupEffect) with nothing between = ghost power
+        // for GHOST_FROM_GREYSTAR_LEVELS levels. The grey still costs the buddy above.
+        const afterStar = lastPickupKind === 'star';
+        notePickup('grey');
+        if (afterStar) grantLevelGhost(e.x, cy);
+      } else {
+        // COMBO ACCURACY PASS (Osimo 2026-09-03): EVERY chute the player physically
+        // stomps — power chutes included — is one link of the chain. Before this,
+        // only plain chutes counted, so "normal, star, normal" read ×2 on screen and a
+        // star chute sitting >2.6s after the last plain one silently BROKE a chain the
+        // player never stopped stomping. The window itself expires up in update()
+        // (frame-based), so by the time we're here comboCount is 0 or genuinely live.
+        // cap 20 → 30 (Osimo 2026-08-29) so the ×25/×30 acknowledgments + the ×30 mega
+        // rocket upgrade are reachable; stomp-squeak pitch still clamps at 9 inside TONES
+        comboCount = Math.min(comboCount + 1, 30);
+        lastPopFrame = frame;
         // 🚀 COMBO ROCKET (Osimo 2026-08-19): hitting a full ×20 chain fires the bird
         // forward — star-mode pass-through, sparks out the rear, ~2.6× world speed,
         // +40 for each of the next 10 pipes. Once per chain. (activateComboRocket() —
@@ -2264,19 +2916,23 @@ function update(dt) {
           combo30RocketArmed = true;
           activateComboRocket(COMBO30_ROCKET_PIPES, COMBO30_ROCKET_MS, '🚀 MEGA ROCKET ×30!');
         }
-        const pts = 25 * comboCount;
-        score += pts;
-        scoreEl.textContent = score;
-        sfx.stomp(comboCount, pitchMult);
-        spawnParticles(e.x, cy, '#ff6b4a', 12);
-        spawnParticles(e.x, cy, '#ffcf3d', 6);
-        const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
-        floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
-        if (comboCount >= 2) {
-          comboEl.textContent = `×${comboCount} COMBO  +${pts}`;
-          comboEl.classList.add('on');
-          clearTimeout(comboTimer);
-          comboTimer = setTimeout(() => comboEl.classList.remove('on'), 1400);
+        if (applyPickupEffect(e, e.x, cy) === 'normal') {
+          // normal stomp — the 25×combo points. (Power chutes keep their own rewards
+          // and voice lines from applyPickupEffect; they only count + refresh.)
+          // pitchMult lives inside applyPickupEffect()'s own scope now; the normal
+          // branch stayed here (it owns the stomp scoring), so it needs its own
+          const pitchMult = 1 + birdShrink * 0.5;
+          const pts = 25 * comboCount;
+          score += pts;
+          scoreEl.textContent = score;
+          sfx.stomp(comboCount, pitchMult);
+          spawnParticles(e.x, cy, '#ff6b4a', 12);
+          spawnParticles(e.x, cy, '#ffcf3d', 6);
+          const popLabel = comboCount >= 2 ? `+${pts} ×${comboCount}` : `+${pts}`;
+          floaters.push({ x: e.x, y: cy - CHUTE_R - 4, text: popLabel, alpha: 1, vy: -1.8, color: '#ffcf3d' });
+          if (comboCount >= 2) showComboHud(`×${comboCount} COMBO  +${pts}`);
+        } else if (comboCount >= 2) {
+          showComboHud(`×${comboCount} COMBO`);
         }
       }
     }
@@ -2425,6 +3081,24 @@ function update(dt) {
     showCallout('pb');
   }
 
+  // RECORD CHASE (Osimo 2026-09-03): "when you're 50K, 30K, 20K and 10K away from
+  // beating the score record holder, a plane in the background should fly by with a
+  // banner saying: YOU'RE 50K away to beat {NAME} {SCORE}", Jimmy saying the number.
+  // Each step fires once per run, the moment the remaining distance drops to it. A run
+  // that jumps several steps in one frame only announces the closest one (the rest are
+  // marked fired so they can't play late, same discipline as the PB/top callouts).
+  if (!topAnnounced && topScore > 0 && score < topScore) {
+    const away = topScore - score;
+    let fire = 0;
+    for (const step of RECORD_CHASE_STEPS) {
+      if (recordChaseFired.has(step) || away > step) continue;
+      recordChaseFired.add(step);
+      fire = step;   // steps are descending, so the last one taken is the closest
+    }
+    if (fire) launchRecordBanner(fire);
+  }
+  if (bannerPlane) updateBannerPlane(dt);
+
   // score milestones — one celebration per rung per run; a big jump that crosses
   // several rungs only fires the highest (no confetti spam)
   let m = nextMilestoneAfter(lastMilestone);
@@ -2443,12 +3117,8 @@ function update(dt) {
 function draw() {
   ctx.clearRect(0, 0, cw, ch);
 
-  // sky gradient background
-  const sky = ctx.createLinearGradient(0, 0, 0, ch);
-  sky.addColorStop(0, '#030f18');
-  sky.addColorStop(1, '#071a2a');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, cw, ch);
+  // sky — zenith-to-horizon gradient, then the moon, behind everything
+  drawSky();
 
   // parallax stars
   for (const s of stars) {
@@ -2459,15 +3129,23 @@ function draw() {
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+  drawMoon();
 
   // parallax clouds
-  for (const c of clouds) drawCloud(c.x, c.y, c.w, c.alpha);
+  for (const c of clouds) drawCloud(c.x, c.y, c.w, c.alpha, c.v);
+
+  // horizon haze + far ridges, just above the ground line
+  drawHorizon();
+
+  // record-chase banner plane — background traffic, behind the pipes
+  if (bannerPlane) drawBannerPlane();
 
   // pipes (bottom pipe stops at ground; wobble pipes have animated top)
   for (const p of pipes) {
     const xOff   = p.wobble ? p.wobbleXOff : 0;
-    const topH   = p.gapY + (p.wobble ? p.fallOffset : 0);
-    const botY   = p.gapY + p.gapSize, botH = ch - GROUND_H - p.gapY - p.gapSize;
+    // moving gaps (Lv25+): both halves ride the same oscY, so the pair slides as one
+    const topH   = pipeGapTop(p);
+    const botY   = pipeGapBottom(p), botH = ch - GROUND_H - botY;
     const showGhostly = p.flashPipe && p.translucentNow;
     if (showGhostly) ctx.globalAlpha = 0.35;
     // GAUNTLET (Osimo 2026-08-31 v3: "ALL pipes sparkly"): every pipe renders with the
@@ -2496,6 +3174,21 @@ function draw() {
       ctx.strokeStyle = 'rgba(255,80,0,' + pulse + ')'; ctx.lineWidth = 3;
       ctx.strokeRect(p.x + xOff - PIPE_CAP_OVR, topH - 14, PIPE_W + PIPE_CAP_OVR * 2, 14);
       ctx.restore();
+    }
+    // FIRE PIPE (Lv30+, every 3rd level): the whole pair burns — heat tint, glow, and
+    // flame tongues licking out of both mouths into the gap
+    if (p.firePipe) drawFireOverlay(p.x + xOff, topH, botY, botH, p.firePhase);
+  }
+
+  // smoke puffs — what's left of buddies that met a fire pipe
+  if (smokePuffs.length) {
+    for (const s of smokePuffs) {
+      const a = Math.max(0, s.life / s.max) * 0.55;
+      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r);
+      g.addColorStop(0, 'rgba(120,120,130,' + a + ')');
+      g.addColorStop(1, 'rgba(60,60,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -2547,9 +3240,10 @@ function draw() {
     const _waitFlash = waiting && Math.floor(Date.now() / 300) % 3 === 0;
     const _star = starPower && Date.now() < starPowerUntil;
     const _ghostTimer = Date.now() < ghostTimerUntil;   // timed ghost window (near-miss streak)
+    const _ghostLevel = ghostLevelActive();             // grey↔star chain: ghost for 5 levels
     if ((!_inv || Math.floor(Date.now() / 75) % 2 === 0) && !_waitFlash) {
       if (_inv) ctx.globalAlpha = 0.35;
-      else if (birdGhost || _ghostTimer) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
+      else if (birdGhost || _ghostTimer || _ghostLevel) ctx.globalAlpha = 0.5;   // ghost phase — translucent bird
       if (_star) {
         // Mario-star flash: a glow ring cycling through a bright palette every 90ms.
         // Final STAR_WARN_MS: the ring BLINKS on/off (Osimo 2026-08-02) so the expiry
@@ -2577,8 +3271,31 @@ function draw() {
           ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
           ctx.restore();
         }
+      } else if (_ghostLevel) {
+        // level-based ghost (grey↔star chain) — a steady dotted cyan ring, no blink: it
+        // ends on a level boundary, and the HUD label below says which one
+        ctx.save();
+        ctx.shadowColor = '#9fe8ff'; ctx.shadowBlur = 14;
+        ctx.strokeStyle = 'rgba(159,232,255,0.8)'; ctx.lineWidth = 2;
+        ctx.setLineDash([4, 5]);
+        ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.r + 6, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
       }
       drawBird(bird.x, bird.y, bird.rot, undefined, undefined, scrollDir);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // FOREVER BUDDIES (Osimo 2026-09-03) — banked companions, drawn under the regular
+  // chain with a gold ring so they read as a different class of bird at a glance
+  if (foreverBuddies.length) {
+    for (const f of foreverBuddies) {
+      ctx.save();
+      ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 12;
+      ctx.strokeStyle = 'rgba(255,215,0,0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, BUDDY_SIZE + 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 0.7;
+      drawBird(f.x, f.y, 0, BUDDY_SIZE, 0, scrollDir);
       ctx.globalAlpha = 1;
     }
   }
@@ -2610,6 +3327,40 @@ function draw() {
     ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
     ctx.fillText('TAP TO PLAY', cw * 0.5, ch * 0.68);
     ctx.restore();
+  }
+
+  // level-ghost status (grey↔star chain) — a small pinned label, since this buff has
+  // no clock to blink against
+  if (running && ghostLevelActive()) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9fe8ff';
+    ctx.font = 'bold 12px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 6;
+    ctx.fillText(`👻 GHOST UNTIL LEVEL ${ghostLevelsUntil}`, cw * 0.5, 22);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  // PAUSED (Osimo 2026-09-03: two ⏸️ buttons, "double tap the screen to unfreeze") —
+  // the frame underneath is the exact frame the player left; update() is skipped so
+  // nothing moves, and every deadline gets shifted on resume (shiftTimers)
+  if (paused) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,15,24,0.62)';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 10;
+    ctx.font = 'bold 34px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.fillText('⏸️ PAUSED', cw * 0.5, ch * 0.44);
+    const a = 0.55 + 0.45 * Math.sin(Date.now() * 0.006);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px "Barlow Condensed","Arial Narrow",sans-serif';
+    ctx.fillText('double tap the screen to unfreeze', cw * 0.5, ch * 0.44 + 30);
+    ctx.restore();
+    ctx.textAlign = 'left';
   }
 
   // bonus room banner + countdown — the GAUNTLET branches off (QA 2026-08-30): it has
@@ -2729,15 +3480,160 @@ function drawGround() {
   }
 }
 
-function drawCloud(x, y, w, alpha) {
+// ─── sky / moon / horizon (Osimo 2026-09-03: "improve ... the background sky") ──
+// Per-frame cost is three gradient fills + one tiled drawImage. The ridges are baked
+// once per canvas height through a seeded RNG; nothing here is world (no collision),
+// and like the stars/clouds it sits behind the pipes.
+function drawSky() {
+  const sky = ctx.createLinearGradient(0, 0, 0, ch);
+  sky.addColorStop(0,    '#01050c');
+  sky.addColorStop(0.45, '#04111e');
+  sky.addColorStop(0.82, '#07233a');
+  sky.addColorStop(1,    '#0c3b57');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, cw, ch);
+}
+function drawMoon() {
+  const r = 15, mx = Math.round(cw * 0.80), my = Math.round(Math.max(64, ch * 0.13));
+  const halo = ctx.createRadialGradient(mx, my, r * 0.9, mx, my, r * 7);
+  halo.addColorStop(0,    'rgba(190,225,255,0.20)');
+  halo.addColorStop(0.35, 'rgba(150,200,240,0.06)');
+  halo.addColorStop(1,    'rgba(150,200,240,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(mx - r * 7, my - r * 7, r * 14, r * 14);
+  const disc = ctx.createRadialGradient(mx - r * 0.35, my - r * 0.35, r * 0.15, mx, my, r);
+  disc.addColorStop(0,   '#f8fcff');
+  disc.addColorStop(0.7, '#d8e8f6');
+  disc.addColorStop(1,   '#a3bfd6');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(110,140,170,0.38)';   // craters
+  ctx.beginPath(); ctx.arc(mx + r * 0.32, my + r * 0.18, r * 0.27, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mx - r * 0.36, my + r * 0.44, r * 0.17, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mx - r * 0.12, my - r * 0.52, r * 0.13, 0, Math.PI * 2); ctx.fill();
+}
+let hillTile = null, hillTileH = 0, hillTileForCh = 0;
+const HILL_TILE_W = 480;
+function buildHillTile() {
+  const h = Math.round(Math.max(40, Math.min(110, ch * 0.13)));
+  const c = document.createElement('canvas');
+  c.width = HILL_TILE_W * 2; c.height = h * 2;
+  const g = c.getContext('2d');
+  g.scale(2, 2);
+  const rng = makeRng(0x5EED);
+  // each ridge is a sum of whole-period sines, so the strip wraps seamlessly
+  const ridge = (k, base, amp) => {
+    const pts = [];
+    for (let x = 0; x <= HILL_TILE_W; x += 4) {
+      const t = x / HILL_TILE_W * Math.PI * 2;
+      pts.push([x, base - amp * (0.55 * Math.sin(t * 2 + k) + 0.30 * Math.sin(t * 5 + k * 2.3) + 0.15 * Math.sin(t * 9 + k * 0.7))]);
+    }
+    return pts;
+  };
+  const layers = [
+    { pts: ridge(0.8, h * 0.60, h * 0.30), fill: '#0b2a3e', rim: 'rgba(130,190,220,0.20)' },
+    { pts: ridge(2.9, h * 0.80, h * 0.24), fill: '#061a2b', rim: 'rgba(100,160,190,0.24)', lights: true },
+  ];
+  for (const L of layers) {
+    g.beginPath(); g.moveTo(0, h + 2);
+    for (const [x, y] of L.pts) g.lineTo(x, y);
+    g.lineTo(HILL_TILE_W, h + 2); g.closePath();
+    g.fillStyle = L.fill; g.fill();
+    g.strokeStyle = L.rim; g.lineWidth = 1.2;
+    g.beginPath();
+    L.pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+    g.stroke();
+    if (!L.lights) continue;
+    // a few warm pinpricks under the near ridge — a village a long way off
+    for (let i = 0; i < 9; i++) {
+      const px = rng() * HILL_TILE_W;
+      const ridgeY = L.pts[Math.min(L.pts.length - 1, Math.round(px / 4))][1];
+      const py = ridgeY + 3 + rng() * (h - ridgeY - 6);
+      g.fillStyle = `rgba(255,${200 + Math.round(rng() * 40)},120,${0.35 + rng() * 0.35})`;
+      g.fillRect(px, py, 1.5, 1.5);
+    }
+  }
+  hillTile = c; hillTileH = h; hillTileForCh = ch;
+}
+function drawHorizon() {
+  if (!hillTile || hillTileForCh !== ch) buildHillTile();
+  const h = hillTileH, gy = ch - GROUND_H;
+  // haze — a band of lifted teal air sitting on the ground line
+  const haze = ctx.createLinearGradient(0, gy - h * 2.2, 0, gy);
+  haze.addColorStop(0, 'rgba(40,130,150,0)');
+  haze.addColorStop(1, 'rgba(40,130,150,0.16)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, gy - h * 2.2, cw, h * 2.2);
+  const off = ((hillX % HILL_TILE_W) + HILL_TILE_W) % HILL_TILE_W;
+  for (let x = -off; x < cw; x += HILL_TILE_W) ctx.drawImage(hillTile, x, gy - h + 1, HILL_TILE_W, h);
+}
+
+// ─── clouds (Osimo 2026-09-03: "improve ... the clouds") ─────────────────────
+// Four sprite variants pre-rendered once at 2x through a seeded RNG — a pile of
+// soft radial-gradient puffs on a flattened base, shaded underneath, moonlit on the
+// crowns. Per frame a cloud is one drawImage, so the painterly edge is free.
+const CLOUD_SPRITES = [];
+const CLOUD_SPR_W = 200, CLOUD_SPR_H = 100;
+function buildCloudSprites() {
+  for (let v = 0; v < 4; v++) {
+    const c = document.createElement('canvas');
+    c.width = CLOUD_SPR_W * 2; c.height = CLOUD_SPR_H * 2;
+    const g = c.getContext('2d');
+    g.scale(2, 2);
+    const rng = makeRng(0xC10D + v * 977);
+    const W = CLOUD_SPR_W, H = CLOUD_SPR_H;
+    const puffs = [];
+    const n = 7 + Math.floor(rng() * 4);
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const bulge = Math.sin(t * Math.PI);                 // tallest through the middle
+      puffs.push({
+        x: W * (0.20 + 0.60 * t) + (rng() - 0.5) * W * 0.08,
+        y: H * 0.64 - bulge * H * 0.17 - rng() * 0.10 * H,
+        r: H * (0.15 + 0.16 * bulge) * (0.85 + rng() * 0.30),
+      });
+    }
+    puffs.push({ x: W * 0.5, y: H * 0.70, r: W * 0.30, flat: true });   // the base
+    // 1) body — soft-edged puffs
+    for (const p of puffs) {
+      const rg = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      rg.addColorStop(0,    'rgba(208,230,250,0.96)');
+      rg.addColorStop(0.62, 'rgba(192,216,242,0.82)');
+      rg.addColorStop(1,    'rgba(172,202,232,0)');
+      g.fillStyle = rg;
+      g.save();
+      if (p.flat) { g.translate(p.x, p.y); g.scale(1, 0.42); g.translate(-p.x, -p.y); }
+      g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.fill();
+      g.restore();
+    }
+    // 2) underside shade — only where there's already cloud
+    g.globalCompositeOperation = 'source-atop';
+    const sh = g.createLinearGradient(0, H * 0.42, 0, H * 0.96);
+    sh.addColorStop(0, 'rgba(60,90,130,0)');
+    sh.addColorStop(1, 'rgba(40,64,104,0.60)');
+    g.fillStyle = sh;
+    g.fillRect(0, 0, W, H);
+    // 3) moonlit crowns — a highlight caught on the upper-left of each puff
+    for (const p of puffs) {
+      if (p.flat) continue;
+      const hl = g.createRadialGradient(p.x - p.r * 0.30, p.y - p.r * 0.45, 0, p.x - p.r * 0.20, p.y - p.r * 0.30, p.r * 0.85);
+      hl.addColorStop(0, 'rgba(255,255,255,0.42)');
+      hl.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = hl;
+      g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.fill();
+    }
+    g.globalCompositeOperation = 'source-over';
+    CLOUD_SPRITES.push(c);
+  }
+}
+function drawCloud(x, y, w, alpha, v) {
+  if (!CLOUD_SPRITES.length) buildCloudSprites();
+  const spr = CLOUD_SPRITES[(v | 0) % CLOUD_SPRITES.length];
+  const dw = w * 1.15, dh = dw * (CLOUD_SPR_H / CLOUD_SPR_W);
+  const dx = x - dw * 0.5, dy = y - dh * 0.55;
+  if (dx + dw < 0 || dx > cw) return;
   ctx.globalAlpha = alpha;
-  ctx.fillStyle = 'rgba(190,225,255,1)';
-  const r = w * 0.18;
-  ctx.beginPath(); ctx.arc(x,           y,           r * 1.2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + r * 1.3, y + r * 0.2, r,       0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x - r * 1.1, y + r * 0.3, r * 0.8, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + r * 0.5, y - r * 0.5, r * 0.9, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + r * 2.3, y + r * 0.4, r * 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.drawImage(spr, dx, dy, dw, dh);
   ctx.globalAlpha = 1;
 }
 
@@ -2792,39 +3688,100 @@ function drawWarpSparkles(x, y, w, h, now) {
   }
 }
 
+// ─── pipe skin (Osimo 2026-09-03: "pipes ... a little more 3D") ──────────────
+// Round-tube shading baked once per palette into two strips: a 4-row body strip
+// (7-stop cylinder gradient + a soft specular band) stretched to any height, and a
+// collar strip carrying its own tube shading, a dark hollow mouth, a lit rim and the
+// seam to the body. Per pipe per frame that leaves 2 drawImage, the collar's drop
+// shadow on the body, and the segment seams — cheaper than the old 4 fills and it
+// reads as a tube instead of a striped rectangle. The collar is baked mouth-UP
+// (bottom-pipe orientation) and mirrored for top pipes.
+const PIPE_CAP_H = 14;
+const PIPE_SKINS = {};
+function pipeSkin(isWarp) {
+  const key = isWarp ? 'warp' : 'normal';
+  if (PIPE_SKINS[key]) return PIPE_SKINS[key];
+  const P = isWarp
+    ? { edge: '#021a10', dark: '#043321', mid: '#0a5c36', hi: '#107c48', spec: 0.10,
+        cap: { edge: '#03251a', dark: '#04301c', mid: '#0a6338', hi: '#128f50' } }
+    : { edge: '#03241a', dark: '#0a5e3a', mid: '#128a50', hi: '#26c072', spec: 0.22,
+        cap: { edge: '#053a24', dark: '#0a5e3a', mid: '#17a85c', hi: '#35d685' } };
+  const tube = (g, w, c) => {
+    const lg = g.createLinearGradient(0, 0, w, 0);
+    lg.addColorStop(0,    c.edge);
+    lg.addColorStop(0.09, c.dark);
+    lg.addColorStop(0.27, c.hi);
+    lg.addColorStop(0.42, c.mid);
+    lg.addColorStop(0.74, c.dark);
+    lg.addColorStop(0.92, c.edge);
+    lg.addColorStop(1,    c.edge);
+    return lg;
+  };
+  const spec = (g, w, a) => {
+    const lg = g.createLinearGradient(w * 0.15, 0, w * 0.40, 0);
+    lg.addColorStop(0,    'rgba(255,255,255,0)');
+    lg.addColorStop(0.45, `rgba(255,255,255,${a})`);
+    lg.addColorStop(1,    'rgba(255,255,255,0)');
+    return lg;
+  };
+  const S = 2, w = PIPE_W, capW = w + PIPE_CAP_OVR * 2, capH = PIPE_CAP_H;
+  const b = document.createElement('canvas'); b.width = w * S; b.height = 4;
+  const bg = b.getContext('2d'); bg.scale(S, 1);
+  bg.fillStyle = tube(bg, w, P);      bg.fillRect(0, 0, w, 4);
+  bg.fillStyle = spec(bg, w, P.spec); bg.fillRect(w * 0.15, 0, w * 0.25, 4);
+  const c = document.createElement('canvas'); c.width = capW * S; c.height = capH * S;
+  const cg = c.getContext('2d'); cg.scale(S, S);
+  cg.fillStyle = tube(cg, capW, P.cap);      cg.fillRect(0, 0, capW, capH);
+  cg.fillStyle = spec(cg, capW, P.spec);     cg.fillRect(capW * 0.15, 0, capW * 0.25, capH);
+  // rounded lip: lit toward the mouth, falling into shadow toward the body seam
+  const lip = cg.createLinearGradient(0, 4, 0, capH);
+  lip.addColorStop(0,    'rgba(255,255,255,0.16)');
+  lip.addColorStop(0.35, 'rgba(255,255,255,0)');
+  lip.addColorStop(1,    'rgba(0,0,0,0.30)');
+  cg.fillStyle = lip;                        cg.fillRect(0, 4, capW, capH - 4);
+  const mouth = cg.createLinearGradient(0, 0, 0, 4);                                  // hollow mouth
+  mouth.addColorStop(0, 'rgba(0,0,0,0.60)'); mouth.addColorStop(1, 'rgba(0,0,0,0.25)');
+  cg.fillStyle = mouth;                      cg.fillRect(0, 0, capW, 4);
+  cg.fillStyle = 'rgba(255,255,255,0.32)';   cg.fillRect(0, 4, capW, 1);           // lit rim
+  cg.fillStyle = 'rgba(0,0,0,0.38)';         cg.fillRect(0, capH - 1, capW, 1);    // seam to body
+  return (PIPE_SKINS[key] = { body: b, cap: c });
+}
+
 function drawPipe(x, y, w, h, isBottom, isWarp) {
   if (h <= 2) return;
-
-  // body gradient (left-to-right shading).
-  const g = ctx.createLinearGradient(x, 0, x + w, 0);
-  if (isWarp) {
-    g.addColorStop(0,    '#043321');
-    g.addColorStop(0.30, '#0a5c36');
-    g.addColorStop(0.65, '#04452a');
-    g.addColorStop(1,    '#021c11');
-  } else {
-    g.addColorStop(0,    '#0a5e3a');
-    g.addColorStop(0.30, '#12834f');
-    g.addColorStop(0.65, '#0a6840');
-    g.addColorStop(1,    '#053a24');
-  }
-  ctx.fillStyle = g;
-  ctx.fillRect(x, y, w, h);
-
-  // cap
-  const capH = 14;
+  const skin = pipeSkin(isWarp);
+  const capH = PIPE_CAP_H, ovr = PIPE_CAP_OVR;
   const capY = isBottom ? y : y + h - capH;
-  ctx.fillStyle = isWarp ? '#0c7a40' : '#15a358';
-  ctx.fillRect(x - PIPE_CAP_OVR, capY, w + PIPE_CAP_OVR * 2, capH);
 
-  // dark edge under cap
-  ctx.fillStyle = isWarp ? '#021c11' : '#053a24';
-  const edgeY = isBottom ? capY : capY + capH - 2;
-  ctx.fillRect(x - PIPE_CAP_OVR, edgeY, w + PIPE_CAP_OVR * 2, 2);
+  // body
+  ctx.drawImage(skin.body, x, y, w, h);
 
-  // highlight strip
-  ctx.fillStyle = isWarp ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.07)';
-  ctx.fillRect(x + 3, y, 6, h);
+  // segment seams every 96px out from the mouth — dark groove + lit lip
+  const top = isBottom ? y + capH : y, bot = isBottom ? y + h : y + h - capH;
+  for (let sy = isBottom ? top + 96 : bot - 96; isBottom ? sy < bot - 10 : sy > top + 10; sy += isBottom ? 96 : -96) {
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';       ctx.fillRect(x, sy, w, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.09)'; ctx.fillRect(x, sy + 2, w, 1);
+  }
+
+  // the collar sits proud of the tube and shades the body next to it
+  const shH = Math.min(12, h - capH);
+  if (shH > 0) {
+    const y0 = isBottom ? capY + capH : capY, y1 = isBottom ? y0 + shH : y0 - shH;
+    const sh = ctx.createLinearGradient(0, y0, 0, y1);
+    sh.addColorStop(0, 'rgba(0,0,0,0.42)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(x, Math.min(y0, y1), w, shH);
+  }
+
+  // collar
+  if (isBottom) ctx.drawImage(skin.cap, x - ovr, capY, w + ovr * 2, capH);
+  else {
+    ctx.save();
+    ctx.translate(0, capY + capH); ctx.scale(1, -1);
+    ctx.drawImage(skin.cap, x - ovr, 0, w + ovr * 2, capH);
+    ctx.restore();
+  }
 
   if (isWarp) drawWarpSparkles(x, y, w, h, performance.now());
 }
@@ -3100,12 +4057,15 @@ function inflate(cause) {
   // death ridicule lines now vary by cause) — one computed value, not two independently
   // hand-written ternaries that could drift apart.
   lastHitCause = cause === 'ceiling' ? 'hitCeiling' : cause === 'floor' ? 'hitFloor' : 'hitPipe';
-  // Recoil pushes AWAY from whichever surface was hit — ceiling knocks the bird DOWN,
-  // everything else (floor/pipe) knocks it UP. A flat -5 (up) on every cause used to
-  // shove a ceiling-hit bird FURTHER into the ceiling, re-triggering the overlap check
-  // every frame it stayed invincible and reading as "stuck at the top for a moment"
-  // (Osimo 2026-08-19).
-  const recoilVy = cause === 'ceiling' ? 5 : -5;
+  // Recoil: a pipe hit knocks the bird UP. A ceiling hit gets NO recoil at all (Osimo
+  // 2026-09-03: "don't bounce him down, he just loses a life but no repulsion from the
+  // ceiling") — the edge block already zeroed the upward velocity and clamped the bird
+  // inside the play area, so gravity takes over naturally. The old +5 shove-down was the
+  // 2026-08-19 fix for a flat -5 that pushed the bird FURTHER into the ceiling; with the
+  // edge block no longer early-returning, neither push is needed. The floor never calls
+  // inflate() any more (it bounces instead — see floorBounce), so 'floor' only survives
+  // here as a cause label for old callers.
+  const recoilVy = cause === 'ceiling' ? 0 : -5;
   // SHRINK STACKS ARE ARMOR (Osimo 2026-08-18 v8: hit a pipe while super tiny → it
   // killed him; wanted the hit to cost the shrink, not a life). Any hit while shrunk
   // wipes ALL shrink stacks — bird pops back to its starting size ("you can lose all
@@ -3182,6 +4142,10 @@ function die() {
   if (dead) return;
   dead    = true;
   running = false;
+  paused  = false;
+  foreverBuddies = [];   // "…and dies with you" — forever buddies never outlive the run
+  bannerPlane    = null;
+  showPauseButtons(false);
   spawnParticles(bird.x, bird.y, ACCENT, 12);
   draw();
 
@@ -3266,6 +4230,18 @@ function drawIcon(canvasEl, kind) {
     ctx.translate(w / 2, (h - pH * pS) / 2);
     ctx.scale(pS, pS);
     drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, false);
+  } else if (kind === 'firePipe') {
+    // bottom pipe segment with the live fire treatment: heat tint + flames off the mouth
+    const pS = 0.34, pH = 80, ph = Date.now() / 1000;
+    ctx.translate(w / 2, (h - pH * pS) / 2 + 6);
+    ctx.scale(pS, pS);
+    drawPipe(-PIPE_W / 2, 0, PIPE_W, pH, true, false);
+    ctx.fillStyle = 'rgba(255,90,0,' + (0.25 + 0.08 * Math.sin(ph * 2.3)) + ')';
+    ctx.fillRect(-PIPE_W / 2 - PIPE_CAP_OVR, 0, PIPE_W + PIPE_CAP_OVR * 2, pH);
+    for (let i = 0; i < 5; i++) {
+      const fx = -PIPE_W / 2 + 6 + i * (PIPE_W - 12) / 4;
+      flameTongue(fx, -2, 16 + 8 * Math.abs(Math.sin(ph * 5 + i * 1.7)), -1, i);
+    }
   } else {
     // parachute family — all via drawEnemy() with the exact flags the real enemy carries
     const e = { x: 0, y: 0, alive: true, phase: 0, fast: false };
@@ -3299,15 +4275,16 @@ function showOverlay(finalScore) {
   ovTitle.textContent = 'FLAP FIGHT';
   ovsub.innerHTML = s > 0
     ? `You scored <b style="color:var(--ink)">${s}</b> points!`
-    : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level.</span></div>
-       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="26" data-h="34"></canvas><span>Hit a pipe → bird <b>inflates</b> &amp; flashes (2 lives before pop!).</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b>.</span></div>
-       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them!</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything! (10 once reversed, or past 80k)</span></div>
-       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. Thread a gap edge-close, unaided, for a free ghost too!</span></div>
+    : `<div class="ovrow"><canvas class="ovicon" data-kind="bird" data-w="28" data-h="28"></canvas><span>Tap to flap — gaps shrink every level. <b>⏸</b> in either top corner pauses; <b>double-tap</b> to resume.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="pipe" data-w="26" data-h="34"></canvas><span>Hit a pipe or the <b>ceiling</b> → bird <b>inflates</b> &amp; flashes (2 lives before pop!). The floor just bounces you back up.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span>Stomp <b>down</b> on orange parachutes for <b>+25 pts</b> — quick stomps chain into a <b>×COMBO</b>.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="special" data-w="30" data-h="34"></canvas><span>Rare <b>coloured DEFLATE parachutes</b> shrink you back — stomp them! <b>Two in a row</b> shrink you tiny.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="normal" data-w="30" data-h="34"></canvas><span><b>5 stomps in a row</b> (any kind) = ⭐ STAR POWER — fly through everything! (10 once reversed, <b>15 past Lv40</b>)</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="ghost" data-w="30" data-h="34"></canvas><span><b>Lv5+:</b> ghost chutes phase you through the next pipe free. <b>3 shrink bombs</b> in a row = ghost time; a <b>grey then a star</b> (or star then grey) = ghost for <b>5 levels</b>!</span></div>
        <div class="ovrow"><canvas class="ovicon" data-kind="flashPipe" data-w="26" data-h="34"></canvas><canvas class="ovicon" data-kind="shrink" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> some pipes flash translucent — fly through when they do; bombs shrink you tiny.</span></div>
-       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die.</span></div>
-       <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="26" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫</span></div>`;
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="buddy" data-w="30" data-h="34"></canvas><span><b>Lv10+:</b> a gold flickering chute = a buddy bird! Trails you, snags chutes too, and takes your place once when you'd die. <b>3 in a row</b> = a ♾️ FOREVER buddy.</span></div>
+       <div class="ovrow"><canvas class="ovicon" data-kind="warpPipe" data-w="26" data-h="34"></canvas><span><b>Every 5 levels:</b> one pipe turns <b>dark green</b> — hit it for a secret bonus room. 🤫 Lv15 flips the world; it flips back at 30, then every 5.</span></div>
+       <div class="ovrow ovrow-rev"><canvas class="ovicon" data-kind="firePipe" data-w="26" data-h="40"></canvas><span><b>Lv25+:</b> gaps drift up and down. <b>Lv30+, every 3rd level:</b> pipes catch <b>FIRE</b> — touch one and every buddy goes up in smoke. 💨</span></div>`;
   const stored = parseInt(localStorage.getItem('hs_flap-fight') || '0', 10);
   const best = Math.max(bestScore || 0, stored, s);
   board.innerHTML = best > 0 ? `BEST <b style="color:var(--ink)">${best}</b>` : '';
@@ -3335,27 +4312,102 @@ function loop() {
     dt = (now - lastFrameMs) / (1000 / 60);
     dt = Math.min(Math.max(dt, 0.1), 3);
   }
-  lastFrameMs = running ? now : null;   // reset baseline across a pause/game-over gap
-  if (running) update(dt);
-  if (running || waiting) draw();
+  lastFrameMs = (running && !paused) ? now : null;   // reset baseline across a pause/game-over gap
+  if (running && !paused) update(dt);
+  if (running || waiting) draw();   // paused: keeps repainting the frozen frame + overlay
   animId = requestAnimationFrame(loop);
+}
+
+// ─── pause / resume (Osimo 2026-09-03) ───────────────────────────────────────
+// Two ⏸️ buttons (top-left + top-right corners) freeze the game mid-flight; a double
+// tap anywhere on the canvas (or either button again) resumes it from EXACTLY where it
+// stopped. Every wall-clock deadline in the game is shifted forward by the paused
+// duration so a 22s ghost window paused with 10s left still has 10s left afterwards.
+function pauseGame() {
+  if (!running || paused || dead || popping) return;
+  paused = true;
+  pausedAt = Date.now();
+  lastTapMs = 0;
+  for (const b of pauseBtns) b.textContent = '▶';
+  sfx.pause();
+}
+function resumeGame() {
+  if (!paused) return;
+  shiftTimers(Date.now() - pausedAt);
+  paused = false;
+  lastFrameMs = null;   // next loop tick starts a fresh dt baseline (no catch-up jump)
+  for (const b of pauseBtns) b.textContent = '⏸';
+  sfx.resume();
+}
+function showPauseButtons(on) {
+  for (const b of pauseBtns) { b.classList.toggle('hidden', !on); b.textContent = '⏸'; }
+}
+// every Date.now()-based deadline the update loop reads — pushed forward together
+function shiftTimers(ms) {
+  if (!(ms > 0)) return;
+  starPowerUntil     += ms;
+  ghostTimerUntil    += ghostTimerUntil ? ms : 0;
+  bonusUntil         += ms;
+  gapResetTime       += gapResetTime ? ms : 0;
+  gauntletStartTime  += gauntletStartTime ? ms : 0;
+  nextMegaSpawn      += ms;
+  nextGhostSpawn     += ms;
+  nextShrinkSpawn    += ms;
+  nextStarChuteSpawn += ms;
+  nextGreyChuteSpawn += ms;
+  gameStartTime      += ms;
+  inflateInvincible  += inflateInvincible ? ms : 0;
+  lastFloorBounceMs  += lastFloorBounceMs ? ms : 0;
+  if (callout) callout.until += ms;
+  if (VO.priorityUntil) VO.priorityUntil += ms;
+}
+let lastPauseTouchMs = 0;
+function onPauseButton(e) {
+  // Ghost-click guard: Chrome delivers the touchstart with cancelable=false when it
+  // thinks a scroll gesture is live (seen on the top-RIGHT button in landscape, Playwright
+  // 851×393), so preventDefault() is ignored and the synthetic click still follows —
+  // pause on touchstart, un-pause on click, net nothing. Swallow any click that lands
+  // within 700ms of a touch on the same buttons.
+  if (e.type === 'touchstart') lastPauseTouchMs = Date.now();
+  else if (Date.now() - lastPauseTouchMs < 700) { e.preventDefault(); e.stopPropagation(); return; }
+  if (e.cancelable) e.preventDefault();
+  e.stopPropagation();   // never reaches the canvas — a pause tap must not also flap
+  if (paused) resumeGame(); else pauseGame();
+}
+for (const b of pauseBtns) {
+  b.addEventListener('touchstart', onPauseButton, { passive: false });
+  b.addEventListener('click', onPauseButton);
+}
+// a tap on the frozen canvas: second tap within PAUSE_DOUBLE_TAP_MS resumes; the
+// resuming tap itself is swallowed (it never becomes a flap)
+function pausedTap() {
+  const now = Date.now();
+  if (now - lastTapMs < PAUSE_DOUBLE_TAP_MS) { lastTapMs = 0; resumeGame(); }
+  else lastTapMs = now;
 }
 
 // ─── input ───────────────────────────────────────────────────────────────────
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (paused) { pausedTap(); return; }
   if (waiting) { startPlaying(); return; }
   if (running) flap();
 }, { passive: false });
 
 canvas.addEventListener('click', () => {
+  if (paused) { pausedTap(); return; }
   if (waiting) { startPlaying(); return; }
   if (running) flap();
 });
 
 document.addEventListener('keydown', e => {
+  if (e.code === 'KeyP' || e.code === 'Escape') {
+    if (running) { e.preventDefault(); if (paused) resumeGame(); else pauseGame(); }
+    return;
+  }
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
+    if (paused) { pausedTap(); return; }
     if (waiting) { startPlaying(); return; }
     if (running) flap();
   }
