@@ -409,7 +409,12 @@ function buildCabinet(game) {
     // to both.
     try { localStorage.setItem('jnj_return', location.pathname); } catch (e) {}
     bumpPlays(game.id);
-    reportPlay(game.id);
+    // A cabinet can opt OUT of the global play counter with "countPlays": false in its
+    // JSON entry (Osimo 2026-09-05: "leave game count at zero till I say I'm done with the
+    // initial review, so it stays on the bottom with the least games played"). The members'
+    // arcade ranks by global plays, so without this his own review sessions would climb it
+    // up the page. Remove the flag when the cabinet goes live for real.
+    if (game.countPlays !== false) reportPlay(game.id);
     // Fullscreen persists across same-origin navigation on Android Chrome,
     // so the game itself opens chrome-free. Harmless elsewhere.
     if (!isIOS && !isStandalone) tryFullscreen();
