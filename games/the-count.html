@@ -209,16 +209,22 @@ const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
 // consoles, maybe make jnj bigger too same height as each other". Hosts are one height
 // everywhere; punters are sized PER CABINET because the corridor art recedes — a punter
 // at the far machine has to be smaller or he reads as a giant standing in the doorway.
-const HOST_W_SCALE = 1.0, HOST_H_SCALE = 1.12;   // Osimo: "stretch jnj sprites a little
-const HOST_H = 190;                              // in height keep the same width"
-// Punters stand in the AISLE IN FRONT of their machine, not beside it (Osimo 2026-09-04),
-// and the three positions ride the corridor's own perspective line: further down the row
-// means further from the camera, so smaller, higher up the floor, and further right.
-// Heights track the relative height of the machine each one is playing.
+// ONE box for both hosts. Osimo 2026-09-04: "stick to Jimmy size and shape as per image
+// but make Joe identical height and width". The source sprites are different shapes
+// (jimmyFront 40x57, joeFront 38x60), so scaling both to a common HEIGHT still left Joe
+// visibly narrower and shorter-looking. Both are now drawn into the SAME rendered box,
+// which is Jimmy's — 213 tall by 142 wide, his own 38px-wide content stretched 12% in
+// height at unchanged width, exactly as asked last round.
+const HOST_BOX = { w: 142, h: 213 };
+// Punter slots, measured off the corridor plate with a coordinate grid rather than nudged:
+// each machine's control panel centre is (165,300) / (252,290) / (306,281) in world space,
+// each cabinet's floor contact is ~465 / ~425 / ~395, and the sprites face LEFT with their
+// hands about 30% of their width in from the left edge — so x is set so the HANDS land on
+// the panel, not the body centre.
 const CAB_VIS = [
-  { h: 232, feet: 474, x: 186 },   // cabinet 1 — nearest, biggest, lowest on the floor
-  { h: 188, feet: 452, x: 280 },
-  { h: 152, feet: 436, x: 352 },
+  { h: 210, feet: 470, x: 199 },   // cabinet 1 — nearest, biggest, lowest on the floor
+  { h: 165, feet: 435, x: 279 },
+  { h: 135, feet: 405, x: 328 },
 ];
 const ROOMS = {
   coinroom: {
@@ -359,7 +365,7 @@ function drawBubble() {
   if (cur) lines.push(cur);
   const bw = 360, bh = 22 + lines.length * 22;
   const bx = Math.max(20, Math.min(WORLD_W - bw - 20, h.x - bw / 2));
-  const by = Math.max(60, ROOMS[room].floorY - HOST_H * HOST_H_SCALE - bh - 26);
+  const by = Math.max(60, ROOMS[room].floorY - HOST_BOX.h - bh - 26);
   ctx.fillStyle = 'rgba(8,6,4,0.93)';
   ctx.fillRect(bx, by, bw, bh);
   ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
@@ -647,9 +653,15 @@ function drawPlate(id) {
   ctx.fillStyle = '#241a14'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   ctx.fillStyle = '#3a2a20'; ctx.fillRect(0, ROOMS[id] ? ROOMS[id].floorY - 20 : 460, WORLD_W, WORLD_H);
 }
-function drawSprite(im, x, feetY, h, wScale) {
+function drawSprite(im, x, feetY, h) {
   if (!im) return false;
-  const s = h / im.height, w = im.width * s * (wScale || 1);
+  const w = im.width * (h / im.height);
+  return drawSpriteBox(im, x, feetY, w, h);
+}
+// draws into an EXACT box, so two sprites of different source shapes can be made to
+// occupy identical space on screen
+function drawSpriteBox(im, x, feetY, w, h) {
+  if (!im) return false;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(im, Math.round(x - w / 2), Math.round(feetY - h), Math.round(w), Math.round(h));
   ctx.imageSmoothingEnabled = true;
@@ -665,18 +677,20 @@ function drawHost(who, h) {
   ctx.save();
   if (h.face < 0 && walking) { ctx.translate(h.x * 2, 0); ctx.scale(-1, 1); }
   const dx = h.x;
-  // taller, same width: the height scales up and the width is divided back down by the
-  // same factor, so the sprite stretches instead of just getting bigger
-  if (!drawSprite(im, dx, feet, HOST_H * HOST_H_SCALE, HOST_W_SCALE / HOST_H_SCALE)) {
+  // Both hosts fill the identical box. A walk frame keeps its own width RATIO against that
+  // host's standing frame, so the stride still reads without changing how big he is.
+  let boxW = HOST_BOX.w;
+  if (walking && im !== still && still && still.width) boxW *= (im.width / still.width);
+  if (!drawSpriteBox(im, dx, feet, boxW, HOST_BOX.h)) {
     ctx.fillStyle = who === 'jimmy' ? '#e8e2d8' : '#b0873c';
-    ctx.fillRect(dx - 24, feet - HOST_H, 48, HOST_H);
+    ctx.fillRect(dx - HOST_BOX.w / 2, feet - HOST_BOX.h, HOST_BOX.w, HOST_BOX.h);
   }
   ctx.restore();
   if (who !== active) {                     // the one you are not driving
     ctx.fillStyle = 'rgba(232,195,90,0.85)';
     ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TAP TO SWAP', h.x, feet - HOST_H * HOST_H_SCALE - 10);
+    ctx.fillText('TAP TO SWAP', h.x, feet - HOST_BOX.h - 10);
     ctx.textAlign = 'left';
   }
 }
