@@ -313,7 +313,28 @@ const STAR_COUNT   = 60;            // parallax background stars
 const CHUTE_R      = 22;            // parachute dome radius
 const CHUTE_OFFSET = CHUTE_R + 4;  // dome centre is this far above body centre
 const GAP_START    = 220;           // initial pipe gap (wide)
-const GAP_MIN      = 105;           // narrowest pipe gap
+const GAP_MIN      = 105;           // narrowest pipe gap before the Lv30 ratchet
+// ─── the every-5-levels reset stops being a FULL reset from Lv30 (Osimo 2026-09-04) ──
+// "I'm well past LV 60 and the pipes keep going back to large open gap every 5 levels, I
+// think after level 25, or 30 the gaps get smaller every five levels."
+// Cause: each reversal level (15, 30, then every 5) pushes gapResetTime forward so the
+// GAP_START→GAP_MIN decay restarts — deliberate, and his own earlier ask ("the pipes widen
+// up a little, kinda reset"). But the decay takes ~4.6 minutes to reach the floor and a
+// reversal now arrives far sooner than that, so past Lv30 the gap bounced back to the full
+// 220 every time and never actually tightened. The reset still happens; what it resets TO
+// now ratchets down one band per 5 levels, and the floor comes down with it.
+const GAP_TIGHTEN_FROM = 30;        // first level whose reset is no longer a full reset
+const GAP_TIGHTEN_BAND = 5;         // …and it tightens again every this many levels
+const GAP_CEIL_STEP    = 9;         // px off the reset width per band
+const GAP_FLOOR_STEP   = 2;         // px off the floor per band
+const GAP_HARD_MIN     = 88;        // never narrower than this in normal play (the
+                                    // gauntlet's proven floor is 85, so this stays fair)
+function gapBands() {
+  if (level < GAP_TIGHTEN_FROM) return 0;
+  return Math.floor((level - GAP_TIGHTEN_FROM) / GAP_TIGHTEN_BAND) + 1;
+}
+function gapFloorNow() { return Math.max(GAP_HARD_MIN, GAP_MIN - gapBands() * GAP_FLOOR_STEP); }
+function gapCeilNow()  { return Math.max(gapFloorNow() + 12, GAP_START - gapBands() * GAP_CEIL_STEP); }
 
 // ─── LEVEL 15 DIRECTION REVERSAL (Osimo 2026-08-29) ────────────────────────────
 // "when you reach level 15, the pipes widen up a little (kinda reset)... BUT our bird
@@ -1364,8 +1385,10 @@ function currentGapSize() {
     const steps = Math.floor((Date.now() - gauntletStartTime) / GAUNTLET_GAP_STEP_MS);
     return Math.max(GAUNTLET_GAP_MIN, GAP_START - steps * GAUNTLET_GAP_STEP_PX);
   }
+  // Below Lv30 this is byte-for-byte the old behaviour (bands = 0 → ceiling GAP_START,
+  // floor GAP_MIN). From Lv30 the reset width and the floor both step down every 5 levels.
   const mins = (Date.now() - gapResetTime) / 60000;
-  return Math.max(GAP_MIN, Math.round(GAP_START - mins * 25));
+  return Math.max(gapFloorNow(), Math.round(gapCeilNow() - mins * 25));
 }
 
 // spawn edge for pipes/enemies — the RIGHT edge scrolling toward -x in normal play,
