@@ -263,18 +263,21 @@ const MACHINES = [
   // edge, so the LEFT foot tip sits 0.186w left of the sprite centre — measured off the
   // sprite, not guessed. punter.x below is therefore tip + 0.186w (and tip + 0.357w for
   // the mirrored right-hand machine, where the near foot is the mirrored one).
-  // Heights come from the head line Osimo drew earlier — head(x) = 255 - 0.057(x-246) —
-  // so each punter is exactly as tall as the gap between his foot point and that line.
+  // Heights: Osimo then marked the head line on a gridded frame — "top of head should be
+  // on line 12", i.e. world y 220 for the near punter, "grow everyone relative to their
+  // position proportionally". That is x1.226 on every height, feet pinned, and each x
+  // nudged right by the extra 0.186 (0.357 mirrored) of the new width so the LEFT FOOT TIP
+  // stays exactly on the cell he gave.
   { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 155, feet: 410, x: 266 }, flip: false },
+    punter: { h: 190, feet: 410, x: 269 }, flip: false },
   { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 118, feet: 370, x: 302 }, flip: false },
+    punter: { h: 145, feet: 370, x: 305 }, flip: false },
   { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h:  81, feet: 330, x: 358 }, flip: false },
+    punter: { h:  99, feet: 330, x: 360 }, flip: false },
   { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h:  63, feet: 310, x: 396 }, flip: false },
+    punter: { h:  77, feet: 310, x: 398 }, flip: false },
   { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 155, feet: 410, x: 720 }, flip: true },
+    punter: { h: 190, feet: 410, x: 727 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 const ROOMS = {
@@ -363,6 +366,7 @@ let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
 let lastTs, dayPaused, turnedAway = 0;
 let tutorial = -1, talkUntil = 0, talkWho = 'jimmy';   // tutorial step, and who is speaking
 let boxOpenedToday = false;   // the DO NOT OPEN box is a once-a-night decision, not a tap
+let rentWarned = false, rentCardAt = 0;   // the rent card shows once a night, then shuts up
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
@@ -374,6 +378,7 @@ function newRun() {
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
   dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0; boxOpenedToday = false;
+  rentWarned = false; rentCardAt = 0;
   hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
   hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1 };
   active = 'jimmy';
@@ -663,6 +668,7 @@ function endDay() {
     return;
   }
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
+  rentWarned = false; rentCardAt = 0;
   for (const c of cabs) { c.cursed = false; c.jam = false; }   // a new night, clean machines
   hype = Math.min(100, hype + 10);
   dayEndsAt = performance.now() + DAY_MS;
@@ -713,17 +719,24 @@ canvas.addEventListener('mousedown', onTap);
 // ── shop UI (drawn on the canvas so it scales with everything else) ──────────
 // Laid out in SCREEN space (like the HUD): the room is cover-cropped on wide phones, and
 // a world-space list lost its bottom rows off the edge of the crop.
+// The column is anchored to two points Osimo read off a grid laid over the real ledger:
+// the FIRST logo's centre at cell H5 and the LAST at G18. On the 915x412 frame he gridded,
+// letter i is x = i*20+10 and row n is y = (n-1)*20+10, so those are (150,90) and (130,350)
+// — held here as fractions of the frame so they survive other screen shapes. The x drifts
+// LEFT as the list goes down, which is the page's own lean; every row rides that line, so
+// the column ends up parallel to the ruling instead of square to the screen.
+const LEDGER_FIRST = { x: 150 / 915, y: 90 / 412 };
+const LEDGER_LAST  = { x: 130 / 915, y: 350 / 412 };
 function shopMetrics() {
-  // Osimo 2026-09-04: "have him write them in the page not overlapped… following contour of
-  // the pages". The book art has a gutter down the middle and its pages curve, so the list
-  // is inset to the LEFT PAGE's writing area and each row is nudged along the page's own
-  // curve instead of being laid out as a flat table across the whole screen.
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
-  const n = UPGRADES.filter(upgradeAvailable).length || 1;
-  const top = Math.round(SH * 0.20), bottom = Math.round(SH * 0.10);
-  const rowH = Math.max(24, Math.min(40, (SH - top - bottom) / n));
-  const w = Math.round(SW * 0.325);                 // the left page, inside its red rule
-  return { SW, SH, rowH, w, x: Math.round(SW * 0.165), top };   // fully ON the paper
+  const nMax = UPGRADES.length;                    // pitch stays put as items get bought
+  const x0 = LEDGER_FIRST.x * SW, y0 = LEDGER_FIRST.y * SH;
+  const x1 = LEDGER_LAST.x  * SW, y1 = LEDGER_LAST.y  * SH;
+  const rowH = (y1 - y0) / Math.max(1, nMax - 1);
+  const lean = (x1 - x0) / (y1 - y0);              // ≈ -0.077: left as it goes down
+  const w = Math.round(SW * 0.34);                 // writing area, inside the red rule
+  // the logo is sized to the ROW, so ten of them stack without overlapping
+  return { SW, SH, rowH, w, x0, y0, lean, iconR: Math.min(rowH * 0.52, 18) };
 }
 // The book art's red margin rule leans left as it goes down the page (measured off the
 // plate: about -0.11 px of x per px of y). Osimo 2026-09-04: "they should be parallel to
@@ -743,8 +756,9 @@ function shopRows() {
   const m = shopMetrics();
   const list = UPGRADES.filter(upgradeAvailable);
   return list.map((u, i) => {
-    const y = m.top + i * m.rowH + pageCurve(i, list.length);
-    return { u, x: m.x + (y - m.top) * PAGE_LEAN, y, w: m.w, h: m.rowH - 4 };
+    const cy = m.y0 + i * m.rowH;                  // the logo's CENTRE, on the line
+    const cx = m.x0 + (cy - m.y0) * m.lean;
+    return { u, cx, cy, x: cx - m.iconR, y: cy - m.rowH / 2, w: m.w, h: m.rowH };
   });
 }
 function shopTap(w) {
@@ -752,8 +766,10 @@ function shopTap(w) {
   // menu". There is a CLOSE button now, and a tap anywhere off the list still closes it.
   const cl = shopCloseRect();
   if (w.x >= cl.x && w.x <= cl.x + cl.w && w.y >= cl.y && w.y <= cl.y + cl.h) { shopOpen = false; return; }
+  const m = shopMetrics();
   for (const r of shopRows()) {
-    if (w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h) { buy(r.u); return; }
+    if (w.x >= r.cx - m.iconR - 6 && w.x <= r.cx - m.iconR + r.w &&
+        w.y >= r.cy - r.h / 2 && w.y <= r.cy + r.h / 2) { buy(r.u); return; }
   }
   shopOpen = false;
 }
@@ -927,13 +943,24 @@ function sideExits() {
   return out;
 }
 function drawExitArrows(now) {
-  const a = 0.4 + Math.sin(now * 0.004) * 0.25;
+  const calm = 0.4 + Math.sin(now * 0.004) * 0.25;
+  // While rent is short, the chevron that leads toward the SAFE flashes hard — the coin
+  // closet is at the far left of the run, so from anywhere but there the answer is "left".
+  const rentShort = !dayPaused && cash < RENT(day) && (dayEndsAt - now) < 30000;
+  const towardSafe = room === 'coinroom' ? 0 : -1;
   for (const e of sideExits()) {
+    const flash = rentShort && e.dir === towardSafe;
+    const a = flash ? 0.45 + 0.55 * Math.abs(Math.sin(now * 0.011)) : calm;
     const x = e.dir < 0 ? 30 : WORLD_W - 30, y = ROOMS[room].floorY - 70;
-    ctx.fillStyle = 'rgba(232,195,90,' + a.toFixed(3) + ')';
+    const sz = flash ? 15 : 11;
+    ctx.save();
+    if (flash) { ctx.shadowColor = 'rgba(255,215,94,0.9)'; ctx.shadowBlur = 18; }
+    ctx.fillStyle = (flash ? 'rgba(255,215,94,' : 'rgba(232,195,90,') + a.toFixed(3) + ')';
     ctx.beginPath();
-    ctx.moveTo(x - 11 * e.dir, y - 15); ctx.lineTo(x + 11 * e.dir, y); ctx.lineTo(x - 11 * e.dir, y + 15);
+    ctx.moveTo(x - sz * e.dir, y - sz * 1.35); ctx.lineTo(x + sz * e.dir, y);
+    ctx.lineTo(x - sz * e.dir, y + sz * 1.35);
     ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -959,24 +986,44 @@ function drawHUD(now) {
   if (bottles) { ctx.fillStyle = '#e8c35a'; ctx.fillText('🍾×' + bottles, hx + hw + 132, 31); }
   // day + clock
   const left = Math.max(0, dayEndsAt - now);
-  // Rent warning (Osimo 2026-09-04: "does a pop up warn you when you about to run out?").
-  // Fires in the last 25 seconds and only while the safe is short — a warning you can
-  // still do something about, not a post-mortem.
-  if (!dayPaused && left < 25000 && cash < RENT(day)) {
-    const short = (RENT(day) - cash) / 100;
-    const pulse = 0.55 + 0.45 * Math.sin(now * 0.012);
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = 'rgba(120,10,10,0.92)';
-    ctx.fillRect(SW / 2 - 190, 52, 380, 34);
-    ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 2;
-    ctx.strokeRect(SW / 2 - 190, 52, 380, 34);
-    ctx.fillStyle = '#ffd7d7'; ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('RENT £' + (RENT(day) / 100).toFixed(2) + ' DUE — £' + short.toFixed(2) +
-                 ' SHORT. BANK NOW.', SW / 2, 75);
-    ctx.textAlign = 'left';
-    ctx.restore();
+  // Osimo 2026-09-05: "instead of the flashing ugly square, have a cute rounded corners
+  // pop up say you have X amount of time left to pay rent, slider somewhere. and then it
+  // won't remind again, and the whole [time] your rent is due the left right triangles will
+  // flash indicating what room you should go to."
+  // So: ONE soft card that slides down, carries a draining time bar, and leaves. After that
+  // the doorway chevrons do the nagging, pointing at the room with the safe in it.
+  if (!dayPaused && !rentWarned && left < 30000 && cash < RENT(day)) {
+    rentWarned = true; rentCardAt = now; SFX.deny();
+  }
+  if (rentCardAt) {
+    const age = now - rentCardAt, LIFE = 5200;
+    if (age > LIFE) rentCardAt = 0;
+    else {
+      const slide = age < 260 ? age / 260 : age > LIFE - 300 ? (LIFE - age) / 300 : 1;
+      const cw2 = 330, ch2 = 76, cx2 = SW / 2 - cw2 / 2;
+      const cy2 = 54 - (1 - Math.min(1, Math.max(0, slide))) * 90;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, Math.max(0, slide));
+      ctx.fillStyle = 'rgba(28,18,10,0.94)';
+      roundRect(cx2, cy2, cw2, ch2, 14); ctx.fill();
+      ctx.strokeStyle = 'rgba(232,195,90,0.9)'; ctx.lineWidth = 2;
+      roundRect(cx2, cy2, cw2, ch2, 14); ctx.stroke();
+      const secs = Math.ceil(Math.max(0, dayEndsAt - now) / 1000);
+      ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(secs + ' SECONDS TO PAY RENT', SW / 2, cy2 + 26);
+      ctx.fillStyle = '#e8dcc4'; ctx.font = '14px "Barlow Condensed",sans-serif';
+      ctx.fillText('£' + ((RENT(day) - cash) / 100).toFixed(2) + ' short — bank what you are carrying',
+                   SW / 2, cy2 + 44);
+      ctx.textAlign = 'left';
+      // the slider: how much of the night is left
+      const bw = cw2 - 36, frac = Math.max(0, Math.min(1, (dayEndsAt - now) / DAY_MS));
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      roundRect(cx2 + 18, cy2 + ch2 - 18, bw, 8, 4); ctx.fill();
+      ctx.fillStyle = frac < 0.15 ? '#ff6b6b' : '#ffd75e';
+      roundRect(cx2 + 18, cy2 + ch2 - 18, bw * frac, 8, 4); ctx.fill();
+      ctx.restore();
+    }
   }
   ctx.textAlign = 'right';
   ctx.fillStyle = '#e8e2d8';
@@ -1025,29 +1072,31 @@ function drawShop() {
   }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.x + m.w / 2, Math.round(m.SH * 0.125));
+  ctx.fillText('THE LEDGER', m.x0 + m.w * 0.42, Math.round(m.SH * 0.125));
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x + m.w / 2, Math.round(m.SH * 0.163));
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x0 + m.w * 0.42, Math.round(m.SH * 0.163));
   ctx.textAlign = 'left';
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
+    const m2 = shopMetrics();
     if (can) {                                   // an affordable line is ringed in pencil
       ctx.fillStyle = 'rgba(226,178,86,0.22)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = 'rgba(122,74,26,0.55)'; ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillRect(r.cx - m2.iconR - 4, r.cy - r.h / 2 + 1, r.w, r.h - 2);
+      ctx.strokeStyle = 'rgba(122,74,26,0.5)'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(r.cx - m2.iconR - 4, r.cy - r.h / 2 + 1, r.w, r.h - 2);
     }
-    shopIcon(r.u.icon, r.x + 18, r.y + r.h / 2, Math.min(30, r.h), can);
+    shopIcon(r.u.icon, r.cx, r.cy, m2.iconR * 2.05, can);
+    const tx = r.cx + m2.iconR + 8;
     ctx.fillStyle = can ? '#3c2410' : '#8a795f';
     ctx.font = 'bold 16px "Barlow Condensed",sans-serif';
-    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 42, r.y + 15);
+    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), tx, r.cy - 1);
     ctx.font = '12px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
-    ctx.fillText(r.u.blurb, r.x + 42, r.y + 28);
+    ctx.fillText(r.u.blurb, tx, r.cy + 12);
     ctx.textAlign = 'right';
     ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
-    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 6, r.y + 22);
+    ctx.fillText('£' + (c / 100).toFixed(2), r.cx - m2.iconR + r.w - 12, r.cy + 5);
     ctx.textAlign = 'left';
   }
   const cl = shopCloseRect();
@@ -1148,6 +1197,11 @@ window.__TC = {
     canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
   },
   giveCoins(n) { cabs[0].till += n; },      // QA only — seeds a till without waiting for a punter
+  rush(secsLeft, pence) {                   // QA only — jump to the end of the night with a
+    dayEndsAt = performance.now() + secsLeft * 1000;   // chosen amount in the safe, so the
+    if (pence !== undefined) cash = pence;             // rent card and the flashing chevrons
+    rentWarned = false; rentCardAt = 0;                // can be seen without waiting 100s
+  },
   demo() {                                  // QA only — every machine on and busy, so the
     ['cab2','cab3','cab4','cab5'].forEach(k => { owned[k] = true; });   // whole row can be
     const sp = ['punter34A', 'punter34B', 'punter34C'];                 // judged in one frame
