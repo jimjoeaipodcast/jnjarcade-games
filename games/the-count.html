@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>THE COUNT — JnJ Arcade</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  THE COUNT — Jim & Joe's arcade, from the money side.
+  Osimo 2026-09-04, picking concept 2 of four brainstormed with Grok Build:
+  "make it like actual games where you start with little money and buy/pay for
+  things that will help us yield more money just like the farmer games."
+
+  You start with £5 and one working cabinet. Punters play, cabinets fill with
+  coins, you empty them into your apron, you walk the takings to the safe next
+  door, and you spend the takings on things that make the next day earn more.
+  Rent is due every night and it goes up.
+
+  THE JNJ PART: money is the only resource the arcade floor and the podcast
+  actually share, so every pound is a choice between the two. Coins bought
+  cabinets (Jimmy's side, more punters) or whisky (Joe's side, the show keeps
+  recording, which is what pulls punters in). And you play BOTH hosts — whoever
+  you are not driving stays where you left him, so pulling Joe off the mic to
+  help carry coins costs you hype while he is away.
+
+  Rooms are the jnj-on-air set (studio / arcade corridor / prop room) plus a new
+  one to the LEFT of the studio: THE COIN CLOSET. Art regenerated to the mockup
+  standard Osimo set, with the canonical McCarthy + Hinton portraits composited
+  into the studio's frames.
+
+  Conventions: 960x540 world letterboxed by VIEW, tap-to-walk point and click,
+  INSERT COIN overlay, WebAudio-only sfx with the house speaker cycle,
+  ArcadeScores options object. Structure follows games/jnj-on-air.html.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100dvh; background: #000; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none; }
+  #gameCanvas { display: block; width: 100vw; height: 100dvh; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 10;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             font-family: 'Courier New', monospace; color: #fff; text-align: center; padding: 18px; }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(24px, 6.5vw, 54px); letter-spacing: .06em;
+                color: #e8c35a; text-shadow: 0 0 24px #e8c35a; }
+  #overlay p { margin: 12px 0 22px; font-size: 13px; color: #9aa; max-width: 86vw; line-height: 1.55; }
+  #overlay p b { color: #e8c35a; }
+  .obtn { font: bold 17px 'Courier New', monospace; letter-spacing: .08em;
+          padding: 15px 34px; background: #e8c35a; color: #000; border: none;
+          border-radius: 10px; cursor: pointer; margin: 6px; box-shadow: 0 0 26px #e8c35a; }
+  .obtn.ghost { background: transparent; color: #e8c35a; border: 2px solid #e8c35a; box-shadow: none; }
+  /* Landscape nudge, same pattern as jnj-on-air: this is a 16:9 room game, so a portrait
+     phone letterboxes it into a strip. Non-blocking on purpose — iOS cannot lock
+     orientation, so it hints rather than gates, and hides the moment the phone turns. */
+  #rotateHint { display: none; }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rotateHint { display: flex; position: fixed; top: 10px; left: 50%;
+      transform: translateX(-50%); z-index: 9; align-items: center; gap: 8px;
+      background: rgba(10,10,16,.92); color: #e8c35a; border: 1px solid #e8c35a55;
+      border-radius: 10px; padding: 8px 14px; font-size: 12px; letter-spacing: .06em;
+      pointer-events: none; font-family: 'Courier New', monospace; }
+  }
+</style>
+<link rel="stylesheet" href="../cabinet.css">
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="rotateHint">🔄 ROTATE FOR THE FULL FLOOR</div>
+<div id="overlay">
+  <h1>THE COUNT</h1>
+  <p id="ovText">Jim &amp; Joe's arcade, from the money side.<br>
+     You start with <b>£5</b> and one working cabinet.<br><br>
+     Empty the cabinets into your apron, walk the takings to the <b>safe</b> in the coin
+     closet, and spend them on things that earn more tomorrow. <b>Rent is due every night
+     and it goes up.</b></p>
+  <button class="obtn" id="startBtn">INSERT COIN</button>
+  <button class="obtn ghost" id="arcadeBtn">‹ ARCADE</button>
+</div>
+<script src="../arcade-scores.js?v=22"></script>
+<script>
+(function () {
+'use strict';
+const SLUG = 'the-count', ACCENT = '#e8c35a';
+const WORLD_W = 960, WORLD_H = 540;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+
+// ── VIEW: fit the 960x540 world into whatever the device gives us ────────────
+const VIEW = { scale: 1, ox: 0, oy: 0 };
+let DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.round(w * DPR);
+  canvas.height = Math.round(h * DPR);
+  VIEW.scale = Math.min(canvas.width / WORLD_W, canvas.height / WORLD_H);
+  VIEW.ox = Math.round((canvas.width - WORLD_W * VIEW.scale) / 2);
+  VIEW.oy = Math.round((canvas.height - WORLD_H * VIEW.scale) / 2);
+}
+window.addEventListener('resize', resize);
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
+}
+
+// ── SFX — house style, no audio files. Speaker cycle is the house contract
+//    (FLAP_FIGHT_BIBLE v10): this cabinet has no voice pack yet, so it runs the
+//    two-state end of it, 🔊 sound FX → 🔇 mute. ─────────────────────────────
+let audioCtx = null, muted = false;
+try { muted = localStorage.getItem('sfxMuted_' + SLUG) === '1'; } catch (e) {}
+function unlockAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(f0, f1, dur, type, vol) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    const jit = 1 + (Math.random() * 2 - 1) * 0.04;          // LittleJS pitch jitter
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(f0 * jit, t);
+    if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(30, f1 * jit), t + dur);
+    g.gain.setValueAtTime(vol || 0.14, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+const SFX = {
+  coin:   () => { tone(880, 1320, 0.07, 'square', 0.13); setTimeout(() => tone(1320, 1760, 0.07, 'square', 0.10), 60); },
+  bank:   () => { tone(320, 880, 0.22, 'triangle', 0.16); },
+  buy:    () => { tone(440, 660, 0.12, 'sawtooth', 0.13); setTimeout(() => tone(660, 990, 0.14, 'sawtooth', 0.12), 110); },
+  deny:   () => { tone(220, 130, 0.18, 'square', 0.12); },
+  jam:    () => { tone(180, 90, 0.3, 'sawtooth', 0.14); },
+  fix:    () => { tone(500, 900, 0.13, 'triangle', 0.13); },
+  pour:   () => { tone(300, 420, 0.3, 'sine', 0.10); },
+  punter: () => { tone(660, 880, 0.06, 'sine', 0.07); },
+  swap:   () => { tone(520, 780, 0.09, 'triangle', 0.11); },
+  day:    () => { tone(392, 523, 0.2, 'triangle', 0.15); setTimeout(() => tone(523, 784, 0.3, 'triangle', 0.14), 190); },
+  bust:   () => { tone(300, 70, 0.7, 'sawtooth', 0.17); },
+  box:    () => { tone(140, 700, 0.35, 'sawtooth', 0.15); },
+};
+
+// ── ART PACK — 4 room plates (320x180 drawn at 3x) + sprites ────────────────
+const PLATES = {}, SPR = {};
+let packState = 'idle';
+function loadPack() {
+  if (packState !== 'idle') return;
+  packState = 'loading';
+  fetch('the-count-pack.json?v=1').then(r => r.json()).then(p => {
+    const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
+    for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
+    for (const k in p.sprites) {
+      const v = p.sprites[k];
+      if (Array.isArray(v)) { SPR[k] = []; v.forEach((u, i) => mk(u, im => { SPR[k][i] = im; })); }
+      else mk(v, im => { SPR[k] = im; });
+    }
+    packState = 'ready';
+  }).catch(() => { packState = 'failed'; });   // canvas fallback below keeps it playable
+}
+
+// ── ROOMS ────────────────────────────────────────────────────────────────────
+// Left to right: coinroom | studio | corridor | prop. walkX is where a host has
+// to stand to use a hotspot; hit-testing is FIRST MATCH, so exits and small
+// interactive props are listed BEFORE big scenery (the jnj-on-air lesson —
+// a chesterfield rect listed above a doorway silently ate the doorway).
+const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
+const ROOMS = {
+  coinroom: {
+    name: 'THE COIN CLOSET', floorY: 470,
+    hotspots: [
+      { id: 'toStudio', x: 880, y: 150, w: 80, h: 340, walkX: 890, label: 'TO THE STUDIO', exit: 'studio' },
+      { id: 'safe',     x: 690, y: 300, w: 130, h: 150, walkX: 690, label: 'THE SAFE' },
+      { id: 'ledger',   x: 430, y: 300, w: 200, h: 130, walkX: 470, label: 'THE LEDGER' },
+      { id: 'counter',  x: 60,  y: 250, w: 170, h: 220, walkX: 210, label: 'COIN COUNTER' },
+    ],
+  },
+  studio: {
+    name: 'THE STUDIO', floorY: 480,
+    hotspots: [
+      { id: 'toCoin',   x: 0,   y: 150, w: 70,  h: 340, walkX: 60,  label: 'TO THE COIN CLOSET', exit: 'coinroom' },
+      { id: 'toCorr',   x: 890, y: 150, w: 70,  h: 340, walkX: 900, label: 'TO THE ARCADE', exit: 'corridor' },
+      { id: 'decanter', x: 400, y: 300, w: 90,  h: 90,  walkX: 420, label: 'THE DECANTER' },
+      { id: 'mic',      x: 520, y: 270, w: 120, h: 120, walkX: 560, label: 'THE MIC' },
+      { id: 'sofaL',    x: 90,  y: 290, w: 260, h: 140, walkX: 240, label: 'THE CHESTERFIELD' },
+    ],
+  },
+  corridor: {
+    name: 'THE ARCADE', floorY: 490,
+    hotspots: [
+      { id: 'toStudio2', x: 0,   y: 150, w: 60,  h: 340, walkX: 55,  label: 'TO THE STUDIO', exit: 'studio' },
+      { id: 'toProp',    x: 420, y: 140, w: 120, h: 240, walkX: 480, label: 'PROP ROOM', exit: 'prop' },
+      { id: 'cab0',      x: 26,  y: 210, w: 144, h: 250, walkX: 150, label: 'CABINET 1', cab: 0 },
+      { id: 'cab1',      x: 170, y: 225, w: 96,  h: 230, walkX: 240, label: 'CABINET 2', cab: 1 },
+      { id: 'cab2',      x: 266, y: 235, w: 70,  h: 215, walkX: 310, label: 'CABINET 3', cab: 2 },
+      { id: 'change',    x: 620, y: 200, w: 90,  h: 250, walkX: 610, label: 'CHANGE MACHINE' },
+      { id: 'vending',   x: 700, y: 180, w: 130, h: 280, walkX: 690, label: 'VENDING MACHINE' },
+      { id: 'cooler',    x: 830, y: 200, w: 100, h: 270, walkX: 800, label: 'WATER COOLER' },
+    ],
+  },
+  prop: {
+    name: 'THE PROP ROOM', floorY: 480,
+    hotspots: [
+      { id: 'toCorr2',  x: 890, y: 150, w: 70,  h: 340, walkX: 895, label: 'BACK TO THE ARCADE', exit: 'corridor' },
+      { id: 'whisky',   x: 250, y: 300, w: 130, h: 130, walkX: 300, label: 'WHISKY CRATE' },
+      { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
+      { id: 'parts',    x: 600, y: 260, w: 120, h: 190, walkX: 610, label: 'SPARE PARTS' },
+      { id: 'shelves',  x: 20,  y: 120, w: 210, h: 330, walkX: 180, label: 'THE SHELVES' },
+    ],
+  },
+};
+
+// ── ECONOMY ──────────────────────────────────────────────────────────────────
+// Everything is PENCE so nothing ever hits a float rounding edge; only the HUD
+// divides by 100. Osimo's ask: "start with little money and buy/pay for things
+// that will help us yield more money just like the farmer games."
+const START_CASH = 500;                 // £5.00
+const DAY_MS = 100000;                  // a shift is 100 seconds
+const RENT = d => 300 + (d - 1) * 250;  // £3 on day one, +£2.50 a night after
+const UPGRADES = [
+  { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true,
+    blurb: 'A second machine earning at the same time.' },
+  { id: 'cab3',    name: 'POWER UP CABINET 3', cost: 2000, once: true,
+    blurb: 'Three machines. Three queues.' },
+  { id: 'apron',   name: 'BIGGER APRON',       cost: 600,  max: 3, scale: 2.2,
+    blurb: 'Carry more coins per trip to the safe.' },
+  { id: 'marquee', name: 'MARQUEE LIGHTS',     cost: 1200, once: true,
+    blurb: 'People can see the place. Punters arrive faster.' },
+  { id: 'sticks',  name: 'NEW JOYSTICKS',      cost: 1000, once: true,
+    blurb: 'Cabinets jam far less often.' },
+  { id: 'onair',   name: 'ON AIR SIGN',        cost: 1600, once: true,
+    blurb: 'The show reads as live. Hype drains slower.' },
+  { id: 'crate',   name: 'WHISKY CRATE',       cost: 900,  once: true,
+    blurb: 'The decanter holds double. Fewer trips to the prop room.' },
+  { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true,
+    blurb: 'The safe pays a 10% counting bonus on every bag.' },
+];
+
+let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
+let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
+let lastTs, dayPaused;
+
+function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
+function has(id) { return !!owned[id]; }
+function cabCount() { return 1 + (has('cab2') ? 1 : 0) + (has('cab3') ? 1 : 0); }
+
+function newRun() {
+  cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
+  banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
+  cabs = [0, 1, 2].map(i => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
+  room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
+  dayEndsAt = performance.now() + DAY_MS; dayPaused = false;
+  hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
+  hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1 };
+  active = 'jimmy';
+}
+const hosts = { jimmy: null, joe: null };
+let active = 'jimmy';
+function me() { return hosts[active]; }
+function other() { return hosts[active === 'jimmy' ? 'joe' : 'jimmy']; }
+function otherName() { return active === 'jimmy' ? 'joe' : 'jimmy'; }
+
+function say(t, ms) { msg = t; msgUntil = performance.now() + (ms || 2200); }
+
+// ── the floor: punters arrive, pick a free cabinet, play, pay, leave ─────────
+// Cabinets are the crop. A punter only lands if a cabinet is powered, unjammed
+// and free — every punter turned away is money that never existed, which is
+// what makes buying the second and third cabinet feel like a real decision.
+function freeCab() {
+  for (let i = 0; i < cabCount(); i++) {
+    const c = cabs[i];
+    if (!c.jam && !c.busy) return i;
+  }
+  return -1;
+}
+let nextPunter = 0;
+function updateFloor(dt, now) {
+  const rate = (2600 - hype * 12) / (has('marquee') ? 1.35 : 1);
+  if (now > nextPunter) {
+    nextPunter = now + rate * (0.6 + Math.random() * 0.8);
+    const ci = freeCab();
+    if (ci >= 0) {
+      const c = cabs[ci];
+      c.busy = { spr: ['punterA', 'punterB', 'punterC'][Math.floor(Math.random() * 3)] };
+      c.playT = 5000 + Math.random() * 4000;
+      SFX.punter();
+    } else if (hype > 12) {
+      hype -= 1.2;                     // turned away, and they tell people
+      if (room === 'corridor') floaters.push({ x: 480, y: 250, t: now, txt: 'NO FREE MACHINE', col: '#ff6b6b' });
+    }
+  }
+  for (let i = 0; i < cabs.length; i++) {
+    const c = cabs[i];
+    if (i >= cabCount()) { c.busy = null; continue; }
+    if (!c.busy) continue;
+    c.playT -= dt;
+    if (c.playT <= 0) {
+      const take = Math.round((18 + Math.random() * 22) * (c.cursed ? 0.45 : 1) * (1 + hype / 220));
+      c.till += take;
+      c.busy = null;
+      if (room === 'corridor') {
+        const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
+        floaters.push({ x: hs.x + hs.w / 2, y: hs.y + 40, t: now, txt: '+' + take + 'p', col: '#ffd75e' });
+      }
+      // jam roll — the one thing that stops a cabinet earning until you walk over
+      const jamChance = (c.cursed ? 0.22 : 0.10) * (has('sticks') ? 0.4 : 1);
+      if (Math.random() < jamChance) { c.jam = true; SFX.jam(); }
+    }
+  }
+}
+
+// ── hype: the show is what pulls punters in ─────────────────────────────────
+// Joe standing in the studio IS the show. Take him out to carry coins and hype
+// falls three times faster — that is the whole Jimmy-versus-Joe tension.
+function updateHype(dt) {
+  const joeOnMic = hosts.joe.room === 'studio';
+  let drain = (joeOnMic && decanter > 0) ? 0.55 : 1.1;
+  if (has('onair')) drain *= 0.6;
+  if (joeOnMic && decanter > 0) {
+    hype += 0.35 * (dt / 1000);
+    // one measure roughly every 40s of talking, so a full decanter outlasts a shift and
+    // the whisky run is a chore you plan, not an emergency every eighty seconds. (First
+    // tuning burned a measure every 26s: the decanter emptied inside one day and hype
+    // hit 1 by the bell.)
+    if (Math.random() < dt / 40000) {
+      decanter = Math.max(0, decanter - 1);
+      if (decanter === 0) say('The decanter is dry — Joe is winding down. Crate is in the prop room.', 3200);
+    }
+  }
+  hype -= drain * (dt / 1000);
+  hype = Math.max(0, Math.min(100, hype));
+}
+
+// ── interactions ─────────────────────────────────────────────────────────────
+function act(h) {
+  const now = performance.now();
+  if (h.exit) { changeRoom(h.exit); return; }
+  if (h.cab !== undefined) {
+    const i = h.cab, c = cabs[i];
+    if (i >= cabCount()) { say('That one has no power. Buy it at the ledger.'); SFX.deny(); return; }
+    if (c.jam) { c.jam = false; SFX.fix(); say('Unjammed. Back in service.'); return; }
+    if (c.till <= 0) { say('Empty. Let someone play it.'); SFX.deny(); return; }
+    const room4 = apronCap() - carry;
+    if (room4 <= 0) { say('Apron is full — bank it at the safe.'); SFX.deny(); return; }
+    const took = Math.min(c.till, room4);
+    c.till -= took; carry += took;
+    SFX.coin();
+    floaters.push({ x: h.x + h.w / 2, y: h.y + 30, t: now, txt: '+' + took + 'p', col: '#ffd75e' });
+    if (c.till > 0) say('Apron full at ' + carry + 'p — some left in the machine.');
+    return;
+  }
+  switch (h.id) {
+    case 'safe': {
+      if (carry <= 0) { say('Nothing to bank.'); SFX.deny(); return; }
+      const bonus = has('counter') ? Math.round(carry * 0.1) : 0;
+      cash += carry + bonus; banked += carry + bonus;
+      floaters.push({ x: h.x + h.w / 2, y: h.y, t: now,
+                      txt: '+' + ((carry + bonus) / 100).toFixed(2) + (bonus ? ' (+10%)' : ''), col: '#8effc2' });
+      carry = 0; SFX.bank();
+      return;
+    }
+    case 'ledger':  shopOpen = true; return;
+    case 'counter': say('The counter does the counting. The safe takes the bags.'); return;
+    case 'decanter': {
+      if (decanter >= (has('crate') ? 6 : 3)) { say('Still full.'); SFX.deny(); return; }
+      if (bottles <= 0) { say('No bottle on you. There is a crate in the prop room.'); SFX.deny(); return; }
+      bottles--; decanter = has('crate') ? 6 : 3; SFX.pour();
+      say('Poured. Joe will keep talking.');
+      return;
+    }
+    case 'whisky': {
+      if (bottles >= 2) { say('Two bottles is all you can carry.'); SFX.deny(); return; }
+      bottles++; SFX.fix(); say('Bottle taken. The decanter is in the studio.');
+      return;
+    }
+    case 'parts': {
+      const jammed = cabs.findIndex((c, i) => i < cabCount() && c.jam);
+      if (jammed < 0) { say('Nothing jammed right now.'); return; }
+      cabs[jammed].jam = false; SFX.fix(); say('Fixed cabinet ' + (jammed + 1) + ' from here.');
+      return;
+    }
+    case 'bitsBox': {
+      // THE ONE TWIST (Grok Build, Joe's version): the only free money in the
+      // game, and it permanently sours a machine for the rest of the night.
+      const win = 250 + Math.round(Math.random() * 400);
+      const live = [];
+      for (let i = 0; i < cabCount(); i++) if (!cabs[i].cursed) live.push(i);
+      cash += win; banked += win; SFX.box();
+      if (live.length) {
+        const c = live[Math.floor(Math.random() * live.length)];
+        cabs[c].cursed = true;
+        say('£' + (win / 100).toFixed(2) + ' in the box. Cabinet ' + (c + 1) + ' has never been the same since.', 3200);
+      } else {
+        say('£' + (win / 100).toFixed(2) + ' — and nothing left to ruin.', 3000);
+      }
+      floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + (win / 100).toFixed(2), col: '#c96bff' });
+      return;
+    }
+    case 'mic':
+      say(hosts.joe.room === 'studio' ? 'Joe is on it. Leave him there.' : 'Nobody on the mic. Hype is draining.');
+      return;
+    case 'vending': say('Stocked for now.'); return;
+    case 'cooler':  say('Cold water. No money in it.'); return;
+    case 'change':  say('The machine takes notes and gives coins. The coins end up in the cabinets.'); return;
+    default: say(h.label);
+  }
+}
+
+function changeRoom(to) {
+  const h = me();
+  // enter from the side you walked in from: going RIGHT along ORDER puts you at the
+  // left edge of the new room, going LEFT puts you at the right edge. (The first cut
+  // of this picked a random edge, which teleported you across the room half the time.)
+  const goingRight = ORDER.indexOf(to) > ORDER.indexOf(h.room);
+  h.room = to; room = to;
+  h.x = h.target = goingRight ? 150 : 810;
+  shopOpen = false;
+  pending = null;
+}
+
+// ── shop ─────────────────────────────────────────────────────────────────────
+function upgradeCost(u) {
+  if (u.max) return Math.round(u.cost * Math.pow(u.scale, apronLvl));
+  return u.cost;
+}
+function upgradeAvailable(u) {
+  if (u.once) return !has(u.id);
+  if (u.max) return apronLvl < u.max;
+  return true;
+}
+function buy(u) {
+  const c = upgradeCost(u);
+  if (cash < c) { SFX.deny(); say('Not enough. ' + ((c - cash) / 100).toFixed(2) + ' short.'); return; }
+  cash -= c;
+  if (u.max) apronLvl++; else owned[u.id] = true;
+  SFX.buy();
+  say(u.name + ' — bought.');
+}
+
+// ── day cycle ────────────────────────────────────────────────────────────────
+function endDay() {
+  const rent = RENT(day);
+  dayPaused = true;
+  if (cash < rent) {
+    state = 'bust'; SFX.bust();
+    setTimeout(() => {
+      ArcadeScores.show({ game: SLUG, title: 'THE COUNT', score: banked, accent: ACCENT,
+                          onClose: () => { newRun(); state = 'play'; } });
+    }, 900);
+    return;
+  }
+  cash -= rent; day++; SFX.day();
+  for (const c of cabs) { c.cursed = false; c.jam = false; }   // a new night, clean machines
+  hype = Math.min(100, hype + 10);
+  dayEndsAt = performance.now() + DAY_MS;
+  dayPaused = false;
+  say('RENT PAID £' + (rent / 100).toFixed(2) + ' — DAY ' + day, 3000);
+}
+
+// ── input ────────────────────────────────────────────────────────────────────
+function hotspotAt(wx, wy) {
+  for (const h of ROOMS[room].hotspots) {
+    if (wx >= h.x && wx <= h.x + h.w && wy >= h.y && wy <= h.y + h.h) return h;
+  }
+  return null;
+}
+let pending = null;
+function onTap(e) {
+  unlockAudio();
+  if (state !== 'play') return;
+  const p = e.changedTouches ? e.changedTouches[0] : e;
+  const w = toWorld(p.clientX, p.clientY);
+  if (e.cancelable) e.preventDefault();
+
+  if (shopOpen) { shopTap(w); return; }
+  // speaker button, top right
+  if (w.x > WORLD_W - 56 && w.y < 46) {
+    muted = !muted;
+    try { localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0'); } catch (er) {}
+    return;
+  }
+  // tap the other host to take him over — he stays exactly where you left him
+  const o = other();
+  if (o.room === room && Math.abs(w.x - o.x) < 46 && w.y > ROOMS[room].floorY - 130) {
+    active = otherName(); SFX.swap();
+    say('You are ' + (active === 'jimmy' ? 'JIMMY' : 'JOE') + ' now.');
+    return;
+  }
+  const h = hotspotAt(w.x, w.y);
+  if (h) { me().target = Math.max(60, Math.min(WORLD_W - 60, h.walkX)); pending = h; return; }
+  me().target = Math.max(40, Math.min(WORLD_W - 40, w.x));
+  pending = null;
+}
+canvas.addEventListener('touchstart', onTap, { passive: false });
+canvas.addEventListener('mousedown', onTap);
+
+// ── shop UI (drawn on the canvas so it scales with everything else) ──────────
+const SHOP_ROW_H = 46;
+function shopRows() {
+  const list = UPGRADES.filter(upgradeAvailable);
+  return list.map((u, i) => ({ u, x: 130, y: 128 + i * SHOP_ROW_H, w: 700, h: SHOP_ROW_H - 6 }));
+}
+function shopTap(w) {
+  if (w.y < 96 || w.y > 470) { shopOpen = false; return; }
+  for (const r of shopRows()) {
+    if (w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h) { buy(r.u); return; }
+  }
+}
+
+// ── walking ──────────────────────────────────────────────────────────────────
+function stepHost(h, dt) {
+  const sp = 0.44 * dt;   // ~420 world px/s — crossing a room should cost ~2s, not 4
+  if (Math.abs(h.target - h.x) > 3) {
+    h.face = h.target > h.x ? 1 : -1;
+    h.x += Math.sign(h.target - h.x) * Math.min(sp, Math.abs(h.target - h.x));
+    h.walk += dt;
+  } else if (pending && h === me()) {
+    const p = pending; pending = null; act(p);
+  }
+}
+
+// ── draw ─────────────────────────────────────────────────────────────────────
+function drawPlate(id) {
+  const im = PLATES[id];
+  if (im) { ctx.imageSmoothingEnabled = false; ctx.drawImage(im, 0, 0, WORLD_W, WORLD_H); ctx.imageSmoothingEnabled = true; return; }
+  ctx.fillStyle = '#241a14'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  ctx.fillStyle = '#3a2a20'; ctx.fillRect(0, ROOMS[id] ? ROOMS[id].floorY - 20 : 460, WORLD_W, WORLD_H);
+}
+function drawSprite(im, x, feetY, h) {
+  if (!im) return false;
+  const s = h / im.height, w = im.width * s;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(im, Math.round(x - w / 2), Math.round(feetY - h), Math.round(w), Math.round(h));
+  ctx.imageSmoothingEnabled = true;
+  return true;
+}
+function drawHost(who, h) {
+  const walking = Math.abs(h.target - h.x) > 3;
+  const feet = ROOMS[h.room].floorY;
+  const frames = who === 'jimmy' ? SPR.jimmyWalk : SPR.joeWalk;
+  const still = who === 'jimmy' ? SPR.jimmyFront : SPR.joeFront;
+  let im = still;
+  if (walking && frames && frames.length) im = frames[Math.floor(h.walk / 110) % frames.length] || still;
+  ctx.save();
+  if (h.face < 0 && walking) { ctx.translate(h.x * 2, 0); ctx.scale(-1, 1); }
+  const dx = (h.face < 0 && walking) ? h.x : h.x;
+  if (!drawSprite(im, dx, feet, 132)) {
+    ctx.fillStyle = who === 'jimmy' ? '#e8e2d8' : '#b0873c';
+    ctx.fillRect(dx - 16, feet - 120, 32, 120);
+  }
+  ctx.restore();
+  if (who !== active) {                     // the one you are not driving
+    ctx.fillStyle = 'rgba(232,195,90,0.85)';
+    ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TAP TO SWAP', h.x, feet - 142);
+    ctx.textAlign = 'left';
+  }
+}
+function drawPunters() {
+  if (room !== 'corridor') return;
+  for (let i = 0; i < cabCount(); i++) {
+    const c = cabs[i];
+    if (!c.busy) continue;
+    const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
+    drawSprite(SPR[c.busy.spr], hs.x + hs.w / 2 + 30, ROOMS.corridor.floorY, 118);
+  }
+}
+function drawCabState() {
+  if (room !== 'corridor') return;
+  for (let i = 0; i < 3; i++) {
+    const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
+    const c = cabs[i], cx = hs.x + hs.w / 2, cy = hs.y - 14;
+    if (i >= cabCount()) {
+      badge(cx, cy, 'NO POWER', '#7a7a7a'); continue;
+    }
+    if (c.jam) { badge(cx, cy, '⚠ JAMMED', '#ff6b6b'); continue; }
+    if (c.till > 0) badge(cx, cy, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
+    else if (c.cursed) badge(cx, cy, 'CURSED', '#c96bff');
+  }
+}
+function badge(cx, cy, txt, col) {
+  ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+  const w = ctx.measureText(txt).width + 16;
+  ctx.fillStyle = 'rgba(8,6,4,0.78)';
+  ctx.fillRect(cx - w / 2, cy - 18, w, 22);
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+  ctx.strokeRect(cx - w / 2, cy - 18, w, 22);
+  ctx.fillStyle = col; ctx.textAlign = 'center';
+  ctx.fillText(txt, cx, cy - 2);
+  ctx.textAlign = 'left';
+}
+function drawHUD(now) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(6,5,4,0.62)';
+  ctx.fillRect(0, 0, WORLD_W, 46);
+  ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = '#ffd75e';
+  ctx.fillText('£' + (cash / 100).toFixed(2), 14, 32);
+  ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = carry >= apronCap() ? '#ff6b6b' : '#e8e2d8';
+  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', 128, 31);
+  // hype bar — the show's pull on the floor
+  const hx = 300, hw = 190;
+  ctx.fillStyle = '#e8e2d8'; ctx.fillText('HYPE', hx, 31);
+  ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(hx + 46, 16, hw, 15);
+  ctx.fillStyle = hype > 55 ? '#8effc2' : hype > 25 ? '#ffd75e' : '#ff6b6b';
+  ctx.fillRect(hx + 46, 16, hw * (hype / 100), 15);
+  ctx.fillStyle = decanter > 0 ? '#e8c35a' : '#ff6b6b';
+  ctx.fillText(decanter > 0 ? '🥃×' + decanter : '🥃 DRY', hx + hw + 58, 31);
+  if (bottles) { ctx.fillStyle = '#e8c35a'; ctx.fillText('🍾×' + bottles, hx + hw + 132, 31); }
+  // day + clock
+  const left = Math.max(0, dayEndsAt - now);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#e8e2d8';
+  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), WORLD_W - 66, 31);
+  ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
+  ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
+  ctx.fillText(Math.ceil(left / 1000) + 's', WORLD_W - 190, 31);
+  ctx.textAlign = 'left';
+  ctx.restore();
+  // speaker
+  ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 32);
+  ctx.textAlign = 'left';
+  // room name
+  ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = 'rgba(232,195,90,0.65)'; ctx.textAlign = 'center';
+  ctx.fillText(ROOMS[room].name, WORLD_W / 2, WORLD_H - 12);
+  ctx.textAlign = 'left';
+}
+function drawShop() {
+  ctx.fillStyle = 'rgba(6,5,4,0.92)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = ACCENT; ctx.font = 'bold 34px "Barlow Condensed",sans-serif';
+  ctx.fillText('THE LEDGER', WORLD_W / 2, 68);
+  ctx.fillStyle = '#9aa'; ctx.font = '15px "Barlow Condensed",sans-serif';
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe — tap anything outside the list to close',
+               WORLD_W / 2, 92);
+  ctx.textAlign = 'left';
+  for (const r of shopRows()) {
+    const c = upgradeCost(r.u), can = cash >= c;
+    ctx.fillStyle = can ? 'rgba(232,195,90,0.10)' : 'rgba(255,255,255,0.04)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = can ? ACCENT : '#5a5148'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = can ? '#ffd75e' : '#8a8078';
+    ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 14, r.y + 18);
+    ctx.font = '14px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = can ? '#cbd2d6' : '#6d655e';
+    ctx.fillText(r.u.blurb, r.x + 14, r.y + 34);
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = can ? '#8effc2' : '#8a5a5a';
+    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 14, r.y + 27);
+    ctx.textAlign = 'left';
+  }
+}
+function drawFloaters(now) {
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i], age = now - f.t;
+    if (age > 1200) { floaters.splice(i, 1); continue; }
+    ctx.globalAlpha = 1 - age / 1200;
+    ctx.fillStyle = f.col; ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(f.txt, f.x, f.y - age * 0.03);
+    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+  }
+}
+function drawMsg(now) {
+  if (!msg || now > msgUntil) return;
+  ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+  const w = ctx.measureText(msg).width + 34;
+  ctx.fillStyle = 'rgba(6,5,4,0.86)';
+  ctx.fillRect((WORLD_W - w) / 2, WORLD_H - 92, w, 34);
+  ctx.strokeStyle = 'rgba(232,195,90,0.5)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect((WORLD_W - w) / 2, WORLD_H - 92, w, 34);
+  ctx.fillStyle = '#ffe9a8'; ctx.textAlign = 'center';
+  ctx.fillText(msg, WORLD_W / 2, WORLD_H - 69);
+  ctx.textAlign = 'left';
+}
+
+// ── loop ─────────────────────────────────────────────────────────────────────
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(48, lastTs ? ts - lastTs : 16);
+  lastTs = ts;
+  if (state === 'play' && !shopOpen && !dayPaused) {
+    updateFloor(dt, ts);
+    updateHype(dt);
+    stepHost(hosts.jimmy, dt);
+    stepHost(hosts.joe, dt);
+    if (ts > dayEndsAt) endDay();
+  } else if (state === 'attract') {
+    updateFloor(dt, ts);
+    attractT += dt;
+    if (attractT > 3200) { attractT = 0; room = ORDER[(ORDER.indexOf(room) + 1) % ORDER.length]; }
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  drawPlate(room);
+  drawPunters();
+  if (state !== 'attract') {
+    for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
+  }
+  drawCabState();
+  drawFloaters(ts);
+  if (state !== 'attract') { drawHUD(ts); drawMsg(ts); }
+  if (shopOpen) drawShop();
+  if (state === 'bust') {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.fillStyle = '#ff6b6b'; ctx.font = 'bold 44px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText("CAN'T MAKE RENT", WORLD_W / 2, WORLD_H / 2);
+    ctx.textAlign = 'left';
+  }
+}
+let attractT = 0;
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+state = 'attract';
+newRun();
+resize();
+loadPack();
+requestAnimationFrame(frame);
+
+// Read-only debug hook for QA and the cassette recorder (the pattern game-builder STEP 3
+// asks for). Exposes state and a world-coordinate tap; changes nothing about play.
+window.__TC = {
+  get state() { return { cash, carry, apron: apronCap(), day, hype: Math.round(hype), room,
+                         bottles, decanter, banked, cabs: cabs.map(c => ({ till: c.till, jam: c.jam,
+                         cursed: c.cursed, busy: !!c.busy })), cabCount: cabCount(), owned: Object.keys(owned),
+                         shopOpen, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room }; },
+  tapWorld(wx, wy) {
+    const r = canvas.getBoundingClientRect();
+    const x = r.left + (VIEW.ox + wx * VIEW.scale) / DPR;
+    const y = r.top + (VIEW.oy + wy * VIEW.scale) / DPR;
+    canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  },
+  giveCoins(n) { cabs[0].till += n; },      // QA only — seeds a till without waiting for a punter
+};
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  unlockAudio();
+  overlay.classList.add('hidden');
+  newRun();
+  state = 'play';
+  try {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    screen.orientation?.lock?.('landscape').catch(() => {});
+  } catch (e) {}
+});
+document.getElementById('arcadeBtn').addEventListener('click', () => {
+  location.href = (new URLSearchParams(location.search).get('from') === 'wip') ? '../wip.html' : '../index.html';
+});
+if (new URLSearchParams(location.search).get('play') === '1') {
+  // deep link straight into a shift (used by QA and the cassette recorder)
+  overlay.classList.add('hidden'); newRun(); state = 'play';
+}
+})();
+</script>
+</body>
+</html>

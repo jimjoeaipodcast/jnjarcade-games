@@ -213,6 +213,17 @@
       "status": "wip",
       "special": "Game Lab #12",
       "note": "Platform mechanics template. Reskin = change sprites/palette only."
+    },
+    {
+      "id": "the-count",
+      "name": "THE COUNT",
+      "emoji": "🪙",
+      "genre": "ORDER UP × FARM SIM",
+      "url": "games/the-count.html",
+      "ai_file": "games/the-count.html",
+      "status": "wip",
+      "special": "Game Lab #13",
+      "note": "Jim & Joe's arcade from the money side. Start with £5, empty the cabinets, bank the takings, buy what earns more tomorrow. Rent rises nightly. Rooms: coin closet / studio / arcade / prop room."
     }
   ]
 }

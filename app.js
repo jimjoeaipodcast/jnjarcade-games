@@ -132,6 +132,13 @@ const WORLDS = {
     by: 'JOE',
     attract: faceLabAttract,
   },
+  'the-count': {
+    ink: '#e8c35a', dim: '#5c4611', pit: '#141005', glowsoft: 'rgba(232,195,90,0.22)',
+    genre: 'ORDER UP \u00d7 FARM SIM',
+    quote: '"He bought a second cabinet before he bought the whisky. I have watched this man budget. It is not a spectator sport."',
+    by: 'JOE',
+    attract: theCountAttract,
+  },
   'jnj-on-air': {
     ink: '#e8a13c', dim: '#5c3d12', pit: '#160f06', glowsoft: 'rgba(232,161,60,0.22)',
     genre: 'MONKEY ISLAND × TALK SHOW',
@@ -2061,6 +2068,53 @@ function faceLabAttract(ctx, w, h, t, world, s) {
 }
 
 /* ANGRY WORMS attract — catapult flings worm, arc trajectory, terrain impact */
+function theCountAttract(ctx, w, h, t, world, s) {
+  // Drawn fallback attract (game-builder STEP 3 item 5 — real footage is preferred and
+  // will replace this once there is a playthrough worth recording). A coin drops, the
+  // counter ticks, the takings climb: the whole game in four seconds and no gameplay lie.
+  ctx.fillStyle = '#141005'; ctx.fillRect(0, 0, w, h);
+  // brick wall
+  ctx.fillStyle = 'rgba(120,60,40,0.30)';
+  for (let y = 0; y < h; y += 7) {
+    for (let x = (y / 7) % 2 ? -8 : 0; x < w; x += 16) ctx.fillRect(x + 1, y + 1, 14, 5);
+  }
+  // lamp glow
+  const g = ctx.createRadialGradient(w * 0.5, h * 0.16, 2, w * 0.5, h * 0.16, h * 0.7);
+  g.addColorStop(0, 'rgba(255,205,110,0.32)'); g.addColorStop(1, 'rgba(255,205,110,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // the safe
+  const sx = w * 0.60, sy = h * 0.46, sw = w * 0.30, sh = h * 0.40;
+  ctx.fillStyle = '#4a4f55'; ctx.fillRect(sx, sy, sw, sh);
+  ctx.fillStyle = '#2b2f34'; ctx.fillRect(sx + sw * 0.10, sy + sh * 0.12, sw * 0.80, sh * 0.72);
+  ctx.strokeStyle = '#8d949b'; ctx.lineWidth = Math.max(1, w * 0.006);
+  ctx.beginPath(); ctx.arc(sx + sw * 0.5, sy + sh * 0.48, sh * 0.16, 0, Math.PI * 2); ctx.stroke();
+  // coin counter with its brass funnel
+  const cx = w * 0.18, cy = h * 0.50, cw2 = w * 0.24, ch2 = h * 0.36;
+  ctx.fillStyle = '#5b6169'; ctx.fillRect(cx, cy, cw2, ch2);
+  ctx.fillStyle = '#c9a227';
+  ctx.beginPath();
+  ctx.moveTo(cx + cw2 * 0.10, cy); ctx.lineTo(cx + cw2 * 0.90, cy);
+  ctx.lineTo(cx + cw2 * 0.62, cy - ch2 * 0.26); ctx.lineTo(cx + cw2 * 0.38, cy - ch2 * 0.26);
+  ctx.closePath(); ctx.fill();
+  // a coin falling into the funnel, once per 1.5s
+  const k = (t % 1.5) / 1.5;
+  ctx.fillStyle = '#ffd75e';
+  ctx.beginPath();
+  ctx.ellipse(cx + cw2 * 0.5, cy - ch2 * (0.95 - k * 0.72), Math.max(1.5, w * 0.014),
+              Math.max(1.5, w * 0.014) * (0.45 + 0.55 * Math.abs(Math.cos(k * 7))), 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the takings, climbing
+  const money = 5 + Math.floor((t % 12) * 3.7);
+  ctx.fillStyle = world.ink;
+  ctx.font = 'bold ' + Math.round(h * 0.17) + 'px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('\u00a3' + money + '.00', w * 0.5, h * 0.26);
+  ctx.font = 'bold ' + Math.round(h * 0.085) + 'px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = 'rgba(232,195,90,0.72)';
+  ctx.fillText('RENT DUE AT MIDNIGHT', w * 0.5, h * 0.93);
+  ctx.textAlign = 'left';
+}
+
 function onairAttract(ctx, w, h, t, world, s) {
   // real recorded gameplay, not a hand-drawn mini-scene (Osimo 2026-08-19: "record some
   // actual game play... rather than those moving squares and basic surroundings"). Draws
