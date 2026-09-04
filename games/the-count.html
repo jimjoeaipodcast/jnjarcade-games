@@ -75,6 +75,7 @@
      Empty the cabinets into your apron, walk the takings to the <b>safe</b> in the coin
      closet, and spend them on things that earn more tomorrow. <b>Rent is due every night
      and it goes up.</b></p>
+  <button class="obtn" id="resumeBtn" style="display:none">RESUME</button>
   <button class="obtn" id="startBtn">INSERT COIN</button>
   <button class="obtn ghost" id="arcadeBtn">‹ ARCADE</button>
 </div>
@@ -185,15 +186,82 @@ const SFX = {
   box:    () => { tone(140, 700, 0.35, 'sawtooth', 0.15); },
 };
 
+// ── VOICE (Osimo 2026-09-05: "think of all the tts now so we can start removing boxes and
+//    replace with spoken hints and warnings and directions") ─────────────────────────────
+// Every spoken line lives in VO_LINES, keyed by trigger. The pack builder
+// (tools/games/thecount_voice_pack.py) reads THIS table, renders each line with Chatterbox
+// and stores it under djb2(WHO|text) — the same hash vo() computes at play time — so the
+// script and the audio can never drift apart. Text still draws while a line plays, because
+// a phone on mute is a phone that can still be played.
+const VO_LINES = {
+  // first night, in order — these replace the tutorial boxes
+  intro1: ['JIMMY', "Right. One machine working, a fiver in the tin, and rent at midnight."],
+  intro2: ['JIMMY', "Punters play, and the coins pile up inside the cabinet. Tap the machine to empty it into your apron."],
+  intro3: ['JIMMY', "Your apron only holds so much. Head left, past the studio, to the coin closet."],
+  intro4: ['JIMMY', "The safe eats the bags. The ledger next to it is where you spend what's in it."],
+  intro5: ['JIMMY', "Buy a second cabinet first. Two machines earn while you're walking."],
+  intro6: ['JIMMY', "That's Joe on the mic. Take him off it and the hype drops, and hype is how fast punters turn up."],
+  intro7: ['JIMMY', "Rent comes out of the safe at midnight. Every night. And it goes up."],
+  // directions — said once each, when the thing first becomes true
+  fullCab:  ['JIMMY', "That machine's full of coins. Go and empty it."],
+  fullApron:['JIMMY', "Apron's full. Get it to the safe before you collect any more."],
+  jammed:   ['JIMMY', "One of them's jammed. Walk over and give it a smack."],
+  dryTot:   ['JIMMY', "Decanter's dry. There's a crate of it in the prop room."],
+  noMic:    ['JIMMY', "Nobody's on the mic. The hype's draining while we stand here."],
+  offMach:  ['JIMMY', "Those dark machines aren't broken, they're just not paid for yet."],
+  // warnings
+  rentShort:['JIMMY', "Rent's due and the safe's light. Bank whatever you're carrying."],
+  rentClose:['JOE',   "clock's nearly done."],
+  bust:     ['JOE',   "that's the run. couldn't make rent."],
+  // reactions
+  banked:   ['JOE',   "money in the safe. novel."],
+  boughtCab:['JOE',   "another machine. another queue."],
+  boxOpened:['JOE',   "you opened the box. of course you did."],
+  dayDone:  ['JIMMY', "Rent paid! Right, again, but bigger."],
+};
+const VO = { b64: null, loading: false, until: 0 };
+function djb2(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+// the voice map ships inside the same pack file the art comes from, so loadPack() fills
+// this in and loadVoice() is only a fallback if the art load is skipped
+function loadVoice() { loadPack(); }
+let voiceEl = null;
+const voSaid = new Set();               // "say it once" lines
+// vo(key) speaks a line and puts its text in the bubble. once:true means never again this
+// run — the Flap Fight lesson (Osimo 2026-09-04: an explainer repeated forever is nagging).
+function vo(key, opts) {
+  const line = VO_LINES[key];
+  if (!line) return;
+  const once = !opts || opts.once !== false;
+  if (once && voSaid.has(key)) return;
+  if (once) voSaid.add(key);
+  const [who, text] = line;
+  bubbleShow(who, text, opts && opts.icon, opts && opts.qty);
+  if (muted || !VO.b64) return;
+  const b = VO.b64[djb2(who + '|' + text)];
+  if (!b) return;
+  try {
+    if (voiceEl) { voiceEl.pause(); voiceEl = null; }
+    const a = new Audio('data:audio/mp3;base64,' + b);
+    a.volume = 0.95;
+    a.play().catch(() => {});
+    voiceEl = a;
+  } catch (e) {}
+}
+
 // ── ART PACK — 4 room plates (320x180 drawn at 3x) + sprites ────────────────
 const PLATES = {}, SPR = {};
 let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=5').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=6').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
+    VO.b64 = p.voice || {};
     for (const k in p.sprites) {
       const v = p.sprites[k];
       if (Array.isArray(v)) { SPR[k] = []; v.forEach((u, i) => mk(u, im => { SPR[k][i] = im; })); }
@@ -367,13 +435,51 @@ const UPGRADES = [
 let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
 let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
 let lastTs, dayPaused, turnedAway = 0;
-let tutorial = -1, talkUntil = 0, talkWho = 'jimmy';   // tutorial step, and who is speaking
+let tutorial = -1;            // index into INTRO while the first night is being taught
+let bubble = null;            // {who,text,icon,qty,until} — whatever is being said now
 let boxOpenedToday = false;   // the DO NOT OPEN box is a once-a-night decision, not a tap
 let rentWarned = false, rentCardAt = 0;   // the rent card shows once a night, then shuts up
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
 function cabCount() { return 1 + ['cab2', 'cab3', 'cab4', 'cab5'].filter(has).length; }
+
+// Osimo 2026-09-05: "just like in jnj on air, restart the game or resume last played game."
+// The shift itself is only 100 seconds, so what is worth keeping is the BUSINESS — what is
+// in the safe, which night it is, what has been bought, how big the apron is. Resuming
+// starts a fresh night with that empire intact; it does not restore a half-played shift.
+const SAVE_KEY = 'tc_save_v1';
+function saveRun() {
+  if (state !== 'play') return;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1, t: Date.now(), cash, day, banked, apronLvl, owned, bottles, decanter,
+      hype: Math.round(hype),
+    }));
+  } catch (e) {}
+}
+function hasSave() {
+  try {
+    const s2 = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    return (s2 && s2.v === 1 && s2.day >= 1) ? s2 : null;
+  } catch (e) { return null; }
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function resumeRun() {
+  const s2 = hasSave();
+  if (!s2) return false;
+  newRun();
+  cash = s2.cash; day = s2.day; banked = s2.banked || 0; apronLvl = s2.apronLvl || 0;
+  owned = s2.owned || {}; bottles = s2.bottles || 0;
+  decanter = (s2.decanter !== undefined) ? s2.decanter : 3;
+  hype = (s2.hype !== undefined) ? s2.hype : 80;
+  cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
+  return true;
+}
+window.addEventListener('pagehide', saveRun);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveRun();
+});
 
 function newRun() {
   cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
@@ -393,32 +499,27 @@ function other() { return hosts[active === 'jimmy' ? 'joe' : 'jimmy']; }
 function otherName() { return active === 'jimmy' ? 'joe' : 'jimmy'; }
 
 function say(t, ms) { msg = t; msgUntil = performance.now() + (ms || 2200); }
-
-// Osimo 2026-09-04: "first time playing just like the farming games you should have speech
-// bubbles explainers (for now the we use Jimmy tts)". Six lines, in Jimmy's voice, each
-// anchored over whichever host you are driving, advanced by tapping. Shown once per device
-// — TIP_KEY — and the text is already written as spoken lines so the TTS pass is a render,
-// not a rewrite.
-const TIP_KEY = 'tc_tips_v1';
-const TIPS = [
-  { text: "Right — one machine working, a fiver in the tin, and rent due at midnight.", icon: 'icCoin' },
-  { text: "Punters play and the coins pile up INSIDE the cabinet. Tap the machine to empty it into your apron.", icon: 'icCab' },
-  { text: "Your apron only holds so much. Walk left, past the studio, to the coin closet.", icon: 'icApron' },
-  { text: "The safe eats the bags. The ledger beside it is where you spend what's in it.", icon: 'icCounter' },
-  { text: "Buy a second cabinet first. Two machines earn while you are walking.", icon: 'icCab', qty: 2 },
-  { text: "That's Joe on the mic. Pull him off it and hype drops — hype is how fast punters turn up.", icon: 'icOnair' },
-  // Osimo 2026-09-04: "do they explain how to pay rent?" — they do now, and it is the last
-  // thing said, because it is the thing that ends the run.
-  { text: "Rent comes out of the safe on its own at midnight, every night, and it goes up. Bank before the clock runs out or that's the run.", icon: 'icCounter' },
-];
+// The first night is SPOKEN now (Osimo 2026-09-05: "start removing boxes and replace with
+// spoken hints and warnings and directions, especially at the beginning"). The seven intro
+// lines live in VO_LINES; the tutorial is just an index into them, advanced by tapping, and
+// each step speaks and shows the same words. Once per device.
+const TIP_KEY = 'tc_tips_v2';
+const INTRO = ['intro1', 'intro2', 'intro3', 'intro4', 'intro5', 'intro6', 'intro7'];
+const INTRO_ICON = ['icCoin', 'icCab', 'icApron', 'icCounter', 'icCab', 'icOnair', 'icCounter'];
 function tipsSeen() { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } }
-function startTips() { if (!tipsSeen()) { tutorial = 0; talkWho = 'jimmy'; talkUntil = performance.now() + 9e5; } }
+function startTips() {
+  if (tipsSeen()) return;
+  tutorial = 0;
+  vo(INTRO[0], { icon: INTRO_ICON[0] });
+}
 function nextTip() {
   tutorial++;
-  if (tutorial >= TIPS.length) {
-    tutorial = -1; talkUntil = 0;
+  if (tutorial >= INTRO.length) {
+    tutorial = -1; bubble = null;
     try { localStorage.setItem(TIP_KEY, '1'); } catch (e) {}
+    return;
   }
+  vo(INTRO[tutorial], { icon: INTRO_ICON[tutorial], qty: tutorial === 4 ? 2 : 0 });
 }
 // Township-style bubble (Osimo 2026-09-04: "graphics are more important than written
 // stuff… speech bubbles with images let you know where to drop off anything collected, and
@@ -431,25 +532,30 @@ function roundRect(x, y, w, h, r) {
   ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
+function bubbleShow(who, text, icon, qty) {
+  // a spoken line owns the bubble for as long as it plausibly takes to say, unless the
+  // tutorial is running — there the player taps to move on
+  bubble = { who, text, icon: icon || null, qty: qty || 0,
+             until: performance.now() + Math.max(2800, text.length * 62) };
+}
 function drawBubble(SW, SH) {
-  if (tutorial < 0) return;
-  const t = TIPS[tutorial];
+  if (!bubble) return;
+  if (tutorial < 0 && performance.now() > bubble.until) { bubble = null; return; }
+  const t = bubble;
   ctx.font = '17px "Barlow Condensed",sans-serif';
-  // Osimo 2026-09-04: "make sure it's not that wide if it doesn't have to". Measure the
-  // longest word-wrapped line and size the bubble to THAT, not to the maximum allowed.
   const maxW = Math.min(430, SW - 200);
-  const words = t.text.split(' '), lines = []; let cur = '';
+  const words = t.text.split(' '), lines2 = []; let cur = '';
   for (const w of words) {
-    if (ctx.measureText(cur + ' ' + w).width > maxW && cur) { lines.push(cur); cur = w; }
+    if (ctx.measureText(cur + ' ' + w).width > maxW && cur) { lines2.push(cur); cur = w; }
     else cur = cur ? cur + ' ' + w : w;
   }
-  if (cur) lines.push(cur);
+  if (cur) lines2.push(cur);
   const iconH = t.icon ? 50 : 0;
   let textW = 0;
-  for (const l of lines) textW = Math.max(textW, ctx.measureText(l).width);
-  const bw = Math.max(190, Math.min(maxW, textW) + 28), bh = 22 + lines.length * 21 + iconH;
+  for (const l of lines2) textW = Math.max(textW, ctx.measureText(l).width);
+  const bw = Math.max(190, Math.min(maxW, textW) + 28), bh = 22 + lines2.length * 21 + iconH;
   const px = 104, py = Math.max(56, SH - bh - 72);
-  const po = SPR.poJimmy;
+  const po = SPR[t.who === 'JOE' ? 'poJoe' : 'poJimmy'];
   if (po) ctx.drawImage(po, px - 84, py + bh / 2 - 36, 72, 72);
   ctx.fillStyle = 'rgba(252,246,232,0.97)';
   roundRect(px, py, bw, bh, 12); ctx.fill();
@@ -461,19 +567,21 @@ function drawBubble(SW, SH) {
   ctx.fillStyle = 'rgba(252,246,232,0.97)'; ctx.fill();
   ctx.strokeStyle = '#7a4a1a'; ctx.stroke();
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
-  lines.forEach((l, i) => ctx.fillText(l, px + 14, py + 26 + i * 21));
+  lines2.forEach((l, i) => ctx.fillText(l, px + 14, py + 26 + i * 21));
   if (t.icon) {
-    const iy = py + 22 + lines.length * 21, im = SPR[t.icon];
-    if (im) ctx.drawImage(im, px + 12, iy, 44, 44);      // cut-out art, no tile behind it
+    const iy = py + 22 + lines2.length * 21, im = SPR[t.icon];
+    if (im) ctx.drawImage(im, px + 12, iy, 44, 44);
     if (t.qty) {
       ctx.fillStyle = '#1f6b3a'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
       ctx.fillText('\u00d7' + t.qty, px + 62, iy + 32);
     }
   }
-  ctx.fillStyle = 'rgba(122,74,26,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('TAP TO CONTINUE  ' + (tutorial + 1) + '/' + TIPS.length, px + bw - 12, py + bh - 9);
-  ctx.textAlign = 'left';
+  if (tutorial >= 0) {
+    ctx.fillStyle = 'rgba(122,74,26,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('TAP TO CONTINUE  ' + (tutorial + 1) + '/' + INTRO.length, px + bw - 12, py + bh - 9);
+    ctx.textAlign = 'left';
+  }
 }
 
 // ── the floor: punters arrive, pick a free cabinet, play, pay, leave ─────────
@@ -663,7 +771,7 @@ function endDay() {
   const rent = RENT(day);
   dayPaused = true;
   if (cash < rent) {
-    state = 'bust'; SFX.bust();
+    state = 'bust'; SFX.bust(); vo('bust', { once: false }); clearSave();
     setTimeout(() => {
       ArcadeScores.show({ game: SLUG, title: 'THE COUNT', score: banked, accent: ACCENT,
                           onClose: () => { newRun(); state = 'play'; } });
@@ -671,6 +779,7 @@ function endDay() {
     return;
   }
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
+  saveRun();                     // a survived night is the checkpoint worth keeping
   rentWarned = false; rentCardAt = 0;
   for (const c of cabs) { c.cursed = false; c.jam = false; }   // a new night, clean machines
   hype = Math.min(100, hype + 10);
@@ -945,6 +1054,53 @@ function sideExits() {
   }
   return out;
 }
+// Osimo 2026-09-05: "figure out how I should know what to press on the screen like collect
+// cash from the yellow black box". One pulsing ring at a time, on the single most useful
+// thing in THIS room right now, so the game always answers "what do I tap" without a wall
+// of labels. Priority: money you can take > a machine that has stopped earning > the errand
+// that unblocks the rest.
+function hintSpot() {
+  const H = ROOMS[room].hotspots;
+  const find = id => H.find(h => h.id === id);
+  if (room === 'corridor') {
+    for (let i = 0; i < cabCount(); i++) if (cabs[i].jam) return find('cab' + i);
+    if (carry < apronCap()) {
+      let best = -1, most = 0;
+      for (let i = 0; i < cabCount(); i++) if (cabs[i].till > most) { most = cabs[i].till; best = i; }
+      if (best >= 0 && most >= 15) return find('cab' + best);
+    }
+  }
+  if (room === 'coinroom') {
+    if (carry > 0) return find('safe');
+    if (cash >= 600) return find('ledger');
+  }
+  if (room === 'studio' && decanter === 0 && bottles > 0) return find('decanter');
+  if (room === 'prop' && decanter === 0 && bottles === 0) return find('whisky');
+  return null;
+}
+function drawHint(now) {
+  const h = hintSpot();
+  if (!h || tutorial >= 0) return;
+  const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
+  const t = (now % 1200) / 1200;
+  const r = Math.max(h.w, h.h) * (0.45 + t * 0.28);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,215,94,' + (0.75 * (1 - t)).toFixed(3) + ')';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.62, 0, 0, Math.PI * 2); ctx.stroke();
+  // a finger, bobbing, so it reads as "tap here" and not just a glow
+  const bob = Math.sin(now * 0.006) * 5;
+  ctx.fillStyle = 'rgba(255,235,180,0.95)';
+  ctx.strokeStyle = 'rgba(90,54,24,0.9)'; ctx.lineWidth = 2;
+  const fx = cx, fy = cy + Math.max(h.h * 0.5, 26) + bob;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy - 16); ctx.lineTo(fx + 7, fy - 2); ctx.lineTo(fx + 3, fy - 2);
+  ctx.lineTo(fx + 3, fy + 10); ctx.lineTo(fx - 3, fy + 10); ctx.lineTo(fx - 3, fy - 2);
+  ctx.lineTo(fx - 7, fy - 2); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
 function drawExitArrows(now) {
   const calm = 0.4 + Math.sin(now * 0.004) * 0.25;
   // While rent is short, the chevron that leads toward the SAFE flashes hard — the coin
@@ -1162,7 +1318,7 @@ function frame(ts) {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
   }
   drawCabState();
-  if (state !== 'attract') drawExitArrows(ts);
+  if (state !== 'attract') { drawHint(ts); drawExitArrows(ts); }
   drawFloaters(ts);
   if (state !== 'attract') drawMsg(ts);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD + shop live in SCREEN space, so
@@ -1184,6 +1340,7 @@ state = 'attract';
 newRun();
 resize();
 loadPack();
+loadVoice();
 requestAnimationFrame(frame);
 
 // Read-only debug hook for QA and the cassette recorder (the pattern game-builder STEP 3
@@ -1212,9 +1369,32 @@ window.__TC = {
   },
 };
 
+// RESUME / NEW GAME, the jnj-on-air shape: the button only appears when there is a night
+// worth coming back to, and it says which night it is.
+(function offerResume() {
+  const s2 = hasSave();
+  const btn = document.getElementById('resumeBtn');
+  if (!s2 || !btn) return;
+  btn.textContent = 'RESUME — DAY ' + s2.day + ', £' + (s2.cash / 100).toFixed(2);
+  btn.style.display = '';
+  document.getElementById('startBtn').textContent = 'NEW GAME';
+  btn.addEventListener('click', () => {
+    unlockAudio();
+    overlay.classList.add('hidden');
+    resumeRun();
+    state = 'play';
+    applyMusic();
+    try {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+      screen.orientation?.lock?.('landscape').catch(() => {});
+    } catch (e) {}
+  });
+})();
+
 document.getElementById('startBtn').addEventListener('click', () => {
   unlockAudio();
   overlay.classList.add('hidden');
+  clearSave();                         // NEW GAME really is a new game
   newRun();
   state = 'play';
   startTips();
