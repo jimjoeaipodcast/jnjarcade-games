@@ -263,21 +263,24 @@ const MACHINES = [
   // edge, so the LEFT foot tip sits 0.186w left of the sprite centre — measured off the
   // sprite, not guessed. punter.x below is therefore tip + 0.186w (and tip + 0.357w for
   // the mirrored right-hand machine, where the near foot is the mirrored one).
-  // Heights: Osimo then marked the head line on a gridded frame — "top of head should be
-  // on line 12", i.e. world y 220 for the near punter, "grow everyone relative to their
-  // position proportionally". That is x1.226 on every height, feet pinned, and each x
-  // nudged right by the extra 0.186 (0.357 mirrored) of the new width so the LEFT FOOT TIP
-  // stays exactly on the cell he gave.
+  // Heights: Osimo marked the head line on a gridded frame (line 12 = world y220), then
+  // asked for "another square taller, his left hand should be on the joystick". The hand
+  // sits at the sprite's left edge, 0.383 of the way down it, so at h=210 with the foot
+  // pinned the near punter's hand lands at world (214,280) — cabinet 1's control deck runs
+  // y251-319 with the joystick on its left, so the extra square is exactly what puts his
+  // hand on it. Every height carries the same x1.105, feet unchanged, and each x is nudged
+  // right by 0.186 (0.357 mirrored) of the new width so the LEFT FOOT TIP stays on the
+  // cell he gave.
   { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 190, feet: 410, x: 269 }, flip: false },
+    punter: { h: 210, feet: 410, x: 271 }, flip: false },
   { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 145, feet: 370, x: 305 }, flip: false },
+    punter: { h: 160, feet: 370, x: 306 }, flip: false },
   { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h:  99, feet: 330, x: 360 }, flip: false },
+    punter: { h: 109, feet: 330, x: 361 }, flip: false },
   { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h:  77, feet: 310, x: 398 }, flip: false },
+    punter: { h:  85, feet: 310, x: 399 }, flip: false },
   { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 190, feet: 410, x: 727 }, flip: true },
+    punter: { h: 210, feet: 410, x: 731 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 const ROOMS = {
