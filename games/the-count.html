@@ -158,7 +158,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=1').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=2').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     for (const k in p.sprites) {
@@ -209,11 +209,16 @@ const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
 // consoles, maybe make jnj bigger too same height as each other". Hosts are one height
 // everywhere; punters are sized PER CABINET because the corridor art recedes — a punter
 // at the far machine has to be smaller or he reads as a giant standing in the doorway.
-const HOST_H = 190;
+const HOST_W_SCALE = 1.0, HOST_H_SCALE = 1.12;   // Osimo: "stretch jnj sprites a little
+const HOST_H = 190;                              // in height keep the same width"
+// Punters stand in the AISLE IN FRONT of their machine, not beside it (Osimo 2026-09-04),
+// and the three positions ride the corridor's own perspective line: further down the row
+// means further from the camera, so smaller, higher up the floor, and further right.
+// Heights track the relative height of the machine each one is playing.
 const CAB_VIS = [
-  { h: 235, feet: 466, x: 104 },   // cabinet 1, nearest the camera
-  { h: 196, feet: 456, x: 222 },
-  { h: 166, feet: 449, x: 306 },
+  { h: 232, feet: 474, x: 186 },   // cabinet 1 — nearest, biggest, lowest on the floor
+  { h: 188, feet: 452, x: 280 },
+  { h: 152, feet: 436, x: 352 },
 ];
 const ROOMS = {
   coinroom: {
@@ -354,7 +359,7 @@ function drawBubble() {
   if (cur) lines.push(cur);
   const bw = 360, bh = 22 + lines.length * 22;
   const bx = Math.max(20, Math.min(WORLD_W - bw - 20, h.x - bw / 2));
-  const by = Math.max(60, ROOMS[room].floorY - HOST_H - bh - 26);
+  const by = Math.max(60, ROOMS[room].floorY - HOST_H * HOST_H_SCALE - bh - 26);
   ctx.fillStyle = 'rgba(8,6,4,0.93)';
   ctx.fillRect(bx, by, bw, bh);
   ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
@@ -393,7 +398,7 @@ function updateFloor(dt, now) {
     const ci = freeCab();
     if (ci >= 0) {
       const c = cabs[ci];
-      c.busy = { spr: ['punterA', 'punterB', 'punterC'][Math.floor(Math.random() * 3)] };
+      c.busy = { spr: ['punter34A', 'punter34B', 'punter34C'][Math.floor(Math.random() * 3)] };
       c.playT = 5000 + Math.random() * 4000;
       SFX.punter();
     } else if (hype > 12) {
@@ -642,9 +647,9 @@ function drawPlate(id) {
   ctx.fillStyle = '#241a14'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
   ctx.fillStyle = '#3a2a20'; ctx.fillRect(0, ROOMS[id] ? ROOMS[id].floorY - 20 : 460, WORLD_W, WORLD_H);
 }
-function drawSprite(im, x, feetY, h) {
+function drawSprite(im, x, feetY, h, wScale) {
   if (!im) return false;
-  const s = h / im.height, w = im.width * s;
+  const s = h / im.height, w = im.width * s * (wScale || 1);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(im, Math.round(x - w / 2), Math.round(feetY - h), Math.round(w), Math.round(h));
   ctx.imageSmoothingEnabled = true;
@@ -660,54 +665,26 @@ function drawHost(who, h) {
   ctx.save();
   if (h.face < 0 && walking) { ctx.translate(h.x * 2, 0); ctx.scale(-1, 1); }
   const dx = h.x;
-  if (!drawSprite(im, dx, feet, HOST_H)) {
+  // taller, same width: the height scales up and the width is divided back down by the
+  // same factor, so the sprite stretches instead of just getting bigger
+  if (!drawSprite(im, dx, feet, HOST_H * HOST_H_SCALE, HOST_W_SCALE / HOST_H_SCALE)) {
     ctx.fillStyle = who === 'jimmy' ? '#e8e2d8' : '#b0873c';
     ctx.fillRect(dx - 24, feet - HOST_H, 48, HOST_H);
   }
   ctx.restore();
-  drawFace(who, h.x, feet);
   if (who !== active) {                     // the one you are not driving
     ctx.fillStyle = 'rgba(232,195,90,0.85)';
     ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TAP TO SWAP', h.x, feet - HOST_H - 10);
+    ctx.fillText('TAP TO SWAP', h.x, feet - HOST_H * HOST_H_SCALE - 10);
     ctx.textAlign = 'left';
   }
 }
-// The hosts' visors carry the same dot-matrix face the real LED rig uses (brow bar, round
-// dot eyes, mouth bar — assets/faces/*/\*_matrix_480x480.png). Osimo 2026-09-04: "once
-// Jimmy and Joe start talking their faces should behave like the lipsync faces we built
-// for them" — the mouth bar opens and closes on a fast jitter while that host has a line
-// on screen, and rests as a closed bar when he does not.
-function drawFace(who, x, feetY) {
-  // The sprites already carry the canonical face — black visor, lit eyes, lit mouth. So
-  // lipsync here is NOT a second face drawn on top (that reads as a double exposure, which
-  // is exactly how the first cut looked); it is the MOUTH ONLY, repainted over the baked
-  // one while that host has a line on screen, in the same dot-matrix language as the real
-  // LED rig (assets/faces/*/*_matrix_480x480.png). Silent = draw nothing, the baked smile
-  // stands. Visor geometry measured off the sprites with a ruler overlay, not guessed.
-  if (!(performance.now() < talkUntil && talkWho === who)) return;
-  const H = HOST_H;
-  // 0.695H / 0.685H measured off a live frame: the eyes sit at ~0.78H and the baked smile
-  // at ~0.70H, so anything higher paints the mouth between the eyes (which is what the
-  // first attempt did).
-  const my = feetY - H * (who === 'jimmy' ? 0.695 : 0.685);
-  const r = H * 0.017;                                        // one LED dot
-  const open = 0.30 + 0.70 * Math.abs(Math.sin(performance.now() / 65));
-  const rows = 1 + Math.round(open * 2);
-  ctx.save();
-  ctx.fillStyle = '#0b0d10';                                  // black out the baked smile only
-  ctx.fillRect(x - r * 6, my - r * 2.4, r * 12, r * 5.2);
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(190,235,255,0.95)'; ctx.shadowBlur = H * 0.012;
-  for (let i = -2; i <= 2; i++) {
-    for (let j = 0; j < rows; j++) {
-      const dx = i * r * 2.1, dy = (j - (rows - 1) / 2) * r * 2.1;
-      ctx.beginPath(); ctx.arc(x + dx, my + dy, r * 0.78, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  ctx.restore();
-}
+// LIPSYNC REMOVED 2026-09-04. A dot-matrix mouth was painted over the sprite's own baked
+// face; at play size it swallowed the eyes and read as a broken face, and Osimo called it:
+// "faces broke... forget that faces let's carry on with the game". The sprites carry a
+// perfectly good face already, so nothing is drawn over them now. If lipsync ever comes
+// back it needs per-sprite visor rects baked into the pack, not a guessed fraction.
 
 function drawPunters() {
   if (room !== 'corridor') return;
@@ -919,6 +896,11 @@ window.__TC = {
     canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
   },
   giveCoins(n) { cabs[0].till += n; },      // QA only — seeds a till without waiting for a punter
+  demo() {                                  // QA only — all three machines on and busy, so
+    owned.cab2 = owned.cab3 = true;         // the perspective row can be judged in one frame
+    const sp = ['punter34A', 'punter34B', 'punter34C'];
+    cabs.forEach((c, i) => { c.busy = { spr: sp[i] }; c.playT = 60000; c.jam = false; });
+  },
 };
 
 document.getElementById('startBtn').addEventListener('click', () => {
