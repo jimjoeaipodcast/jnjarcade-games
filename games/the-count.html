@@ -158,7 +158,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=3').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=4').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     for (const k in p.sprites) {
@@ -223,21 +223,23 @@ const HOST_BOX = { w: 142, h: 213 };
 // quad, plus the light it throws into the room.
 const MACHINES = [
   // Quads/bodies measured against the ALL-SCREENS-OFF corridor plate with a coordinate
-  // grid. Punter slots put each head BELOW its machine's screen, so five people never hide
-  // the row they are playing, and the five form a receding diagonal down the aisle. The
-  // sprites face left with their hands ~30% in from their leading edge, so x is set to land
-  // the hands near each control panel; the right-hand machine is mirrored (`flip`) because
-  // it is played from its left.
+  // grid. Punter slots sit on the floor line MEASURED under the cabinet row — the cabinet
+  // bases run (207,443) to (313,380), a slope of -0.59 — so each punter further down the
+  // row stands higher and smaller, tucked at his machine rather than out in the aisle.
+  // Osimo 2026-09-04 drew that line over a screenshot: "the position of the punters is all
+  // off, follow the bottom line I added". The sprites face left with their hands ~30% in
+  // from their leading edge; the right-hand machine is mirrored (`flip`), played from its
+  // left.
   { body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 150, feet: 455, x: 268 }, flip: false },
+    punter: { h: 150, feet: 418, x: 250 }, flip: false },
   { body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 128, feet: 428, x: 330 }, flip: false },
+    punter: { h: 122, feet: 392, x: 300 }, flip: false },
   { body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h: 108, feet: 405, x: 372 }, flip: false },
+    punter: { h: 100, feet: 372, x: 340 }, flip: false },
   { body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h:  92, feet: 388, x: 404 }, flip: false },
+    punter: { h:  84, feet: 356, x: 374 }, flip: false },
   { body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 160, feet: 458, x: 656 }, flip: true },
+    punter: { h: 155, feet: 430, x: 660 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 const ROOMS = {
@@ -353,12 +355,12 @@ function say(t, ms) { msg = t; msgUntil = performance.now() + (ms || 2200); }
 // not a rewrite.
 const TIP_KEY = 'tc_tips_v1';
 const TIPS = [
-  "Right — one machine working, a fiver in the tin, and rent due at midnight.",
-  "Punters play, and the coins pile up INSIDE the cabinet. Tap the machine to empty it into your apron.",
-  "Apron only holds so much. Walk left, past the studio, to the coin closet.",
-  "The safe eats the bags. The ledger next to it is where you spend what's in it.",
-  "Buy the second cabinet first. Two machines earn while you're walking.",
-  "And that's Joe on the mic. Pull him off it to help you carry and the hype drops — hype is how fast punters turn up.",
+  { text: "Right — one machine working, a fiver in the tin, and rent due at midnight.", icon: 'icCoin' },
+  { text: "Punters play and the coins pile up INSIDE the cabinet. Tap the machine to empty it into your apron.", icon: 'icCab' },
+  { text: "Your apron only holds so much. Walk left, past the studio, to the coin closet.", icon: 'icApron' },
+  { text: "The safe eats the bags. The ledger beside it is where you spend what's in it.", icon: 'icCounter' },
+  { text: "Buy a second cabinet first. Two machines earn while you are walking.", icon: 'icCab', qty: 2 },
+  { text: "That's Joe on the mic. Pull him off it and hype drops — hype is how fast punters turn up.", icon: 'icOnair' },
 ];
 function tipsSeen() { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } }
 function startTips() { if (!tipsSeen()) { tutorial = 0; talkWho = 'jimmy'; talkUntil = performance.now() + 9e5; } }
@@ -369,37 +371,55 @@ function nextTip() {
     try { localStorage.setItem(TIP_KEY, '1'); } catch (e) {}
   }
 }
-function drawBubble() {
+// Township-style bubble (Osimo 2026-09-04: "graphics are more important than written
+// stuff… speech bubbles with images let you know where to drop off anything collected, and
+// speech bubbles with image and quantities of what you need to pick up"): a round portrait
+// badge outside the bubble, a short line inside, and the THING itself drawn as an icon with
+// a quantity rather than spelled out. Screen space, so the wide-phone crop cannot clip it.
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawBubble(SW, SH) {
   if (tutorial < 0) return;
-  const h = hosts[talkWho] && hosts[talkWho].room === room ? hosts[talkWho] : me();
-  const text = TIPS[tutorial];
-  ctx.font = '18px "Barlow Condensed",sans-serif';
-  // wrap to a sane column rather than one long line off the side of the room
-  const words = text.split(' '), lines = []; let cur = '';
+  const t = TIPS[tutorial];
+  ctx.font = '17px "Barlow Condensed",sans-serif';
+  const maxW = Math.min(430, SW - 200);
+  const words = t.text.split(' '), lines = []; let cur = '';
   for (const w of words) {
-    if (ctx.measureText(cur + ' ' + w).width > 330 && cur) { lines.push(cur); cur = w; }
+    if (ctx.measureText(cur + ' ' + w).width > maxW && cur) { lines.push(cur); cur = w; }
     else cur = cur ? cur + ' ' + w : w;
   }
   if (cur) lines.push(cur);
-  const bw = 360, bh = 22 + lines.length * 22;
-  const bx = Math.max(20, Math.min(WORLD_W - bw - 20, h.x - bw / 2));
-  const by = Math.max(60, ROOMS[room].floorY - HOST_BOX.h - bh - 26);
-  ctx.fillStyle = 'rgba(8,6,4,0.93)';
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
-  ctx.beginPath();                                   // tail pointing at the speaker
-  ctx.moveTo(Math.max(bx + 18, Math.min(bx + bw - 30, h.x - 10)), by + bh);
-  ctx.lineTo(Math.max(bx + 30, Math.min(bx + bw - 18, h.x + 10)), by + bh);
-  ctx.lineTo(h.x, by + bh + 16); ctx.closePath();
-  ctx.fillStyle = 'rgba(8,6,4,0.93)'; ctx.fill();
-  ctx.strokeStyle = ACCENT; ctx.stroke();
-  ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
-  ctx.fillText('JIMMY', bx + 12, by + 16);
-  ctx.fillStyle = '#fff'; ctx.font = '18px "Barlow Condensed",sans-serif';
-  lines.forEach((l, i) => ctx.fillText(l, bx + 12, by + 36 + i * 22));
-  ctx.fillStyle = 'rgba(232,195,90,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
+  const iconH = t.icon ? 46 : 0;
+  const bw = maxW + 28, bh = 22 + lines.length * 21 + iconH;
+  const px = 104, py = Math.max(56, SH - bh - 72);
+  const po = SPR.poJimmy;
+  if (po) ctx.drawImage(po, px - 84, py + bh / 2 - 36, 72, 72);
+  ctx.fillStyle = 'rgba(252,246,232,0.97)';
+  roundRect(px, py, bw, bh, 12); ctx.fill();
+  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = 3;
+  roundRect(px, py, bw, bh, 12); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px, py + bh / 2 - 10); ctx.lineTo(px - 15, py + bh / 2);
+  ctx.lineTo(px, py + bh / 2 + 10); ctx.closePath();
+  ctx.fillStyle = 'rgba(252,246,232,0.97)'; ctx.fill();
+  ctx.strokeStyle = '#7a4a1a'; ctx.stroke();
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+  lines.forEach((l, i) => ctx.fillText(l, px + 14, py + 26 + i * 21));
+  if (t.icon) {
+    const iy = py + 24 + lines.length * 21, im = SPR[t.icon];
+    if (im) ctx.drawImage(im, px + 14, iy, 40, 40);
+    if (t.qty) {
+      ctx.fillStyle = '#1f6b3a'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
+      ctx.fillText('\u00d7' + t.qty, px + 62, iy + 30);
+    }
+  }
+  ctx.fillStyle = 'rgba(122,74,26,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('TAP TO CONTINUE  ' + (tutorial + 1) + '/' + TIPS.length, bx + bw - 12, by + bh - 8);
+  ctx.fillText('TAP TO CONTINUE  ' + (tutorial + 1) + '/' + TIPS.length, px + bw - 12, py + bh - 9);
   ctx.textAlign = 'left';
 }
 
@@ -676,58 +696,18 @@ function shopTap(w) {
   }
   shopOpen = false;
 }
-// a small drawn icon per line, so each row SHOWS what you are buying (Osimo 2026-09-04)
-function shopIcon(kind, x, y, s, on) {
-  ctx.save(); ctx.translate(x, y);
-  const ink = on ? '#ffd75e' : '#8a8078';
-  ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1, s * 0.06);
-  if (kind === 'cab') {
-    ctx.fillRect(-s * 0.34, -s * 0.5, s * 0.68, s);
-    ctx.fillStyle = '#0b1a22'; ctx.fillRect(-s * 0.24, -s * 0.38, s * 0.48, s * 0.34);
-    ctx.fillStyle = on ? '#7ee0ff' : '#3d3a35'; ctx.fillRect(-s * 0.20, -s * 0.34, s * 0.40, s * 0.26);
-    ctx.fillStyle = ink; ctx.fillRect(-s * 0.24, s * 0.06, s * 0.48, s * 0.10);
-  } else if (kind === 'apron') {
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.06, -s * 0.5); ctx.lineTo(s * 0.06, -s * 0.5);
-    ctx.lineTo(s * 0.30, -s * 0.2); ctx.quadraticCurveTo(s * 0.42, s * 0.5, 0, s * 0.5);
-    ctx.quadraticCurveTo(-s * 0.42, s * 0.5, -s * 0.30, -s * 0.2);
-    ctx.closePath(); ctx.fill();
-  } else if (kind === 'bulb') {
-    ctx.beginPath(); ctx.arc(0, -s * 0.1, s * 0.28, 0, Math.PI * 2); ctx.fill();
-    ctx.fillRect(-s * 0.11, s * 0.18, s * 0.22, s * 0.2);
-    for (let i = 0; i < 6; i++) {
-      const a = i * Math.PI / 3;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * s * 0.38, -s * 0.1 + Math.sin(a) * s * 0.38);
-      ctx.lineTo(Math.cos(a) * s * 0.50, -s * 0.1 + Math.sin(a) * s * 0.50);
-      ctx.stroke();
-    }
-  } else if (kind === 'stick') {
-    ctx.fillRect(-s * 0.42, s * 0.2, s * 0.84, s * 0.22);
-    ctx.lineWidth = Math.max(2, s * 0.12);
-    ctx.beginPath(); ctx.moveTo(0, s * 0.2); ctx.lineTo(0, -s * 0.22); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, -s * 0.32, s * 0.15, 0, Math.PI * 2); ctx.fill();
-  } else if (kind === 'onair') {
-    ctx.strokeRect(-s * 0.48, -s * 0.26, s * 0.96, s * 0.52);
-    ctx.font = 'bold ' + Math.round(s * 0.32) + 'px "Barlow Condensed",sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('ON', 0, 0);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  } else if (kind === 'bottle') {
-    ctx.fillRect(-s * 0.10, -s * 0.5, s * 0.20, s * 0.22);
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.10, -s * 0.28); ctx.lineTo(s * 0.10, -s * 0.28);
-    ctx.lineTo(s * 0.25, s * 0.0); ctx.lineTo(s * 0.25, s * 0.46);
-    ctx.lineTo(-s * 0.25, s * 0.46); ctx.lineTo(-s * 0.25, s * 0.0);
-    ctx.closePath(); ctx.fill();
-  } else if (kind === 'coin') {
-    ctx.beginPath(); ctx.arc(0, 0, s * 0.42, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = on ? '#3a2c08' : '#1e1c18';
-    ctx.font = 'bold ' + Math.round(s * 0.5) + 'px "Barlow Condensed",sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('£', 0, s * 0.02);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  }
+// Icons are Grok-drawn PNGs from the pack now, not shapes drawn in code (Osimo 2026-09-04:
+// "we need reference PNG images on the menu"). ICON_FOR maps an upgrade's icon key to art.
+const ICON_FOR = { cab: 'icCab', apron: 'icApron', bulb: 'icBulb', stick: 'icStick',
+                   onair: 'icOnair', bottle: 'icBottle', coin: 'icCounter' };
+function shopIcon(kind, x, y, size, on) {
+  const im = SPR[ICON_FOR[kind] || 'icCoin'];
+  if (!im) return;
+  ctx.save();
+  ctx.globalAlpha = on ? 1 : 0.42;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(im, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
+  ctx.imageSmoothingEnabled = true;
   ctx.restore();
 }
 
@@ -836,7 +816,18 @@ function drawCabState() {
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = c.jam ? 0.22 : 1;
-      ctx.drawImage(scr, sx, sy, sw, sh);          // its own game picture, lit
+      // Osimo 2026-09-04 outlined the screens: they sit at an angle, so an axis-aligned
+      // rectangle reads as a sticker stuck on the glass. Each picture is drawn through a
+      // shear so it lies IN the cabinet's plane — the left row leans one way, the
+      // right-hand machine the other.
+      // shear about the screen's CENTRE, not its corner — pivoting at the corner slides
+      // the picture off the glass as it leans. Magnitude is per machine because the row
+      // recedes, so the far cabinets present their screens at a shallower angle.
+      const sk = m.flip ? 0.22 : [-0.22, -0.20, -0.18, -0.16][i] || -0.18;
+      ctx.translate(sx + sw / 2, sy + sh / 2);
+      ctx.transform(1, sk, 0, 1, 0, 0);
+      ctx.drawImage(scr, -sw / 2, -sh / 2, sw, sh);   // its own game picture, lit
+      ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
       ctx.imageSmoothingEnabled = true;
       if (!c.jam) {
         const g = ctx.createRadialGradient(cx, sy + sh / 2, 3, cx, sy + sh / 2, sw * 1.6);
@@ -946,11 +937,13 @@ function drawHUD(now) {
   ctx.textAlign = 'left';
   // turned-away count — the quiet version of the old flashing NO FREE MACHINE
   if (turnedAway > 0) {
+    // Osimo 2026-09-04: "instead of no free machine, maybe it should say, turn on more
+    // machines, and place it somewhere where it doesn't show over the b-roll screen."
+    // It now says what to DO, and sits low-left — the studio's big screen is dead centre,
+    // which is exactly where this used to land.
     ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = 'rgba(255,107,107,0.9)';
-    ctx.textAlign = 'center';
-    ctx.fillText(turnedAway + ' walked out — no free machine', SW / 2, 62);
-    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,107,107,0.92)';
+    ctx.fillText('TURN ON MORE MACHINES — ' + turnedAway + ' walked out', 14, SH - 58);
   }
   // room name
   ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
@@ -961,38 +954,49 @@ function drawHUD(now) {
 }
 function drawShop() {
   const m = shopMetrics();
-  ctx.fillStyle = 'rgba(6,5,4,0.93)'; ctx.fillRect(0, 0, m.SW, m.SH);
+  // Osimo 2026-09-04: "make it more like a ledger Jimmy is holding open, and it's written
+  // on the scroll you holding in first view as if you were Jimmy holding the scroll." The
+  // panel is a Grok-drawn first-person held ledger and the list is written onto its pages.
+  ctx.fillStyle = 'rgba(4,3,2,0.96)'; ctx.fillRect(0, 0, m.SW, m.SH);
+  const bk = SPR.ledger;
+  if (bk) {
+    const sc = Math.max(m.SW / bk.width, m.SH / bk.height);
+    const dw = bk.width * sc, dh = bk.height * sc;
+    ctx.drawImage(bk, (m.SW - dw) / 2, (m.SH - dh) / 2, dw, dh);
+  }
   ctx.textAlign = 'center';
-  ctx.fillStyle = ACCENT; ctx.font = 'bold 30px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.SW / 2, 40);
-  ctx.fillStyle = '#9aa'; ctx.font = '14px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.SW / 2, 62);
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 27px "Barlow Condensed",sans-serif';
+  ctx.fillText('THE LEDGER', m.SW / 2, 38);
+  ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.SW / 2, 58);
   ctx.textAlign = 'left';
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
-    ctx.fillStyle = can ? 'rgba(232,195,90,0.10)' : 'rgba(255,255,255,0.04)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = can ? ACCENT : '#5a5148'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
-    shopIcon(r.u.icon, r.x + 24, r.y + r.h / 2, 24, can);
-    ctx.fillStyle = can ? '#ffd75e' : '#8a8078';
+    if (can) {                                   // an affordable line is ringed in pencil
+      ctx.fillStyle = 'rgba(226,178,86,0.22)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = 'rgba(122,74,26,0.55)'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+    shopIcon(r.u.icon, r.x + 28, r.y + r.h / 2, Math.min(34, r.h - 2), can);
+    ctx.fillStyle = can ? '#3c2410' : '#8a795f';
     ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
-    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 48, r.y + 16);
+    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 56, r.y + 16);
     ctx.font = '13px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = can ? '#cbd2d6' : '#6d655e';
-    ctx.fillText(r.u.blurb, r.x + 48, r.y + 30);
+    ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
+    ctx.fillText(r.u.blurb, r.x + 56, r.y + 30);
     ctx.textAlign = 'right';
     ctx.font = 'bold 20px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = can ? '#8effc2' : '#8a5a5a';
-    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 14, r.y + 24);
+    ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
+    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 16, r.y + 24);
     ctx.textAlign = 'left';
   }
   const cl = shopCloseRect();
-  ctx.fillStyle = 'rgba(232,195,90,0.18)';
+  ctx.fillStyle = 'rgba(122,74,26,0.9)';
   ctx.fillRect(cl.x, cl.y, cl.w, cl.h);
-  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
+  ctx.strokeStyle = '#e2b256'; ctx.lineWidth = 2;
   ctx.strokeRect(cl.x, cl.y, cl.w, cl.h);
-  ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = '#ffe9c0'; ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('✕  CLOSE', cl.x + cl.w / 2, cl.y + 25);
   ctx.textAlign = 'left';
@@ -1048,9 +1052,10 @@ function frame(ts) {
   }
   drawCabState();
   drawFloaters(ts);
-  if (state !== 'attract') { drawBubble(); drawMsg(ts); }
+  if (state !== 'attract') drawMsg(ts);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD + shop live in SCREEN space, so
   if (state !== 'attract') drawHUD(ts);              // a cover-cropped room never eats them
+  if (state !== 'attract') drawBubble(canvas.clientWidth, canvas.clientHeight);
   if (shopOpen) drawShop();
   if (state === 'bust') {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
