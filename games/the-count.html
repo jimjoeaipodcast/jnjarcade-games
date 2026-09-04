@@ -255,22 +255,26 @@ const HOST_BOX = { w: 142, h: 213 };
 // painted over it. A powered one gets its own lit game picture blitted into the screen
 // quad, plus the light it throws into the room.
 const MACHINES = [
-  // Punter slots come from the two lines Osimo drew over a screenshot on 2026-09-04 — one
-  // along the TOPS OF THE HEADS, one along the FEET. Converted into world space they are:
-  //   head(x) = 255 - 0.057 * (x - 246)      (nearly level — correct for a receding row of
-  //   feet(x) = 478 - 0.763 * (x - 242)       same-height people)
-  // so a punter's height at any x is feet(x) - head(x). That is why the near one is 223px
-  // and the far one 111px: I had been sizing them by eye and getting it wrong every time.
+  // PUNTER PLACEMENT, 2026-09-05. Osimo read five cells off a grid overlaid on a live
+  // frame — M21, O19, R17, T16, AI21 — each one the tip of that punter's LEFT foot. Cell
+  // letter i is world x = i*20 + 10, row n is world y = (n-1)*20 + 10, so those points are
+  // (250,410) (290,370) (350,330) (390,310) (690,410).
+  // The sprite is 35x64 and its baseline foot pixels run 0.314w..0.857w from its left
+  // edge, so the LEFT foot tip sits 0.186w left of the sprite centre — measured off the
+  // sprite, not guessed. punter.x below is therefore tip + 0.186w (and tip + 0.357w for
+  // the mirrored right-hand machine, where the near foot is the mirrored one).
+  // Heights come from the head line Osimo drew earlier — head(x) = 255 - 0.057(x-246) —
+  // so each punter is exactly as tall as the gap between his foot point and that line.
   { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 223, feet: 478, x: 242 }, flip: false },
+    punter: { h: 155, feet: 410, x: 266 }, flip: false },
   { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 182, feet: 434, x: 300 }, flip: false },
+    punter: { h: 118, feet: 370, x: 302 }, flip: false },
   { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h: 145, feet: 394, x: 352 }, flip: false },
+    punter: { h:  81, feet: 330, x: 358 }, flip: false },
   { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h: 111, feet: 357, x: 400 }, flip: false },
+    punter: { h:  63, feet: 310, x: 396 }, flip: false },
   { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 215, feet: 472, x: 648 }, flip: true },
+    punter: { h: 155, feet: 410, x: 720 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 const ROOMS = {
@@ -841,9 +845,14 @@ function drawPunters() {
   // PLACEMENT — they stood beside the machine on the shared floor line. Each punter now
   // stands on his own cabinet's base line, centred on its control panel, at that
   // cabinet's depth-appropriate size.
-  for (let i = 0; i < cabCount(); i++) {
+  // Osimo 2026-09-05: "you layered the punters backwards, you put the last punter on top
+  // of everyone instead of below number 3". Painter's algorithm — the FURTHEST punter (the
+  // one whose feet are highest up the floor) is drawn first, so the nearest ends up on top.
+  const order = [];
+  for (let i = 0; i < cabCount(); i++) if (cabs[i].busy) order.push(i);
+  order.sort((a, b) => MACHINES[a].punter.feet - MACHINES[b].punter.feet);
+  for (const i of order) {
     const c = cabs[i];
-    if (!c.busy) continue;
     const m = MACHINES[i], im = SPR[c.busy.spr];
     if (!im) continue;
     // Osimo 2026-09-04: "maybe we could do it subtly where the punters are like in black
@@ -883,35 +892,10 @@ function drawCabState() {
       badge(cx, sy - 6, '£' + (UPGRADES.find(u => u.id === 'cab' + (i + 1)).cost / 100).toFixed(2), '#9a9a9a');
       continue;
     }
-    const scr = SPR['scr' + i];
-    if (scr) {
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.globalAlpha = c.jam ? 0.22 : 1;
-      // Osimo 2026-09-04 outlined the screens: they sit at an angle, so an axis-aligned
-      // rectangle reads as a sticker stuck on the glass. Each picture is drawn through a
-      // shear so it lies IN the cabinet's plane — the left row leans one way, the
-      // right-hand machine the other.
-      // shear about the screen's CENTRE, not its corner — pivoting at the corner slides
-      // the picture off the glass as it leans. Magnitude is per machine because the row
-      // recedes, so the far cabinets present their screens at a shallower angle.
-      // Osimo 2026-09-04: "you slanted them into the wrong direction" — the glass leans
-      // the other way, so the sign is flipped.
-      const sk = m.flip ? -0.22 : [0.22, 0.20, 0.18, 0.16][i] || 0.18;
-      ctx.translate(sx + sw / 2, sy + sh / 2);
-      ctx.transform(1, sk, 0, 1, 0, 0);
-      ctx.drawImage(scr, -sw / 2, -sh / 2, sw, sh);   // its own game picture, lit
-      ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
-      ctx.imageSmoothingEnabled = true;
-      if (!c.jam) {
-        const g = ctx.createRadialGradient(cx, sy + sh / 2, 3, cx, sy + sh / 2, sw * 1.6);
-        g.addColorStop(0, 'rgba(150,225,255,0.15)');
-        g.addColorStop(1, 'rgba(150,225,255,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(sx - sw, sy - sh, sw * 3, sh * 3.4);
-      }
-      ctx.restore();
-    }
+    // SCREEN OVERLAYS REMOVED 2026-09-05 — Osimo: "remove those silly arcade screen
+    // overlays, not working". Three attempts (square, sheared one way, sheared the other)
+    // never sat convincingly on angled glass, so the plate's own artwork stands on every
+    // machine and power state is read from the badges below instead.
     if (c.jam) badge(cx, sy - 6, '⚠ JAMMED', '#ff6b6b');
     else if (c.till > 0) badge(cx, sy - 6, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
     else if (c.cursed) badge(cx, sy - 6, 'CURSED', '#c96bff');
