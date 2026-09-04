@@ -1015,6 +1015,25 @@ function joeSay(event) {
   // rate, so it's ambience; every other Joe announcement stays at full JOE_GAIN
   voicePlay('JOE', bank[VO.rot[event]], event === 'flap' ? JOE_GAIN * 0.85 : JOE_GAIN);
 }
+// ─── rule explainers are said ONCE each, then never again ────────────────────
+// Osimo 2026-09-04, mid-run: "Jimmy keeps on repeating himself saying the pipes are
+// flammable etc… if he has more than one way to say it, once exhausted all ways he can say
+// it that's it, we don't need a constant reminder." Fire levels come every third level
+// from 30, so the two fire-pipe warnings were re-announced at 30, 33, 36, 39… forever; the
+// chain and buddy explainers had the same shape. Each PHRASING now gets used at most once
+// per run and then the bank goes quiet for good. Reset per run, not per session, because a
+// fresh run can be a fresh player — and reaching level 30 again is a long way to come.
+// Reactions (personal best, death, milestones) are deliberately NOT routed through this:
+// those are responses to a moment, not instructions, and repeating them is the point.
+let explained = new Set();
+function jimmyExplain(bank) {
+  const lines = Array.isArray(bank) ? bank : [bank];
+  const next = lines.find(t => !explained.has(t));
+  if (!next) return;                      // every way of saying it is spent — say nothing
+  explained.add(next);
+  jimmySay(next, true);
+}
+
 function jimmyPick(bank) {
   VO.rot.__jim = ((VO.rot.__jim || 0) + 1) % bank.length;
   return bank[VO.rot.__jim];
@@ -1583,7 +1602,7 @@ function setLevel(n) {
   // No on-screen "DON'T TOUCH" banner (Osimo 2026-09-03: "don't mention don't touch fire
   // pipes, it's self explanatory") — the flames are the telegraph; Jimmy just remarks.
   if (fireLevel && !wasFire && running) {
-    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(jimmyPick(JIMMY_FIRE_LEVEL_VO), true);
+    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmyExplain(JIMMY_FIRE_LEVEL_VO);
   }
   // one-off Jimmy heads-ups for the new rule changes (spoken modes only, priority so
   // they're not swallowed by a stomp bark)
@@ -1640,7 +1659,7 @@ function grantLevelGhost(cx, cy) {
   ghostLevelsUntil = level + GHOST_FROM_GREYSTAR_LEVELS;
   spawnParticles(cx, cy, '#9fe8ff', 18);
   floaters.push({ x: cx, y: cy - CHUTE_R - 20, text: `👻 GHOST FOR ${GHOST_FROM_GREYSTAR_LEVELS} LEVELS!`, alpha: 1.4, vy: -1.4, color: '#9fe8ff' });
-  if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_GREYSTAR_VO, true);
+  if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmyExplain(JIMMY_GREYSTAR_VO);
   else if (sfxMode === 'tones') TONES.star();
 }
 // three buddy chutes in a row → a FOREVER buddy: banked, never consumed by balloonPop(),
@@ -1657,7 +1676,7 @@ function grantForeverBuddy(cx, cy) {
                    text: foreverBuddies.length > 1 ? `♾️ FOREVER BUDDY ×${foreverBuddies.length}!` : '♾️ FOREVER BUDDY!',
                    alpha: 1.4, vy: -1.4, color: '#ffd700' });
   if (sfxMode === 'voice' || sfxMode === 'hybrid') {
-    jimmySay(JIMMY_FOREVER_VO, true);
+    jimmyExplain(JIMMY_FOREVER_VO);
     setTimeout(() => voicePlay('JOE', JOE_FOREVER_VO, JOE_GAIN), 1500);
   } else if (sfxMode === 'tones') TONES.star();
 }
@@ -1723,7 +1742,7 @@ function applyPickupEffect(e, cx, cy) {
       if (sfxMode !== 'mute') sfx.ghostPower();
       spawnParticles(cx, cy, '#9fe8ff', 16);
       floaters.push({ x: cx, y: cy - CHUTE_R - 22, text: '👻 TRIPLE PURPLE — GHOST MODE!', alpha: 1.3, vy: -1.6, color: '#9fe8ff' });
-      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_TRIPLE_SHRINK_VO, true);
+      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmyExplain(JIMMY_TRIPLE_SHRINK_VO);
     }
   } else if (e.ghost) {
     notePickup('ghost');
@@ -1776,7 +1795,7 @@ function applyPickupEffect(e, cx, cy) {
       sfx.shrink(pitchMult);
       spawnParticles(cx, cy, '#e879f9', 12);
       floaters.push({ x: cx, y: cy - CHUTE_R - 22, text: '💛💛 DOUBLE YELLOW — TINY!', alpha: 1.3, vy: -1.6, color: '#e879f9' });
-      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(JIMMY_DOUBLE_SPECIAL_VO, true);
+      if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmyExplain(JIMMY_DOUBLE_SPECIAL_VO);
     }
   } else {
     notePickup('normal');
@@ -1961,7 +1980,7 @@ function burnBuddiesAndInflate(p) {
                     text: victims.length > 1 ? `🔥 ${victims.length} BUDDIES → SMOKE!` : '🔥 BUDDY → SMOKE!',
                     alpha: 1, vy: -2, color: '#ff7a1a' });
     sfx.fireHit();
-    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmySay(jimmyPick(JIMMY_FIRE_HIT_VO), true);
+    if (sfxMode === 'voice' || sfxMode === 'hybrid') jimmyExplain(JIMMY_FIRE_HIT_VO);
   }
   inflate('pipe');
 }
@@ -2470,6 +2489,7 @@ function initGame() {
   gapResetTime  = gameStartTime;   // currentGapSize() decay starts here until Lv15 moves it
   scrollDir     = 1;
   reversalLevelsFired = new Set();
+  explained = new Set();          // a new run may be a new player — explain each rule once
   gauntletActive = false;
   gauntletStartTime = 0;
   reversal      = null;
