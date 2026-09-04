@@ -121,7 +121,7 @@ addEventListener('resize', resize); resize();
 // SPEAKER CYCLE (Osimo 2026-09-03: "Jimmy and Joe talking the default, pressing it again
 // will change to music or jingle or just sound FX depending on the game") — this cabinet
 // had only mute/unmute, so it gains the house 3-state linear cycle:
-//   🎙️ voice — Jimmy + Joe speak every line, plus sound FX  (DEFAULT)
+//   🗣️ voice — Jimmy + Joe speak every line, plus sound FX  (DEFAULT)
 //   🔊 tones — sound FX only, hosts silent (subtitles still show)
 //   🔇 mute  — silence
 let audioCtx = null, sfxMode = 'voice';
@@ -1875,7 +1875,7 @@ function drawHUD() {
   ctx.fillText('COMEBACKS ' + counters.length + '/6', 14, 34);
   // mute
   ctx.textAlign = 'right'; ctx.font = '20px serif';
-  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 14, 10);
+  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🗣️' : '🔊', WORLD_W - 14, 10);
   ctx.fillText('⛶', WORLD_W - 106, 10);
 }
 function drawDuelUI() {
@@ -1989,7 +1989,7 @@ function render() {
 }
 function drawHUDMuteOnly() {
   ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.font = '20px serif';
-  ctx.fillStyle = '#fff'; ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 14, 10);
+  ctx.fillStyle = '#fff'; ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🗣️' : '🔊', WORLD_W - 14, 10);
 }
 
 // ── LOOP ─────────────────────────────────────────────────────────────────────

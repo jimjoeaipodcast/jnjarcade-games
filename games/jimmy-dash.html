@@ -51,7 +51,7 @@
   <div id="banner" style="display:none"><div>Now entering</div><h2 id="bannerText"></h2></div>
   <div id="caption"></div>
   <div id="btns"><div class="pad">❚❚</div><div class="pad" id="dashPad">💨<small style="font-size:10px" id="dashN">3</small></div></div>
-  <button id="sfxBtn" type="button">VO</button>
+  <button id="sfxBtn" type="button">🗣️</button>
 </div>
 <div id="overlay">
   <h1>JIMMY DASH</h1>
@@ -889,10 +889,14 @@ document.getElementById('menuBtn').onclick = () => {
 };
 document.getElementById('sfxBtn').onclick = () => {
   sfxMode = sfxMode === 'voice' ? 'tones' : sfxMode === 'tones' ? 'mute' : 'voice';
-  document.getElementById('sfxBtn').textContent = sfxMode === 'voice' ? 'VO' : sfxMode === 'tones' ? '♪' : '🔇';
+  document.getElementById('sfxBtn').textContent = sfxMode === 'voice' ? '🗣️' : sfxMode === 'tones' ? '🔊' : '🔇';   // house icon set (Osimo 2026-09-04)
   try { localStorage.setItem('sfxMode_jimmy-dash', sfxMode); } catch(e){}
   unlock();
 };
+// the markup ships the default glyph; a device with a different mode stored needs the
+// button corrected on load, or the icon lies until the first press
+document.getElementById('sfxBtn').textContent =
+  sfxMode === 'voice' ? '🗣️' : sfxMode === 'tones' ? '🔊' : '🔇';
 })();
 </script>
 </body>

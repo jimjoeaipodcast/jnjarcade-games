@@ -1331,7 +1331,7 @@ function checkInventoryTap(p) {
 // SPEAKER CYCLE body extracted so the top-bar button AND the settings popover share it
 function cycleSfx() {
   initAudio();
-  // 🎙️ Jimmy + Joe talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
+  // 🗣️ Jimmy + Joe talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
   // Osimo 2026-09-03: the hosts lead in every cabinet that has them; one press off the
   // default drops to plain sound FX.
   sfxMode = sfxMode === "voice" ? "tones" : sfxMode === "tones" ? "mute" : "voice";
@@ -1375,7 +1375,7 @@ function checkSettingsTap(p) {
 }
 
 // SPEAKER CYCLE — strictly LINEAR single tap (flap-fight hard rule 1):
-// 🎙️ tones + JnJ commentary (DEFAULT, Osimo 2026-09-03) → 🔊 tones → 🔇 mute → 🎙️ …
+// 🗣️ tones + JnJ commentary (DEFAULT, Osimo 2026-09-03) → 🔊 tones → 🔇 mute → 🎙️ …
 // The one-shot aw_voiceDefault_v2 flag lands the new default on devices that already
 // have a mode stored — without it they would keep their old "tones" forever.
 let sfxMode = (() => {
@@ -3787,7 +3787,7 @@ function drawHudButton(cx, cy, r, kind) {
     // same sfxMode-cycle glyphs as always
     ctx.font = "20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillStyle = "#fff";
-    ctx.fillText(sfxMode === "mute" ? "🔇" : sfxMode === "voice" ? "🎙️" : "🔊", cx, cy + 1);
+    ctx.fillText(sfxMode === "mute" ? "🔇" : sfxMode === "voice" ? "🗣️" : "🔊", cx, cy + 1);
   } else if (kind === "gear") {
     ctx.font = "18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillStyle = "#fff";

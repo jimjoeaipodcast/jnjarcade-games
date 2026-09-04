@@ -1193,9 +1193,13 @@ const sfx = {
 })();
 
 function updateMuteUI() {
+  // Osimo 2026-09-04: "need the default one be the voice of Jimmy, little face icon, then
+  // if pressed the icon of the mic appears, then the speaker then the mute button" —
+  // 🗣️ face (both hosts talking, DEFAULT) → 🎙️ mic → 🔊 speaker → 🔇 mute. The modes and
+  // their order are unchanged; only which glyph sits on which mode moved.
   muteBtn.textContent = sfxMode === 'mute' ? '🔇'
-                      : sfxMode === 'voice' ? '🎙️'
-                      : sfxMode === 'hybrid' ? '🗣️' : '🔊';
+                      : sfxMode === 'voice' ? '🗣️'
+                      : sfxMode === 'hybrid' ? '🎙️' : '🔊';
 }
 updateMuteUI();
 
@@ -3464,6 +3468,16 @@ function draw() {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 16px "Barlow Condensed","Arial Narrow",sans-serif';
     ctx.fillText('double tap the screen to unfreeze', cw * 0.5, ch * 0.44 + 30);
+    // a run that came back from storage says so, so a paused screen is never mistaken
+    // for a fresh game (Osimo 2026-09-04: "I paused the game last night at 60k points
+    // only to wake up to a fresh game")
+    if (resumedFromSave) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#4dd9f5';
+      ctx.font = 'bold 15px "Barlow Condensed","Arial Narrow",sans-serif';
+      ctx.fillText('SAVED RUN — ' + score.toLocaleString() + ' PTS, LEVEL ' + level,
+                   cw * 0.5, ch * 0.44 - 34);
+    }
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -4337,6 +4351,8 @@ function die() {
   dead    = true;
   running = false;
   paused  = false;
+  clearRun();            // the saved run is spent — never resume into a dead bird
+  resumedFromSave = false;
   foreverBuddies = [];   // "…and dies with you" — forever buddies never outlive the run
   bannerPlane    = null;
   showPauseButtons(false);
@@ -4532,15 +4548,134 @@ function pauseGame() {
   lastTapMs = 0;
   for (const b of pauseBtns) b.textContent = '▶';
   sfx.pause();
+  saveRun();          // pause means SAVED (Osimo 2026-09-04) — survives a locked phone
 }
 function resumeGame() {
   if (!paused) return;
   shiftTimers(Date.now() - pausedAt);
   paused = false;
+  resumedFromSave = false;   // the banner has done its job
   lastFrameMs = null;   // next loop tick starts a fresh dt baseline (no catch-up jump)
   for (const b of pauseBtns) b.textContent = '⏸';
   sfx.resume();
 }
+
+// ─── PAUSE = SAVED (Osimo 2026-09-04) ────────────────────────────────────────
+// "I paused the game last night at 60k points only to wake up to a fresh game, make sure
+// paused means saved." A pause used to live only in memory, so a locked phone, a tab the
+// OS reclaimed, or a reload threw the run away. The whole run is now written to
+// localStorage on pause AND whenever the page is hidden (which is what a locked phone
+// actually does), and restored on the next load in the PAUSED state — the player picks up
+// on the exact frame they left, on the same score, level and pipe field.
+//
+// What is deliberately NOT saved: particles, floaters, the callout, the banner plane and
+// the star/cloud backdrop — cosmetic, regenerated, and keeping them would bloat the blob
+// for nothing. Everything that decides FAIRNESS (bird, pipes, enemies, buddies, timers,
+// spawn accumulators, chains, streaks) is saved, and every Date.now() deadline is re-based
+// through the same shiftTimers() the pause resume already uses, so a run restored after
+// eight hours does not wake up with eight hours of expired star power.
+const RUN_SAVE_KEY = 'ff_run_v1';
+const RUN_SAVE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;   // a week-old run is not worth resuming
+let resumedFromSave = false;
+function clearRun() { try { localStorage.removeItem(RUN_SAVE_KEY); } catch (e) {} }
+function saveRun() {
+  if (!running || dead || popping || waiting) { return; }
+  try {
+    localStorage.setItem(RUN_SAVE_KEY, JSON.stringify({
+      v: 1, t: Date.now(), cw, ch,
+      // run identity
+      score, frame, level, pipesUntilLevel, pipeSpeed, groundX,
+      // world + actors
+      bird, pipes, enemies, buddies, scouts, foreverBuddies, smokePuffs, warp, reversal,
+      // direction / cutscene bookkeeping
+      scrollDir, reversalTargetDir,
+      reversalLevelsFired: [...reversalLevelsFired], recordChaseFired: [...recordChaseFired],
+      // player state
+      birdInflate, birdGhost, birdShrink, starChain, starPower, lastHitCause,
+      nearMissStreak, lastGhostWarnSec, buddyPending,
+      lastPickupKind, pickupStreak, ghostLevelsUntil,
+      // combo
+      comboCount, lastPopFrame, comboRocketPipes, comboRocketArmed, combo30RocketArmed,
+      lastComboAnnounced,
+      // spawn cadence
+      pipeSpawnCount, pipeSpawnAcc, enemySpawnAcc, enemySpawnCount,
+      warpAtPipe, levelPipeCount, bonusEntryCount, fireLevel,
+      // announcements already made this run
+      pbAnnounced, topAnnounced, lastMilestone,
+      // absolute deadlines — every one of these is re-based by shiftTimers() on restore
+      starPowerUntil, ghostTimerUntil, bonusUntil, gapResetTime, gauntletActive,
+      gauntletStartTime, nextMegaSpawn, nextGhostSpawn, nextShrinkSpawn,
+      nextStarChuteSpawn, nextGreyChuteSpawn, gameStartTime, inflateInvincible,
+      lastFloorBounceMs,
+    }));
+  } catch (e) {}   // private mode / quota — a lost save must never break the game
+}
+function restoreRun() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(RUN_SAVE_KEY) || 'null'); } catch (e) { return false; }
+  if (!s || s.v !== 1 || !s.bird || !Array.isArray(s.pipes)) return false;
+  const age = Date.now() - (s.t || 0);
+  if (!(age >= 0) || age > RUN_SAVE_MAX_AGE_MS) { clearRun(); return false; }
+
+  score = s.score; frame = s.frame; level = s.level;
+  pipesUntilLevel = s.pipesUntilLevel; pipeSpeed = s.pipeSpeed; groundX = s.groundX || 0;
+  bird = s.bird; pipes = s.pipes; enemies = s.enemies || [];
+  buddies = s.buddies || []; scouts = s.scouts || []; foreverBuddies = s.foreverBuddies || [];
+  smokePuffs = s.smokePuffs || []; warp = s.warp || null; reversal = s.reversal || null;
+  scrollDir = s.scrollDir; reversalTargetDir = s.reversalTargetDir;
+  reversalLevelsFired = new Set(s.reversalLevelsFired || []);
+  recordChaseFired = new Set(s.recordChaseFired || []);
+  birdInflate = s.birdInflate; birdGhost = s.birdGhost; birdShrink = s.birdShrink;
+  starChain = s.starChain; starPower = s.starPower; lastHitCause = s.lastHitCause || 'hitPipe';
+  nearMissStreak = s.nearMissStreak; lastGhostWarnSec = s.lastGhostWarnSec;
+  buddyPending = s.buddyPending;
+  lastPickupKind = s.lastPickupKind || ''; pickupStreak = s.pickupStreak || 0;
+  ghostLevelsUntil = s.ghostLevelsUntil || 0;
+  comboCount = s.comboCount; lastPopFrame = s.lastPopFrame;
+  comboRocketPipes = s.comboRocketPipes; comboRocketArmed = s.comboRocketArmed;
+  combo30RocketArmed = s.combo30RocketArmed; lastComboAnnounced = s.lastComboAnnounced || 0;
+  pipeSpawnCount = s.pipeSpawnCount; pipeSpawnAcc = s.pipeSpawnAcc;
+  enemySpawnAcc = s.enemySpawnAcc; enemySpawnCount = s.enemySpawnCount;
+  warpAtPipe = s.warpAtPipe; levelPipeCount = s.levelPipeCount;
+  bonusEntryCount = s.bonusEntryCount; fireLevel = s.fireLevel;
+  pbAnnounced = s.pbAnnounced; topAnnounced = s.topAnnounced; lastMilestone = s.lastMilestone || 0;
+  starPowerUntil = s.starPowerUntil; ghostTimerUntil = s.ghostTimerUntil;
+  bonusUntil = s.bonusUntil; gapResetTime = s.gapResetTime;
+  gauntletActive = s.gauntletActive; gauntletStartTime = s.gauntletStartTime;
+  nextMegaSpawn = s.nextMegaSpawn; nextGhostSpawn = s.nextGhostSpawn;
+  nextShrinkSpawn = s.nextShrinkSpawn; nextStarChuteSpawn = s.nextStarChuteSpawn;
+  nextGreyChuteSpawn = s.nextGreyChuteSpawn; gameStartTime = s.gameStartTime;
+  inflateInvincible = s.inflateInvincible; lastFloorBounceMs = s.lastFloorBounceMs;
+
+  // The screen may not be the one the run was saved on (rotation, another device). Nothing
+  // is RESCALED — the gaps are absolute px and stretching them would change the difficulty
+  // — everything is CLAMPED back inside the new playfield instead.
+  recomputeBirdRadius();
+  bird.x = Math.min(Math.max(bird.x, bird.r + 2), cw - bird.r - 2);
+  bird.y = Math.min(Math.max(bird.y, bird.r + 2), ch - GROUND_H - bird.r - 2);
+  for (const p of pipes) {
+    const room = ch - GROUND_H - p.gapSize - 40;
+    p.gapY = Math.min(Math.max(p.gapY, 40), Math.max(40, room));
+    if (p.oscAmp) p.oscAmp = Math.min(p.oscAmp, Math.max(0, Math.min(p.gapY - 20, room - p.gapY + 20)));
+  }
+  for (const e of enemies) e.y = Math.min(Math.max(e.y, CHUTE_OFFSET + CHUTE_R + 12), ch - GROUND_H - 28);
+
+  shiftTimers(age);          // …so eight hours asleep does not eat eight hours of star power
+  lvlEl.textContent = 'LEVEL ' + level;
+  scoreEl.textContent = score;
+  waiting = false; dead = false; popping = false; running = true;
+  paused = true; pausedAt = Date.now(); lastTapMs = 0;
+  resumedFromSave = true;
+  showPauseButtons(true);
+  for (const b of pauseBtns) b.textContent = '▶';
+  return true;
+}
+// A phone that locks, an app switch, or a tab the OS reclaims all fire visibilitychange —
+// that IS the overnight case, so it pauses AND saves rather than trusting pagehide alone.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { pauseGame(); saveRun(); }
+});
+window.addEventListener('pagehide', saveRun);
 function showPauseButtons(on) {
   for (const b of pauseBtns) { b.classList.toggle('hidden', !on); b.textContent = '⏸'; }
 }
@@ -4668,6 +4803,10 @@ fitShell();
 
 // Auto-start in waiting state on load
 initGame();
+// …then put back the run the player paused, if there is one (Osimo 2026-09-04). initGame()
+// has to run first — it sizes the canvas and builds the backdrop — and restoreRun() then
+// overwrites the run state on top of that fresh, correctly-sized world.
+restoreRun();
 loop();
 
 // live resize

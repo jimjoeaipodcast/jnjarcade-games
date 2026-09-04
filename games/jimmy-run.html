@@ -769,7 +769,7 @@ function toWorld(px, py) {
 }
 const MIC_ZONE = { x: WORLD_W - 52, y: 6, w: 46, h: 40 };
 function cycleSfxMode() {
-  // 🎙️ hosts talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
+  // 🗣️ hosts talking (DEFAULT) → 🔊 sound FX only → 🔇 mute → 🎙️ …
   sfxMode = sfxMode === 'voice' ? 'tones' : sfxMode === 'tones' ? 'mute' : 'voice';
   muted = sfxMode === 'mute';
   try { localStorage.setItem('sfxMode_' + SLUG, sfxMode); } catch (e) {}
@@ -1876,7 +1876,7 @@ function render() {
   ctx.font = '22px sans-serif';
   ctx.textAlign = 'right';
   ctx.globalAlpha = (sfxMode === 'voice' && stepVoiceOff) ? 0.5 : 1;
-  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🎙️' : '🔊', WORLD_W - 12, 12);
+  ctx.fillText(sfxMode === 'mute' ? '🔇' : sfxMode === 'voice' ? '🗣️' : '🔊', WORLD_W - 12, 12);
   ctx.globalAlpha = 1;
 
   // floaters
