@@ -93,12 +93,19 @@ const VIEW = { scale: 1, ox: 0, oy: 0 };
 let DPR = 1;
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  canvas.width = Math.round(w * DPR);
-  canvas.height = Math.round(h * DPR);
-  VIEW.scale = Math.min(canvas.width / WORLD_W, canvas.height / WORLD_H);
+  canvas.width = Math.round(canvas.clientWidth * DPR);
+  canvas.height = Math.round(canvas.clientHeight * DPR);
+  const sx = canvas.width / WORLD_W, sy = canvas.height / WORLD_H;
+  // Osimo 2026-09-04: "make screen fit phones that are wider than 16:9 like my Google
+  // pixel. so I don't get black lines on the side". A phone in landscape is ~20:9, so
+  // fitting a 16:9 room by the SMALLER axis pillarboxes it. When the viewport is wider
+  // than the room we now scale by WIDTH and let the room overflow vertically; when it is
+  // taller (portrait) we fall back to fitting, because covering there would crop the room
+  // down to a narrow slice. The vertical crop is biased 62/38 toward the ceiling so the
+  // floor — where everything is tapped — always survives.
+  VIEW.scale = (sx > sy) ? sx : Math.min(sx, sy);
   VIEW.ox = Math.round((canvas.width - WORLD_W * VIEW.scale) / 2);
-  VIEW.oy = Math.round((canvas.height - WORLD_H * VIEW.scale) / 2);
+  VIEW.oy = Math.round((canvas.height - WORLD_H * VIEW.scale) * (sx > sy ? 0.62 : 0.5));
 }
 window.addEventListener('resize', resize);
 function toWorld(px, py) {
@@ -163,12 +170,51 @@ function loadPack() {
   }).catch(() => { packState = 'failed'; });   // canvas fallback below keeps it playable
 }
 
+// ── the studio's big screen plays the real smoke title b-roll ──────────────
+// Osimo 2026-09-04: "big screen should have our Jimmy & Joe smoke b roll". Same clip the
+// show's cold open uses (assets/diorama/jimmy-joe-title-LOOP.mp4), cut to 12s and squeezed
+// to 256x144 @15fps — 10KB, so it costs nothing to ship inside a room. Rect measured
+// against the studio plate, not guessed.
+const TV = { x: 352, y: 108, w: 256, h: 146 };
+let tvVideo = null;
+function tvFrame() {
+  if (!tvVideo) {
+    const v = document.createElement('video');
+    v.src = '../assets/footage/jnj-smoke-screen.mp4?v=1';
+    v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.preload = 'auto';
+    v.play().catch(() => {});
+    tvVideo = v;
+  }
+  if (tvVideo.readyState >= 2 && tvVideo.videoWidth) {
+    ctx.save();
+    ctx.drawImage(tvVideo, TV.x, TV.y, TV.w, TV.h);
+    // a little screen glow spilling onto the brick, so it reads as ON
+    const g = ctx.createRadialGradient(TV.x + TV.w / 2, TV.y + TV.h / 2, 10,
+                                       TV.x + TV.w / 2, TV.y + TV.h / 2, TV.w * 0.9);
+    g.addColorStop(0, 'rgba(255,214,140,0.10)');
+    g.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(TV.x - 90, TV.y - 60, TV.w + 180, TV.h + 140);
+    ctx.restore();
+  }
+}
+
 // ── ROOMS ────────────────────────────────────────────────────────────────────
 // Left to right: coinroom | studio | corridor | prop. walkX is where a host has
 // to stand to use a hotspot; hit-testing is FIRST MATCH, so exits and small
 // interactive props are listed BEFORE big scenery (the jnj-on-air lesson —
 // a chesterfield rect listed above a doorway silently ate the doorway).
 const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
+// Osimo 2026-09-04: "make everyone a lot bigger, so they may [reach] the height of the
+// consoles, maybe make jnj bigger too same height as each other". Hosts are one height
+// everywhere; punters are sized PER CABINET because the corridor art recedes — a punter
+// at the far machine has to be smaller or he reads as a giant standing in the doorway.
+const HOST_H = 190;
+const CAB_VIS = [
+  { h: 235, feet: 466, x: 104 },   // cabinet 1, nearest the camera
+  { h: 196, feet: 456, x: 222 },
+  { h: 166, feet: 449, x: 306 },
+];
 const ROOMS = {
   coinroom: {
     name: 'THE COIN CLOSET', floorY: 470,
@@ -205,6 +251,10 @@ const ROOMS = {
   prop: {
     name: 'THE PROP ROOM', floorY: 480,
     hotspots: [
+      // Osimo 2026-09-04: "once I entered to store room at the end of the corridor could
+      // only exit to the right make it left and right". The prop room is through a door in
+      // the MIDDLE of the corridor, so either end of it should put you back on the floor.
+      { id: 'toCorrL',  x: 0,   y: 150, w: 70,  h: 340, walkX: 65,  label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'toCorr2',  x: 890, y: 150, w: 70,  h: 340, walkX: 895, label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'whisky',   x: 250, y: 300, w: 130, h: 130, walkX: 300, label: 'WHISKY CRATE' },
       { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
@@ -242,7 +292,8 @@ const UPGRADES = [
 
 let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
 let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
-let lastTs, dayPaused;
+let lastTs, dayPaused, turnedAway = 0;
+let tutorial = -1, talkUntil = 0, talkWho = 'jimmy';   // tutorial step, and who is speaking
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
@@ -253,7 +304,7 @@ function newRun() {
   banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
   cabs = [0, 1, 2].map(i => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
-  dayEndsAt = performance.now() + DAY_MS; dayPaused = false;
+  dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0;
   hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
   hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1 };
   active = 'jimmy';
@@ -265,6 +316,63 @@ function other() { return hosts[active === 'jimmy' ? 'joe' : 'jimmy']; }
 function otherName() { return active === 'jimmy' ? 'joe' : 'jimmy'; }
 
 function say(t, ms) { msg = t; msgUntil = performance.now() + (ms || 2200); }
+
+// Osimo 2026-09-04: "first time playing just like the farming games you should have speech
+// bubbles explainers (for now the we use Jimmy tts)". Six lines, in Jimmy's voice, each
+// anchored over whichever host you are driving, advanced by tapping. Shown once per device
+// — TIP_KEY — and the text is already written as spoken lines so the TTS pass is a render,
+// not a rewrite.
+const TIP_KEY = 'tc_tips_v1';
+const TIPS = [
+  "Right — one machine working, a fiver in the tin, and rent due at midnight.",
+  "Punters play, and the coins pile up INSIDE the cabinet. Tap the machine to empty it into your apron.",
+  "Apron only holds so much. Walk left, past the studio, to the coin closet.",
+  "The safe eats the bags. The ledger next to it is where you spend what's in it.",
+  "Buy the second cabinet first. Two machines earn while you're walking.",
+  "And that's Joe on the mic. Pull him off it to help you carry and the hype drops — hype is how fast punters turn up.",
+];
+function tipsSeen() { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } }
+function startTips() { if (!tipsSeen()) { tutorial = 0; talkWho = 'jimmy'; talkUntil = performance.now() + 9e5; } }
+function nextTip() {
+  tutorial++;
+  if (tutorial >= TIPS.length) {
+    tutorial = -1; talkUntil = 0;
+    try { localStorage.setItem(TIP_KEY, '1'); } catch (e) {}
+  }
+}
+function drawBubble() {
+  if (tutorial < 0) return;
+  const h = hosts[talkWho] && hosts[talkWho].room === room ? hosts[talkWho] : me();
+  const text = TIPS[tutorial];
+  ctx.font = '18px "Barlow Condensed",sans-serif';
+  // wrap to a sane column rather than one long line off the side of the room
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) {
+    if (ctx.measureText(cur + ' ' + w).width > 330 && cur) { lines.push(cur); cur = w; }
+    else cur = cur ? cur + ' ' + w : w;
+  }
+  if (cur) lines.push(cur);
+  const bw = 360, bh = 22 + lines.length * 22;
+  const bx = Math.max(20, Math.min(WORLD_W - bw - 20, h.x - bw / 2));
+  const by = Math.max(60, ROOMS[room].floorY - HOST_H - bh - 26);
+  ctx.fillStyle = 'rgba(8,6,4,0.93)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
+  ctx.beginPath();                                   // tail pointing at the speaker
+  ctx.moveTo(Math.max(bx + 18, Math.min(bx + bw - 30, h.x - 10)), by + bh);
+  ctx.lineTo(Math.max(bx + 30, Math.min(bx + bw - 18, h.x + 10)), by + bh);
+  ctx.lineTo(h.x, by + bh + 16); ctx.closePath();
+  ctx.fillStyle = 'rgba(8,6,4,0.93)'; ctx.fill();
+  ctx.strokeStyle = ACCENT; ctx.stroke();
+  ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+  ctx.fillText('JIMMY', bx + 12, by + 16);
+  ctx.fillStyle = '#fff'; ctx.font = '18px "Barlow Condensed",sans-serif';
+  lines.forEach((l, i) => ctx.fillText(l, bx + 12, by + 36 + i * 22));
+  ctx.fillStyle = 'rgba(232,195,90,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('TAP TO CONTINUE  ' + (tutorial + 1) + '/' + TIPS.length, bx + bw - 12, by + bh - 8);
+  ctx.textAlign = 'left';
+}
 
 // ── the floor: punters arrive, pick a free cabinet, play, pay, leave ─────────
 // Cabinets are the crop. A punter only lands if a cabinet is powered, unjammed
@@ -290,7 +398,7 @@ function updateFloor(dt, now) {
       SFX.punter();
     } else if (hype > 12) {
       hype -= 1.2;                     // turned away, and they tell people
-      if (room === 'corridor') floaters.push({ x: 480, y: 250, t: now, txt: 'NO FREE MACHINE', col: '#ff6b6b' });
+      turnedAway++;                    // shown once on the HUD, not flashed mid-screen
     }
   }
   for (let i = 0; i < cabs.length; i++) {
@@ -415,9 +523,12 @@ function changeRoom(to) {
   // enter from the side you walked in from: going RIGHT along ORDER puts you at the
   // left edge of the new room, going LEFT puts you at the right edge. (The first cut
   // of this picked a random edge, which teleported you across the room half the time.)
-  const goingRight = ORDER.indexOf(to) > ORDER.indexOf(h.room);
+  const from = h.room;
+  const goingRight = ORDER.indexOf(to) > ORDER.indexOf(from);
   h.room = to; room = to;
-  h.x = h.target = goingRight ? 150 : 810;
+  // coming back out of the prop room you step through the door in the middle of the
+  // corridor, not in at one end — either prop-room exit lands you at the same doorway
+  h.x = h.target = (from === 'prop' && to === 'corridor') ? 480 : (goingRight ? 150 : 810);
   shopOpen = false;
   pending = null;
 }
@@ -453,7 +564,7 @@ function endDay() {
     }, 900);
     return;
   }
-  cash -= rent; day++; SFX.day();
+  cash -= rent; day++; turnedAway = 0; SFX.day();   // the walkout count is per shift
   for (const c of cabs) { c.cursed = false; c.jam = false; }   // a new night, clean machines
   hype = Math.min(100, hype + 10);
   dayEndsAt = performance.now() + DAY_MS;
@@ -476,6 +587,7 @@ function onTap(e) {
   const w = toWorld(p.clientX, p.clientY);
   if (e.cancelable) e.preventDefault();
 
+  if (tutorial >= 0) { nextTip(); return; }        // the tutorial owns the tap while it is up
   if (shopOpen) { shopTap(w); return; }
   // speaker button, top right
   if (w.x > WORLD_W - 56 && w.y < 46) {
@@ -547,27 +659,68 @@ function drawHost(who, h) {
   if (walking && frames && frames.length) im = frames[Math.floor(h.walk / 110) % frames.length] || still;
   ctx.save();
   if (h.face < 0 && walking) { ctx.translate(h.x * 2, 0); ctx.scale(-1, 1); }
-  const dx = (h.face < 0 && walking) ? h.x : h.x;
-  if (!drawSprite(im, dx, feet, 132)) {
+  const dx = h.x;
+  if (!drawSprite(im, dx, feet, HOST_H)) {
     ctx.fillStyle = who === 'jimmy' ? '#e8e2d8' : '#b0873c';
-    ctx.fillRect(dx - 16, feet - 120, 32, 120);
+    ctx.fillRect(dx - 24, feet - HOST_H, 48, HOST_H);
   }
   ctx.restore();
+  drawFace(who, h.x, feet);
   if (who !== active) {                     // the one you are not driving
     ctx.fillStyle = 'rgba(232,195,90,0.85)';
     ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TAP TO SWAP', h.x, feet - 142);
+    ctx.fillText('TAP TO SWAP', h.x, feet - HOST_H - 10);
     ctx.textAlign = 'left';
   }
 }
+// The hosts' visors carry the same dot-matrix face the real LED rig uses (brow bar, round
+// dot eyes, mouth bar — assets/faces/*/\*_matrix_480x480.png). Osimo 2026-09-04: "once
+// Jimmy and Joe start talking their faces should behave like the lipsync faces we built
+// for them" — the mouth bar opens and closes on a fast jitter while that host has a line
+// on screen, and rests as a closed bar when he does not.
+function drawFace(who, x, feetY) {
+  // The sprites already carry the canonical face — black visor, lit eyes, lit mouth. So
+  // lipsync here is NOT a second face drawn on top (that reads as a double exposure, which
+  // is exactly how the first cut looked); it is the MOUTH ONLY, repainted over the baked
+  // one while that host has a line on screen, in the same dot-matrix language as the real
+  // LED rig (assets/faces/*/*_matrix_480x480.png). Silent = draw nothing, the baked smile
+  // stands. Visor geometry measured off the sprites with a ruler overlay, not guessed.
+  if (!(performance.now() < talkUntil && talkWho === who)) return;
+  const H = HOST_H;
+  // 0.695H / 0.685H measured off a live frame: the eyes sit at ~0.78H and the baked smile
+  // at ~0.70H, so anything higher paints the mouth between the eyes (which is what the
+  // first attempt did).
+  const my = feetY - H * (who === 'jimmy' ? 0.695 : 0.685);
+  const r = H * 0.017;                                        // one LED dot
+  const open = 0.30 + 0.70 * Math.abs(Math.sin(performance.now() / 65));
+  const rows = 1 + Math.round(open * 2);
+  ctx.save();
+  ctx.fillStyle = '#0b0d10';                                  // black out the baked smile only
+  ctx.fillRect(x - r * 6, my - r * 2.4, r * 12, r * 5.2);
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(190,235,255,0.95)'; ctx.shadowBlur = H * 0.012;
+  for (let i = -2; i <= 2; i++) {
+    for (let j = 0; j < rows; j++) {
+      const dx = i * r * 2.1, dy = (j - (rows - 1) / 2) * r * 2.1;
+      ctx.beginPath(); ctx.arc(x + dx, my + dy, r * 0.78, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function drawPunters() {
   if (room !== 'corridor') return;
+  // Osimo 2026-09-04: "could you make it look like people playing on the arcade are facing
+  // the arcade playing". The sprites are already back-view, so what was wrong was the
+  // PLACEMENT — they stood beside the machine on the shared floor line. Each punter now
+  // stands on his own cabinet's base line, centred on its control panel, at that
+  // cabinet's depth-appropriate size.
   for (let i = 0; i < cabCount(); i++) {
     const c = cabs[i];
     if (!c.busy) continue;
-    const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
-    drawSprite(SPR[c.busy.spr], hs.x + hs.w / 2 + 30, ROOMS.corridor.floorY, 118);
+    const v = CAB_VIS[i];
+    drawSprite(SPR[c.busy.spr], v.x, v.feet, v.h);
   }
 }
 function drawCabState() {
@@ -576,7 +729,17 @@ function drawCabState() {
     const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
     const c = cabs[i], cx = hs.x + hs.w / 2, cy = hs.y - 14;
     if (i >= cabCount()) {
-      badge(cx, cy, 'NO POWER', '#7a7a7a'); continue;
+      // Osimo 2026-09-04: "says no power but it looks like they have power (screens on)".
+      // The plate draws every cabinet lit, so an unpowered one has to be painted dark —
+      // and the badge now says what it costs and where to buy it, instead of only what is
+      // wrong with it.
+      ctx.save();
+      ctx.fillStyle = 'rgba(4,3,2,0.72)';
+      ctx.fillRect(hs.x, hs.y - 26, hs.w, hs.h + 30);
+      ctx.restore();
+      const u = UPGRADES.find(x => x.id === (i === 1 ? 'cab2' : 'cab3'));
+      badge(cx, cy, 'OFF — £' + (u.cost / 100).toFixed(2), '#8e8e8e');
+      continue;
     }
     if (c.jam) { badge(cx, cy, '⚠ JAMMED', '#ff6b6b'); continue; }
     if (c.till > 0) badge(cx, cy, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
@@ -595,9 +758,10 @@ function badge(cx, cy, txt, col) {
   ctx.textAlign = 'left';
 }
 function drawHUD(now) {
+  const SW = canvas.clientWidth, SH = canvas.clientHeight;
   ctx.save();
   ctx.fillStyle = 'rgba(6,5,4,0.62)';
-  ctx.fillRect(0, 0, WORLD_W, 46);
+  ctx.fillRect(0, 0, SW, 46);
   ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
   ctx.fillStyle = '#ffd75e';
   ctx.fillText('£' + (cash / 100).toFixed(2), 14, 32);
@@ -617,20 +781,28 @@ function drawHUD(now) {
   const left = Math.max(0, dayEndsAt - now);
   ctx.textAlign = 'right';
   ctx.fillStyle = '#e8e2d8';
-  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), WORLD_W - 66, 31);
+  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), SW - 66, 31);
   ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
   ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText(Math.ceil(left / 1000) + 's', WORLD_W - 190, 31);
+  ctx.fillText(Math.ceil(left / 1000) + 's', SW - 190, 31);
   ctx.textAlign = 'left';
   ctx.restore();
   // speaker
   ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(muted ? '🔇' : '🔊', WORLD_W - 14, 32);
+  ctx.fillText(muted ? '🔇' : '🔊', SW - 14, 32);
   ctx.textAlign = 'left';
+  // turned-away count — the quiet version of the old flashing NO FREE MACHINE
+  if (turnedAway > 0) {
+    ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = 'rgba(255,107,107,0.9)';
+    ctx.textAlign = 'center';
+    ctx.fillText(turnedAway + ' walked out — no free machine', SW / 2, 62);
+    ctx.textAlign = 'left';
+  }
   // room name
   ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
   ctx.fillStyle = 'rgba(232,195,90,0.65)'; ctx.textAlign = 'center';
-  ctx.fillText(ROOMS[room].name, WORLD_W / 2, WORLD_H - 12);
+  ctx.fillText(ROOMS[room].name, SW / 2, SH - 10);
   ctx.textAlign = 'left';
 }
 function drawShop() {
@@ -705,13 +877,16 @@ function frame(ts) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
   drawPlate(room);
+  if (room === 'studio') tvFrame();
   drawPunters();
   if (state !== 'attract') {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
   }
   drawCabState();
   drawFloaters(ts);
-  if (state !== 'attract') { drawHUD(ts); drawMsg(ts); }
+  if (state !== 'attract') { drawBubble(); drawMsg(ts); }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD lives in SCREEN space, so a
+  if (state !== 'attract') drawHUD(ts);              // cover-cropped room never eats it
   if (shopOpen) drawShop();
   if (state === 'bust') {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
@@ -751,6 +926,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
   overlay.classList.add('hidden');
   newRun();
   state = 'play';
+  startTips();
   try {
     document.documentElement.requestFullscreen?.().catch(() => {});
     screen.orientation?.lock?.('landscape').catch(() => {});
@@ -761,7 +937,7 @@ document.getElementById('arcadeBtn').addEventListener('click', () => {
 });
 if (new URLSearchParams(location.search).get('play') === '1') {
   // deep link straight into a shift (used by QA and the cassette recorder)
-  overlay.classList.add('hidden'); newRun(); state = 'play';
+  overlay.classList.add('hidden'); newRun(); state = 'play'; startTips();
 }
 })();
 </script>
