@@ -119,6 +119,39 @@ function toWorld(px, py) {
 //    two-state end of it, 🔊 sound FX → 🔇 mute. ─────────────────────────────
 let audioCtx = null, muted = false;
 try { muted = localStorage.getItem('sfxMuted_' + SLUG) === '1'; } catch (e) {}
+// Osimo 2026-09-04: "put the 3 jingles in there from crushtris". Same three files
+// candy-tris uses, same quiet backing-bed volume; the speaker button cycles
+// 🔊 sound FX → the three jingles in turn → 🔇 mute, and the choice persists.
+const JINGLES = [
+  { label: '8-BIT',      file: '../assets/audio/candy-tris/jingle-8bit-town.mp3' },
+  { label: 'MUSIC BOX',  file: '../assets/audio/candy-tris/jingle-music-box.mp3' },
+  { label: 'RETRO WAVE', file: '../assets/audio/candy-tris/jingle-retro-wave.mp3' },
+];
+const MUSIC_VOL = 0.32;
+let musicIdx = -1, musicEl = null;      // -1 = no music, 0..2 = a jingle
+try { const mi = parseInt(localStorage.getItem('music_' + SLUG), 10);
+      if (mi >= 0 && mi < JINGLES.length) musicIdx = mi; } catch (e) {}
+function applyMusic() {
+  if (musicEl) { musicEl.pause(); musicEl = null; }
+  if (musicIdx < 0 || muted || state === 'attract') return;
+  const a = new Audio(JINGLES[musicIdx].file);
+  a.loop = true; a.volume = MUSIC_VOL;
+  a.play().catch(() => {});
+  musicEl = a;
+}
+function cycleSound() {
+  // sfx → jingle 1 → jingle 2 → jingle 3 → mute → sfx …
+  if (muted) { muted = false; musicIdx = -1; }
+  else if (musicIdx < 0) musicIdx = 0;
+  else if (musicIdx < JINGLES.length - 1) musicIdx++;
+  else { muted = true; musicIdx = -1; }
+  try {
+    localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0');
+    localStorage.setItem('music_' + SLUG, String(musicIdx));
+  } catch (e) {}
+  applyMusic();
+  if (!muted) say(musicIdx < 0 ? 'Sound FX only.' : JINGLES[musicIdx].label + ' playing.');
+}
 function unlockAudio() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -222,26 +255,22 @@ const HOST_BOX = { w: 142, h: 213 };
 // painted over it. A powered one gets its own lit game picture blitted into the screen
 // quad, plus the light it throws into the room.
 const MACHINES = [
-  // Quads/bodies measured against the ALL-SCREENS-OFF corridor plate with a coordinate
-  // grid. Punter slots sit on the floor line MEASURED under the cabinet row — the cabinet
-  // bases run (207,443) to (313,380), a slope of -0.59 — so each punter further down the
-  // row stands higher and smaller, tucked at his machine rather than out in the aisle.
-  // Osimo 2026-09-04 drew that line over a screenshot: "the position of the punters is all
-  // off, follow the bottom line I added". The sprites face left with their hands ~30% in
-  // from their leading edge; the right-hand machine is mirrored (`flip`), played from its
-  // left.
-  // Osimo 2026-09-04: "just like in the real games you have some that pay quicker some
-  // slower but pay more". pay = coins per session, secs = how long a punter stays.
+  // Punter slots come from the two lines Osimo drew over a screenshot on 2026-09-04 — one
+  // along the TOPS OF THE HEADS, one along the FEET. Converted into world space they are:
+  //   head(x) = 255 - 0.057 * (x - 246)      (nearly level — correct for a receding row of
+  //   feet(x) = 478 - 0.763 * (x - 242)       same-height people)
+  // so a punter's height at any x is feet(x) - head(x). That is why the near one is 223px
+  // and the far one 111px: I had been sizing them by eye and getting it wrong every time.
   { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 150, feet: 418, x: 250 }, flip: false },
+    punter: { h: 223, feet: 478, x: 242 }, flip: false },
   { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 122, feet: 392, x: 300 }, flip: false },
+    punter: { h: 182, feet: 434, x: 300 }, flip: false },
   { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h: 100, feet: 372, x: 340 }, flip: false },
+    punter: { h: 145, feet: 394, x: 352 }, flip: false },
   { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h:  84, feet: 356, x: 374 }, flip: false },
+    punter: { h: 111, feet: 357, x: 400 }, flip: false },
   { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 155, feet: 430, x: 660 }, flip: true },
+    punter: { h: 215, feet: 472, x: 648 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 const ROOMS = {
@@ -250,7 +279,9 @@ const ROOMS = {
     hotspots: [
       { id: 'toStudio', x: 880, y: 150, w: 80, h: 340, walkX: 890, label: 'TO THE STUDIO', exit: 'studio' },
       { id: 'safe',     x: 690, y: 300, w: 130, h: 150, walkX: 690, label: 'THE SAFE' },
-      { id: 'ledger',   x: 430, y: 300, w: 200, h: 130, walkX: 470, label: 'THE LEDGER' },
+      // Osimo 2026-09-04: "finding what to click for the ledger is too small, anywhere on
+      // the desk should cover it" — the hotspot is the whole desk now, top to floor.
+      { id: 'ledger',   x: 386, y: 268, w: 286, h: 210, walkX: 470, label: 'THE LEDGER' },
       { id: 'counter',  x: 60,  y: 250, w: 170, h: 220, walkX: 210, label: 'COIN COUNTER' },
     ],
   },
@@ -364,6 +395,9 @@ const TIPS = [
   { text: "The safe eats the bags. The ledger beside it is where you spend what's in it.", icon: 'icCounter' },
   { text: "Buy a second cabinet first. Two machines earn while you are walking.", icon: 'icCab', qty: 2 },
   { text: "That's Joe on the mic. Pull him off it and hype drops — hype is how fast punters turn up.", icon: 'icOnair' },
+  // Osimo 2026-09-04: "do they explain how to pay rent?" — they do now, and it is the last
+  // thing said, because it is the thing that ends the run.
+  { text: "Rent comes out of the safe on its own at midnight, every night, and it goes up. Bank before the clock runs out or that's the run.", icon: 'icCounter' },
 ];
 function tipsSeen() { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } }
 function startTips() { if (!tipsSeen()) { tutorial = 0; talkWho = 'jimmy'; talkUntil = performance.now() + 9e5; } }
@@ -656,11 +690,7 @@ function onTap(e) {
   // the chevrons are painted at the doorways; tapping one walks you to that exit like
   // any other hotspot, so no separate screen-space hit test is needed
   // speaker button, top right
-  if (w.x > WORLD_W - 56 && w.y < 46) {
-    muted = !muted;
-    try { localStorage.setItem('sfxMuted_' + SLUG, muted ? '1' : '0'); } catch (er) {}
-    return;
-  }
+  if (w.x > WORLD_W - 56 && w.y < 46) { cycleSound(); return; }
   // tap the other host to take him over — he stays exactly where you left him
   const o = other();
   if (o.room === room && Math.abs(w.x - o.x) < 46 && w.y > ROOMS[room].floorY - 130) {
@@ -688,13 +718,17 @@ function shopMetrics() {
   const n = UPGRADES.filter(upgradeAvailable).length || 1;
   const top = Math.round(SH * 0.20), bottom = Math.round(SH * 0.10);
   const rowH = Math.max(24, Math.min(40, (SH - top - bottom) / n));
-  const w = Math.round(SW * 0.375);                 // the left page only
-  return { SW, SH, rowH, w, x: Math.round(SW * 0.115), top };   // clear of the spine
+  const w = Math.round(SW * 0.325);                 // the left page, inside its red rule
+  return { SW, SH, rowH, w, x: Math.round(SW * 0.165), top };   // fully ON the paper
 }
-// how far down the page a row sits, as a fraction — used to bend the rows with the paper
+// The book art's red margin rule leans left as it goes down the page (measured off the
+// plate: about -0.11 px of x per px of y). Osimo 2026-09-04: "they should be parallel to
+// the red line" — so every row is shifted along that same lean, and the whole column runs
+// parallel to the rule instead of sitting square on a curved page.
+const PAGE_LEAN = -0.11;
 function pageCurve(i, n) {
   const t = n > 1 ? i / (n - 1) : 0.5;
-  return Math.sin(t * Math.PI) * 5;                 // pages bow out in the middle
+  return Math.sin(t * Math.PI) * 4;                 // pages bow out in the middle
 }
 const SHOP_CLOSE_W = 118, SHOP_CLOSE_H = 38;
 function shopCloseRect() {
@@ -704,9 +738,10 @@ function shopCloseRect() {
 function shopRows() {
   const m = shopMetrics();
   const list = UPGRADES.filter(upgradeAvailable);
-  return list.map((u, i) => ({ u, x: m.x + pageCurve(i, list.length) * 0.6,
-                               y: m.top + i * m.rowH + pageCurve(i, list.length),
-                               w: m.w, h: m.rowH - 4 }));
+  return list.map((u, i) => {
+    const y = m.top + i * m.rowH + pageCurve(i, list.length);
+    return { u, x: m.x + (y - m.top) * PAGE_LEAN, y, w: m.w, h: m.rowH - 4 };
+  });
 }
 function shopTap(w) {
   // Osimo 2026-09-04: "if you can't buy anything there's no intuitive way to exit the
@@ -860,7 +895,9 @@ function drawCabState() {
       // shear about the screen's CENTRE, not its corner — pivoting at the corner slides
       // the picture off the glass as it leans. Magnitude is per machine because the row
       // recedes, so the far cabinets present their screens at a shallower angle.
-      const sk = m.flip ? 0.22 : [-0.22, -0.20, -0.18, -0.16][i] || -0.18;
+      // Osimo 2026-09-04: "you slanted them into the wrong direction" — the glass leans
+      // the other way, so the sign is flipped.
+      const sk = m.flip ? -0.22 : [0.22, 0.20, 0.18, 0.16][i] || 0.18;
       ctx.translate(sx + sw / 2, sy + sh / 2);
       ctx.transform(1, sk, 0, 1, 0, 0);
       ctx.drawImage(scr, -sw / 2, -sh / 2, sw, sh);   // its own game picture, lit
@@ -938,6 +975,25 @@ function drawHUD(now) {
   if (bottles) { ctx.fillStyle = '#e8c35a'; ctx.fillText('🍾×' + bottles, hx + hw + 132, 31); }
   // day + clock
   const left = Math.max(0, dayEndsAt - now);
+  // Rent warning (Osimo 2026-09-04: "does a pop up warn you when you about to run out?").
+  // Fires in the last 25 seconds and only while the safe is short — a warning you can
+  // still do something about, not a post-mortem.
+  if (!dayPaused && left < 25000 && cash < RENT(day)) {
+    const short = (RENT(day) - cash) / 100;
+    const pulse = 0.55 + 0.45 * Math.sin(now * 0.012);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = 'rgba(120,10,10,0.92)';
+    ctx.fillRect(SW / 2 - 190, 52, 380, 34);
+    ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 2;
+    ctx.strokeRect(SW / 2 - 190, 52, 380, 34);
+    ctx.fillStyle = '#ffd7d7'; ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('RENT £' + (RENT(day) / 100).toFixed(2) + ' DUE — £' + short.toFixed(2) +
+                 ' SHORT. BANK NOW.', SW / 2, 75);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
   ctx.textAlign = 'right';
   ctx.fillStyle = '#e8e2d8';
   ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), SW - 66, 31);
@@ -948,7 +1004,12 @@ function drawHUD(now) {
   ctx.restore();
   // speaker
   ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(muted ? '🔇' : '🔊', SW - 14, 32);
+  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - 14, 32);
+  if (musicIdx >= 0 && !muted) {
+    ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = 'rgba(232,195,90,0.8)';
+    ctx.fillText(JINGLES[musicIdx].label, SW - 34, 32);
+  }
   ctx.textAlign = 'left';
   // turned-away count — the quiet version of the old flashing NO FREE MACHINE
   if (turnedAway > 0) {
@@ -980,9 +1041,9 @@ function drawShop() {
   }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.x + m.w / 2, Math.round(m.SH * 0.135));
+  ctx.fillText('THE LEDGER', m.x + m.w / 2, Math.round(m.SH * 0.125));
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x + m.w / 2, Math.round(m.SH * 0.175));
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x + m.w / 2, Math.round(m.SH * 0.163));
   ctx.textAlign = 'left';
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
@@ -1116,6 +1177,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
   newRun();
   state = 'play';
   startTips();
+  applyMusic();                        // a stored jingle choice resumes with the run
   try {
     document.documentElement.requestFullscreen?.().catch(() => {});
     screen.orientation?.lock?.('landscape').catch(() => {});
