@@ -158,7 +158,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=4').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=5').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     for (const k in p.sprites) {
@@ -230,15 +230,17 @@ const MACHINES = [
   // off, follow the bottom line I added". The sprites face left with their hands ~30% in
   // from their leading edge; the right-hand machine is mirrored (`flip`), played from its
   // left.
-  { body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
+  // Osimo 2026-09-04: "just like in the real games you have some that pay quicker some
+  // slower but pay more". pay = coins per session, secs = how long a punter stays.
+  { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
     punter: { h: 150, feet: 418, x: 250 }, flip: false },
-  { body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
+  { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
     punter: { h: 122, feet: 392, x: 300 }, flip: false },
-  { body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
+  { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
     punter: { h: 100, feet: 372, x: 340 }, flip: false },
-  { body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
+  { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
     punter: { h:  84, feet: 356, x: 374 }, flip: false },
-  { body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
+  { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
     punter: { h: 155, feet: 430, x: 660 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
@@ -325,6 +327,7 @@ let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
 let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
 let lastTs, dayPaused, turnedAway = 0;
 let tutorial = -1, talkUntil = 0, talkWho = 'jimmy';   // tutorial step, and who is speaking
+let boxOpenedToday = false;   // the DO NOT OPEN box is a once-a-night decision, not a tap
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
@@ -335,7 +338,7 @@ function newRun() {
   banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
-  dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0;
+  dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0; boxOpenedToday = false;
   hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
   hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1 };
   active = 'jimmy';
@@ -386,6 +389,8 @@ function drawBubble(SW, SH) {
   if (tutorial < 0) return;
   const t = TIPS[tutorial];
   ctx.font = '17px "Barlow Condensed",sans-serif';
+  // Osimo 2026-09-04: "make sure it's not that wide if it doesn't have to". Measure the
+  // longest word-wrapped line and size the bubble to THAT, not to the maximum allowed.
   const maxW = Math.min(430, SW - 200);
   const words = t.text.split(' '), lines = []; let cur = '';
   for (const w of words) {
@@ -393,8 +398,10 @@ function drawBubble(SW, SH) {
     else cur = cur ? cur + ' ' + w : w;
   }
   if (cur) lines.push(cur);
-  const iconH = t.icon ? 46 : 0;
-  const bw = maxW + 28, bh = 22 + lines.length * 21 + iconH;
+  const iconH = t.icon ? 50 : 0;
+  let textW = 0;
+  for (const l of lines) textW = Math.max(textW, ctx.measureText(l).width);
+  const bw = Math.max(190, Math.min(maxW, textW) + 28), bh = 22 + lines.length * 21 + iconH;
   const px = 104, py = Math.max(56, SH - bh - 72);
   const po = SPR.poJimmy;
   if (po) ctx.drawImage(po, px - 84, py + bh / 2 - 36, 72, 72);
@@ -410,11 +417,11 @@ function drawBubble(SW, SH) {
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   lines.forEach((l, i) => ctx.fillText(l, px + 14, py + 26 + i * 21));
   if (t.icon) {
-    const iy = py + 24 + lines.length * 21, im = SPR[t.icon];
-    if (im) ctx.drawImage(im, px + 14, iy, 40, 40);
+    const iy = py + 22 + lines.length * 21, im = SPR[t.icon];
+    if (im) ctx.drawImage(im, px + 12, iy, 44, 44);      // cut-out art, no tile behind it
     if (t.qty) {
       ctx.fillStyle = '#1f6b3a'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
-      ctx.fillText('\u00d7' + t.qty, px + 62, iy + 30);
+      ctx.fillText('\u00d7' + t.qty, px + 62, iy + 32);
     }
   }
   ctx.fillStyle = 'rgba(122,74,26,0.75)'; ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
@@ -443,7 +450,8 @@ function updateFloor(dt, now) {
     if (ci >= 0) {
       const c = cabs[ci];
       c.busy = { spr: ['punter34A', 'punter34B', 'punter34C'][Math.floor(Math.random() * 3)] };
-      c.playT = 5000 + Math.random() * 4000;
+      c.playFull = MACHINES[ci].secs * 1000 * (0.85 + Math.random() * 0.3);
+      c.playT = c.playFull;
       SFX.punter();
     } else if (hype > 12) {
       hype -= 1.2;                     // turned away, and they tell people
@@ -456,7 +464,8 @@ function updateFloor(dt, now) {
     if (!c.busy) continue;
     c.playT -= dt;
     if (c.playT <= 0) {
-      const take = Math.round((18 + Math.random() * 22) * (c.cursed ? 0.45 : 1) * (1 + hype / 220));
+      const take = Math.round(MACHINES[i].pay * (0.8 + Math.random() * 0.4) *
+                              (c.cursed ? 0.45 : 1) * (1 + hype / 220));
       c.till += take;
       c.busy = null;
       if (room === 'corridor') {
@@ -541,19 +550,21 @@ function act(h) {
       return;
     }
     case 'bitsBox': {
-      // THE ONE TWIST (Grok Build, Joe's version): the only free money in the
-      // game, and it permanently sours a machine for the rest of the night.
-      const win = 250 + Math.round(Math.random() * 400);
+      // THE ONE TWIST (Grok Build, Joe's version): the only free money in the game, and it
+      // permanently sours a machine for the night. Osimo 2026-09-04: "why am I getting
+      // infinite cash by tapping that box" — because it paid out on EVERY tap and, once
+      // every cabinet was already cursed, it paid with no cost at all. It now costs a
+      // cabinet every time: no clean cabinet left, no payout. One box per night either way.
       const live = [];
       for (let i = 0; i < cabCount(); i++) if (!cabs[i].cursed) live.push(i);
+      if (boxOpenedToday) { say('You have had your hand in there once tonight already.'); SFX.deny(); return; }
+      if (!live.length) { say('Every machine is already ruined. The box has nothing to take.'); SFX.deny(); return; }
+      boxOpenedToday = true;
+      const win = 250 + Math.round(Math.random() * 400);
+      const c = live[Math.floor(Math.random() * live.length)];
+      cabs[c].cursed = true;
       cash += win; banked += win; SFX.box();
-      if (live.length) {
-        const c = live[Math.floor(Math.random() * live.length)];
-        cabs[c].cursed = true;
-        say('£' + (win / 100).toFixed(2) + ' in the box. Cabinet ' + (c + 1) + ' has never been the same since.', 3200);
-      } else {
-        say('£' + (win / 100).toFixed(2) + ' — and nothing left to ruin.', 3000);
-      }
+      say('£' + (win / 100).toFixed(2) + ' in the box. Cabinet ' + (c + 1) + ' has never been the same since.', 3200);
       floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + (win / 100).toFixed(2), col: '#c96bff' });
       return;
     }
@@ -613,7 +624,7 @@ function endDay() {
     }, 900);
     return;
   }
-  cash -= rent; day++; turnedAway = 0; SFX.day();   // the walkout count is per shift
+  cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
   for (const c of cabs) { c.cursed = false; c.jam = false; }   // a new night, clean machines
   hype = Math.min(100, hype + 10);
   dayEndsAt = performance.now() + DAY_MS;
@@ -642,8 +653,8 @@ function onTap(e) {
     shopTap({ x: p.clientX - sr.left, y: p.clientY - sr.top });
     return;
   }
-  const rr = canvas.getBoundingClientRect();       // arrows are screen furniture
-  if (arrowTapScreen(p.clientX - rr.left, p.clientY - rr.top)) return;
+  // the chevrons are painted at the doorways; tapping one walks you to that exit like
+  // any other hotspot, so no separate screen-space hit test is needed
   // speaker button, top right
   if (w.x > WORLD_W - 56 && w.y < 46) {
     muted = !muted;
@@ -669,12 +680,21 @@ canvas.addEventListener('mousedown', onTap);
 // Laid out in SCREEN space (like the HUD): the room is cover-cropped on wide phones, and
 // a world-space list lost its bottom rows off the edge of the crop.
 function shopMetrics() {
+  // Osimo 2026-09-04: "have him write them in the page not overlapped… following contour of
+  // the pages". The book art has a gutter down the middle and its pages curve, so the list
+  // is inset to the LEFT PAGE's writing area and each row is nudged along the page's own
+  // curve instead of being laid out as a flat table across the whole screen.
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   const n = UPGRADES.filter(upgradeAvailable).length || 1;
-  const top = 84, bottom = 12;
-  const rowH = Math.max(26, Math.min(42, (SH - top - bottom) / n));
-  const w = Math.min(760, SW - 40);
-  return { SW, SH, rowH, w, x: (SW - w) / 2, top };
+  const top = Math.round(SH * 0.20), bottom = Math.round(SH * 0.10);
+  const rowH = Math.max(24, Math.min(40, (SH - top - bottom) / n));
+  const w = Math.round(SW * 0.375);                 // the left page only
+  return { SW, SH, rowH, w, x: Math.round(SW * 0.115), top };   // clear of the spine
+}
+// how far down the page a row sits, as a fraction — used to bend the rows with the paper
+function pageCurve(i, n) {
+  const t = n > 1 ? i / (n - 1) : 0.5;
+  return Math.sin(t * Math.PI) * 5;                 // pages bow out in the middle
 }
 const SHOP_CLOSE_W = 118, SHOP_CLOSE_H = 38;
 function shopCloseRect() {
@@ -683,8 +703,10 @@ function shopCloseRect() {
 }
 function shopRows() {
   const m = shopMetrics();
-  return UPGRADES.filter(upgradeAvailable)
-    .map((u, i) => ({ u, x: m.x, y: m.top + i * m.rowH, w: m.w, h: m.rowH - 4 }));
+  const list = UPGRADES.filter(upgradeAvailable);
+  return list.map((u, i) => ({ u, x: m.x + pageCurve(i, list.length) * 0.6,
+                               y: m.top + i * m.rowH + pageCurve(i, list.length),
+                               w: m.w, h: m.rowH - 4 }));
 }
 function shopTap(w) {
   // Osimo 2026-09-04: "if you can't buy anything there's no intuitive way to exit the
@@ -789,13 +811,28 @@ function drawPunters() {
     if (!c.busy) continue;
     const m = MACHINES[i], im = SPR[c.busy.spr];
     if (!im) continue;
-    if (m.flip) {                       // the right-hand machine is played from its left
-      ctx.save(); ctx.translate(m.punter.x * 2, 0); ctx.scale(-1, 1);
-      drawSprite(im, m.punter.x, m.punter.feet, m.punter.h);
+    // Osimo 2026-09-04: "maybe we could do it subtly where the punters are like in black
+    // and white and they regain colour at the rate that they are staying on the machine
+    // for." So the punter IS the progress bar — he arrives drained of colour and fills up
+    // from the feet as his session runs; when he is fully coloured, he pays and leaves.
+    const prog = c.playFull ? Math.max(0, Math.min(1, 1 - c.playT / c.playFull)) : 1;
+    ctx.save();
+    if (m.flip) { ctx.translate(m.punter.x * 2, 0); ctx.scale(-1, 1); }
+    const px = m.punter.x, feet = m.punter.feet, ph = m.punter.h;
+    const pw = im.width * (ph / im.height);
+    ctx.save();                                   // grey version, whole body
+    ctx.filter = 'grayscale(1) brightness(0.78)';
+    drawSprite(im, px, feet, ph);
+    ctx.restore();
+    if (prog > 0) {                               // colour rises from the feet
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(px - pw / 2 - 2, feet - ph * prog, pw + 4, ph * prog + 2);
+      ctx.clip();
+      drawSprite(im, px, feet, ph);
       ctx.restore();
-    } else {
-      drawSprite(im, m.punter.x, m.punter.feet, m.punter.h);
     }
+    ctx.restore();
   }
 }
 function drawCabState() {
@@ -855,50 +892,28 @@ function badge(cx, cy, txt, col) {
   ctx.fillText(txt, cx, cy - 2);
   ctx.textAlign = 'left';
 }
-// Osimo 2026-09-04: "should have the arrows to move between rooms, make more intuitive."
-// Screen-space furniture beside the room name, so the cover-crop can never hide it, and
-// each one NAMES the room it leads to rather than just pointing. Walking to a doorway and
-// tapping it still works — this is a second, obvious route.
-function roomArrows() {
-  // the prop room hangs off the corridor's middle door, so it is nobody's left/right
-  // neighbour: both of its arrows lead back to the arcade
-  if (room === 'prop') return [{ dir: -1, to: 'corridor', name: ROOMS.corridor.name },
-                               { dir: 1,  to: 'corridor', name: ROOMS.corridor.name }];
-  const i = ORDER.indexOf(room), res = [];
-  if (i > 0) res.push({ dir: -1, to: ORDER[i - 1], name: ROOMS[ORDER[i - 1]].name });
-  if (room === 'corridor') res.push({ dir: 1, to: 'prop', name: ROOMS.prop.name });
-  else if (ORDER[i + 1] && ORDER[i + 1] !== 'prop') {
-    res.push({ dir: 1, to: ORDER[i + 1], name: ROOMS[ORDER[i + 1]].name });
+// Osimo 2026-09-04: "the arrows should only be like in jnj on air, simple, minimalist, and
+// shouldn't have one for the store room as you have to click the door." So: no labelled
+// boxes any more — a single small pulsing chevron sitting IN the room at each side
+// doorway, exactly the jnj-on-air treatment, and the prop room is entered by tapping its
+// door like any other object.
+function sideExits() {
+  const out = [];
+  for (const h of ROOMS[room].hotspots) {
+    if (!h.exit || h.exit === 'prop') continue;        // the prop door is not an arrow
+    out.push({ h, dir: h.x < WORLD_W / 2 ? -1 : 1 });
   }
-  return res;
+  return out;
 }
-function arrowRect(dir, SW, SH) {
-  const w = 118, h = 42, m = 10;
-  return { x: dir < 0 ? m : SW - w - m, y: SH - h - m, w, h };
-}
-function drawArrows(SW, SH) {
-  for (const a of roomArrows()) {
-    const r = arrowRect(a.dir, SW, SH);
-    ctx.fillStyle = 'rgba(8,6,4,0.74)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = 'rgba(232,195,90,0.75)'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(a.dir < 0 ? '‹' : '›', a.dir < 0 ? r.x + 13 : r.x + r.w - 13, r.y + 28);
-    ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = 'rgba(255,233,168,0.92)';
-    ctx.fillText(a.name, r.x + r.w / 2, r.y + 26);
-    ctx.textAlign = 'left';
+function drawExitArrows(now) {
+  const a = 0.4 + Math.sin(now * 0.004) * 0.25;
+  for (const e of sideExits()) {
+    const x = e.dir < 0 ? 30 : WORLD_W - 30, y = ROOMS[room].floorY - 70;
+    ctx.fillStyle = 'rgba(232,195,90,' + a.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.moveTo(x - 11 * e.dir, y - 15); ctx.lineTo(x + 11 * e.dir, y); ctx.lineTo(x - 11 * e.dir, y + 15);
+    ctx.closePath(); ctx.fill();
   }
-}
-function arrowTapScreen(px, py) {
-  const SW = canvas.clientWidth, SH = canvas.clientHeight;
-  for (const a of roomArrows()) {
-    const r = arrowRect(a.dir, SW, SH);
-    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) { changeRoom(a.to); return true; }
-  }
-  return false;
 }
 
 function drawHUD(now) {
@@ -950,7 +965,6 @@ function drawHUD(now) {
   ctx.fillStyle = 'rgba(232,195,90,0.65)'; ctx.textAlign = 'center';
   ctx.fillText(ROOMS[room].name, SW / 2, SH - 10);
   ctx.textAlign = 'left';
-  drawArrows(SW, SH);
 }
 function drawShop() {
   const m = shopMetrics();
@@ -965,10 +979,10 @@ function drawShop() {
     ctx.drawImage(bk, (m.SW - dw) / 2, (m.SH - dh) / 2, dw, dh);
   }
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 27px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.SW / 2, 38);
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
+  ctx.fillText('THE LEDGER', m.x + m.w / 2, Math.round(m.SH * 0.135));
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.SW / 2, 58);
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x + m.w / 2, Math.round(m.SH * 0.175));
   ctx.textAlign = 'left';
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
@@ -978,17 +992,17 @@ function drawShop() {
       ctx.strokeStyle = 'rgba(122,74,26,0.55)'; ctx.lineWidth = 1.5;
       ctx.strokeRect(r.x, r.y, r.w, r.h);
     }
-    shopIcon(r.u.icon, r.x + 28, r.y + r.h / 2, Math.min(34, r.h - 2), can);
+    shopIcon(r.u.icon, r.x + 18, r.y + r.h / 2, Math.min(30, r.h), can);
     ctx.fillStyle = can ? '#3c2410' : '#8a795f';
-    ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
-    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 56, r.y + 16);
-    ctx.font = '13px "Barlow Condensed",sans-serif';
+    ctx.font = 'bold 16px "Barlow Condensed",sans-serif';
+    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 42, r.y + 15);
+    ctx.font = '12px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
-    ctx.fillText(r.u.blurb, r.x + 56, r.y + 30);
+    ctx.fillText(r.u.blurb, r.x + 42, r.y + 28);
     ctx.textAlign = 'right';
-    ctx.font = 'bold 20px "Barlow Condensed",sans-serif';
+    ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
-    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 16, r.y + 24);
+    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 6, r.y + 22);
     ctx.textAlign = 'left';
   }
   const cl = shopCloseRect();
@@ -1051,6 +1065,7 @@ function frame(ts) {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
   }
   drawCabState();
+  if (state !== 'attract') drawExitArrows(ts);
   drawFloaters(ts);
   if (state !== 'attract') drawMsg(ts);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD + shop live in SCREEN space, so
