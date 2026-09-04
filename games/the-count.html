@@ -158,7 +158,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=2').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=3').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     for (const k in p.sprites) {
@@ -216,16 +216,30 @@ const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
 // which is Jimmy's — 213 tall by 142 wide, his own 38px-wide content stretched 12% in
 // height at unchanged width, exactly as asked last round.
 const HOST_BOX = { w: 142, h: 213 };
-// Punter slots, measured off the corridor plate with a coordinate grid rather than nudged:
-// each machine's control panel centre is (165,300) / (252,290) / (306,281) in world space,
-// each cabinet's floor contact is ~465 / ~425 / ~395, and the sprites face LEFT with their
-// hands about 30% of their width in from the left edge — so x is set so the HANDS land on
-// the panel, not the body centre.
-const CAB_VIS = [
-  { h: 210, feet: 470, x: 199 },   // cabinet 1 — nearest, biggest, lowest on the floor
-  { h: 165, feet: 435, x: 279 },
-  { h: 135, feet: 405, x: 328 },
+// FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
+// game play"): four down the left wall, one on the right. The corridor plate is now the
+// ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
+// painted over it. A powered one gets its own lit game picture blitted into the screen
+// quad, plus the light it throws into the room.
+const MACHINES = [
+  // Quads/bodies measured against the ALL-SCREENS-OFF corridor plate with a coordinate
+  // grid. Punter slots put each head BELOW its machine's screen, so five people never hide
+  // the row they are playing, and the five form a receding diagonal down the aisle. The
+  // sprites face left with their hands ~30% in from their leading edge, so x is set to land
+  // the hands near each control panel; the right-hand machine is mirrored (`flip`) because
+  // it is played from its left.
+  { body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
+    punter: { h: 150, feet: 455, x: 268 }, flip: false },
+  { body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
+    punter: { h: 128, feet: 428, x: 330 }, flip: false },
+  { body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
+    punter: { h: 108, feet: 405, x: 372 }, flip: false },
+  { body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
+    punter: { h:  92, feet: 388, x: 404 }, flip: false },
+  { body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
+    punter: { h: 160, feet: 458, x: 656 }, flip: true },
 ];
+const CAB_N = MACHINES.length;
 const ROOMS = {
   coinroom: {
     name: 'THE COIN CLOSET', floorY: 470,
@@ -247,17 +261,17 @@ const ROOMS = {
     ],
   },
   corridor: {
-    name: 'THE ARCADE', floorY: 490,
-    hotspots: [
-      { id: 'toStudio2', x: 0,   y: 150, w: 60,  h: 340, walkX: 55,  label: 'TO THE STUDIO', exit: 'studio' },
-      { id: 'toProp',    x: 420, y: 140, w: 120, h: 240, walkX: 480, label: 'PROP ROOM', exit: 'prop' },
-      { id: 'cab0',      x: 26,  y: 210, w: 144, h: 250, walkX: 150, label: 'CABINET 1', cab: 0 },
-      { id: 'cab1',      x: 170, y: 225, w: 96,  h: 230, walkX: 240, label: 'CABINET 2', cab: 1 },
-      { id: 'cab2',      x: 266, y: 235, w: 70,  h: 215, walkX: 310, label: 'CABINET 3', cab: 2 },
-      { id: 'change',    x: 620, y: 200, w: 90,  h: 250, walkX: 610, label: 'CHANGE MACHINE' },
-      { id: 'vending',   x: 700, y: 180, w: 130, h: 280, walkX: 690, label: 'VENDING MACHINE' },
-      { id: 'cooler',    x: 830, y: 200, w: 100, h: 270, walkX: 800, label: 'WATER COOLER' },
-    ],
+    name: 'THE ARCADE', floorY: 486,
+    hotspots: MACHINES.map((m, i) => ({
+      id: 'cab' + i, x: m.body[0], y: m.body[1], w: m.body[2], h: m.body[3],
+      walkX: Math.max(70, Math.min(890, m.punter.x + (m.flip ? -80 : 70))),
+      label: 'CABINET ' + (i + 1), cab: i,
+    })).concat([
+      { id: 'toStudio2', x: 0,   y: 150, w: 56,  h: 340, walkX: 60,  label: 'TO THE STUDIO', exit: 'studio' },
+      { id: 'toProp',    x: 428, y: 155, w: 94,  h: 155, walkX: 470, label: 'PROP ROOM', exit: 'prop' },
+      { id: 'cooler',    x: 590, y: 200, w: 36,  h: 116, walkX: 566, label: 'WATER COOLER' },
+      { id: 'vending',   x: 627, y: 167, w: 54,  h: 164, walkX: 600, label: 'VENDING MACHINE' },
+    ]),
   },
   prop: {
     name: 'THE PROP ROOM', floorY: 480,
@@ -283,21 +297,25 @@ const START_CASH = 500;                 // £5.00
 const DAY_MS = 100000;                  // a shift is 100 seconds
 const RENT = d => 300 + (d - 1) * 250;  // £3 on day one, +£2.50 a night after
 const UPGRADES = [
-  { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true,
+  { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true, icon: 'cab',
     blurb: 'A second machine earning at the same time.' },
-  { id: 'cab3',    name: 'POWER UP CABINET 3', cost: 2000, once: true,
+  { id: 'cab3',    name: 'POWER UP CABINET 3', cost: 2000, once: true, icon: 'cab',
     blurb: 'Three machines. Three queues.' },
-  { id: 'apron',   name: 'BIGGER APRON',       cost: 600,  max: 3, scale: 2.2,
+  { id: 'cab4',    name: 'POWER UP CABINET 4', cost: 3600, once: true, icon: 'cab',
+    blurb: 'The one at the dark end of the row.' },
+  { id: 'cab5',    name: 'POWER UP THE RED ONE', cost: 5200, once: true, icon: 'cab',
+    blurb: 'The big machine on the right. Earns the most.' },
+  { id: 'apron',   name: 'BIGGER APRON',       cost: 600,  max: 3, scale: 2.2, icon: 'apron',
     blurb: 'Carry more coins per trip to the safe.' },
-  { id: 'marquee', name: 'MARQUEE LIGHTS',     cost: 1200, once: true,
+  { id: 'marquee', name: 'MARQUEE LIGHTS',     cost: 1200, once: true, icon: 'bulb',
     blurb: 'People can see the place. Punters arrive faster.' },
-  { id: 'sticks',  name: 'NEW JOYSTICKS',      cost: 1000, once: true,
+  { id: 'sticks',  name: 'NEW JOYSTICKS',      cost: 1000, once: true, icon: 'stick',
     blurb: 'Cabinets jam far less often.' },
-  { id: 'onair',   name: 'ON AIR SIGN',        cost: 1600, once: true,
+  { id: 'onair',   name: 'ON AIR SIGN',        cost: 1600, once: true, icon: 'onair',
     blurb: 'The show reads as live. Hype drains slower.' },
-  { id: 'crate',   name: 'WHISKY CRATE',       cost: 900,  once: true,
+  { id: 'crate',   name: 'WHISKY CRATE',       cost: 900,  once: true, icon: 'bottle',
     blurb: 'The decanter holds double. Fewer trips to the prop room.' },
-  { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true,
+  { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true, icon: 'coin',
     blurb: 'The safe pays a 10% counting bonus on every bag.' },
 ];
 
@@ -308,12 +326,12 @@ let tutorial = -1, talkUntil = 0, talkWho = 'jimmy';   // tutorial step, and who
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
-function cabCount() { return 1 + (has('cab2') ? 1 : 0) + (has('cab3') ? 1 : 0); }
+function cabCount() { return 1 + ['cab2', 'cab3', 'cab4', 'cab5'].filter(has).length; }
 
 function newRun() {
   cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
   banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
-  cabs = [0, 1, 2].map(i => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
+  cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
   dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0;
   hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
@@ -599,7 +617,13 @@ function onTap(e) {
   if (e.cancelable) e.preventDefault();
 
   if (tutorial >= 0) { nextTip(); return; }        // the tutorial owns the tap while it is up
-  if (shopOpen) { shopTap(w); return; }
+  if (shopOpen) {                                  // the shop is screen-space furniture
+    const sr = canvas.getBoundingClientRect();
+    shopTap({ x: p.clientX - sr.left, y: p.clientY - sr.top });
+    return;
+  }
+  const rr = canvas.getBoundingClientRect();       // arrows are screen furniture
+  if (arrowTapScreen(p.clientX - rr.left, p.clientY - rr.top)) return;
   // speaker button, top right
   if (w.x > WORLD_W - 56 && w.y < 46) {
     muted = !muted;
@@ -622,16 +646,89 @@ canvas.addEventListener('touchstart', onTap, { passive: false });
 canvas.addEventListener('mousedown', onTap);
 
 // ── shop UI (drawn on the canvas so it scales with everything else) ──────────
-const SHOP_ROW_H = 46;
+// Laid out in SCREEN space (like the HUD): the room is cover-cropped on wide phones, and
+// a world-space list lost its bottom rows off the edge of the crop.
+function shopMetrics() {
+  const SW = canvas.clientWidth, SH = canvas.clientHeight;
+  const n = UPGRADES.filter(upgradeAvailable).length || 1;
+  const top = 84, bottom = 12;
+  const rowH = Math.max(26, Math.min(42, (SH - top - bottom) / n));
+  const w = Math.min(760, SW - 40);
+  return { SW, SH, rowH, w, x: (SW - w) / 2, top };
+}
+const SHOP_CLOSE_W = 118, SHOP_CLOSE_H = 38;
+function shopCloseRect() {
+  const { SW } = shopMetrics();
+  return { x: SW - SHOP_CLOSE_W - 12, y: 10, w: SHOP_CLOSE_W, h: SHOP_CLOSE_H };
+}
 function shopRows() {
-  const list = UPGRADES.filter(upgradeAvailable);
-  return list.map((u, i) => ({ u, x: 130, y: 128 + i * SHOP_ROW_H, w: 700, h: SHOP_ROW_H - 6 }));
+  const m = shopMetrics();
+  return UPGRADES.filter(upgradeAvailable)
+    .map((u, i) => ({ u, x: m.x, y: m.top + i * m.rowH, w: m.w, h: m.rowH - 4 }));
 }
 function shopTap(w) {
-  if (w.y < 96 || w.y > 470) { shopOpen = false; return; }
+  // Osimo 2026-09-04: "if you can't buy anything there's no intuitive way to exit the
+  // menu". There is a CLOSE button now, and a tap anywhere off the list still closes it.
+  const cl = shopCloseRect();
+  if (w.x >= cl.x && w.x <= cl.x + cl.w && w.y >= cl.y && w.y <= cl.y + cl.h) { shopOpen = false; return; }
   for (const r of shopRows()) {
     if (w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.h) { buy(r.u); return; }
   }
+  shopOpen = false;
+}
+// a small drawn icon per line, so each row SHOWS what you are buying (Osimo 2026-09-04)
+function shopIcon(kind, x, y, s, on) {
+  ctx.save(); ctx.translate(x, y);
+  const ink = on ? '#ffd75e' : '#8a8078';
+  ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1, s * 0.06);
+  if (kind === 'cab') {
+    ctx.fillRect(-s * 0.34, -s * 0.5, s * 0.68, s);
+    ctx.fillStyle = '#0b1a22'; ctx.fillRect(-s * 0.24, -s * 0.38, s * 0.48, s * 0.34);
+    ctx.fillStyle = on ? '#7ee0ff' : '#3d3a35'; ctx.fillRect(-s * 0.20, -s * 0.34, s * 0.40, s * 0.26);
+    ctx.fillStyle = ink; ctx.fillRect(-s * 0.24, s * 0.06, s * 0.48, s * 0.10);
+  } else if (kind === 'apron') {
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.06, -s * 0.5); ctx.lineTo(s * 0.06, -s * 0.5);
+    ctx.lineTo(s * 0.30, -s * 0.2); ctx.quadraticCurveTo(s * 0.42, s * 0.5, 0, s * 0.5);
+    ctx.quadraticCurveTo(-s * 0.42, s * 0.5, -s * 0.30, -s * 0.2);
+    ctx.closePath(); ctx.fill();
+  } else if (kind === 'bulb') {
+    ctx.beginPath(); ctx.arc(0, -s * 0.1, s * 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-s * 0.11, s * 0.18, s * 0.22, s * 0.2);
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * s * 0.38, -s * 0.1 + Math.sin(a) * s * 0.38);
+      ctx.lineTo(Math.cos(a) * s * 0.50, -s * 0.1 + Math.sin(a) * s * 0.50);
+      ctx.stroke();
+    }
+  } else if (kind === 'stick') {
+    ctx.fillRect(-s * 0.42, s * 0.2, s * 0.84, s * 0.22);
+    ctx.lineWidth = Math.max(2, s * 0.12);
+    ctx.beginPath(); ctx.moveTo(0, s * 0.2); ctx.lineTo(0, -s * 0.22); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -s * 0.32, s * 0.15, 0, Math.PI * 2); ctx.fill();
+  } else if (kind === 'onair') {
+    ctx.strokeRect(-s * 0.48, -s * 0.26, s * 0.96, s * 0.52);
+    ctx.font = 'bold ' + Math.round(s * 0.32) + 'px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('ON', 0, 0);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  } else if (kind === 'bottle') {
+    ctx.fillRect(-s * 0.10, -s * 0.5, s * 0.20, s * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.10, -s * 0.28); ctx.lineTo(s * 0.10, -s * 0.28);
+    ctx.lineTo(s * 0.25, s * 0.0); ctx.lineTo(s * 0.25, s * 0.46);
+    ctx.lineTo(-s * 0.25, s * 0.46); ctx.lineTo(-s * 0.25, s * 0.0);
+    ctx.closePath(); ctx.fill();
+  } else if (kind === 'coin') {
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.42, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = on ? '#3a2c08' : '#1e1c18';
+    ctx.font = 'bold ' + Math.round(s * 0.5) + 'px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('£', 0, s * 0.02);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
 }
 
 // ── walking ──────────────────────────────────────────────────────────────────
@@ -710,33 +807,52 @@ function drawPunters() {
   for (let i = 0; i < cabCount(); i++) {
     const c = cabs[i];
     if (!c.busy) continue;
-    const v = CAB_VIS[i];
-    drawSprite(SPR[c.busy.spr], v.x, v.feet, v.h);
+    const m = MACHINES[i], im = SPR[c.busy.spr];
+    if (!im) continue;
+    if (m.flip) {                       // the right-hand machine is played from its left
+      ctx.save(); ctx.translate(m.punter.x * 2, 0); ctx.scale(-1, 1);
+      drawSprite(im, m.punter.x, m.punter.feet, m.punter.h);
+      ctx.restore();
+    } else {
+      drawSprite(im, m.punter.x, m.punter.feet, m.punter.h);
+    }
   }
 }
 function drawCabState() {
   if (room !== 'corridor') return;
-  for (let i = 0; i < 3; i++) {
-    const hs = ROOMS.corridor.hotspots.find(h => h.cab === i);
-    const c = cabs[i], cx = hs.x + hs.w / 2, cy = hs.y - 14;
+  for (let i = 0; i < CAB_N; i++) {
+    const m = MACHINES[i], c = cabs[i];
+    const [sx, sy, sx1, sy1] = m.screen, sw = sx1 - sx, sh = sy1 - sy;
+    const cx = sx + sw / 2;
     if (i >= cabCount()) {
-      // Osimo 2026-09-04: "says no power but it looks like they have power (screens on)".
-      // The plate draws every cabinet lit, so an unpowered one has to be painted dark —
-      // and the badge now says what it costs and where to buy it, instead of only what is
-      // wrong with it.
-      ctx.save();
-      ctx.fillStyle = 'rgba(4,3,2,0.72)';
-      ctx.fillRect(hs.x, hs.y - 26, hs.w, hs.h + 30);
-      ctx.restore();
-      const u = UPGRADES.find(x => x.id === (i === 1 ? 'cab2' : 'cab3'));
-      badge(cx, cy, 'OFF — £' + (u.cost / 100).toFixed(2), '#8e8e8e');
+      // OFF: the plate already draws dead black glass, so NOTHING is painted over the
+      // machine (Osimo 2026-09-04: "remove those ugly transparent rectangles over the
+      // arcades"). Just a price, so a dark machine reads as "buy me" and not "broken".
+      badge(cx, sy - 6, '£' + (UPGRADES.find(u => u.id === 'cab' + (i + 1)).cost / 100).toFixed(2), '#9a9a9a');
       continue;
     }
-    if (c.jam) { badge(cx, cy, '⚠ JAMMED', '#ff6b6b'); continue; }
-    if (c.till > 0) badge(cx, cy, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
-    else if (c.cursed) badge(cx, cy, 'CURSED', '#c96bff');
+    const scr = SPR['scr' + i];
+    if (scr) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = c.jam ? 0.22 : 1;
+      ctx.drawImage(scr, sx, sy, sw, sh);          // its own game picture, lit
+      ctx.imageSmoothingEnabled = true;
+      if (!c.jam) {
+        const g = ctx.createRadialGradient(cx, sy + sh / 2, 3, cx, sy + sh / 2, sw * 1.6);
+        g.addColorStop(0, 'rgba(150,225,255,0.15)');
+        g.addColorStop(1, 'rgba(150,225,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(sx - sw, sy - sh, sw * 3, sh * 3.4);
+      }
+      ctx.restore();
+    }
+    if (c.jam) badge(cx, sy - 6, '⚠ JAMMED', '#ff6b6b');
+    else if (c.till > 0) badge(cx, sy - 6, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
+    else if (c.cursed) badge(cx, sy - 6, 'CURSED', '#c96bff');
   }
 }
+
 function badge(cx, cy, txt, col) {
   ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
   const w = ctx.measureText(txt).width + 16;
@@ -748,6 +864,52 @@ function badge(cx, cy, txt, col) {
   ctx.fillText(txt, cx, cy - 2);
   ctx.textAlign = 'left';
 }
+// Osimo 2026-09-04: "should have the arrows to move between rooms, make more intuitive."
+// Screen-space furniture beside the room name, so the cover-crop can never hide it, and
+// each one NAMES the room it leads to rather than just pointing. Walking to a doorway and
+// tapping it still works — this is a second, obvious route.
+function roomArrows() {
+  // the prop room hangs off the corridor's middle door, so it is nobody's left/right
+  // neighbour: both of its arrows lead back to the arcade
+  if (room === 'prop') return [{ dir: -1, to: 'corridor', name: ROOMS.corridor.name },
+                               { dir: 1,  to: 'corridor', name: ROOMS.corridor.name }];
+  const i = ORDER.indexOf(room), res = [];
+  if (i > 0) res.push({ dir: -1, to: ORDER[i - 1], name: ROOMS[ORDER[i - 1]].name });
+  if (room === 'corridor') res.push({ dir: 1, to: 'prop', name: ROOMS.prop.name });
+  else if (ORDER[i + 1] && ORDER[i + 1] !== 'prop') {
+    res.push({ dir: 1, to: ORDER[i + 1], name: ROOMS[ORDER[i + 1]].name });
+  }
+  return res;
+}
+function arrowRect(dir, SW, SH) {
+  const w = 118, h = 42, m = 10;
+  return { x: dir < 0 ? m : SW - w - m, y: SH - h - m, w, h };
+}
+function drawArrows(SW, SH) {
+  for (const a of roomArrows()) {
+    const r = arrowRect(a.dir, SW, SH);
+    ctx.fillStyle = 'rgba(8,6,4,0.74)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = 'rgba(232,195,90,0.75)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(a.dir < 0 ? '‹' : '›', a.dir < 0 ? r.x + 13 : r.x + r.w - 13, r.y + 28);
+    ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = 'rgba(255,233,168,0.92)';
+    ctx.fillText(a.name, r.x + r.w / 2, r.y + 26);
+    ctx.textAlign = 'left';
+  }
+}
+function arrowTapScreen(px, py) {
+  const SW = canvas.clientWidth, SH = canvas.clientHeight;
+  for (const a of roomArrows()) {
+    const r = arrowRect(a.dir, SW, SH);
+    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) { changeRoom(a.to); return true; }
+  }
+  return false;
+}
+
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   ctx.save();
@@ -795,15 +957,16 @@ function drawHUD(now) {
   ctx.fillStyle = 'rgba(232,195,90,0.65)'; ctx.textAlign = 'center';
   ctx.fillText(ROOMS[room].name, SW / 2, SH - 10);
   ctx.textAlign = 'left';
+  drawArrows(SW, SH);
 }
 function drawShop() {
-  ctx.fillStyle = 'rgba(6,5,4,0.92)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  const m = shopMetrics();
+  ctx.fillStyle = 'rgba(6,5,4,0.93)'; ctx.fillRect(0, 0, m.SW, m.SH);
   ctx.textAlign = 'center';
-  ctx.fillStyle = ACCENT; ctx.font = 'bold 34px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', WORLD_W / 2, 68);
-  ctx.fillStyle = '#9aa'; ctx.font = '15px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe — tap anything outside the list to close',
-               WORLD_W / 2, 92);
+  ctx.fillStyle = ACCENT; ctx.font = 'bold 30px "Barlow Condensed",sans-serif';
+  ctx.fillText('THE LEDGER', m.SW / 2, 40);
+  ctx.fillStyle = '#9aa'; ctx.font = '14px "Barlow Condensed",sans-serif';
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.SW / 2, 62);
   ctx.textAlign = 'left';
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
@@ -811,18 +974,28 @@ function drawShop() {
     ctx.fillRect(r.x, r.y, r.w, r.h);
     ctx.strokeStyle = can ? ACCENT : '#5a5148'; ctx.lineWidth = 1.5;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
+    shopIcon(r.u.icon, r.x + 24, r.y + r.h / 2, 24, can);
     ctx.fillStyle = can ? '#ffd75e' : '#8a8078';
-    ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
-    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 14, r.y + 18);
-    ctx.font = '14px "Barlow Condensed",sans-serif';
+    ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
+    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), r.x + 48, r.y + 16);
+    ctx.font = '13px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#cbd2d6' : '#6d655e';
-    ctx.fillText(r.u.blurb, r.x + 14, r.y + 34);
+    ctx.fillText(r.u.blurb, r.x + 48, r.y + 30);
     ctx.textAlign = 'right';
-    ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+    ctx.font = 'bold 20px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#8effc2' : '#8a5a5a';
-    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 14, r.y + 27);
+    ctx.fillText('£' + (c / 100).toFixed(2), r.x + r.w - 14, r.y + 24);
     ctx.textAlign = 'left';
   }
+  const cl = shopCloseRect();
+  ctx.fillStyle = 'rgba(232,195,90,0.18)';
+  ctx.fillRect(cl.x, cl.y, cl.w, cl.h);
+  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
+  ctx.strokeRect(cl.x, cl.y, cl.w, cl.h);
+  ctx.fillStyle = '#ffd75e'; ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('✕  CLOSE', cl.x + cl.w / 2, cl.y + 25);
+  ctx.textAlign = 'left';
 }
 function drawFloaters(now) {
   for (let i = floaters.length - 1; i >= 0; i--) {
@@ -876,8 +1049,8 @@ function frame(ts) {
   drawCabState();
   drawFloaters(ts);
   if (state !== 'attract') { drawBubble(); drawMsg(ts); }
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD lives in SCREEN space, so a
-  if (state !== 'attract') drawHUD(ts);              // cover-cropped room never eats it
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);            // HUD + shop live in SCREEN space, so
+  if (state !== 'attract') drawHUD(ts);              // a cover-cropped room never eats them
   if (shopOpen) drawShop();
   if (state === 'bust') {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
@@ -910,10 +1083,10 @@ window.__TC = {
     canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
   },
   giveCoins(n) { cabs[0].till += n; },      // QA only — seeds a till without waiting for a punter
-  demo() {                                  // QA only — all three machines on and busy, so
-    owned.cab2 = owned.cab3 = true;         // the perspective row can be judged in one frame
-    const sp = ['punter34A', 'punter34B', 'punter34C'];
-    cabs.forEach((c, i) => { c.busy = { spr: sp[i] }; c.playT = 60000; c.jam = false; });
+  demo() {                                  // QA only — every machine on and busy, so the
+    ['cab2','cab3','cab4','cab5'].forEach(k => { owned[k] = true; });   // whole row can be
+    const sp = ['punter34A', 'punter34B', 'punter34C'];                 // judged in one frame
+    cabs.forEach((c, i) => { c.busy = { spr: sp[i % 3] }; c.playT = 60000; c.jam = false; });
   },
 };
 
