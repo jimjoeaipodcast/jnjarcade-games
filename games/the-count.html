@@ -134,7 +134,7 @@ try { const mi = parseInt(localStorage.getItem('music_' + SLUG), 10);
       if (mi >= 0 && mi < JINGLES.length) musicIdx = mi; } catch (e) {}
 function applyMusic() {
   if (musicEl) { musicEl.pause(); musicEl = null; }
-  if (musicIdx < 0 || muted || state === 'attract') return;
+  if (musicIdx < 0 || muted) return;
   const a = new Audio(JINGLES[musicIdx].file);
   a.loop = true; a.volume = MUSIC_VOL;
   a.play().catch(() => {});
@@ -240,7 +240,11 @@ function vo(key, opts) {
   if (once) voSaid.add(key);
   const [who, text] = line;
   bubbleShow(who, text, opts && opts.icon, opts && opts.qty);
-  if (muted || !VO.b64) return;
+  if (muted) return;
+  if (!VO.b64) {                       // pack still in flight — say it the moment it lands
+    VO.pending = key;
+    return;
+  }
   const b = VO.b64[djb2(who + '|' + text)];
   if (!b) return;
   try {
@@ -258,10 +262,11 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=7').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=9').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
+    if (VO.pending) { const k = VO.pending; VO.pending = null; voSaid.delete(k); vo(k); }
     for (const k in p.sprites) {
       const v = p.sprites[k];
       if (Array.isArray(v)) { SPR[k] = []; v.forEach((u, i) => mk(u, im => { SPR[k][i] = im; })); }
@@ -305,7 +310,8 @@ function tvFrame() {
 // to stand to use a hotspot; hit-testing is FIRST MATCH, so exits and small
 // interactive props are listed BEFORE big scenery (the jnj-on-air lesson —
 // a chesterfield rect listed above a doorway silently ate the doorway).
-const ORDER = ['coinroom', 'studio', 'corridor', 'prop'];
+// prop is NOT in ORDER — it hangs off the corridor's middle door and is special-cased
+const ORDER = ['coinroom', 'studio', 'corridor', 'hall'];
 // Osimo 2026-09-04: "make everyone a lot bigger, so they may [reach] the height of the
 // consoles, maybe make jnj bigger too same height as each other". Hosts are one height
 // everywhere; punters are sized PER CABINET because the corridor art recedes — a punter
@@ -351,6 +357,33 @@ const MACHINES = [
     punter: { h: 210, feet: 410, x: 731 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
+// THE BIG ROOM (Osimo 2026-09-05: "once we unlock absolutely everything, an arrow going
+// right saying £100 that will unlock a busier room with more arcades that we will have to
+// unlock"). Four more machines, bought one at a time exactly like the first five, in a hall
+// that only exists once the £100 lease is paid.
+MACHINES.forEach(m => { m.room = 'corridor'; });
+// Measured off the hall plate at 3x (960x540): the two front cabinets on each side, the
+// only four with enough face to hold a punter and a coin pile. Bodies are [x,y,w,h] like
+// the corridor's, and each punter stands in the aisle beside his machine — feet on the
+// boards just clear of the red carpet, so painter's-order (sorted by feet) puts the back
+// pair behind the front pair.
+// FEET ARE CAPPED AT 468, not the 485 the cabinet bases sit at. On Osimo's 851x393 phone
+// the cover-fit crop keeps world rows 37..480, so a punter standing at the true floorline
+// loses his shoes off the bottom of the screen — which is what the first pass did.
+const HALL_MACHINES = [
+  { room: 'hall', pay: 90,  secs: 11.0, body: [40, 112, 100, 380], screen: [58, 238, 132, 302],
+    punter: { h: 205, feet: 466, x: 196 }, flip: false },
+  { room: 'hall', pay: 64,  secs: 8.0,  body: [140, 140, 105, 320], screen: [176, 244, 242, 296],
+    punter: { h: 172, feet: 440, x: 282 }, flip: false },
+  { room: 'hall', pay: 110, secs: 14.0, body: [800, 112, 105, 380], screen: [812, 238, 886, 302],
+    punter: { h: 205, feet: 466, x: 764 }, flip: true },
+  { room: 'hall', pay: 76,  secs: 9.0,  body: [712, 140, 88, 320], screen: [720, 244, 786, 296],
+    punter: { h: 172, feet: 440, x: 678 }, flip: true },
+];
+HALL_MACHINES.forEach(m => MACHINES.push(m));
+const HALL_FIRST = CAB_N;                 // index of the first hall machine
+const HALL_PRICE = 10000;                 // £100 for the lease on the big room
+const ALL_N = MACHINES.length;
 const ROOMS = {
   coinroom: {
     name: 'THE COIN CLOSET', floorY: 470,
@@ -382,8 +415,19 @@ const ROOMS = {
     })).concat([
       { id: 'toStudio2', x: 0,   y: 150, w: 56,  h: 340, walkX: 60,  label: 'TO THE STUDIO', exit: 'studio' },
       { id: 'toProp',    x: 428, y: 155, w: 94,  h: 155, walkX: 470, label: 'PROP ROOM', exit: 'prop' },
+      { id: 'toHall',    x: 900, y: 150, w: 60,  h: 340, walkX: 890, label: 'THE BIG ROOM', exit: 'hall' },
       { id: 'cooler',    x: 590, y: 200, w: 36,  h: 116, walkX: 566, label: 'WATER COOLER' },
       { id: 'vending',   x: 627, y: 167, w: 54,  h: 164, walkX: 600, label: 'VENDING MACHINE' },
+    ]),
+  },
+  hall: {
+    name: 'THE BIG ROOM', floorY: 480,
+    hotspots: HALL_MACHINES.map((m, i) => ({
+      id: 'cab' + (HALL_FIRST + i), x: m.body[0], y: m.body[1], w: m.body[2], h: m.body[3],
+      walkX: Math.max(70, Math.min(890, m.punter.x + (m.flip ? -80 : 70))),
+      label: 'BIG ROOM CABINET ' + (i + 1), cab: HALL_FIRST + i,
+    })).concat([
+      { id: 'toCorr3', x: 0, y: 150, w: 60, h: 340, walkX: 60, label: 'BACK TO THE ARCADE', exit: 'corridor' },
     ]),
   },
   prop: {
@@ -410,7 +454,11 @@ const START_CASH = 500;                 // £5.00
 const DAY_MS = 200000;                  // a shift is 200 seconds (Osimo 2026-09-05:
                                         // "double the rent time") — the rent card's
                                         // countdown and slider both read from this
-const RENT = d => 300 + (d - 1) * 250;  // £3 on day one, +£2.50 a night after
+// Osimo 2026-09-05: "rent goes up in really big increments and makes the game super
+// slow." +£2.50 a night compounded past what one or two machines could ever take, so the
+// run stalled instead of growing. It now steps £1 a night for the first week and eases
+// after that, which keeps the pressure without outrunning the arcade.
+const RENT = d => 300 + Math.round((d - 1) * 100 + Math.max(0, d - 7) * 60);
 const UPGRADES = [
   { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true, icon: 'cab',
     blurb: 'A second machine earning at the same time.' },
@@ -432,6 +480,26 @@ const UPGRADES = [
     blurb: 'The decanter holds double. Fewer trips to the prop room.' },
   { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true, icon: 'coin',
     blurb: 'The safe pays a 10% counting bonus on every bag.' },
+  // ── the expansion (Osimo 2026-09-05) ───────────────────────────────────────
+  // Only appears once the first arcade is fully lit, so it always reads as the NEXT thing
+  // rather than a distraction from the first five machines.
+  { id: 'hall',    name: 'LEASE THE BIG ROOM',  cost: HALL_PRICE, once: true, icon: 'cab',
+    need: () => !anyOffInFirstRoom(),
+    blurb: 'The double hall next door. Six more machines to light up.' },
+  { id: 'hall1',   name: 'BIG ROOM: FRONT LEFT', cost: 7000,  once: true, icon: 'cab',
+    need: () => has('hall'), blurb: 'The big one by the door. 90p a play.' },
+  { id: 'hall2',   name: 'BIG ROOM: BACK LEFT',  cost: 5000,  once: true, icon: 'cab',
+    need: () => has('hall'), blurb: 'Quicker, smaller takings.' },
+  { id: 'hall3',   name: 'BIG ROOM: FRONT RIGHT',cost: 9000,  once: true, icon: 'cab',
+    need: () => has('hall'), blurb: 'The best earner in the building. £1.10 a play.' },
+  { id: 'hall4',   name: 'BIG ROOM: BACK RIGHT', cost: 6000,  once: true, icon: 'cab',
+    need: () => has('hall'), blurb: 'Steady money on the far wall.' },
+  // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
+  // expansion is FOR (Osimo: "you can pay Joe some money daily so that he collects money
+  // from the first arcade for you and banks them").
+  { id: 'joePay',  name: 'PUT JOE ON WAGES',    cost: 4000,  once: true, icon: 'onair',
+    need: () => has('hall'),
+    blurb: 'He works the first arcade and banks it. £1.50 a night off the rent.' },
 ];
 
 let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
@@ -445,6 +513,22 @@ let rentWarned = false, rentCardAt = 0;   // the rent card shows once a night, t
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
 function has(id) { return !!owned[id]; }
 function cabCount() { return 1 + ['cab2', 'cab3', 'cab4', 'cab5'].filter(has).length; }
+// is machine i powered and earning?
+function cabOn(i) {
+  if (i < CAB_N) return i < cabCount();
+  return has('hall') && has('hall' + (i - HALL_FIRST + 1));
+}
+// the machines that live in the room you are standing in
+function roomMachines() {
+  const out = [];
+  for (let i = 0; i < ALL_N; i++) if (MACHINES[i].room === room) out.push(i);
+  return out;
+}
+// "Any machine off" is a per-ROOM question now that there are two arcades — telling you to
+// turn on more machines while you stand in a room where every machine is already lit reads
+// as a bug, which is exactly what it looked like the first time the hall went in.
+function anyOff() { for (const i of roomMachines()) if (!cabOn(i)) return true; return false; }
+function anyOffInFirstRoom() { for (let i = 0; i < CAB_N; i++) if (!cabOn(i)) return true; return false; }
 
 // Osimo 2026-09-05: "just like in jnj on air, restart the game or resume last played game."
 // The shift itself is only 100 seconds, so what is worth keeping is the BUSINESS — what is
@@ -591,7 +675,8 @@ function drawBubble(SW, SH) {
 // and free — every punter turned away is money that never existed, which is
 // what makes buying the second and third cabinet feel like a real decision.
 function freeCab() {
-  for (let i = 0; i < cabCount(); i++) {
+  for (let i = 0; i < ALL_N; i++) {
+    if (!cabOn(i)) continue;
     const c = cabs[i];
     if (!c.jam && !c.busy) return i;
   }
@@ -616,7 +701,7 @@ function updateFloor(dt, now) {
   }
   for (let i = 0; i < cabs.length; i++) {
     const c = cabs[i];
-    if (i >= cabCount()) { c.busy = null; continue; }
+    if (!cabOn(i)) { c.busy = null; continue; }
     if (!c.busy) continue;
     c.playT -= dt;
     if (c.playT <= 0) {
@@ -629,7 +714,11 @@ function updateFloor(dt, now) {
         floaters.push({ x: hs.x + hs.w / 2, y: hs.y + 40, t: now, txt: '+' + take + 'p', col: '#ffd75e' });
       }
       // jam roll — the one thing that stops a cabinet earning until you walk over
-      const jamChance = (c.cursed ? 0.22 : 0.10) * (has('sticks') ? 0.4 : 1);
+      // Osimo 2026-09-05: "I paid for the joystick, still feels like jammed happens at the
+      // same rate." It was a real 60% cut, but off a base low enough that the difference
+      // hid in the noise. Base raised so jams are a felt problem, and the upgrade now takes
+      // 85% of them away so paying for it is unmistakable.
+      const jamChance = (c.cursed ? 0.26 : 0.14) * (has('sticks') ? 0.15 : 1);
       if (Math.random() < jamChance) { c.jam = true; SFX.jam(); }
     }
   }
@@ -638,6 +727,51 @@ function updateFloor(dt, now) {
 // ── hype: the show is what pulls punters in ─────────────────────────────────
 // Joe standing in the studio IS the show. Take him out to carry coins and hype
 // falls three times faster — that is the whole Jimmy-versus-Joe tension.
+// Spoken directions — the reason there was "no talk at all during game play" is that this
+// never made it into the file: it was written in a batch that aborted on a later miss and
+// silently rolled back. Each line fires the first time its condition is true in a run and
+// then never again (vo() latches the key), so the game guides without nagging.
+function voWatch() {
+  if (tutorial >= 0) return;                       // the intro owns the bubble
+  if (carry >= apronCap()) vo('fullApron', { icon: 'icApron' });
+  for (let i = 0; i < ALL_N; i++) {
+    if (!cabOn(i)) continue;
+    if (cabs[i].jam) vo('jammed', { icon: 'icStick' });
+    if (cabs[i].till >= 40) vo('fullCab', { icon: 'icCab' });
+  }
+  if (decanter === 0) vo('dryTot', { icon: 'icBottle' });
+  if (hosts.joe.room !== 'studio' && !has('joePay')) vo('noMic', { icon: 'icOnair' });
+  if (anyOff() && (room === 'corridor' || room === 'hall')) vo('offMach', { icon: 'icCab' });
+  if (cash < RENT(day) && (dayEndsAt - performance.now()) < 30000) vo('rentShort', { icon: 'icCounter' });
+}
+
+// Joe on wages (Osimo 2026-09-05). Once the big room is leased you can pay him a nightly
+// wage and he works the FIRST arcade: emptying its machines and walking the takings to the
+// safe, so you can stand in the new hall. He is off the mic while he does it, which is the
+// trade — hype drains faster, and voWatch stops nagging about the mic because it is now a
+// choice you paid for.
+let joeTimer = 0;
+function updateJoe(dt) {
+  if (!has('joePay') || dayPaused) return;
+  joeTimer += dt;
+  if (joeTimer < 4200) return;              // a round trip takes him about four seconds
+  joeTimer = 0;
+  let took = 0;
+  for (let i = 0; i < CAB_N; i++) {
+    if (!cabOn(i)) continue;
+    if (cabs[i].jam) { cabs[i].jam = false; continue; }   // he unjams as he goes
+    took += cabs[i].till; cabs[i].till = 0;
+  }
+  if (took > 0) {
+    const bonus = has('counter') ? Math.round(took * 0.1) : 0;
+    cash += took + bonus; banked += took + bonus;
+    if (room === 'corridor') {
+      floaters.push({ x: 480, y: 300, t: performance.now(),
+                      txt: 'JOE BANKED +' + ((took + bonus) / 100).toFixed(2), col: '#8effc2' });
+    }
+  }
+}
+
 function updateHype(dt) {
   const joeOnMic = hosts.joe.room === 'studio';
   let drain = (joeOnMic && decanter > 0) ? 0.55 : 1.1;
@@ -660,14 +794,26 @@ function updateHype(dt) {
 // ── interactions ─────────────────────────────────────────────────────────────
 function act(h) {
   const now = performance.now();
-  if (h.exit) { changeRoom(h.exit); return; }
+  if (h.exit) {
+    if (h.exit === 'hall' && (anyOffInFirstRoom() || !has('hall'))) {
+      if (anyOffInFirstRoom()) return;          // not offered yet — the door reads as wall
+
+      // Osimo 2026-09-05: "an arrow going right saying say £100, that will unlock a busier
+      // room". The door is always there; until the lease is paid it quotes its price.
+      say('THE BIG ROOM — £' + (HALL_PRICE / 100).toFixed(2) + ' at the ledger.', 2800);
+      SFX.deny();
+      return;
+    }
+    changeRoom(h.exit);
+    return;
+  }
   if (h.cab !== undefined) {
     const i = h.cab, c = cabs[i];
-    if (i >= cabCount()) { say('That one has no power. Buy it at the ledger.'); SFX.deny(); return; }
+    if (!cabOn(i)) { vo('offMach', { icon: 'icCab', once: false }); SFX.deny(); return; }
     if (c.jam) { c.jam = false; SFX.fix(); say('Unjammed. Back in service.'); return; }
     if (c.till <= 0) { say('Empty. Let someone play it.'); SFX.deny(); return; }
     const room4 = apronCap() - carry;
-    if (room4 <= 0) { say('Apron is full — bank it at the safe.'); SFX.deny(); return; }
+    if (room4 <= 0) { vo('fullApron', { icon: 'icApron', once: false }); SFX.deny(); return; }
     const took = Math.min(c.till, room4);
     c.till -= took; carry += took;
     SFX.coin();
@@ -689,7 +835,7 @@ function act(h) {
     case 'counter': say('The counter does the counting. The safe takes the bags.'); return;
     case 'decanter': {
       if (decanter >= (has('crate') ? 6 : 3)) { say('Still full.'); SFX.deny(); return; }
-      if (bottles <= 0) { say('No bottle on you. There is a crate in the prop room.'); SFX.deny(); return; }
+      if (bottles <= 0) { vo('dryTot', { icon: 'icBottle', once: false }); SFX.deny(); return; }
       bottles--; decanter = has('crate') ? 6 : 3; SFX.pour();
       say('Poured. Joe will keep talking.');
       return;
@@ -712,7 +858,7 @@ function act(h) {
       // every cabinet was already cursed, it paid with no cost at all. It now costs a
       // cabinet every time: no clean cabinet left, no payout. One box per night either way.
       const live = [];
-      for (let i = 0; i < cabCount(); i++) if (!cabs[i].cursed) live.push(i);
+      for (let i = 0; i < ALL_N; i++) if (cabOn(i) && !cabs[i].cursed) live.push(i);
       if (boxOpenedToday) { say('You have had your hand in there once tonight already.'); SFX.deny(); return; }
       if (!live.length) { say('Every machine is already ruined. The box has nothing to take.'); SFX.deny(); return; }
       boxOpenedToday = true;
@@ -755,6 +901,7 @@ function upgradeCost(u) {
   return u.cost;
 }
 function upgradeAvailable(u) {
+  if (u.need && !u.need()) return false;     // gated behind another purchase
   if (u.once) return !has(u.id);
   if (u.max) return apronLvl < u.max;
   return true;
@@ -780,6 +927,7 @@ function endDay() {
     }, 900);
     return;
   }
+  if (has('joePay')) cash -= 150;      // Joe's nightly wage, paid before the rent
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
   saveRun();                     // a survived night is the checkpoint worth keeping
   rentWarned = false; rentCardAt = 0;
@@ -805,6 +953,17 @@ function onTap(e) {
   const w = toWorld(p.clientX, p.clientY);
   if (e.cancelable) e.preventDefault();
 
+  // Speaker button, top right — tested FIRST, before the tutorial and the shop get to eat
+  // the tap. It was below both, so during the opening tips (the exact moment you reach for
+  // the volume) the button was dead. And the HUD moved into SCREEN space when the cover-fit
+  // landed while this test stayed in WORLD space, which put the zone somewhere else again.
+  // Osimo 2026-09-05: "pressing the speaker does nothing." Both causes are fixed here.
+  {
+    const sr = canvas.getBoundingClientRect();
+    if (p.clientX - sr.left > sr.width - 56 && p.clientY - sr.top < 46) {
+      unlockAudio(); cycleSound(); return;
+    }
+  }
   if (tutorial >= 0) { nextTip(); return; }        // the tutorial owns the tap while it is up
   if (shopOpen) {                                  // the shop is screen-space furniture
     const sr = canvas.getBoundingClientRect();
@@ -813,8 +972,6 @@ function onTap(e) {
   }
   // the chevrons are painted at the doorways; tapping one walks you to that exit like
   // any other hotspot, so no separate screen-space hit test is needed
-  // speaker button, top right
-  if (w.x > WORLD_W - 56 && w.y < 46) { cycleSound(); return; }
   // tap the other host to take him over — he stays exactly where you left him
   const o = other();
   if (o.room === room && Math.abs(w.x - o.x) < 46 && w.y > ROOMS[room].floorY - 130) {
@@ -841,16 +998,26 @@ canvas.addEventListener('mousedown', onTap);
 // the column ends up parallel to the ruling instead of square to the screen.
 const LEDGER_FIRST = { x: 150 / 915, y: 90 / 412 };
 const LEDGER_LAST  = { x: 130 / 915, y: 350 / 412 };
+// The book has a RIGHT page too, and until now it was blank while the left one was
+// overfilled. Measured off the rendered ledger at 851 wide: the left page's red rule sits
+// at x148 and the right page's at x468, and the right rule is all but vertical where the
+// left one leans. The list fills the left page and carries on across the spine.
+const LEDGER_PAGE2 = { dx: 320 / 851, lean: 0.02 };
+// A row has to hold a 16px name with a 12px blurb under it, so 30px is the floor. The old
+// pitch was the page height divided by the WHOLE catalogue, which meant every upgrade
+// added anywhere squeezed every existing row — adding the BIG ROOM's six entries dropped
+// the pitch to 17px and every line landed on top of the one below it.
+const LEDGER_ROW_H = 30;
 function shopMetrics() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
-  const nMax = UPGRADES.length;                    // pitch stays put as items get bought
   const x0 = LEDGER_FIRST.x * SW, y0 = LEDGER_FIRST.y * SH;
   const x1 = LEDGER_LAST.x  * SW, y1 = LEDGER_LAST.y  * SH;
-  const rowH = (y1 - y0) / Math.max(1, nMax - 1);
-  const lean = (x1 - x0) / (y1 - y0);              // ≈ -0.077: left as it goes down
-  const w = Math.round(SW * 0.34);                 // writing area, inside the red rule
-  // the logo is sized to the ROW, so ten of them stack without overlapping
-  return { SW, SH, rowH, w, x0, y0, lean, iconR: Math.min(rowH * 0.52, 18) };
+  const span = Math.max(1, y1 - y0);
+  const lean = (x1 - x0) / span;                  // ≈ -0.077: left as it goes down
+  const perCol = Math.max(1, Math.floor(span / LEDGER_ROW_H) + 1);
+  const w = Math.round(SW * 0.30);                // writing area, inside the red rule
+  return { SW, SH, rowH: LEDGER_ROW_H, perCol, w, x0, y0, lean,
+           iconR: Math.min(LEDGER_ROW_H * 0.52, 18) };
 }
 // The book art's red margin rule leans left as it goes down the page (measured off the
 // plate: about -0.11 px of x per px of y). Osimo 2026-09-04: "they should be parallel to
@@ -861,6 +1028,16 @@ function pageCurve(i, n) {
   const t = n > 1 ? i / (n - 1) : 0.5;
   return Math.sin(t * Math.PI) * 4;                 // pages bow out in the middle
 }
+// Trim a string to a pixel width in the CURRENT font, ellipsis included.
+function fitText(s, maxW) {
+  if (ctx.measureText(s).width <= maxW) return s;
+  let lo = 0, hi = s.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(s.slice(0, mid) + '…').width <= maxW) lo = mid; else hi = mid - 1;
+  }
+  return s.slice(0, lo).trimEnd() + '…';
+}
 const SHOP_CLOSE_W = 118, SHOP_CLOSE_H = 38;
 function shopCloseRect() {
   const { SW } = shopMetrics();
@@ -870,8 +1047,11 @@ function shopRows() {
   const m = shopMetrics();
   const list = UPGRADES.filter(upgradeAvailable);
   return list.map((u, i) => {
-    const cy = m.y0 + i * m.rowH;                  // the logo's CENTRE, on the line
-    const cx = m.x0 + (cy - m.y0) * m.lean;
+    const col = Math.floor(i / m.perCol), k = i % m.perCol;
+    const cy = m.y0 + k * m.rowH;                  // the logo's CENTRE, on the line
+    const cx = col === 0
+      ? m.x0 + (cy - m.y0) * m.lean
+      : m.x0 + m.SW * LEDGER_PAGE2.dx + (cy - m.y0) * LEDGER_PAGE2.lean;
     return { u, cx, cy, x: cx - m.iconR, y: cy - m.rowH / 2, w: m.w, h: m.rowH };
   });
 }
@@ -969,7 +1149,7 @@ function drawHost(who, h) {
 // back it needs per-sprite visor rects baked into the pack, not a guessed fraction.
 
 function drawPunters() {
-  if (room !== 'corridor') return;
+  if (room !== 'corridor' && room !== 'hall') return;
   // Osimo 2026-09-04: "could you make it look like people playing on the arcade are facing
   // the arcade playing". The sprites are already back-view, so what was wrong was the
   // PLACEMENT — they stood beside the machine on the shared floor line. Each punter now
@@ -979,7 +1159,7 @@ function drawPunters() {
   // of everyone instead of below number 3". Painter's algorithm — the FURTHEST punter (the
   // one whose feet are highest up the floor) is drawn first, so the nearest ends up on top.
   const order = [];
-  for (let i = 0; i < cabCount(); i++) if (cabs[i].busy) order.push(i);
+  for (const i of roomMachines()) if (cabs[i].busy) order.push(i);
   order.sort((a, b) => MACHINES[a].punter.feet - MACHINES[b].punter.feet);
   for (const i of order) {
     const c = cabs[i];
@@ -1010,16 +1190,17 @@ function drawPunters() {
   }
 }
 function drawCabState() {
-  if (room !== 'corridor') return;
-  for (let i = 0; i < CAB_N; i++) {
+  if (room !== 'corridor' && room !== 'hall') return;
+  for (const i of roomMachines()) {
     const m = MACHINES[i], c = cabs[i];
     const [sx, sy, sx1, sy1] = m.screen, sw = sx1 - sx, sh = sy1 - sy;
     const cx = sx + sw / 2;
-    if (i >= cabCount()) {
+    if (!cabOn(i)) {
       // OFF: the plate already draws dead black glass, so NOTHING is painted over the
       // machine (Osimo 2026-09-04: "remove those ugly transparent rectangles over the
       // arcades"). Just a price, so a dark machine reads as "buy me" and not "broken".
-      badge(cx, sy - 6, '£' + (UPGRADES.find(u => u.id === 'cab' + (i + 1)).cost / 100).toFixed(2), '#9a9a9a');
+      const up = UPGRADES.find(u => u.id === (i < CAB_N ? 'cab' + (i + 1) : 'hall' + (i - HALL_FIRST + 1)));
+      badge(cx, sy - 6, up ? '£' + (up.cost / 100).toFixed(2) : 'OFF', '#9a9a9a');
       continue;
     }
     // SCREEN OVERLAYS REMOVED 2026-09-05 — Osimo: "remove those silly arcade screen
@@ -1052,6 +1233,9 @@ function sideExits() {
   const out = [];
   for (const h of ROOMS[room].hotspots) {
     if (!h.exit || h.exit === 'prop') continue;        // the prop door is not an arrow
+    // The big room only advertises itself once the first arcade is fully lit — Osimo asked
+    // for it as the reward for finishing, not as a distraction from it.
+    if (h.exit === 'hall' && anyOffInFirstRoom()) continue;
     out.push({ h, dir: h.x < WORLD_W / 2 ? -1 : 1 });
   }
   return out;
@@ -1069,10 +1253,10 @@ function hintSpots() {
   const H = ROOMS[room].hotspots;
   const find = id => H.find(h => h.id === id);
   const out = [];
-  const boxLive = !boxOpenedToday && cabs.slice(0, cabCount()).some(c => !c.cursed);
+  const boxLive = !boxOpenedToday && cabs.some((c, i) => cabOn(i) && !c.cursed);
   const needBottle = decanter === 0 && bottles === 0;
-  if (room === 'corridor') {
-    for (let i = 0; i < cabCount(); i++) {
+  if (room === 'corridor' || room === 'hall') {
+    for (const i of roomMachines()) {
       const c = cabs[i];
       if (c.jam || (c.till >= 15 && carry < apronCap())) out.push(find('cab' + i));
     }
@@ -1134,6 +1318,16 @@ function drawExitArrows(now) {
     ctx.moveTo(x - sz * e.dir, y - sz * 1.35); ctx.lineTo(x + sz * e.dir, y);
     ctx.lineTo(x - sz * e.dir, y + sz * 1.35);
     ctx.closePath(); ctx.fill();
+    // An unleased big room quotes its price next to the chevron, so the arrow itself
+    // tells you what it costs instead of sending you to the ledger to find out.
+    if (e.h.exit === 'hall' && !has('hall')) {
+      ctx.shadowBlur = 0;
+      ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,215,94,' + (0.55 + a * 0.45).toFixed(3) + ')';
+      ctx.fillText('£' + (HALL_PRICE / 100).toFixed(0), x - 22, y + 7);
+      ctx.textAlign = 'left';
+    }
     ctx.restore();
   }
 }
@@ -1217,14 +1411,19 @@ function drawHUD(now) {
   }
   ctx.textAlign = 'left';
   // turned-away count — the quiet version of the old flashing NO FREE MACHINE
-  if (turnedAway > 0) {
+  // …and only where the machines are. In the prop room or the studio it reads as a fault
+  // report about a room you cannot see.
+  if (turnedAway > 0 && (room === 'corridor' || room === 'hall')) {
     // Osimo 2026-09-04: "instead of no free machine, maybe it should say, turn on more
     // machines, and place it somewhere where it doesn't show over the b-roll screen."
     // It now says what to DO, and sits low-left — the studio's big screen is dead centre,
     // which is exactly where this used to land.
     ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
     ctx.fillStyle = 'rgba(255,107,107,0.92)';
-    ctx.fillText('TURN ON MORE MACHINES — ' + turnedAway + ' walked out', 14, SH - 58);
+    // With every machine in the room already lit there is nothing to turn on, so the line
+    // has to say the true thing instead: the room is full and the queue is walking.
+    ctx.fillText((anyOff() ? 'TURN ON MORE MACHINES — ' : 'ALL MACHINES BUSY — ')
+                 + turnedAway + ' walked out', 14, SH - 58);
   }
   // room name
   ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
@@ -1266,7 +1465,9 @@ function drawShop() {
     ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), tx, r.cy - 1);
     ctx.font = '12px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
-    ctx.fillText(r.u.blurb, tx, r.cy + 12);
+    // the blurb is trimmed to the writing area rather than running across the spine onto
+    // the facing page, which is what long lines were doing
+    ctx.fillText(fitText(r.u.blurb, r.cx - m2.iconR + r.w - 16 - tx), tx, r.cy + 12);
     ctx.textAlign = 'right';
     ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
@@ -1315,6 +1516,8 @@ function frame(ts) {
   if (state === 'play' && !shopOpen && !dayPaused) {
     updateFloor(dt, ts);
     updateHype(dt);
+    updateJoe(dt);
+    voWatch();
     stepHost(hosts.jimmy, dt);
     stepHost(hosts.joe, dt);
     if (ts > dayEndsAt) endDay();
@@ -1364,7 +1567,11 @@ window.__TC = {
   get state() { return { cash, carry, apron: apronCap(), day, hype: Math.round(hype), room,
                          bottles, decanter, banked, cabs: cabs.map(c => ({ till: c.till, jam: c.jam,
                          cursed: c.cursed, busy: !!c.busy })), cabCount: cabCount(), owned: Object.keys(owned),
-                         shopOpen, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room }; },
+                         shopOpen, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room,
+                         // the whole script is IIFE-wrapped, so QA can only see what this
+                         // object exposes — room nav has to be inspectable from out here
+                         exits: sideExits().map(e => e.h.id), pending: pending && pending.id,
+                         hx: Math.round(me().x), target: Math.round(me().target) }; },
   tapWorld(wx, wy) {
     const r = canvas.getBoundingClientRect();
     const x = r.left + (VIEW.ox + wx * VIEW.scale) / DPR;
@@ -1377,10 +1584,20 @@ window.__TC = {
     if (pence !== undefined) cash = pence;             // rent card and the flashing chevrons
     rentWarned = false; rentCardAt = 0;                // can be seen without waiting 100s
   },
+  own(id) { owned[id] = true; },            // QA only — grant one upgrade without the ledger
+  // QA only — the jingle and the last spoken line live in closure variables, and the audio
+  // objects are never in the DOM, so this is the only way to prove either one is running
+  get audio() {
+    return { muted, musicIdx, music: musicEl && { src: musicEl.src.split('/').pop(),
+             paused: musicEl.paused, t: +musicEl.currentTime.toFixed(2), vol: musicEl.volume },
+             voSaid: [...voSaid], voPlaying: !!voiceEl && !voiceEl.paused,
+             voT: voiceEl ? +voiceEl.currentTime.toFixed(2) : null };
+  },
   demo() {                                  // QA only — every machine on and busy, so the
     ['cab2','cab3','cab4','cab5'].forEach(k => { owned[k] = true; });   // whole row can be
     const sp = ['punter34A', 'punter34B', 'punter34C'];                 // judged in one frame
-    cabs.forEach((c, i) => { c.busy = { spr: sp[i % 3] }; c.playT = 60000; c.jam = false; });
+    cabs.forEach((c, i) => { if (!cabOn(i)) return;
+                             c.busy = { spr: sp[i % 3] }; c.playT = 60000; c.jam = false; });
   },
 };
 
