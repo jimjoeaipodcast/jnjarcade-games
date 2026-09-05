@@ -407,7 +407,9 @@ const ROOMS = {
 // divides by 100. Osimo's ask: "start with little money and buy/pay for things
 // that will help us yield more money just like the farmer games."
 const START_CASH = 500;                 // £5.00
-const DAY_MS = 100000;                  // a shift is 100 seconds
+const DAY_MS = 200000;                  // a shift is 200 seconds (Osimo 2026-09-05:
+                                        // "double the rent time") — the rent card's
+                                        // countdown and slider both read from this
 const RENT = d => 300 + (d - 1) * 250;  // £3 on day one, +£2.50 a night after
 const UPGRADES = [
   { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true, icon: 'cab',
@@ -1079,24 +1081,27 @@ function hintSpot() {
   return null;
 }
 function drawHint(now) {
+  // Osimo 2026-09-05: "remove the glowing circle, just have a larger triangle/arrow
+  // bouncing". So: one big arrow above the thing worth tapping, bobbing, nothing else.
   const h = hintSpot();
   if (!h || tutorial >= 0) return;
-  const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
-  const t = (now % 1200) / 1200;
-  const r = Math.max(h.w, h.h) * (0.45 + t * 0.28);
+  const cx = h.x + h.w / 2;
+  const bob = Math.sin(now * 0.006) * 9;
+  const tipY = h.y - 10 + bob;              // the point sits just above the object
+  const W2 = 34, H2 = 40;                   // big enough to read across a room
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,215,94,' + (0.75 * (1 - t)).toFixed(3) + ')';
+  ctx.fillStyle = 'rgba(255,215,94,0.95)';
+  ctx.strokeStyle = 'rgba(90,54,24,0.9)';
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.62, 0, 0, Math.PI * 2); ctx.stroke();
-  // a finger, bobbing, so it reads as "tap here" and not just a glow
-  const bob = Math.sin(now * 0.006) * 5;
-  ctx.fillStyle = 'rgba(255,235,180,0.95)';
-  ctx.strokeStyle = 'rgba(90,54,24,0.9)'; ctx.lineWidth = 2;
-  const fx = cx, fy = cy + Math.max(h.h * 0.5, 26) + bob;
   ctx.beginPath();
-  ctx.moveTo(fx, fy - 16); ctx.lineTo(fx + 7, fy - 2); ctx.lineTo(fx + 3, fy - 2);
-  ctx.lineTo(fx + 3, fy + 10); ctx.lineTo(fx - 3, fy + 10); ctx.lineTo(fx - 3, fy - 2);
-  ctx.lineTo(fx - 7, fy - 2); ctx.closePath();
+  ctx.moveTo(cx, tipY);                     // down-pointing arrow head
+  ctx.lineTo(cx + W2 / 2, tipY - H2 * 0.55);
+  ctx.lineTo(cx + W2 * 0.18, tipY - H2 * 0.55);
+  ctx.lineTo(cx + W2 * 0.18, tipY - H2);
+  ctx.lineTo(cx - W2 * 0.18, tipY - H2);
+  ctx.lineTo(cx - W2 * 0.18, tipY - H2 * 0.55);
+  ctx.lineTo(cx - W2 / 2, tipY - H2 * 0.55);
+  ctx.closePath();
   ctx.fill(); ctx.stroke();
   ctx.restore();
 }
