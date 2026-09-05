@@ -372,7 +372,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=11').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=12').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -1125,12 +1125,12 @@ canvas.addEventListener('mousedown', onTap);
 // place and the writing drifted off the paper. These figures are measured off the PLATE
 // itself and pushed through the same cover-fit transform the book is drawn with, so the
 // rows sit on the ruling at every screen shape.
-// Measured on the 640x360 plate itself: ruled paper runs y30..306, the left page's red
-// margin rule is at x118 and the right page's at x351. Osimo 2026-09-05 had the plate
-// amended rather than redrawn ("keep the ledger as is"), so these are the ORIGINAL book's
-// numbers — only the hands holding it changed.
+// Measured on the 640x360 plate itself: ruled paper runs y24..312, the left page spans
+// x80..296 with its red margin rule at x114, the right page x333..556 with its rule at
+// x351. Osimo 2026-09-05 reverted the plate to the original art to re-place the writing
+// himself, so these are that plate's own numbers, read off the pixels.
 const LEDGER_ART = { w: 640, h: 360, pageY0: 30, pageY1: 306,
-                     colX: [122, 355], colW: 168 };
+                     colX: [118, 355], colW: 178 };
 const LEDGER_ROW_H = 30;   // a 16px name with a 12px blurb under it needs this much
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
