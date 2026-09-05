@@ -36,9 +36,18 @@
 ═══════════════════════════════════════════════════════════════════════════ -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100dvh; background: #000; overflow: hidden;
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden;
                touch-action: none; -webkit-user-select: none; user-select: none; }
-  #gameCanvas { display: block; width: 100vw; height: 100dvh; }
+  /* The canvas is sized in PIXELS by resize(), not by 100vw/100dvh. On iPhone those two
+     units settle on their own schedule after a rotation, so the CSS box changed shape
+     while the backing store still held the portrait one and the whole room was stretched
+     to fit — Osimo 2026-09-05: "tested on an iPhone and the image is all squashed in
+     landscape". Layout units cannot be the source of truth here. */
+  #gameCanvas { display: block; position: fixed; left: 0; top: 0; }
+  /* invisible probe: the only way to read env(safe-area-inset-*) from script */
+  #safeProbe { position: fixed; left: 0; top: 0; width: 0; height: 0; visibility: hidden;
+               padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
+               padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
   #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 10;
              display: flex; flex-direction: column; align-items: center; justify-content: center;
              font-family: 'Courier New', monospace; color: #fff; text-align: center; padding: 18px; }
@@ -67,6 +76,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
+<div id="safeProbe"></div>
 <div id="rotateHint">🔄 ROTATE FOR THE FULL FLOOR</div>
 <div id="overlay">
   <h1>THE COUNT</h1>
@@ -92,10 +102,50 @@ const overlay = document.getElementById('overlay');
 // ── VIEW: fit the 960x540 world into whatever the device gives us ────────────
 const VIEW = { scale: 1, ox: 0, oy: 0 };
 let DPR = 1;
+// iPhone landscape came back squashed (Osimo 2026-09-05). The cause is not the projection
+// — VIEW.scale is a single uniform number — it is that the CSS box and the backing store
+// disagreed. iOS settles `100dvh`/`100vw` and the safe-area insets on their own schedule
+// after a rotation, and the one `resize` event fired BEFORE that settled, so the canvas
+// kept its portrait backing store while the element became a landscape box, and the
+// browser stretched one into the other. Same fix Flap Fight already carries: take the
+// SMALLEST live figure the browser will admit to on each axis, size the element in real
+// pixels from it, and re-check on a 250ms poll rather than trusting any single event.
+function viewportW() {
+  let w = window.innerWidth || 0;
+  const vv = window.visualViewport;
+  if (vv && vv.width)  w = w ? Math.min(w, vv.width) : vv.width;
+  const dw = document.documentElement.clientWidth;
+  if (dw) w = w ? Math.min(w, dw) : dw;
+  return Math.round(w);
+}
+function viewportH() {
+  let h = window.innerHeight || 0;
+  const vv = window.visualViewport;
+  if (vv && vv.height) h = h ? Math.min(h, vv.height) : vv.height;
+  const dh = document.documentElement.clientHeight;
+  if (dh) h = h ? Math.min(h, dh) : dh;
+  return Math.round(h);
+}
+// The notch sits on one SIDE in landscape, which is exactly where the cash figure and the
+// speaker button live, so the HUD reads these rather than sitting under it.
+const SAFE = { l: 0, r: 0, t: 0, b: 0 };
+function readSafeArea() {
+  const el = document.getElementById('safeProbe');
+  if (!el) return;
+  const cs = getComputedStyle(el);
+  SAFE.l = parseFloat(cs.paddingLeft)   || 0;
+  SAFE.r = parseFloat(cs.paddingRight)  || 0;
+  SAFE.t = parseFloat(cs.paddingTop)    || 0;
+  SAFE.b = parseFloat(cs.paddingBottom) || 0;
+}
 function resize() {
+  readSafeArea();
+  const cw = viewportW(), ch = viewportH();
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.round(canvas.clientWidth * DPR);
-  canvas.height = Math.round(canvas.clientHeight * DPR);
+  canvas.width = Math.round(cw * DPR);
+  canvas.height = Math.round(ch * DPR);
   const sx = canvas.width / WORLD_W, sy = canvas.height / WORLD_H;
   // Osimo 2026-09-04: "make screen fit phones that are wider than 16:9 like my Google
   // pixel. so I don't get black lines on the side". A phone in landscape is ~20:9, so
@@ -108,7 +158,29 @@ function resize() {
   VIEW.ox = Math.round((canvas.width - WORLD_W * VIEW.scale) / 2);
   VIEW.oy = Math.round((canvas.height - WORLD_H * VIEW.scale) * (sx > sy ? 0.62 : 0.5));
 }
-window.addEventListener('resize', resize);
+// A rotation is not one event at one moment — iOS reports the new size a beat before it
+// settles the insets around it, and a resize listener registered during the page's own
+// load is not reliably invoked later. The poll is the guarantee; the listeners are the
+// same-frame fast path for when they do fire.
+let lastVW = 0, lastVH = 0;
+function syncViewport() {
+  const w = viewportW(), h = viewportH();
+  // Two triggers, not one. The viewport figures moving is the normal case; the second
+  // clause catches the case that actually produced the squash — the ELEMENT's box ending
+  // up a different shape from the backing store we last sized for it, whatever the
+  // viewport numbers claim. That one is self-healing within a quarter second.
+  const boxOff = Math.abs(canvas.clientWidth - w) > 1 || Math.abs(canvas.clientHeight - h) > 1
+              || Math.abs(canvas.width  - Math.round(w * DPR)) > 1
+              || Math.abs(canvas.height - Math.round(h * DPR)) > 1;
+  if (w === lastVW && h === lastVH && !boxOff) return;
+  lastVW = w; lastVH = h;
+  resize();
+}
+function onViewportEvent() { syncViewport(); setTimeout(syncViewport, 120); }
+window.addEventListener('resize', onViewportEvent);
+window.addEventListener('orientationchange', onViewportEvent);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportEvent);
+setInterval(syncViewport, 250);
 function toWorld(px, py) {
   const r = canvas.getBoundingClientRect();
   return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
@@ -960,7 +1032,7 @@ function onTap(e) {
   // Osimo 2026-09-05: "pressing the speaker does nothing." Both causes are fixed here.
   {
     const sr = canvas.getBoundingClientRect();
-    if (p.clientX - sr.left > sr.width - 56 && p.clientY - sr.top < 46) {
+    if (p.clientX - sr.left > sr.width - SAFE.r - 56 && p.clientY - sr.top < 46 + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
   }
@@ -1041,7 +1113,7 @@ function fitText(s, maxW) {
 const SHOP_CLOSE_W = 118, SHOP_CLOSE_H = 38;
 function shopCloseRect() {
   const { SW } = shopMetrics();
-  return { x: SW - SHOP_CLOSE_W - 12, y: 10, w: SHOP_CLOSE_W, h: SHOP_CLOSE_H };
+  return { x: SW - SAFE.r - SHOP_CLOSE_W - 12, y: 10 + SAFE.t, w: SHOP_CLOSE_W, h: SHOP_CLOSE_H };
 }
 function shopRows() {
   const m = shopMetrics();
@@ -1334,17 +1406,24 @@ function drawExitArrows(now) {
 
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
+  // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
+  // figure and the speaker sit. The dark bar still runs edge to edge so the cut-out area
+  // stays black; only the writing is inset.
+  const L = SAFE.l, R = SAFE.r, T = SAFE.t;
   ctx.save();
   ctx.fillStyle = 'rgba(6,5,4,0.62)';
-  ctx.fillRect(0, 0, SW, 46);
+  ctx.fillRect(0, 0, SW, 46 + T);
+  ctx.translate(0, T);
   ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
   ctx.fillStyle = '#ffd75e';
-  ctx.fillText('£' + (cash / 100).toFixed(2), 14, 32);
+  ctx.fillText('£' + (cash / 100).toFixed(2), L + 14, 32);
   ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   ctx.fillStyle = carry >= apronCap() ? '#ff6b6b' : '#e8e2d8';
-  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', 128, 31);
-  // hype bar — the show's pull on the floor
-  const hx = 300, hw = 190;
+  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', L + 128, 31);
+  // hype bar — the show's pull on the floor. The whole row is laid out inside the safe
+  // width, so a notch on either side squeezes it rather than hiding an end of it.
+  const usable = SW - L - R;
+  const hx = L + Math.max(240, usable * 0.31), hw = Math.max(110, Math.min(190, usable * 0.23));
   ctx.fillStyle = '#e8e2d8'; ctx.fillText('HYPE', hx, 31);
   ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(hx + 46, 16, hw, 15);
   ctx.fillStyle = hype > 55 ? '#8effc2' : hype > 25 ? '#ffd75e' : '#ff6b6b';
@@ -1395,19 +1474,19 @@ function drawHUD(now) {
   }
   ctx.textAlign = 'right';
   ctx.fillStyle = '#e8e2d8';
-  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), SW - 66, 31);
+  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), SW - R - 66, 31);
   ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
   ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText(Math.ceil(left / 1000) + 's', SW - 190, 31);
+  ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 190, 31);
   ctx.textAlign = 'left';
   ctx.restore();
   // speaker
   ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - 14, 32);
+  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - R - 14, 32 + T);
   if (musicIdx >= 0 && !muted) {
     ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
     ctx.fillStyle = 'rgba(232,195,90,0.8)';
-    ctx.fillText(JINGLES[musicIdx].label, SW - 34, 32);
+    ctx.fillText(JINGLES[musicIdx].label, SW - R - 34, 32 + T);
   }
   ctx.textAlign = 'left';
   // turned-away count — the quiet version of the old flashing NO FREE MACHINE
@@ -1423,7 +1502,7 @@ function drawHUD(now) {
     // With every machine in the room already lit there is nothing to turn on, so the line
     // has to say the true thing instead: the room is full and the queue is walking.
     ctx.fillText((anyOff() ? 'TURN ON MORE MACHINES — ' : 'ALL MACHINES BUSY — ')
-                 + turnedAway + ' walked out', 14, SH - 58);
+                 + turnedAway + ' walked out', SAFE.l + 14, SH - SAFE.b - 58);
   }
   // room name
   ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
