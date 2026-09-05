@@ -258,7 +258,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=6').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=7').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -395,7 +395,7 @@ const ROOMS = {
       { id: 'toCorrL',  x: 0,   y: 150, w: 70,  h: 340, walkX: 65,  label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'toCorr2',  x: 890, y: 150, w: 70,  h: 340, walkX: 895, label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'whisky',   x: 250, y: 300, w: 130, h: 130, walkX: 300, label: 'WHISKY CRATE' },
-      { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'BITS BOX — DO NOT OPEN' },
+      { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'THE OLD SAFE — DO NOT OPEN' },
       { id: 'parts',    x: 600, y: 260, w: 120, h: 190, walkX: 610, label: 'SPARE PARTS' },
       { id: 'shelves',  x: 20,  y: 120, w: 210, h: 330, walkX: 180, label: 'THE SHELVES' },
     ],
@@ -1061,57 +1061,59 @@ function sideExits() {
 // thing in THIS room right now, so the game always answers "what do I tap" without a wall
 // of labels. Priority: money you can take > a machine that has stopped earning > the errand
 // that unblocks the rest.
-function hintSpot() {
+function hintSpots() {
+  // Osimo 2026-09-05: "should be two arrows if there's money in both machines, and there
+  // should be an arrow on the store room door when a bottle needs picking up or money in
+  // the safe is available." So this returns a LIST — every machine worth walking to, plus
+  // the door that leads to the thing you need.
   const H = ROOMS[room].hotspots;
   const find = id => H.find(h => h.id === id);
+  const out = [];
+  const boxLive = !boxOpenedToday && cabs.slice(0, cabCount()).some(c => !c.cursed);
+  const needBottle = decanter === 0 && bottles === 0;
   if (room === 'corridor') {
-    for (let i = 0; i < cabCount(); i++) if (cabs[i].jam) return find('cab' + i);
-    if (carry < apronCap()) {
-      let best = -1, most = 0;
-      for (let i = 0; i < cabCount(); i++) if (cabs[i].till > most) { most = cabs[i].till; best = i; }
-      if (best >= 0 && most >= 15) return find('cab' + best);
+    for (let i = 0; i < cabCount(); i++) {
+      const c = cabs[i];
+      if (c.jam || (c.till >= 15 && carry < apronCap())) out.push(find('cab' + i));
     }
+    // the prop room is through that door, so the door carries the errand
+    if (needBottle || boxLive) out.push(find('toProp'));
   }
   if (room === 'coinroom') {
-    if (carry > 0) return find('safe');
-    if (cash >= 600) return find('ledger');
+    if (carry > 0) out.push(find('safe'));
+    else if (cash >= 600) out.push(find('ledger'));
   }
-  if (room === 'studio' && decanter === 0 && bottles > 0) return find('decanter');
+  if (room === 'studio' && decanter === 0 && bottles > 0) out.push(find('decanter'));
   if (room === 'prop') {
-    if (decanter === 0 && bottles === 0) return find('whisky');
-    // Osimo 2026-09-05: "missing arrow when money is in the box available for pick up."
-    // The DO NOT OPEN box only pays while it has a clean cabinet left to ruin and has not
-    // been opened tonight — exactly the window where it is worth pointing at. It sits below
-    // the whisky errand on purpose: the game should not nag you into cursing a machine.
-    const clean = cabs.slice(0, cabCount()).some(c => !c.cursed);
-    if (!boxOpenedToday && clean) return find('bitsBox');
+    if (needBottle) out.push(find('whisky'));
+    if (boxLive) out.push(find('bitsBox'));
   }
-  return null;
+  return out.filter(Boolean);
 }
+
 function drawHint(now) {
-  // Osimo 2026-09-05: "remove the glowing circle, just have a larger triangle/arrow
-  // bouncing". So: one big arrow above the thing worth tapping, bobbing, nothing else.
-  const h = hintSpot();
-  if (!h || tutorial >= 0) return;
-  const cx = h.x + h.w / 2;
+  if (tutorial >= 0) return;
   const bob = Math.sin(now * 0.006) * 9;
-  const tipY = h.y - 10 + bob;              // the point sits just above the object
-  const W2 = 34, H2 = 40;                   // big enough to read across a room
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,215,94,0.95)';
-  ctx.strokeStyle = 'rgba(90,54,24,0.9)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(cx, tipY);                     // down-pointing arrow head
-  ctx.lineTo(cx + W2 / 2, tipY - H2 * 0.55);
-  ctx.lineTo(cx + W2 * 0.18, tipY - H2 * 0.55);
-  ctx.lineTo(cx + W2 * 0.18, tipY - H2);
-  ctx.lineTo(cx - W2 * 0.18, tipY - H2);
-  ctx.lineTo(cx - W2 * 0.18, tipY - H2 * 0.55);
-  ctx.lineTo(cx - W2 / 2, tipY - H2 * 0.55);
-  ctx.closePath();
-  ctx.fill(); ctx.stroke();
-  ctx.restore();
+  for (const h of hintSpots()) {
+    const cx = h.x + h.w / 2;
+    const tipY = h.y - 10 + bob;            // the point sits just above the object
+    const W2 = 34, H2 = 40;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,215,94,0.95)';
+    ctx.strokeStyle = 'rgba(90,54,24,0.9)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(cx + W2 / 2, tipY - H2 * 0.55);
+    ctx.lineTo(cx + W2 * 0.18, tipY - H2 * 0.55);
+    ctx.lineTo(cx + W2 * 0.18, tipY - H2);
+    ctx.lineTo(cx - W2 * 0.18, tipY - H2);
+    ctx.lineTo(cx - W2 * 0.18, tipY - H2 * 0.55);
+    ctx.lineTo(cx - W2 / 2, tipY - H2 * 0.55);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawExitArrows(now) {
@@ -1369,7 +1371,7 @@ window.__TC = {
     const y = r.top + (VIEW.oy + wy * VIEW.scale) / DPR;
     canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
   },
-  giveCoins(n) { cabs[0].till += n; },      // QA only — seeds a till without waiting for a punter
+  giveCoins(n, i) { cabs[i || 0].till += n; },   // QA only — seeds a till without a punter
   rush(secsLeft, pence) {                   // QA only — jump to the end of the night with a
     dayEndsAt = performance.now() + secsLeft * 1000;   // chosen amount in the safe, so the
     if (pence !== undefined) cash = pence;             // rent card and the flashing chevrons
