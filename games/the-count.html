@@ -1077,7 +1077,15 @@ function hintSpot() {
     if (cash >= 600) return find('ledger');
   }
   if (room === 'studio' && decanter === 0 && bottles > 0) return find('decanter');
-  if (room === 'prop' && decanter === 0 && bottles === 0) return find('whisky');
+  if (room === 'prop') {
+    if (decanter === 0 && bottles === 0) return find('whisky');
+    // Osimo 2026-09-05: "missing arrow when money is in the box available for pick up."
+    // The DO NOT OPEN box only pays while it has a clean cabinet left to ruin and has not
+    // been opened tonight — exactly the window where it is worth pointing at. It sits below
+    // the whisky errand on purpose: the game should not nag you into cursing a machine.
+    const clean = cabs.slice(0, cabCount()).some(c => !c.cursed);
+    if (!boxOpenedToday && clean) return find('bitsBox');
+  }
   return null;
 }
 function drawHint(now) {
@@ -1413,8 +1421,15 @@ document.getElementById('arcadeBtn').addEventListener('click', () => {
   location.href = (new URLSearchParams(location.search).get('from') === 'wip') ? '../wip.html' : '../index.html';
 });
 if (new URLSearchParams(location.search).get('play') === '1') {
-  // deep link straight into a shift (used by QA and the cassette recorder)
-  overlay.classList.add('hidden'); newRun(); state = 'play'; startTips();
+  // Deep link straight into a shift. The halls launch every cabinet as ?play=1, so this is
+  // the NORMAL way in, not just a QA door — and it used to call newRun() unconditionally,
+  // which threw away the saved night every single time. Osimo 2026-09-05: "I left the game
+  // by mistake, when I got back it was reset to the beginning." play=1 means "skip the coin
+  // screen", never "wipe my progress": if there is a night banked, resume it.
+  overlay.classList.add('hidden');
+  if (hasSave()) { resumeRun(); } else { newRun(); startTips(); }
+  state = 'play';
+  applyMusic();
 }
 })();
 </script>
