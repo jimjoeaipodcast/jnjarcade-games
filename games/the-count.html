@@ -301,15 +301,19 @@ function djb2(str) {
 // this in and loadVoice() is only a fallback if the art load is skipped
 function loadVoice() { loadPack(); }
 let voiceEl = null;
-const voSaid = new Set();               // "say it once" lines
+// How many times each line has been spoken this run. Osimo 2026-09-05: "this message
+// should say it once, maybe the second time for good measure that's it" — so a line has a
+// budget, not a boolean, and once it is spent the line never comes back.
+const voSaid = new Map();
 // vo(key) speaks a line and puts its text in the bubble. once:true means never again this
 // run — the Flap Fight lesson (Osimo 2026-09-04: an explainer repeated forever is nagging).
 function vo(key, opts) {
   const line = VO_LINES[key];
   if (!line) return;
-  const once = !opts || opts.once !== false;
-  if (once && voSaid.has(key)) return;
-  if (once) voSaid.add(key);
+  const max = (opts && opts.max) || 1;             // times this line may EVER be said
+  const said = voSaid.get(key) || 0;
+  if (said >= max) return;
+  voSaid.set(key, said + 1);
   const [who, text] = line;
   bubbleShow(who, text, opts && opts.icon, opts && opts.qty);
   if (muted) return;
@@ -334,7 +338,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=9').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=11').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -700,8 +704,15 @@ function drawBubble(SW, SH) {
   if (!bubble) return;
   if (tutorial < 0 && performance.now() > bubble.until) { bubble = null; return; }
   const t = bubble;
+  // Osimo 2026-09-05: "don't place these speech bubbles over the arrows". The exit
+  // chevrons are painted at world x30 and x930, which land inside ARROW_KEEP of either
+  // screen edge — the bubble and its portrait now start beyond that on the left and stop
+  // short of it on the right, so a doorway is never hidden behind something Jimmy is
+  // saying. Tapping an arrow you cannot see is what sent him walking into the middle of
+  // the room and triggered an unrelated line.
+  const ARROW_KEEP = 74;
   ctx.font = '17px "Barlow Condensed",sans-serif';
-  const maxW = Math.min(430, SW - 200);
+  const maxW = Math.min(430, SW - ARROW_KEEP * 2 - 190);
   const words = t.text.split(' '), lines2 = []; let cur = '';
   for (const w of words) {
     if (ctx.measureText(cur + ' ' + w).width > maxW && cur) { lines2.push(cur); cur = w; }
@@ -712,7 +723,8 @@ function drawBubble(SW, SH) {
   let textW = 0;
   for (const l of lines2) textW = Math.max(textW, ctx.measureText(l).width);
   const bw = Math.max(190, Math.min(maxW, textW) + 28), bh = 22 + lines2.length * 21 + iconH;
-  const px = 104, py = Math.max(56, SH - bh - 72);
+  const px = ARROW_KEEP + 90 + SAFE.l;             // 90 leaves room for the portrait badge
+  const py = Math.max(56 + SAFE.t, SH - bh - 72 - SAFE.b);
   const po = SPR[t.who === 'JOE' ? 'poJoe' : 'poJimmy'];
   if (po) ctx.drawImage(po, px - 84, py + bh / 2 - 36, 72, 72);
   ctx.fillStyle = 'rgba(252,246,232,0.97)';
@@ -805,7 +817,7 @@ function updateFloor(dt, now) {
 // then never again (vo() latches the key), so the game guides without nagging.
 function voWatch() {
   if (tutorial >= 0) return;                       // the intro owns the bubble
-  if (carry >= apronCap()) vo('fullApron', { icon: 'icApron' });
+  if (carry >= apronCap()) vo('fullApron', { icon: 'icApron', max: 2 });
   for (let i = 0; i < ALL_N; i++) {
     if (!cabOn(i)) continue;
     if (cabs[i].jam) vo('jammed', { icon: 'icStick' });
@@ -813,7 +825,11 @@ function voWatch() {
   }
   if (decanter === 0) vo('dryTot', { icon: 'icBottle' });
   if (hosts.joe.room !== 'studio' && !has('joePay')) vo('noMic', { icon: 'icOnair' });
-  if (anyOff() && (room === 'corridor' || room === 'hall')) vo('offMach', { icon: 'icCab' });
+  // 'offMach' is NOT here any more. It used to fire on its own the moment you stood in a
+  // room with an unlit machine, so it landed on taps that had nothing to do with a machine
+  // — Osimo 2026-09-05: "the message those dark machines appears pressing in places that
+  // are not related to me pressing on a machine that hasn't been purchased". It is now
+  // spoken only when you actually tap a machine you have not bought, in onTap.
   if (cash < RENT(day) && (dayEndsAt - performance.now()) < 30000) vo('rentShort', { icon: 'icCounter' });
 }
 
@@ -1052,7 +1068,14 @@ function onTap(e) {
     return;
   }
   const h = hotspotAt(w.x, w.y);
-  if (h) { me().target = Math.max(60, Math.min(WORLD_W - 60, h.walkX)); pending = h; return; }
+  if (h) {
+    // tapping a machine you have not paid for is the ONLY thing that explains why it is
+    // dark, so that is the only place the line belongs
+    if (h.cab !== undefined && !cabOn(h.cab)) vo('offMach', { icon: 'icCab', max: 2 });
+    me().target = Math.max(60, Math.min(WORLD_W - 60, h.walkX));
+    pending = h;
+    return;
+  }
   me().target = Math.max(40, Math.min(WORLD_W - 40, w.x));
   pending = null;
 }
@@ -1062,43 +1085,41 @@ canvas.addEventListener('mousedown', onTap);
 // ── shop UI (drawn on the canvas so it scales with everything else) ──────────
 // Laid out in SCREEN space (like the HUD): the room is cover-cropped on wide phones, and
 // a world-space list lost its bottom rows off the edge of the crop.
-// The column is anchored to two points Osimo read off a grid laid over the real ledger:
-// the FIRST logo's centre at cell H5 and the LAST at G18. On the 915x412 frame he gridded,
-// letter i is x = i*20+10 and row n is y = (n-1)*20+10, so those are (150,90) and (130,350)
-// — held here as fractions of the frame so they survive other screen shapes. The x drifts
-// LEFT as the list goes down, which is the page's own lean; every row rides that line, so
-// the column ends up parallel to the ruling instead of square to the screen.
-const LEDGER_FIRST = { x: 150 / 915, y: 90 / 412 };
-const LEDGER_LAST  = { x: 130 / 915, y: 350 / 412 };
-// The book has a RIGHT page too, and until now it was blank while the left one was
-// overfilled. Measured off the rendered ledger at 851 wide: the left page's red rule sits
-// at x148 and the right page's at x468, and the right rule is all but vertical where the
-// left one leans. The list fills the left page and carries on across the spine.
-const LEDGER_PAGE2 = { dx: 320 / 851, lean: 0.02 };
-// A row has to hold a 16px name with a 12px blurb under it, so 30px is the floor. The old
-// pitch was the page height divided by the WHOLE catalogue, which meant every upgrade
-// added anywhere squeezed every existing row — adding the BIG ROOM's six entries dropped
-// the pitch to 17px and every line landed on top of the one below it.
-const LEDGER_ROW_H = 30;
-function shopMetrics() {
+// The list is anchored to the BOOK, not to the screen. The anchors used to be fractions of
+// a 915x412 frame Osimo gridded, which only lands on the page at that one aspect ratio —
+// the book is drawn cover-fit, so on any other shape it is a different size in a different
+// place and the writing drifted off the paper. These figures are measured off the PLATE
+// itself and pushed through the same cover-fit transform the book is drawn with, so the
+// rows sit on the ruling at every screen shape.
+// Measured on the 640x360 plate itself: ruled paper runs y30..306, the left page's red
+// margin rule is at x118 and the right page's at x351. Osimo 2026-09-05 had the plate
+// amended rather than redrawn ("keep the ledger as is"), so these are the ORIGINAL book's
+// numbers — only the hands holding it changed.
+const LEDGER_ART = { w: 640, h: 360, pageY0: 30, pageY1: 306,
+                     colX: [122, 355], colW: 168 };
+const LEDGER_ROW_H = 30;   // a 16px name with a 12px blurb under it needs this much
+function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
-  const x0 = LEDGER_FIRST.x * SW, y0 = LEDGER_FIRST.y * SH;
-  const x1 = LEDGER_LAST.x  * SW, y1 = LEDGER_LAST.y  * SH;
-  const span = Math.max(1, y1 - y0);
-  const lean = (x1 - x0) / span;                  // ≈ -0.077: left as it goes down
-  const perCol = Math.max(1, Math.floor(span / LEDGER_ROW_H) + 1);
-  const w = Math.round(SW * 0.30);                // writing area, inside the red rule
-  return { SW, SH, rowH: LEDGER_ROW_H, perCol, w, x0, y0, lean,
-           iconR: Math.min(LEDGER_ROW_H * 0.52, 18) };
+  const bk = SPR.ledger;
+  const bw = bk ? bk.width : LEDGER_ART.w, bh = bk ? bk.height : LEDGER_ART.h;
+  // CONTAIN, not cover. The book is a panel you read, not a backdrop: cover-fitting it on
+  // a portrait phone scaled it to 1500px wide inside a 390px screen and both written pages
+  // sat off the sides of the display entirely — the rows were being drawn, just nowhere you
+  // could see or tap them. Black margins around a held book are the correct look anyway.
+  const sc = Math.min(SW / bw, SH / bh);
+  return { SW, SH, sc, bw, bh, dx: (SW - bw * sc) / 2, dy: (SH - bh * sc) / 2 };
 }
-// The book art's red margin rule leans left as it goes down the page (measured off the
-// plate: about -0.11 px of x per px of y). Osimo 2026-09-04: "they should be parallel to
-// the red line" — so every row is shifted along that same lean, and the whole column runs
-// parallel to the rule instead of sitting square on a curved page.
-const PAGE_LEAN = -0.11;
-function pageCurve(i, n) {
-  const t = n > 1 ? i / (n - 1) : 0.5;
-  return Math.sin(t * Math.PI) * 4;                 // pages bow out in the middle
+function shopMetrics() {
+  const b = bookRect();
+  const head = 52;                                  // the title block at the top of the page
+  const y0 = b.dy + LEDGER_ART.pageY0 * b.sc + head + LEDGER_ROW_H / 2;
+  const y1 = b.dy + LEDGER_ART.pageY1 * b.sc;
+  const span = Math.max(LEDGER_ROW_H, y1 - y0);
+  const perCol = Math.max(1, Math.floor(span / LEDGER_ROW_H));
+  const cols = LEDGER_ART.colX.map(x => b.dx + x * b.sc);
+  return { SW: b.SW, SH: b.SH, book: b, rowH: LEDGER_ROW_H, perCol, cols,
+           w: Math.round(LEDGER_ART.colW * b.sc), x0: cols[0], y0,
+           iconR: Math.min(LEDGER_ROW_H * 0.52, 18) };
 }
 // Trim a string to a pixel width in the CURRENT font, ellipsis included.
 function fitText(s, maxW) {
@@ -1119,11 +1140,9 @@ function shopRows() {
   const m = shopMetrics();
   const list = UPGRADES.filter(upgradeAvailable);
   return list.map((u, i) => {
-    const col = Math.floor(i / m.perCol), k = i % m.perCol;
+    const col = Math.min(m.cols.length - 1, Math.floor(i / m.perCol)), k = i % m.perCol;
     const cy = m.y0 + k * m.rowH;                  // the logo's CENTRE, on the line
-    const cx = col === 0
-      ? m.x0 + (cy - m.y0) * m.lean
-      : m.x0 + m.SW * LEDGER_PAGE2.dx + (cy - m.y0) * LEDGER_PAGE2.lean;
+    const cx = m.cols[col];
     return { u, cx, cy, x: cx - m.iconR, y: cy - m.rowH / 2, w: m.w, h: m.rowH };
   });
 }
@@ -1517,17 +1536,15 @@ function drawShop() {
   // panel is a Grok-drawn first-person held ledger and the list is written onto its pages.
   ctx.fillStyle = 'rgba(4,3,2,0.96)'; ctx.fillRect(0, 0, m.SW, m.SH);
   const bk = SPR.ledger;
-  if (bk) {
-    const sc = Math.max(m.SW / bk.width, m.SH / bk.height);
-    const dw = bk.width * sc, dh = bk.height * sc;
-    ctx.drawImage(bk, (m.SW - dw) / 2, (m.SH - dh) / 2, dw, dh);
-  }
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 26px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.x0 + m.w * 0.42, Math.round(m.SH * 0.125));
-  ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.x0 + m.w * 0.42, Math.round(m.SH * 0.163));
+  if (bk) ctx.drawImage(bk, m.book.dx, m.book.dy, bk.width * m.book.sc, bk.height * m.book.sc);
+  // Title block sits on the paper at the top of the left page, in BOOK space, so it moves
+  // with the book instead of floating at a fixed fraction of the screen.
+  const headY = m.book.dy + LEDGER_ART.pageY0 * m.book.sc;
   ctx.textAlign = 'left';
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
+  ctx.fillText('THE LEDGER', m.cols[0] - m.iconR, headY + 18);
+  ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0] - m.iconR, headY + 32);
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
@@ -1539,19 +1556,27 @@ function drawShop() {
     }
     shopIcon(r.u.icon, r.cx, r.cy, m2.iconR * 2.05, can);
     const tx = r.cx + m2.iconR + 8;
+    const right = r.cx - m2.iconR + r.w - 8;
+    // A page column is narrow, so the price is measured FIRST and the name is trimmed to
+    // whatever is left. Writing the name at full length and hoping the price cleared it is
+    // what put the two on top of each other.
+    // The name gets the WHOLE line; the price shares the second line with the blurb. Name
+    // and price side by side left about 90px for the name in a page column and every entry
+    // came out as an ellipsis.
+    const price = '£' + (c / 100).toFixed(2);
     ctx.fillStyle = can ? '#3c2410' : '#8a795f';
-    ctx.font = 'bold 16px "Barlow Condensed",sans-serif';
-    ctx.fillText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''), tx, r.cy - 1);
-    ctx.font = '12px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
-    // the blurb is trimmed to the writing area rather than running across the spine onto
-    // the facing page, which is what long lines were doing
-    ctx.fillText(fitText(r.u.blurb, r.cx - m2.iconR + r.w - 16 - tx), tx, r.cy + 12);
+    ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+    ctx.fillText(fitText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''),
+                         right - tx), tx, r.cy - 2);
+    ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+    const pw = ctx.measureText(price).width;
     ctx.textAlign = 'right';
-    ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
     ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
-    ctx.fillText('£' + (c / 100).toFixed(2), r.cx - m2.iconR + r.w - 12, r.cy + 5);
+    ctx.fillText(price, right, r.cy + 11);
     ctx.textAlign = 'left';
+    ctx.font = '11px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
+    ctx.fillText(fitText(r.u.blurb, right - pw - 8 - tx), tx, r.cy + 11);
   }
   const cl = shopCloseRect();
   ctx.fillStyle = 'rgba(122,74,26,0.9)';
@@ -1664,6 +1689,10 @@ window.__TC = {
     rentWarned = false; rentCardAt = 0;                // can be seen without waiting 100s
   },
   own(id) { owned[id] = true; },            // QA only — grant one upgrade without the ledger
+  // QA only — the ledger is painted on the canvas, so nothing outside can find a row to
+  // tap. Screen-space centres, ready to click.
+  rows() { return shopRows().map(r => ({ id: r.u.id, name: r.u.name,
+                                         x: Math.round(r.cx + 30), y: Math.round(r.cy) })); },
   // QA only — the jingle and the last spoken line live in closure variables, and the audio
   // objects are never in the DOM, so this is the only way to prove either one is running
   get audio() {
