@@ -60,24 +60,36 @@
           padding: 15px 34px; background: #e8c35a; color: #000; border: none;
           border-radius: 10px; cursor: pointer; margin: 6px; box-shadow: 0 0 26px #e8c35a; }
   .obtn.ghost { background: transparent; color: #e8c35a; border: 2px solid #e8c35a; box-shadow: none; }
-  /* Landscape nudge, same pattern as jnj-on-air: this is a 16:9 room game, so a portrait
-     phone letterboxes it into a strip. Non-blocking on purpose — iOS cannot lock
-     orientation, so it hints rather than gates, and hides the moment the phone turns. */
-  #rotateHint { display: none; }
+  /* LANDSCAPE ONLY (Osimo 2026-09-05: "force users to play in landscape on this game").
+     The house gate — same as lupo-alberto, jungle-hop, astro-hop: a full-screen panel over
+     everything, canvas and coin overlay both hidden, so there is nothing to play until the
+     phone is turned. It was a non-blocking hint before, which meant a portrait player got
+     a squashed strip of a 16:9 room and no reason to rotate.
+     Kept behind pointer:coarse so a narrow DESKTOP window is not locked out of a game that
+     is perfectly playable there. */
+  #rot { display: none; }
   @media (orientation: portrait) and (pointer: coarse) {
-    #rotateHint { display: flex; position: fixed; top: 10px; left: 50%;
-      transform: translateX(-50%); z-index: 9; align-items: center; gap: 8px;
-      background: rgba(10,10,16,.92); color: #e8c35a; border: 1px solid #e8c35a55;
-      border-radius: 10px; padding: 8px 14px; font-size: 12px; letter-spacing: .06em;
-      pointer-events: none; font-family: 'Courier New', monospace; }
+    #rot { display: flex; position: fixed; inset: 0; z-index: 40;
+      flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+      background: #0b0904; color: #e8c35a; text-align: center; padding: 24px;
+      font-family: 'Courier New', monospace; }
+    #rot .ph { font-size: 62px; animation: rotSpin 2s ease-in-out infinite alternate; }
+    #rot h2 { font-size: 21px; letter-spacing: .1em; }
+    #rot p { font-size: 13px; color: #9aa; max-width: 78vw; line-height: 1.6; }
+    #gameCanvas, #overlay { display: none !important; }
   }
+  @keyframes rotSpin { to { transform: rotate(90deg); } }
 </style>
 <link rel="stylesheet" href="../cabinet.css">
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
 <div id="safeProbe"></div>
-<div id="rotateHint">🔄 ROTATE FOR THE FULL FLOOR</div>
+<div id="rot">
+  <div class="ph">📱</div>
+  <h2>TURN YOUR PHONE</h2>
+  <p>THE COUNT is played sideways — the arcade floor runs the width of the room.</p>
+</div>
 <div id="overlay">
   <h1>THE COUNT</h1>
   <p id="ovText">Jim &amp; Joe's arcade, from the money side.<br>
@@ -162,8 +174,30 @@ function resize() {
 // settles the insets around it, and a resize listener registered during the page's own
 // load is not reliably invoked later. The poll is the guarantee; the listeners are the
 // same-frame fast path for when they do fire.
+// The landscape gate is CSS (see #rot), but the CLOCK is not. Rent is due on a wall-clock
+// deadline, so a player who turned the phone upright would come back to a night that had
+// run down behind a panel he could not see through. This is the one thing the stylesheet
+// cannot do for us.
+const portraitMQ = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+function rotateGated() { return portraitMQ.matches; }
+// Fullscreen needs a user GESTURE and a rotation is not one, so this is re-armed on every
+// tap as well as at the two entry points. The lock is chained onto fullscreen resolving —
+// Android rejects orientation.lock() unless fullscreen is already active, and firing the
+// two side by side is a race the lock usually loses. iOS Safari has no lock at all, which
+// is exactly why the CSS gate has to exist rather than relying on this.
+function goFullscreenLandscape() {
+  try {
+    const r = document.documentElement.requestFullscreen?.();
+    if (r && r.then) r.then(() => screen.orientation?.lock?.('landscape')?.catch(() => {}))
+                      .catch(() => {});
+    else screen.orientation?.lock?.('landscape')?.catch(() => {});
+  } catch (e) {}
+}
 let lastVW = 0, lastVH = 0;
 function syncViewport() {
+  // while the gate is up the canvas is display:none, so its client box is 0 and the
+  // mismatch check below would re-size it every tick for nothing
+  if (rotateGated()) return;
   const w = viewportW(), h = viewportH();
   // Two triggers, not one. The viewport figures moving is the normal case; the second
   // clause catches the case that actually produced the squash — the ELEMENT's box ending
@@ -1617,6 +1651,12 @@ function frame(ts) {
   requestAnimationFrame(frame);
   const dt = Math.min(48, lastTs ? ts - lastTs : 16);
   lastTs = ts;
+  if (rotateGated()) {
+    // nothing to draw (the canvas is hidden) and the night must not run down while the
+    // player cannot see it
+    if (state === 'play' && !dayPaused) dayEndsAt += dt;
+    return;
+  }
   if (state === 'play' && !shopOpen && !dayPaused) {
     updateFloor(dt, ts);
     updateHype(dt);
@@ -1675,6 +1715,7 @@ window.__TC = {
                          // the whole script is IIFE-wrapped, so QA can only see what this
                          // object exposes — room nav has to be inspectable from out here
                          exits: sideExits().map(e => e.h.id), pending: pending && pending.id,
+                         msLeft: Math.round(dayEndsAt - performance.now()), gated: rotateGated(),
                          hx: Math.round(me().x), target: Math.round(me().target) }; },
   tapWorld(wx, wy) {
     const r = canvas.getBoundingClientRect();
@@ -1724,10 +1765,7 @@ window.__TC = {
     resumeRun();
     state = 'play';
     applyMusic();
-    try {
-      document.documentElement.requestFullscreen?.().catch(() => {});
-      screen.orientation?.lock?.('landscape').catch(() => {});
-    } catch (e) {}
+    goFullscreenLandscape();
   });
 })();
 
@@ -1739,11 +1777,13 @@ document.getElementById('startBtn').addEventListener('click', () => {
   state = 'play';
   startTips();
   applyMusic();                        // a stored jingle choice resumes with the run
-  try {
-    document.documentElement.requestFullscreen?.().catch(() => {});
-    screen.orientation?.lock?.('landscape').catch(() => {});
-  } catch (e) {}
+  goFullscreenLandscape();
 });
+// Re-arm on any tap: once fullscreen is lost (scoreboard, app switch, back gesture) it can
+// only come back inside a gesture, and capture+passive means this cannot swallow a game tap.
+canvas.addEventListener('pointerdown', () => {
+  if (!document.fullscreenElement && state === 'play') goFullscreenLandscape();
+}, { capture: true, passive: true });
 document.getElementById('arcadeBtn').addEventListener('click', () => {
   location.href = (new URLSearchParams(location.search).get('from') === 'wip') ? '../wip.html' : '../index.html';
 });
