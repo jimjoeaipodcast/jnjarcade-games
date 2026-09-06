@@ -18,6 +18,13 @@
   door, and you spend the takings on things that make the next day earn more.
   Rent is due every night and it goes up.
 
+  TWO BUSINESSES, ONE PAIR OF LEGS. The arcade earns coins you have to walk. The SHOW
+  earns differently: a host on the mic builds HYPE, hype is the audience, and with both of
+  them in the studio you can RECORD AN EPISODE — it pays on the night, and every episode in
+  the catalogue then pays a ROYALTY at every bell after. That royalty is where the money in
+  the safe comes from on a quiet night, and it is money the pair earned rather than rent
+  collected off anyone (Osimo 2026-09-06).
+
   THE JNJ PART: money is the only resource the arcade floor and the podcast
   actually share, so every pound is a choice between the two. Coins bought
   cabinets (Jimmy's side, more punters) or whisky (Joe's side, the show keeps
@@ -306,7 +313,8 @@ const VO_LINES = {
   intro3: ['JIMMY', "Your apron only holds so much. Head left, past the studio, to the coin closet."],
   intro4: ['JIMMY', "The safe eats the bags. The ledger next to it is where you spend what's in it."],
   intro5: ['JIMMY', "Buy a second cabinet first. Two machines earn while you're walking."],
-  intro6: ['JIMMY', "That's Joe on the mic. Take him off it and the hype drops, and hype is how fast punters turn up."],
+  intro6: ['JIMMY', "That's Joe on the mic. Somebody on it builds hype, and hype is how fast punters turn up."],
+  intro6b:['JIMMY', "Get the hype up with both of us in the studio and we can record an episode. It pays on the night, then pays again every night after."],
   intro7: ['JIMMY', "Rent comes out of the safe at midnight. Every night. And it goes up."],
   // directions — said once each, when the thing first becomes true
   fullCab:  ['JIMMY', "That machine's full of coins. Go and empty it."],
@@ -324,6 +332,13 @@ const VO_LINES = {
   boughtCab:['JOE',   "another machine. another queue."],
   boxOpened:['JOE',   "you opened the box. of course you did."],
   dayDone:  ['JIMMY', "Rent paid! Right, again, but bigger."],
+  // the show is the second business (Osimo 2026-09-06)
+  recCan:   ['JIMMY', "There's a crowd out there now. Get us both in the studio and we'll record something."],
+  recStart: ['JIMMY', "We're rolling! Nobody leave the room."],
+  recBail:  ['JOE',   "you walked out mid-take. that's the take gone."],
+  recDone:  ['JIMMY', "That's an episode in the can. It pays tonight, and it pays every night after."],
+  royalty:  ['JOE',   "the back catalogue paid out. turns out people rewatch us."],
+  hypeLow:  ['JIMMY', "Hype's on the floor — nobody's talking. One of us needs to be on that mic."],
 };
 const VO = { b64: null, loading: false, until: 0 };
 function djb2(str) {
@@ -338,7 +353,8 @@ let voiceEl = null;
 // How many times each line has been spoken this run. Osimo 2026-09-05: "this message
 // should say it once, maybe the second time for good measure that's it" — so a line has a
 // budget, not a boolean, and once it is spent the line never comes back.
-const voSaid = new Map();
+const voSaid = new Map();               // times each line has been said this run
+const voWhen = new Map();               // and when it was last said
 // vo(key) speaks a line and puts its text in the bubble. once:true means never again this
 // run — the Flap Fight lesson (Osimo 2026-09-04: an explainer repeated forever is nagging).
 function vo(key, opts) {
@@ -347,7 +363,13 @@ function vo(key, opts) {
   const max = (opts && opts.max) || 1;             // times this line may EVER be said
   const said = voSaid.get(key) || 0;
   if (said >= max) return;
+  // A budget of two is no use if both plays land in the same five seconds — that reads as
+  // a stutter, not a reminder. A line with a budget also gets a minimum gap between plays.
+  const gap = (opts && opts.gap) || 45000;
+  const now = performance.now();
+  if (said > 0 && now - (voWhen.get(key) || 0) < gap) return;
   voSaid.set(key, said + 1);
+  voWhen.set(key, now);
   const [who, text] = line;
   bubbleShow(who, text, opts && opts.icon, opts && opts.qty);
   if (muted) return;
@@ -372,7 +394,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=12').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=13').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -512,7 +534,10 @@ const ROOMS = {
       { id: 'toCoin',   x: 0,   y: 150, w: 70,  h: 340, walkX: 60,  label: 'TO THE COIN CLOSET', exit: 'coinroom' },
       { id: 'toCorr',   x: 890, y: 150, w: 70,  h: 340, walkX: 900, label: 'TO THE ARCADE', exit: 'corridor' },
       { id: 'decanter', x: 400, y: 300, w: 90,  h: 90,  walkX: 420, label: 'THE DECANTER' },
-      { id: 'mic',      x: 520, y: 270, w: 120, h: 120, walkX: 560, label: 'THE MIC' },
+      { id: 'mic',      x: 520, y: 270, w: 120, h: 120, walkX: 560, label: 'RECORD AN EPISODE' },
+      // Osimo 2026-09-06: "the TV comes on and they have to record the video or podcast".
+      // Same action from either prop — the mic for the podcast, the screen for the show.
+      { id: 'tv',       x: 352, y: 108, w: 256, h: 146, walkX: 480, label: 'RECORD AN EPISODE' },
       { id: 'sofaL',    x: 90,  y: 290, w: 260, h: 140, walkX: 240, label: 'THE CHESTERFIELD' },
     ],
   },
@@ -618,6 +643,20 @@ let lastTs, dayPaused, turnedAway = 0;
 let tutorial = -1;            // index into INTRO while the first night is being taught
 let bubble = null;            // {who,text,icon,qty,until} — whatever is being said now
 let boxOpenedToday = false;   // the DO NOT OPEN box is a once-a-night decision, not a tap
+// ── the show as a business (Osimo 2026-09-06) ────────────────────────────────
+// "the mic... Jim and Joe they need to perform on the mic for money, or the TV comes on and
+// they have to record the video or podcast... and they get money through that. second, the
+// money that appears in the safe it's not quite clear where it comes from so it should be
+// some sort of dividends."
+// One loop answers both: hype is the audience, a RECORDING turns the audience into a
+// payday, and every episode you have recorded pays a ROYALTY every night afterwards. That
+// royalty is the money arriving in the safe, and it is money the pair earned rather than
+// rent collected off somebody.
+const REC_MS = 14000;         // a take runs fourteen seconds
+const REC_MIN_HYPE = 25;      // below this there is no audience worth recording for
+const ROYALTY = 60;           // 60p a night, per episode in the catalogue
+let episodes = 0, rec = null; // rec = { until, hype0 } while the red light is on
+let lastTurnAt = 0;           // when a punter last walked out — the HUD explains hype with it
 let rentWarned = false, rentCardAt = 0;   // the rent card shows once a night, then shuts up
 
 function apronCap() { return Math.round(60 * Math.pow(2.2, apronLvl)); }
@@ -649,7 +688,7 @@ function saveRun() {
   if (state !== 'play') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      v: 1, t: Date.now(), cash, day, banked, apronLvl, owned, bottles, decanter,
+      v: 1, t: Date.now(), cash, day, banked, apronLvl, owned, bottles, decanter, episodes,
       hype: Math.round(hype),
     }));
   } catch (e) {}
@@ -666,6 +705,7 @@ function resumeRun() {
   if (!s2) return false;
   newRun();
   cash = s2.cash; day = s2.day; banked = s2.banked || 0; apronLvl = s2.apronLvl || 0;
+  episodes = s2.episodes || 0; rec = null;   // a take in progress does not survive a reload
   owned = s2.owned || {}; bottles = s2.bottles || 0;
   decanter = (s2.decanter !== undefined) ? s2.decanter : 3;
   hype = (s2.hype !== undefined) ? s2.hype : 80;
@@ -680,6 +720,7 @@ document.addEventListener('visibilitychange', () => {
 function newRun() {
   cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
   banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
+  episodes = 0; rec = null;
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
   dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0; boxOpenedToday = false;
@@ -700,7 +741,7 @@ function say(t, ms) { msg = t; msgUntil = performance.now() + (ms || 2200); }
 // lines live in VO_LINES; the tutorial is just an index into them, advanced by tapping, and
 // each step speaks and shows the same words. Once per device.
 const TIP_KEY = 'tc_tips_v2';
-const INTRO = ['intro1', 'intro2', 'intro3', 'intro4', 'intro5', 'intro6', 'intro7'];
+const INTRO = ['intro1', 'intro2', 'intro3', 'intro4', 'intro5', 'intro6', 'intro6b', 'intro7'];
 const INTRO_ICON = ['icCoin', 'icCab', 'icApron', 'icCounter', 'icCab', 'icOnair', 'icCounter'];
 function tipsSeen() { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } }
 function startTips() {
@@ -813,8 +854,13 @@ function updateFloor(dt, now) {
       c.playT = c.playFull;
       SFX.punter();
     } else if (hype > 12) {
-      hype -= 1.2;                     // turned away, and they tell people
+      // Turned away, and they tell people. This used to cost 1.2 each, which on one or two
+      // machines swamped everything the mic could earn — the real reason hype "wouldn't go
+      // up" even when played correctly. It still hurts, but a host on the mic can now out-
+      // earn a moderate queue, and the HUD names it as the cause (see hypeReason).
+      hype -= 0.55;
       turnedAway++;                    // shown once on the HUD, not flashed mid-screen
+      lastTurnAt = now;
     }
   }
   for (let i = 0; i < cabs.length; i++) {
@@ -894,12 +940,35 @@ function updateJoe(dt) {
   }
 }
 
+// HYPE, rewritten. Osimo 2026-09-06: "hype not clear on how to increase". It was not
+// unclear, it was IMPOSSIBLE: the old numbers gained 0.35/s while draining 0.55/s in the
+// very state that was supposed to raise it, so playing correctly still lost 0.2/s and the
+// bar only ever fell until the ON AIR SIGN was bought. Now a host on the mic with whisky
+// nets a clear +0.4/s and an empty studio costs 1.3/s, and the HUD says which is happening
+// and why (see drawHUD's hypeReason).
+// Either host counts. You only ever drive one, so the other staying put IS the decision —
+// and with Joe on wages working the first arcade, keeping hype up falls to Jimmy.
+function micHost() {
+  if (hosts.jimmy.room === 'studio') return 'jimmy';
+  if (hosts.joe.room === 'studio') return 'joe';
+  return null;
+}
+function hypeReason() {
+  if (rec) return { dir: 1, txt: 'RECORDING' };
+  if (!micHost()) return { dir: -1, txt: 'NO ONE ON MIC' };
+  if (decanter <= 0) return { dir: -1, txt: 'DECANTER DRY' };
+  // a queue walking out costs more than the mic earns, so when it is happening it IS the
+  // reason the bar is falling and saying "ON MIC" instead would be a lie
+  if (performance.now() - lastTurnAt < 3500) return { dir: -1, txt: 'QUEUE WALKING OUT' };
+  return { dir: 1, txt: 'ON MIC' };
+}
 function updateHype(dt) {
-  const joeOnMic = hosts.joe.room === 'studio';
-  let drain = (joeOnMic && decanter > 0) ? 0.55 : 1.1;
+  const talking = !!micHost() && decanter > 0;
+  let drain = talking ? 0.5 : 1.3;
   if (has('onair')) drain *= 0.6;
-  if (joeOnMic && decanter > 0) {
-    hype += 0.35 * (dt / 1000);
+  if (rec) drain *= 2.6;             // a take spends the audience it was recorded for
+  if (talking) {
+    hype += 0.9 * (dt / 1000);
     // one measure roughly every 40s of talking, so a full decanter outlasts a shift and
     // the whisky run is a chore you plan, not an emergency every eighty seconds. (First
     // tuning burned a measure every 26s: the decanter emptied inside one day and hype
@@ -911,6 +980,45 @@ function updateHype(dt) {
   }
   hype -= drain * (dt / 1000);
   hype = Math.max(0, Math.min(100, hype));
+  if (hype < 12 && !micHost()) vo('hypeLow', { icon: 'icOnair', max: 2 });
+  if (hype >= 55 && episodes === 0 && !rec) vo('recCan', { icon: 'icOnair', max: 2 });
+}
+
+// ── recording an episode ─────────────────────────────────────────────────────
+// Both hosts have to be in the studio for the whole take. That is the cost: for fourteen
+// seconds nobody is on the arcade floor, the cabinets fill up unattended, and the audience
+// you built gets spent. The payout scales with the hype you brought to it.
+function recPay(h) { return Math.round(h * 7) + 120; }
+function startRec() {
+  if (rec) { say('Already rolling.'); return; }
+  if (hype < REC_MIN_HYPE) {
+    say('Not enough of a crowd yet — get someone on the mic first.', 3000); SFX.deny(); return;
+  }
+  if (hosts.jimmy.room !== 'studio' || hosts.joe.room !== 'studio') {
+    say('Both of you, in here. You cannot record a double act on your own.', 3200);
+    SFX.deny(); return;
+  }
+  rec = { until: performance.now() + REC_MS, hype0: hype };
+  vo('recStart', { icon: 'icOnair' });
+  SFX.day();
+}
+function updateRec(dt, now) {
+  if (!rec) return;
+  // walk either of them out and the take is lost — that is what makes it a commitment
+  if (hosts.jimmy.room !== 'studio' || hosts.joe.room !== 'studio') {
+    rec = null; vo('recBail', { icon: 'icOnair', max: 3 }); SFX.deny();
+    return;
+  }
+  if (now < rec.until) return;
+  const pay = recPay(hype);
+  rec = null; episodes++;
+  cash += pay; banked += pay;
+  SFX.bank();
+  vo('recDone', { icon: 'icOnair' });
+  say('EPISODE ' + episodes + ' RECORDED — £' + (pay / 100).toFixed(2)
+      + '. It pays £' + (ROYALTY / 100).toFixed(2) + ' a night from now on.', 4200);
+  floaters.push({ x: 480, y: 260, t: now, txt: '+' + (pay / 100).toFixed(2), col: '#8effc2' });
+  saveRun();
 }
 
 // ── interactions ─────────────────────────────────────────────────────────────
@@ -993,7 +1101,8 @@ function act(h) {
       return;
     }
     case 'mic':
-      say(hosts.joe.room === 'studio' ? 'Joe is on it. Leave him there.' : 'Nobody on the mic. Hype is draining.');
+    case 'tv':
+      startRec();
       return;
     case 'vending': say('Stocked for now.'); return;
     case 'cooler':  say('Cold water. No money in it.'); return;
@@ -1050,6 +1159,11 @@ function endDay() {
     return;
   }
   if (has('joePay')) cash -= 150;      // Joe's nightly wage, paid before the rent
+  // ROYALTIES — the answer to "where is this money coming from". Every episode already
+  // recorded pays out again tonight. It is income the pair earned, itemised on the day-end
+  // line so it can never read as rent arriving from nowhere.
+  const roy = episodes * ROYALTY;
+  if (roy > 0) { cash += roy; banked += roy; vo('royalty', { icon: 'icOnair', max: 2 }); }
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
   saveRun();                     // a survived night is the checkpoint worth keeping
   rentWarned = false; rentCardAt = 0;
@@ -1057,7 +1171,9 @@ function endDay() {
   hype = Math.min(100, hype + 10);
   dayEndsAt = performance.now() + DAY_MS;
   dayPaused = false;
-  say('RENT PAID £' + (rent / 100).toFixed(2) + ' — DAY ' + day, 3000);
+  say((roy > 0 ? 'ROYALTIES +£' + (roy / 100).toFixed(2) + ' from ' + episodes
+                 + ' episode' + (episodes > 1 ? 's' : '') + '  ·  ' : '')
+      + 'RENT PAID £' + (rent / 100).toFixed(2) + ' — DAY ' + day, 3600);
 }
 
 // ── input ────────────────────────────────────────────────────────────────────
@@ -1393,6 +1509,10 @@ function hintSpots() {
     else if (cash >= 600) out.push(find('ledger'));
   }
   if (room === 'studio' && decanter === 0 && bottles > 0) out.push(find('decanter'));
+  // a crowd worth recording, both of them in the room, nothing rolling — point at the mic.
+  // Discovering the show is a business should not depend on tapping a prop on a hunch.
+  if (room === 'studio' && !rec && hype >= REC_MIN_HYPE
+      && hosts.jimmy.room === 'studio' && hosts.joe.room === 'studio') out.push(find('mic'));
   if (room === 'prop') {
     if (needBottle) out.push(find('whisky'));
     if (boxLive) out.push(find('bitsBox'));
@@ -1457,6 +1577,36 @@ function drawExitArrows(now) {
   }
 }
 
+// The red light. During a take the TV carries a live-feed frame and a countdown, so the
+// studio actually looks like a room where something is being made rather than a room with
+// a mic prop in it.
+function drawRecording(now) {
+  const left = Math.max(0, rec.until - now), frac = left / REC_MS;
+  ctx.save();
+  const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.006));
+  ctx.strokeStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(TV.x - 4, TV.y - 4, TV.w + 8, TV.h + 8);
+  ctx.fillStyle = 'rgba(10,4,4,0.72)';
+  roundRect(TV.x + 12, TV.y + 10, 120, 30, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(TV.x + 30, TV.y + 25, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffe9e9';
+  ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+  ctx.fillText('REC', TV.x + 44, TV.y + 32);
+  // how much of the take is left, drawn as the tape running out
+  ctx.fillStyle = 'rgba(255,255,255,0.20)';
+  ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, TV.w - 24, 9);
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, (TV.w - 24) * frac, 9);
+  ctx.fillStyle = '#ffd75e';
+  ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('WORTH £' + (recPay(hype) / 100).toFixed(2), TV.x + TV.w / 2, TV.y + TV.h - 34);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
@@ -1481,6 +1631,18 @@ function drawHUD(now) {
   ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(hx + 46, 16, hw, 15);
   ctx.fillStyle = hype > 55 ? '#8effc2' : hype > 25 ? '#ffd75e' : '#ff6b6b';
   ctx.fillRect(hx + 46, 16, hw * (hype / 100), 15);
+  // Osimo 2026-09-06: "hype not clear on how to increase". A bar that moves without saying
+  // why is a mystery; this names the cause on the bar itself, every frame.
+  const hr = hypeReason();
+  ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = hr.dir > 0 ? '#8effc2' : '#ff9b9b';
+  ctx.fillText((hr.dir > 0 ? '\u25B2 ' : '\u25BC ') + hr.txt, hx + 46, 42);
+  ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+  // the back catalogue, so the nightly royalty has a visible source
+  if (episodes > 0) {
+    ctx.fillStyle = '#c9a6ff';
+    ctx.fillText('\uD83C\uDF99 x' + episodes, hx + hw + 108, 31);
+  }
   ctx.fillStyle = decanter > 0 ? '#e8c35a' : '#ff6b6b';
   ctx.fillText(decanter > 0 ? '🥃×' + decanter : '🥃 DRY', hx + hw + 58, 31);
   if (bottles) { ctx.fillStyle = '#e8c35a'; ctx.fillText('🍾×' + bottles, hx + hw + 132, 31); }
@@ -1661,6 +1823,7 @@ function frame(ts) {
     updateFloor(dt, ts);
     updateHype(dt);
     updateJoe(dt);
+    updateRec(dt, ts);
     voWatch();
     stepHost(hosts.jimmy, dt);
     stepHost(hosts.joe, dt);
@@ -1675,6 +1838,7 @@ function frame(ts) {
   ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
   drawPlate(room);
   if (room === 'studio') tvFrame();
+  if (room === 'studio' && rec) drawRecording(ts);
   drawPunters();
   if (state !== 'attract') {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
@@ -1716,6 +1880,7 @@ window.__TC = {
                          // object exposes — room nav has to be inspectable from out here
                          exits: sideExits().map(e => e.h.id), pending: pending && pending.id,
                          msLeft: Math.round(dayEndsAt - performance.now()), gated: rotateGated(),
+                         episodes, recording: !!rec, hypeWhy: hypeReason().txt,
                          hx: Math.round(me().x), target: Math.round(me().target) }; },
   tapWorld(wx, wy) {
     const r = canvas.getBoundingClientRect();
@@ -1730,6 +1895,10 @@ window.__TC = {
     rentWarned = false; rentCardAt = 0;                // can be seen without waiting 100s
   },
   own(id) { owned[id] = true; },            // QA only — grant one upgrade without the ledger
+  setHype(v) { hype = v; },                 // QA only — reach a recordable crowd instantly
+  bothInStudio() { hosts.jimmy.room = hosts.joe.room = room = 'studio';
+                   hosts.jimmy.x = hosts.jimmy.target = 300;
+                   hosts.joe.x = hosts.joe.target = 560; },
   // QA only — the ledger is painted on the canvas, so nothing outside can find a row to
   // tap. Screen-space centres, ready to click.
   rows() { return shopRows().map(r => ({ id: r.u.id, name: r.u.name,
