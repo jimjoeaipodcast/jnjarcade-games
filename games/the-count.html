@@ -289,7 +289,15 @@ const SFX = {
   bank:   () => { tone(320, 880, 0.22, 'triangle', 0.16); },
   buy:    () => { tone(440, 660, 0.12, 'sawtooth', 0.13); setTimeout(() => tone(660, 990, 0.14, 'sawtooth', 0.12), 110); },
   deny:   () => { tone(220, 130, 0.18, 'square', 0.12); },
-  jam:    () => { tone(180, 90, 0.3, 'sawtooth', 0.14); },
+  // A cabinet giving up. Osimo 2026-09-07 asked for "a sound, like an arcade machine noise
+  // sounding like it broke" to replace the repeated line — so it is a dying attract jingle
+  // rather than a buzz: three notes falling apart, then a flat dead tone underneath.
+  jam:    () => {
+    tone(660, 590, 0.09, 'square', 0.13);
+    setTimeout(() => tone(500, 400, 0.10, 'square', 0.12), 95);
+    setTimeout(() => tone(330, 150, 0.30, 'sawtooth', 0.15), 205);
+    setTimeout(() => tone(90, 70, 0.42, 'triangle', 0.10), 260);
+  },
   fix:    () => { tone(500, 900, 0.13, 'triangle', 0.13); },
   pour:   () => { tone(300, 420, 0.3, 'sine', 0.10); },
   punter: () => { tone(660, 880, 0.06, 'sine', 0.07); },
@@ -394,7 +402,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=14').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=15').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -512,29 +520,44 @@ MACHINES.forEach(m => { m.room = 'corridor'; });
 // we see the back of him." These positions and heights are FIRST GUESSES — he is placing
 // them properly with tools/punter-placer.
 const BACKS = ['punterBackA', 'punterBackB', 'punterBackC'];
+const FRONTS = ['punter34A', 'punter34B', 'punter34C'];
+// TWELVE, counted off the plate the way Osimo counted them on his screen (2026-09-07):
+// "5 on the left facing left, and 6 on the right facing right", plus the one on the back
+// wall "next to the arm looking machine" — the only punter in the room whose back we see.
+// face: 'left' | 'right' | 'back' drives BOTH the sprite set and the mirroring, so a
+// machine can never end up with a punter facing away from it.
 const HALL_MACHINES = [
-  // left wall, front to back
-  { room: 'hall', pay: 90,  secs: 11.0, body: [45, 118, 130, 372], screen: [58, 238, 132, 302],
-    punter: { h: 200, feet: 470, x: 200 }, flip: false, back: true },
-  { room: 'hall', pay: 64,  secs: 8.0,  body: [175, 145, 75, 310], screen: [176, 244, 242, 296],
-    punter: { h: 170, feet: 448, x: 268 }, flip: false, back: true },
-  { room: 'hall', pay: 46,  secs: 6.0,  body: [250, 170, 50, 255], screen: [254, 250, 296, 292],
-    punter: { h: 145, feet: 420, x: 318 }, flip: false, back: true },
-  { room: 'hall', pay: 34,  secs: 4.5,  body: [300, 190, 34, 210], screen: [302, 254, 332, 288],
-    punter: { h: 122, feet: 398, x: 350 }, flip: false, back: true },
-  // the pinball table in the middle of the right wall — the showpiece, slowest and richest
-  { room: 'hall', pay: 120, secs: 15.0, body: [532, 232, 82, 92],  screen: [540, 240, 606, 282],
-    punter: { h: 105, feet: 330, x: 573 }, flip: false, back: true },
-  // right wall, back to front
-  { room: 'hall', pay: 34,  secs: 4.5,  body: [630, 190, 60, 210], screen: [636, 254, 684, 288],
-    punter: { h: 122, feet: 398, x: 614 }, flip: true,  back: true },
-  { room: 'hall', pay: 46,  secs: 6.0,  body: [688, 170, 50, 260], screen: [692, 250, 734, 292],
-    punter: { h: 145, feet: 420, x: 662 }, flip: true,  back: true },
-  { room: 'hall', pay: 64,  secs: 8.0,  body: [736, 148, 60, 307], screen: [740, 244, 792, 296],
-    punter: { h: 170, feet: 448, x: 712 }, flip: true,  back: true },
-  { room: 'hall', pay: 110, secs: 14.0, body: [792, 118, 133, 372], screen: [812, 238, 886, 302],
-    punter: { h: 200, feet: 470, x: 772 }, flip: true,  back: true },
+  // LEFT WALL, front to back — punters stand in the aisle facing left, into the cabinet
+  { room: 'hall', pay: 90,  secs: 11.0, body: [43, 118, 140, 372], screen: [58, 238, 132, 302],
+    punter: { h: 200, feet: 470, x: 200 }, face: 'left' },
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [183, 145, 71, 305], screen: [190, 244, 246, 296],
+    punter: { h: 172, feet: 448, x: 272 }, face: 'left' },
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [254, 168, 46, 252], screen: [258, 250, 296, 292],
+    punter: { h: 148, feet: 424, x: 318 }, face: 'left' },
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [300, 186, 32, 214], screen: [302, 252, 330, 288],
+    punter: { h: 128, feet: 404, x: 350 }, face: 'left' },
+  { room: 'hall', pay: 30,  secs: 4.0,  body: [332, 200, 22, 186], screen: [334, 256, 352, 286],
+    punter: { h: 112, feet: 388, x: 372 }, face: 'left' },
+  // BACK WALL — the one you see from behind, beside the cash machine
+  { room: 'hall', pay: 46,  secs: 6.0,  body: [372, 205, 44, 118], screen: [378, 226, 410, 268],
+    punter: { h: 104, feet: 352, x: 394 }, face: 'back' },
+  // RIGHT WALL, back to front — punters face right, into the cabinet
+  { room: 'hall', pay: 120, secs: 15.0, body: [532, 235, 85, 100], screen: [540, 244, 606, 282],
+    punter: { h: 104, feet: 352, x: 560 }, face: 'right' },
+  { room: 'hall', pay: 30,  secs: 4.0,  body: [606, 200, 22, 186], screen: [608, 256, 626, 286],
+    punter: { h: 112, feet: 388, x: 590 }, face: 'right' },
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [628, 186, 32, 214], screen: [630, 252, 658, 288],
+    punter: { h: 128, feet: 404, x: 610 }, face: 'right' },
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [660, 168, 46, 252], screen: [664, 250, 702, 292],
+    punter: { h: 148, feet: 424, x: 642 }, face: 'right' },
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [706, 145, 71, 305], screen: [714, 244, 770, 296],
+    punter: { h: 172, feet: 448, x: 688 }, face: 'right' },
+  { room: 'hall', pay: 110, secs: 14.0, body: [777, 118, 140, 372], screen: [828, 238, 902, 302],
+    punter: { h: 200, feet: 470, x: 760 }, face: 'right' },
 ];
+// flip and sprite set both come from `face`, so they cannot disagree with each other
+HALL_MACHINES.forEach(m => { m.flip = m.face === 'right'; m.back = m.face === 'back'; });
+
 HALL_MACHINES.forEach(m => MACHINES.push(m));
 const HALL_FIRST = CAB_N;                 // index of the first hall machine
 const HALL_PRICE = 10000;                 // £100 for the lease on the big room
@@ -643,23 +666,26 @@ const UPGRADES = [
   // rather than a distraction from the first five machines.
   { id: 'hall',    name: 'LEASE THE BIG ROOM',  cost: HALL_PRICE, once: true, icon: 'cab',
     need: () => !anyOffInFirstRoom(),
-    blurb: 'The double hall next door. Nine more machines to light up.' },
+    blurb: 'The double hall next door. Twelve more machines to light up.' },
   // One ledger line per hall machine, in the order you meet them walking in. Built from
   // HALL_MACHINES so a machine can never exist on the floor without a price on it — which
   // is exactly how six of them ended up unbuyable scenery.
   ...[
-    ['LEFT WALL: FRONT',  7000, 'The big one by the door. 90p a play.'],
-    ['LEFT WALL: SECOND', 5000, 'Steady money. 64p a play.'],
-    ['LEFT WALL: THIRD',  3600, 'Quicker, smaller takings.'],
-    ['LEFT WALL: FAR',    2600, 'The little one at the far end. Never stops.'],
-    ['THE PINBALL TABLE', 11000, 'The showpiece. £1.20 a play, and they stay on it.'],
-    ['RIGHT WALL: FAR',   2600, 'The far corner. Cheap to light, quick to pay.'],
-    ['RIGHT WALL: THIRD', 3600, 'Middle of the row, middle of the money.'],
-    ['RIGHT WALL: SECOND',5000, 'Steady money. 64p a play.'],
-    ['RIGHT WALL: FRONT', 8500, 'The best earner in the building. £1.10 a play.'],
+    ['LEFT 1 — BY THE DOOR', 7000, 'The big one by the door. 90p a play.'],
+    ['LEFT 2',               5200, 'Steady money. 68p a play.'],
+    ['LEFT 3',               3800, 'Quicker, smaller takings.'],
+    ['LEFT 4',               2800, 'Halfway down the wall. Never stops.'],
+    ['LEFT 5 — FAR END',     2000, 'The little one at the far end.'],
+    ['BACK WALL',            3200, 'Beside the cash machine. Faces the room.'],
+    ['THE PINBALL TABLE',   11000, 'The showpiece. £1.20 a play, and they stay on it.'],
+    ['RIGHT 5 — FAR END',    2000, 'The far corner. Cheap to light, quick to pay.'],
+    ['RIGHT 4',              2800, 'Middle of the row, middle of the money.'],
+    ['RIGHT 3',              3800, 'Picks up when the room is busy.'],
+    ['RIGHT 2',              5200, 'Steady money. 68p a play.'],
+    ['RIGHT 1 — BY THE DOOR',8500, 'The best earner in the building. £1.10 a play.'],
   ].map(([name, cost, blurb], i) => ({
     id: 'hall' + (i + 1), name: 'BIG ROOM: ' + name, cost, once: true,
-    icon: i === 4 ? 'coin' : 'cab', need: () => has('hall'), blurb,
+    icon: i === 6 ? 'coin' : 'cab', need: () => has('hall'), blurb,
   })),
   // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
   // expansion is FOR (Osimo: "you can pay Joe some money daily so that he collects money
@@ -688,6 +714,12 @@ const REC_MS = 14000;         // a take runs fourteen seconds
 const REC_MIN_HYPE = 25;      // below this there is no audience worth recording for
 const ROYALTY = 60;           // 60p a night, per episode in the catalogue
 let episodes = 0, rec = null; // rec = { until, hype0 } while the red light is on
+// PAUSE (Osimo 2026-09-07: "add a pause button, and it must save the position and
+// everything of the game play, even through days"). Pausing writes the full run — the
+// night's remaining time, every machine's till and jam, where both hosts are standing,
+// which lines have already been spoken — and freezes the clock. Same contract as Flap
+// Fight's: PAUSE = SAVED.
+let paused = false;
 let lastTurnAt = 0;           // when a punter last walked out — the HUD explains hype with it
 let rentWarned = false, rentCardAt = 0;   // the rent card shows once a night, then shuts up
 
@@ -721,7 +753,16 @@ function saveRun() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 1, t: Date.now(), cash, day, banked, apronLvl, owned, bottles, decanter, episodes,
-      hype: Math.round(hype),
+      hype: Math.round(hype), carry,
+      // where you were standing and which of them you were driving, so a resumed run puts
+      // you back where you left off rather than at the start of the corridor
+      room, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room,
+      jimmyX: Math.round(hosts.jimmy.x), joeX: Math.round(hosts.joe.x),
+      // the night itself: how much of the shift was left, and the state of every machine
+      msLeft: Math.max(0, Math.round(dayEndsAt - performance.now())),
+      cabs: cabs.map(c => ({ till: c.till, jam: !!c.jam, cursed: !!c.cursed })),
+      said: [...voSaid],       // a line already spent stays spent across a resume
+      boxOpenedToday,
     }));
   } catch (e) {}
 }
@@ -738,10 +779,34 @@ function resumeRun() {
   newRun();
   cash = s2.cash; day = s2.day; banked = s2.banked || 0; apronLvl = s2.apronLvl || 0;
   episodes = s2.episodes || 0; rec = null;   // a take in progress does not survive a reload
+  carry = s2.carry || 0;
+  boxOpenedToday = !!s2.boxOpenedToday;
+  if (Array.isArray(s2.said)) for (const [k, n] of s2.said) voSaid.set(k, n);
+  if (s2.room && ROOMS[s2.room]) room = s2.room;
+  if (s2.active === 'jimmy' || s2.active === 'joe') active = s2.active;
+  if (s2.jimmyRoom && ROOMS[s2.jimmyRoom]) {
+    hosts.jimmy.room = s2.jimmyRoom;
+    hosts.jimmy.x = hosts.jimmy.target = s2.jimmyX || 300;
+  }
+  if (s2.joeRoom && ROOMS[s2.joeRoom]) {
+    hosts.joe.room = s2.joeRoom;
+    hosts.joe.x = hosts.joe.target = s2.joeX || 560;
+  }
+  // the shift picks up with the time that was left on it, not a fresh night
+  if (typeof s2.msLeft === 'number' && s2.msLeft > 1000) {
+    dayEndsAt = performance.now() + Math.min(DAY_MS, s2.msLeft);
+  }
   owned = s2.owned || {}; bottles = s2.bottles || 0;
   decanter = (s2.decanter !== undefined) ? s2.decanter : 3;
   hype = (s2.hype !== undefined) ? s2.hype : 80;
+  // This rebuild has to happen BEFORE the tills are put back, not after. It was the last
+  // line of the function and it silently wiped every restored till and jam — a resumed run
+  // came back with the right money and the wrong machines.
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
+  if (Array.isArray(s2.cabs)) s2.cabs.forEach((sc, i) => {
+    if (!cabs[i]) return;
+    cabs[i].till = sc.till || 0; cabs[i].jam = !!sc.jam; cabs[i].cursed = !!sc.cursed;
+  });
   return true;
 }
 window.addEventListener('pagehide', saveRun);
@@ -883,7 +948,7 @@ function updateFloor(dt, now) {
       const c = cabs[ci];
       // A machine that faces the camera gets a punter drawn squarely from BEHIND; the
       // corridor's angled cabinets keep the three-quarter set, which reads right there.
-      const set = MACHINES[ci].back ? BACKS : ['punter34A', 'punter34B', 'punter34C'];
+      const set = MACHINES[ci].back ? BACKS : FRONTS;
       c.busy = { spr: set[Math.floor(Math.random() * set.length)] };
       c.playFull = MACHINES[ci].secs * 1000 * (0.85 + Math.random() * 0.3);
       c.playT = c.playFull;
@@ -935,7 +1000,11 @@ function voWatch() {
   if (carry >= apronCap()) vo('fullApron', { icon: 'icApron', max: 2 });
   for (let i = 0; i < ALL_N; i++) {
     if (!cabOn(i)) continue;
-    if (cabs[i].jam) vo('jammed', { icon: 'icStick' });
+    // Osimo 2026-09-07: "that phrase they keep on using about the machines... use it once
+    // only and never repeat it again, remove it completely once it has been said." Both of
+    // these are now one-and-done for the whole run; after that the smoking card over the
+    // machine and the breaking-cabinet noise say it without a word.
+    if (cabs[i].jam) vo('jammed', { icon: 'icStick', max: 1 });
     if (cabs[i].till >= 40) vo('fullCab', { icon: 'icCab' });
   }
   if (decanter === 0) vo('dryTot', { icon: 'icBottle' });
@@ -1233,9 +1302,17 @@ function onTap(e) {
   // Osimo 2026-09-05: "pressing the speaker does nothing." Both causes are fixed here.
   {
     const sr = canvas.getBoundingClientRect();
-    if (p.clientX - sr.left > sr.width - SAFE.r - 56 && p.clientY - sr.top < 46 + SAFE.t) {
+    const sxp = p.clientX - sr.left, syp = p.clientY - sr.top;
+    if (sxp > sr.width - SAFE.r - 56 && syp < 46 + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
+    // PAUSE, just inboard of the speaker. Tested before everything else for the same reason
+    // the speaker is: you reach for it at exactly the moments the tutorial or the shop would
+    // otherwise be eating taps.
+    if (sxp > sr.width - SAFE.r - 112 && sxp < sr.width - SAFE.r - 56 && syp < 46 + SAFE.t) {
+      togglePause(); return;
+    }
+    if (paused) { togglePause(); return; }        // tap anywhere to come back
   }
   if (tutorial >= 0) { nextTip(); return; }        // the tutorial owns the tap while it is up
   if (shopOpen) {                                  // the shop is screen-space furniture
@@ -1256,7 +1333,7 @@ function onTap(e) {
   if (h) {
     // tapping a machine you have not paid for is the ONLY thing that explains why it is
     // dark, so that is the only place the line belongs
-    if (h.cab !== undefined && !cabOn(h.cab)) vo('offMach', { icon: 'icCab', max: 2 });
+    if (h.cab !== undefined && !cabOn(h.cab)) vo('offMach', { icon: 'icCab', max: 1 });
     me().target = Math.max(60, Math.min(WORLD_W - 60, h.walkX));
     pending = h;
     return;
@@ -1483,9 +1560,13 @@ function drawCabState() {
     // overlays, not working". Three attempts (square, sheared one way, sheared the other)
     // never sat convincingly on angled glass, so the plate's own artwork stands on every
     // machine and power state is read from the badges below instead.
-    if (c.jam) badge(cx, sy - 6, '⚠ JAMMED', '#ff6b6b');
-    else if (c.till > 0) badge(cx, sy - 6, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
-    else if (c.cursed) badge(cx, sy - 6, 'CURSED', '#c96bff');
+    // Osimo 2026-09-07: the big Jimmy line about a jam is said ONCE for the whole arcade;
+    // after that a jam is a NOISE and a bouncing card over the machine — a smoking cabinet
+    // and nothing to read. Money is the same card with a coin and a quantity. Every source
+    // of cash in the game speaks in this one shape.
+    if (c.jam) cardTag(cx, sy - 4, m, 'jam', 'JAMMED', '#a83a3a', true);
+    else if (c.till > 0) cardTag(cx, sy - 4, m, 'coin', c.till + 'p', c.cursed ? '#c96bff' : '#1f6b3a');
+    else if (c.cursed) cardTag(cx, sy - 4, m, 'cab', 'CURSED', '#c96bff');
   }
 }
 
@@ -1494,35 +1575,66 @@ function drawCabState() {
 // carries the same rounded cream card the hosts speak out of, with the ledger's own cabinet
 // icon on the left and the price beside it — the tag and the ledger line are visibly the
 // same offer, seen in two places.
-function priceTag(cx, cy, up, m) {
-  const price = up ? '£' + (up.cost / 100).toFixed(2) : 'OFF';
-  const icon = SPR[ICON_FOR[(up && up.icon) || 'cab'] || 'icCab'];
-  // scaled by how near the machine is, so a tag on a far cabinet does not dwarf it
-  const s = Math.max(0.62, Math.min(1, m.body[3] / 372));
-  ctx.font = 'bold ' + Math.round(19 * s) + 'px "Barlow Condensed",sans-serif';
-  const ir = Math.round(26 * s), pad = Math.round(9 * s);
-  const tw = ctx.measureText(price).width;
-  const w = pad + ir + 6 * s + tw + pad, h = Math.round(34 * s);
-  const x = cx - w / 2, y = cy - h;
+// ONE CARD for everything that sits over a machine — the price of a dark one, the coins in
+// a live one, a jam. Osimo 2026-09-07: "over the machines place the money value under the
+// arcade logo, it allow us to make the arcade logo a little bigger to match the few digits
+// below, so that they don't overlap one over the other." So the logo is on top, big, and
+// the value is written under it — a tall card rather than a wide one, which also stops
+// neighbouring cabinets' tags colliding down a receding row.
+// Same cream-and-brown as the hosts' speech bubbles, because it is the same voice: this is
+// the building telling you something.
+function cardTag(cx, cy, m, kind, text, col, bounce) {
+  const s = Math.max(0.60, Math.min(1, m.body[3] / 372));
+  const iconKey = kind === 'coin' ? 'icCoin' : kind === 'jam' ? 'icStick' : 'icCab';
+  const icon = SPR[iconKey] || SPR.icCab;
+  const ir = Math.round(40 * s);
+  ctx.font = 'bold ' + Math.round(20 * s) + 'px "Barlow Condensed",sans-serif';
+  const tw = ctx.measureText(text).width;
+  const pad = Math.round(8 * s);
+  const w = Math.max(ir, tw) + pad * 2;
+  const h = ir + Math.round(22 * s) + pad;
+  // a jam bounces so it catches the eye across the room without a line of dialogue
+  const dy = bounce ? Math.round(Math.abs(Math.sin(performance.now() * 0.006)) * -7 * s) : 0;
+  const x = cx - w / 2, y = cy - h + dy;
   ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 8 * s; ctx.shadowOffsetY = 2 * s;
+  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 9 * s; ctx.shadowOffsetY = 2 * s;
   ctx.fillStyle = 'rgba(252,246,232,0.97)';
-  roundRect(x, y, w, h, 8 * s); ctx.fill();
+  roundRect(x, y, w, h, 9 * s); ctx.fill();
   ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = Math.max(1.5, 2.4 * s);
-  roundRect(x, y, w, h, 8 * s); ctx.stroke();
-  // the little tail, pointing down at the machine it is priced for
-  ctx.beginPath();
+  ctx.strokeStyle = kind === 'jam' ? '#a83a3a' : '#7a4a1a';
+  ctx.lineWidth = Math.max(1.5, 2.4 * s);
+  roundRect(x, y, w, h, 9 * s); ctx.stroke();
+  ctx.beginPath();                                  // tail, pointing at its machine
   ctx.moveTo(cx - 7 * s, y + h); ctx.lineTo(cx, y + h + 9 * s); ctx.lineTo(cx + 7 * s, y + h);
   ctx.closePath();
   ctx.fillStyle = 'rgba(252,246,232,0.97)'; ctx.fill();
-  ctx.strokeStyle = '#7a4a1a'; ctx.stroke();
-  if (icon) ctx.drawImage(icon, x + pad, y + (h - ir) / 2, ir, ir);
-  ctx.fillStyle = '#1f6b3a';
-  ctx.textAlign = 'left';
-  ctx.fillText(price, x + pad + ir + 6 * s, y + h / 2 + 6.5 * s);
+  ctx.stroke();
+  if (icon) ctx.drawImage(icon, cx - ir / 2, y + pad * 0.6, ir, ir);
+  if (kind === 'jam') smokePuffs(cx, y + pad * 0.6, ir, s);
+  ctx.fillStyle = col;
+  ctx.textAlign = 'center';
+  ctx.fillText(text, cx, y + h - pad * 0.8);
   ctx.restore();
   ctx.textAlign = 'left';
+}
+// smoke curling off a broken cabinet — drawn rather than a second sprite, so it animates
+function smokePuffs(cx, top, ir, s) {
+  const t = performance.now() * 0.0016;
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const p = (t + i / 3) % 1;
+    const r = (3 + p * 7) * s;
+    ctx.globalAlpha = 0.55 * (1 - p);
+    ctx.fillStyle = '#6d6257';
+    ctx.beginPath();
+    ctx.arc(cx + ir * 0.28 + Math.sin((t + i) * 3) * 4 * s, top + 2 * s - p * 16 * s, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function priceTag(cx, cy, up, m) {
+  cardTag(cx, cy, m, (up && up.icon === 'coin') ? 'coin' : 'cab',
+          up ? '£' + (up.cost / 100).toFixed(2) : 'OFF', '#1f6b3a', false);
 }
 
 function badge(cx, cy, txt, col) {
@@ -1678,6 +1790,39 @@ function drawRecording(now) {
   ctx.restore();
 }
 
+function togglePause() {
+  if (state !== 'play') return;
+  paused = !paused;
+  if (paused) { saveRun(); SFX.deny(); } else SFX.swap();
+}
+// The pause card, in the hosts' own cream-and-brown, because everything the building says
+// to you is in that shape now.
+function drawPaused(now) {
+  const SW = canvas.clientWidth, SH = canvas.clientHeight;
+  ctx.fillStyle = 'rgba(6,5,4,0.72)';
+  ctx.fillRect(0, 0, SW, SH);
+  const w = Math.min(360, SW - 80), h = 132, x = (SW - w) / 2, y = (SH - h) / 2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+  ctx.fillStyle = 'rgba(252,246,232,0.98)';
+  roundRect(x, y, w, h, 14); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = 3;
+  roundRect(x, y, w, h, 14); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 30px "Barlow Condensed",sans-serif';
+  ctx.fillText('PAUSED — AND SAVED', x + w / 2, y + 42);
+  ctx.fillStyle = '#6b4a24'; ctx.font = '16px "Barlow Condensed",sans-serif';
+  ctx.fillText('Day ' + day + '  ·  £' + (cash / 100).toFixed(2) + ' in the safe'
+               + (episodes ? '  ·  ' + episodes + ' episode' + (episodes > 1 ? 's' : '') : ''),
+               x + w / 2, y + 70);
+  ctx.fillText('Close the game and it comes back exactly here.', x + w / 2, y + 92);
+  ctx.fillStyle = '#1f6b3a'; ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+  ctx.fillText('TAP ANYWHERE TO CARRY ON', x + w / 2, y + 118);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
@@ -1769,6 +1914,7 @@ function drawHUD(now) {
   // speaker
   ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
   ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - R - 14, 32 + T);
+  ctx.fillText(paused ? '▶' : '⏸', SW - R - 70, 32 + T);
   if (musicIdx >= 0 && !muted) {
     ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
     ctx.fillStyle = 'rgba(232,195,90,0.8)';
@@ -1890,7 +2036,9 @@ function frame(ts) {
     if (state === 'play' && !dayPaused) dayEndsAt += dt;
     return;
   }
-  if (state === 'play' && !shopOpen && !dayPaused) {
+  // a paused night does not run down either — the deadline is pushed along with real time
+  if (paused && state === 'play' && !dayPaused) dayEndsAt += dt;
+  if (state === 'play' && !shopOpen && !dayPaused && !paused) {
     updateFloor(dt, ts);
     updateHype(dt);
     updateJoe(dt);
@@ -1922,6 +2070,7 @@ function frame(ts) {
   if (state !== 'attract') drawHUD(ts);              // a cover-cropped room never eats them
   if (state !== 'attract') drawBubble(canvas.clientWidth, canvas.clientHeight);
   if (shopOpen) drawShop();
+  if (paused && state === 'play') drawPaused(ts);
   if (state === 'bust') {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     ctx.fillStyle = '#ff6b6b'; ctx.font = 'bold 44px "Barlow Condensed",sans-serif';
@@ -1966,6 +2115,8 @@ window.__TC = {
     rentWarned = false; rentCardAt = 0;                // can be seen without waiting 100s
   },
   own(id) { owned[id] = true; },            // QA only — grant one upgrade without the ledger
+  pause() { togglePause(); return paused; },// QA only
+  save() { saveRun(); },                    // QA only
   setHype(v) { hype = v; },                 // QA only — reach a recordable crowd instantly
   bothInStudio() { hosts.jimmy.room = hosts.joe.room = room = 'studio';
                    hosts.jimmy.x = hosts.jimmy.target = 300;
@@ -1985,8 +2136,7 @@ window.__TC = {
   demo() {                                  // QA only — every machine on and busy, so the
     ['cab2','cab3','cab4','cab5'].forEach(k => { owned[k] = true; });   // whole row can be
     cabs.forEach((c, i) => { if (!cabOn(i)) return;
-                             const sp = MACHINES[i].back ? BACKS
-                                                         : ['punter34A', 'punter34B', 'punter34C'];
+                             const sp = MACHINES[i].back ? BACKS : FRONTS;
                              c.busy = { spr: sp[i % sp.length] }; c.playT = 60000; c.jam = false; });
   },
 };

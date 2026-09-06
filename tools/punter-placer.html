@@ -75,6 +75,13 @@
 <script>
 (function () {
 'use strict';
+// LOCKED is flipped to true once Osimo's layout has been read out and shipped into the
+// game (Osimo 2026-09-07: "once I submit any one, we update our game and remove the submit
+// button from the page so patreons can just play around with the sprites"). The page then
+// stops being a work order and becomes a toy: everything still drags and pinches, nothing
+// is sent anywhere. ?edit=1 puts the button back for the next round of placement.
+const LOCKED = false;
+const EDIT = new URLSearchParams(location.search).get('edit') === '1';
 const W = 960, H = 540;                       // the game's world, one to one
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
@@ -82,19 +89,33 @@ let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
 // The nine hall machines, in the order they are declared in the game's HALL_MACHINES.
 // These are the CURRENT values — the tool opens on exactly what the game draws today, so
 // Osimo is adjusting the real thing rather than starting from nothing.
+// TWELVE, in the game's own HALL_MACHINES order, with the facing Osimo drew on 2026-09-07:
+// "5 on the left facing left, and 6 on the right facing right", plus the one at the back
+// wall beside the cash machine — the only one whose back we see. `face` picks BOTH the
+// sprite set and the mirroring here exactly as it does in the game, so a punter in this
+// tool can never be facing a different way from the same punter in the arcade.
 const DEFAULTS = [
-  { label: 'LEFT WALL: FRONT',   x: 200, feet: 470, h: 200, flip: false },
-  { label: 'LEFT WALL: SECOND',  x: 268, feet: 448, h: 170, flip: false },
-  { label: 'LEFT WALL: THIRD',   x: 318, feet: 420, h: 145, flip: false },
-  { label: 'LEFT WALL: FAR',     x: 350, feet: 398, h: 122, flip: false },
-  { label: 'THE PINBALL TABLE',  x: 573, feet: 330, h: 105, flip: false },
-  { label: 'RIGHT WALL: FAR',    x: 614, feet: 398, h: 122, flip: true  },
-  { label: 'RIGHT WALL: THIRD',  x: 662, feet: 420, h: 145, flip: true  },
-  { label: 'RIGHT WALL: SECOND', x: 712, feet: 448, h: 170, flip: true  },
-  { label: 'RIGHT WALL: FRONT',  x: 772, feet: 470, h: 200, flip: true  },
+  { label: 'LEFT 1 — BY THE DOOR', x: 200, feet: 470, h: 200, face: 'left'  },
+  { label: 'LEFT 2',               x: 272, feet: 448, h: 172, face: 'left'  },
+  { label: 'LEFT 3',               x: 318, feet: 424, h: 148, face: 'left'  },
+  { label: 'LEFT 4',               x: 350, feet: 404, h: 128, face: 'left'  },
+  { label: 'LEFT 5 — FAR END',     x: 372, feet: 388, h: 112, face: 'left'  },
+  { label: 'BACK WALL (his back)', x: 394, feet: 352, h: 104, face: 'back'  },
+  { label: 'THE PINBALL TABLE',    x: 560, feet: 352, h: 104, face: 'right' },
+  { label: 'RIGHT 5 — FAR END',    x: 590, feet: 388, h: 112, face: 'right' },
+  { label: 'RIGHT 4',              x: 610, feet: 404, h: 128, face: 'right' },
+  { label: 'RIGHT 3',              x: 642, feet: 424, h: 148, face: 'right' },
+  { label: 'RIGHT 2',              x: 688, feet: 448, h: 172, face: 'right' },
+  { label: 'RIGHT 1 — BY THE DOOR',x: 760, feet: 470, h: 200, face: 'right' },
 ];
-const SPRITES = ['punterBackA', 'punterBackB', 'punterBackC'];
-let punters = DEFAULTS.map((d, i) => ({ ...d, spr: SPRITES[i % SPRITES.length] }));
+const BACKS  = ['punterBackA', 'punterBackB', 'punterBackC'];
+const FRONTS = ['punter34A', 'punter34B', 'punter34C'];
+const SPRITES = [...BACKS, ...FRONTS];
+let punters = DEFAULTS.map((d, i) => ({
+  ...d,
+  flip: d.face === 'right',
+  spr: (d.face === 'back' ? BACKS : FRONTS)[i % 3],
+}));
 let sel = 0, hall = null, SPR = {}, ready = false;
 
 function resize() {
@@ -121,7 +142,7 @@ function toWorld(px, py) {
 }
 
 // ── art, straight from the game's own pack ──────────────────────────────────
-fetch('../games/the-count-pack.json?v=14').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=15').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   mk(p.art.hall, im => { hall = im; });
   for (const k of SPRITES) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
@@ -267,6 +288,10 @@ document.getElementById('reset').onclick = () => {
   updateSel(); toast('Back to the current game positions.', 1400);
 };
 
+if (LOCKED && !EDIT) {
+  document.getElementById('submit').style.display = 'none';
+  document.getElementById('hint').textContent = 'drag · pinch · play about with it';
+}
 let toastT = 0;
 function toast(msg, ms) {
   const el = document.getElementById('toast');
