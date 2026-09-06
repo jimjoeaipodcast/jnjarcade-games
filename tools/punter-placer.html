@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>PUNTER PLACER — THE BIG ROOM</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  Osimo 2026-09-07: "make an html page, background image, full screen of the new
+  arcade, then place the 9 punters on the 9 arcades, and allow me while on that
+  page, to select a punter, move his sprite in position, pinch to enlarge shrink,
+  and a submit button, then I come back here and tell you I submitted it."
+
+  Drag to move, pinch to size, SUBMIT posts to /api/punters (SUBMISSIONS KV).
+  Claude reads it back and writes the numbers into the-count.html.
+
+  Everything is drawn in the game's own 960x540 world at the game's own scale, so
+  what is placed here is exactly what appears in the game — no conversion step to
+  get wrong. Art comes from the live pack, so the hall and the sprites are always
+  whatever the game currently ships.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0b0904; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none;
+               font-family: 'Barlow Condensed', 'Helvetica Neue', sans-serif; color: #e8c35a; }
+  #c { display: block; position: fixed; left: 0; top: 0; }
+  .bar { position: fixed; left: 0; right: 0; display: flex; align-items: center;
+         gap: 8px; padding: 8px 12px; z-index: 5; pointer-events: none; }
+  .bar > * { pointer-events: auto; }
+  #top { top: 0; background: linear-gradient(rgba(6,5,4,.85), rgba(6,5,4,0)); }
+  #bot { bottom: 0; background: linear-gradient(rgba(6,5,4,0), rgba(6,5,4,.9)); }
+  button { font: bold 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .05em;
+           padding: 11px 15px; border-radius: 9px; border: 1.5px solid #e8c35a66;
+           background: #1a1409; color: #e8c35a; cursor: pointer; }
+  button:active { background: #2c2110; }
+  button.go { background: #e8c35a; color: #241a06; border-color: #e8c35a; }
+  button.ghost { border-color: #ffffff33; color: #cfc6b4; }
+  #sel { font-size: 15px; letter-spacing: .04em; color: #fff3d0; min-width: 0;
+         flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hint { font-size: 13px; color: #a99b80; }
+  #toast { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+           background: rgba(10,8,4,.95); border: 2px solid #e8c35a; border-radius: 14px;
+           padding: 20px 26px; font-size: 18px; text-align: center; z-index: 9;
+           display: none; max-width: 80vw; }
+  #rot { display: none; }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rot { display: flex; position: fixed; inset: 0; z-index: 40; flex-direction: column;
+           align-items: center; justify-content: center; gap: 18px; background: #0b0904;
+           text-align: center; padding: 24px; }
+    #rot .ph { font-size: 62px; }
+    #c, .bar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="rot"><div class="ph">📱</div><h2>TURN YOUR PHONE</h2>
+  <p style="color:#9aa;font-size:13px">The big room is sideways.</p></div>
+<div class="bar" id="top">
+  <div id="sel">TAP A PUNTER</div>
+  <button class="ghost" id="prev">‹</button>
+  <button class="ghost" id="next">›</button>
+</div>
+<div class="bar" id="bot">
+  <button class="ghost" id="smaller">− SIZE</button>
+  <button class="ghost" id="bigger">+ SIZE</button>
+  <span id="hint">drag to move · pinch to size</span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="reset">RESET</button>
+  <button class="go" id="submit">SUBMIT</button>
+</div>
+<div id="toast"></div>
+<script>
+(function () {
+'use strict';
+const W = 960, H = 540;                       // the game's world, one to one
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
+
+// The nine hall machines, in the order they are declared in the game's HALL_MACHINES.
+// These are the CURRENT values — the tool opens on exactly what the game draws today, so
+// Osimo is adjusting the real thing rather than starting from nothing.
+const DEFAULTS = [
+  { label: 'LEFT WALL: FRONT',   x: 200, feet: 470, h: 200, flip: false },
+  { label: 'LEFT WALL: SECOND',  x: 268, feet: 448, h: 170, flip: false },
+  { label: 'LEFT WALL: THIRD',   x: 318, feet: 420, h: 145, flip: false },
+  { label: 'LEFT WALL: FAR',     x: 350, feet: 398, h: 122, flip: false },
+  { label: 'THE PINBALL TABLE',  x: 573, feet: 330, h: 105, flip: false },
+  { label: 'RIGHT WALL: FAR',    x: 614, feet: 398, h: 122, flip: true  },
+  { label: 'RIGHT WALL: THIRD',  x: 662, feet: 420, h: 145, flip: true  },
+  { label: 'RIGHT WALL: SECOND', x: 712, feet: 448, h: 170, flip: true  },
+  { label: 'RIGHT WALL: FRONT',  x: 772, feet: 470, h: 200, flip: true  },
+];
+const SPRITES = ['punterBackA', 'punterBackB', 'punterBackC'];
+let punters = DEFAULTS.map((d, i) => ({ ...d, spr: SPRITES[i % SPRITES.length] }));
+let sel = 0, hall = null, SPR = {}, ready = false;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(document.documentElement.clientWidth);
+  const h = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  canvas.width = Math.round(w * DPR); canvas.height = Math.round(h * DPR);
+  // CONTAIN: the whole room has to be visible or you cannot place what you cannot see
+  VIEW.scale = Math.min(canvas.width / W, canvas.height / H);
+  VIEW.ox = Math.round((canvas.width - W * VIEW.scale) / 2);
+  VIEW.oy = Math.round((canvas.height - H * VIEW.scale) / 2);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+setInterval(resize, 300);
+resize();
+
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
+}
+
+// ── art, straight from the game's own pack ──────────────────────────────────
+fetch('../games/the-count-pack.json?v=14').then(r => r.json()).then(p => {
+  const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
+  mk(p.art.hall, im => { hall = im; });
+  for (const k of SPRITES) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
+  ready = true;
+}).catch(() => toast('Could not load the art pack.'));
+
+// ── a layout already submitted wins over the defaults ───────────────────────
+fetch('/api/punters').then(r => r.json()).then(d => {
+  if (d && Array.isArray(d.punters) && d.punters.length === punters.length) {
+    d.punters.forEach((p, i) => {
+      punters[i].x = p.x; punters[i].feet = p.feet; punters[i].h = p.h;
+      if (typeof p.flip === 'boolean') punters[i].flip = p.flip;
+    });
+    toast('Loaded your last submission.', 1400);
+  }
+}).catch(() => {});
+
+function drawPunter(p, on) {
+  const im = SPR[p.spr];
+  if (!im) return;
+  const w = im.width * (p.h / im.height);
+  ctx.save();
+  if (p.flip) { ctx.translate(p.x * 2, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(im, p.x - w / 2, p.feet - p.h, w, p.h);
+  ctx.restore();
+  if (on) {
+    ctx.save();
+    ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]);
+    ctx.strokeRect(p.x - w / 2 - 4, p.feet - p.h - 4, w + 8, p.h + 8);
+    ctx.setLineDash([]);
+    // the foot line, because the feet are the thing that has to sit on the floor
+    ctx.strokeStyle = 'rgba(255,215,94,0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(p.x - w, p.feet); ctx.lineTo(p.x + w, p.feet); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0b0904'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (hall) ctx.drawImage(hall, 0, 0, W, H);
+  // painter's order, exactly as the game does it: furthest feet first
+  const order = punters.map((p, i) => i).sort((a, b) => punters[a].feet - punters[b].feet);
+  for (const i of order) drawPunter(punters[i], i === sel);
+}
+requestAnimationFrame(frame);
+
+// ── input: drag to move, pinch to size ──────────────────────────────────────
+let drag = null, pinch = null;
+function pick(w) {
+  let best = -1, bestD = 1e9;
+  punters.forEach((p, i) => {
+    const im = SPR[p.spr]; if (!im) return;
+    const pw = im.width * (p.h / im.height);
+    const inside = w.x > p.x - pw / 2 - 8 && w.x < p.x + pw / 2 + 8 &&
+                   w.y > p.feet - p.h - 8 && w.y < p.feet + 8;
+    if (!inside) return;
+    const d = Math.hypot(w.x - p.x, w.y - (p.feet - p.h / 2));
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    pinch = { d: dist(e.touches[0], e.touches[1]), h: punters[sel].h };
+    drag = null;
+    return;
+  }
+  const w = toWorld(e.touches[0].clientX, e.touches[0].clientY);
+  const hit = pick(w);
+  if (hit >= 0) { sel = hit; updateSel(); }
+  drag = { dx: w.x - punters[sel].x, dy: w.y - punters[sel].feet };
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (pinch && e.touches.length === 2) {
+    const d = dist(e.touches[0], e.touches[1]);
+    punters[sel].h = Math.max(30, Math.min(420, Math.round(pinch.h * (d / pinch.d))));
+    updateSel();
+    return;
+  }
+  if (!drag || !e.touches.length) return;
+  const w = toWorld(e.touches[0].clientX, e.touches[0].clientY);
+  punters[sel].x = Math.round(w.x - drag.dx);
+  punters[sel].feet = Math.round(w.y - drag.dy);
+  updateSel();
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => { if (!e.touches.length) { drag = null; pinch = null; } });
+
+// mouse, so this is usable on a desktop too
+canvas.addEventListener('mousedown', e => {
+  const w = toWorld(e.clientX, e.clientY);
+  const hit = pick(w);
+  if (hit >= 0) { sel = hit; updateSel(); }
+  drag = { dx: w.x - punters[sel].x, dy: w.y - punters[sel].feet };
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const w = toWorld(e.clientX, e.clientY);
+  punters[sel].x = Math.round(w.x - drag.dx);
+  punters[sel].feet = Math.round(w.y - drag.dy);
+  updateSel();
+});
+window.addEventListener('mouseup', () => { drag = null; });
+window.addEventListener('wheel', e => {
+  punters[sel].h = Math.max(30, Math.min(420, punters[sel].h - Math.sign(e.deltaY) * 4));
+  updateSel();
+}, { passive: true });
+// arrow keys for the last pixel
+window.addEventListener('keydown', e => {
+  const p = punters[sel], step = e.shiftKey ? 10 : 1;
+  if (e.key === 'ArrowLeft')  p.x -= step;
+  else if (e.key === 'ArrowRight') p.x += step;
+  else if (e.key === 'ArrowUp')    p.feet -= step;
+  else if (e.key === 'ArrowDown')  p.feet += step;
+  else if (e.key === '[') p.h -= step;
+  else if (e.key === ']') p.h += step;
+  else return;
+  e.preventDefault(); updateSel();
+});
+
+function updateSel() {
+  const p = punters[sel];
+  document.getElementById('sel').textContent =
+    (sel + 1) + '/' + punters.length + '  ' + p.label + '   x' + Math.round(p.x) +
+    ' feet' + Math.round(p.feet) + ' h' + Math.round(p.h);
+}
+updateSel();
+
+document.getElementById('prev').onclick = () => { sel = (sel + punters.length - 1) % punters.length; updateSel(); };
+document.getElementById('next').onclick = () => { sel = (sel + 1) % punters.length; updateSel(); };
+document.getElementById('bigger').onclick  = () => { punters[sel].h = Math.min(420, punters[sel].h + 6); updateSel(); };
+document.getElementById('smaller').onclick = () => { punters[sel].h = Math.max(30, punters[sel].h - 6); updateSel(); };
+document.getElementById('reset').onclick = () => {
+  punters = DEFAULTS.map((d, i) => ({ ...d, spr: SPRITES[i % SPRITES.length] }));
+  updateSel(); toast('Back to the current game positions.', 1400);
+};
+
+let toastT = 0;
+function toast(msg, ms) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.style.display = 'none'; }, ms || 2600);
+}
+
+document.getElementById('submit').onclick = async () => {
+  const btn = document.getElementById('submit');
+  btn.disabled = true; btn.textContent = 'SENDING…';
+  try {
+    const r = await fetch('/api/punters', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        by: 'osimo',
+        punters: punters.map(p => ({ x: Math.round(p.x), feet: Math.round(p.feet),
+                                     h: Math.round(p.h), flip: p.flip })),
+      }),
+    });
+    const d = await r.json();
+    if (d.ok) toast('SUBMITTED ✅\nTell Claude and he will put it in the game.', 5000);
+    else toast('Did not save: ' + (d.error || r.status), 5000);
+  } catch (e) {
+    toast('Did not save: ' + e.message, 5000);
+  }
+  btn.disabled = false; btn.textContent = 'SUBMIT';
+};
+})();
+</script>
+</body>
+</html>

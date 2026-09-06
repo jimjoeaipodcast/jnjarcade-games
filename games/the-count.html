@@ -394,7 +394,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=13').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=14').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -502,15 +502,38 @@ MACHINES.forEach(m => { m.room = 'corridor'; });
 // FEET ARE CAPPED AT 468, not the 485 the cabinet bases sit at. On Osimo's 851x393 phone
 // the cover-fit crop keeps world rows 37..480, so a punter standing at the true floorline
 // loses his shoes off the bottom of the screen — which is what the first pass did.
+// ALL NINE. Osimo 2026-09-07: "can we make all the arcade playable, there are 6 that have
+// no price tag." Four were wired and the rest of the room was scenery. Every upright
+// cabinet in the plate is a machine now, plus the pinball table — measured off the plate at
+// 3x, front to back down each wall. Pay and play-length scale with how near the machine is,
+// so the big front pair are the earners and the little ones at the far end tick over.
+// The punters here use the BACK sprites (punterBackA/B/C): Osimo 2026-09-07, "the punter on
+// the arcade looking straight at us should have a new sprite that is facing the machine, so
+// we see the back of him." These positions and heights are FIRST GUESSES — he is placing
+// them properly with tools/punter-placer.
+const BACKS = ['punterBackA', 'punterBackB', 'punterBackC'];
 const HALL_MACHINES = [
-  { room: 'hall', pay: 90,  secs: 11.0, body: [40, 112, 100, 380], screen: [58, 238, 132, 302],
-    punter: { h: 205, feet: 466, x: 196 }, flip: false },
-  { room: 'hall', pay: 64,  secs: 8.0,  body: [140, 140, 105, 320], screen: [176, 244, 242, 296],
-    punter: { h: 172, feet: 440, x: 282 }, flip: false },
-  { room: 'hall', pay: 110, secs: 14.0, body: [800, 112, 105, 380], screen: [812, 238, 886, 302],
-    punter: { h: 205, feet: 466, x: 764 }, flip: true },
-  { room: 'hall', pay: 76,  secs: 9.0,  body: [712, 140, 88, 320], screen: [720, 244, 786, 296],
-    punter: { h: 172, feet: 440, x: 678 }, flip: true },
+  // left wall, front to back
+  { room: 'hall', pay: 90,  secs: 11.0, body: [45, 118, 130, 372], screen: [58, 238, 132, 302],
+    punter: { h: 200, feet: 470, x: 200 }, flip: false, back: true },
+  { room: 'hall', pay: 64,  secs: 8.0,  body: [175, 145, 75, 310], screen: [176, 244, 242, 296],
+    punter: { h: 170, feet: 448, x: 268 }, flip: false, back: true },
+  { room: 'hall', pay: 46,  secs: 6.0,  body: [250, 170, 50, 255], screen: [254, 250, 296, 292],
+    punter: { h: 145, feet: 420, x: 318 }, flip: false, back: true },
+  { room: 'hall', pay: 34,  secs: 4.5,  body: [300, 190, 34, 210], screen: [302, 254, 332, 288],
+    punter: { h: 122, feet: 398, x: 350 }, flip: false, back: true },
+  // the pinball table in the middle of the right wall — the showpiece, slowest and richest
+  { room: 'hall', pay: 120, secs: 15.0, body: [532, 232, 82, 92],  screen: [540, 240, 606, 282],
+    punter: { h: 105, feet: 330, x: 573 }, flip: false, back: true },
+  // right wall, back to front
+  { room: 'hall', pay: 34,  secs: 4.5,  body: [630, 190, 60, 210], screen: [636, 254, 684, 288],
+    punter: { h: 122, feet: 398, x: 614 }, flip: true,  back: true },
+  { room: 'hall', pay: 46,  secs: 6.0,  body: [688, 170, 50, 260], screen: [692, 250, 734, 292],
+    punter: { h: 145, feet: 420, x: 662 }, flip: true,  back: true },
+  { room: 'hall', pay: 64,  secs: 8.0,  body: [736, 148, 60, 307], screen: [740, 244, 792, 296],
+    punter: { h: 170, feet: 448, x: 712 }, flip: true,  back: true },
+  { room: 'hall', pay: 110, secs: 14.0, body: [792, 118, 133, 372], screen: [812, 238, 886, 302],
+    punter: { h: 200, feet: 470, x: 772 }, flip: true,  back: true },
 ];
 HALL_MACHINES.forEach(m => MACHINES.push(m));
 const HALL_FIRST = CAB_N;                 // index of the first hall machine
@@ -620,15 +643,24 @@ const UPGRADES = [
   // rather than a distraction from the first five machines.
   { id: 'hall',    name: 'LEASE THE BIG ROOM',  cost: HALL_PRICE, once: true, icon: 'cab',
     need: () => !anyOffInFirstRoom(),
-    blurb: 'The double hall next door. Six more machines to light up.' },
-  { id: 'hall1',   name: 'BIG ROOM: FRONT LEFT', cost: 7000,  once: true, icon: 'cab',
-    need: () => has('hall'), blurb: 'The big one by the door. 90p a play.' },
-  { id: 'hall2',   name: 'BIG ROOM: BACK LEFT',  cost: 5000,  once: true, icon: 'cab',
-    need: () => has('hall'), blurb: 'Quicker, smaller takings.' },
-  { id: 'hall3',   name: 'BIG ROOM: FRONT RIGHT',cost: 9000,  once: true, icon: 'cab',
-    need: () => has('hall'), blurb: 'The best earner in the building. £1.10 a play.' },
-  { id: 'hall4',   name: 'BIG ROOM: BACK RIGHT', cost: 6000,  once: true, icon: 'cab',
-    need: () => has('hall'), blurb: 'Steady money on the far wall.' },
+    blurb: 'The double hall next door. Nine more machines to light up.' },
+  // One ledger line per hall machine, in the order you meet them walking in. Built from
+  // HALL_MACHINES so a machine can never exist on the floor without a price on it — which
+  // is exactly how six of them ended up unbuyable scenery.
+  ...[
+    ['LEFT WALL: FRONT',  7000, 'The big one by the door. 90p a play.'],
+    ['LEFT WALL: SECOND', 5000, 'Steady money. 64p a play.'],
+    ['LEFT WALL: THIRD',  3600, 'Quicker, smaller takings.'],
+    ['LEFT WALL: FAR',    2600, 'The little one at the far end. Never stops.'],
+    ['THE PINBALL TABLE', 11000, 'The showpiece. £1.20 a play, and they stay on it.'],
+    ['RIGHT WALL: FAR',   2600, 'The far corner. Cheap to light, quick to pay.'],
+    ['RIGHT WALL: THIRD', 3600, 'Middle of the row, middle of the money.'],
+    ['RIGHT WALL: SECOND',5000, 'Steady money. 64p a play.'],
+    ['RIGHT WALL: FRONT', 8500, 'The best earner in the building. £1.10 a play.'],
+  ].map(([name, cost, blurb], i) => ({
+    id: 'hall' + (i + 1), name: 'BIG ROOM: ' + name, cost, once: true,
+    icon: i === 4 ? 'coin' : 'cab', need: () => has('hall'), blurb,
+  })),
   // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
   // expansion is FOR (Osimo: "you can pay Joe some money daily so that he collects money
   // from the first arcade for you and banks them").
@@ -849,7 +881,10 @@ function updateFloor(dt, now) {
     const ci = freeCab();
     if (ci >= 0) {
       const c = cabs[ci];
-      c.busy = { spr: ['punter34A', 'punter34B', 'punter34C'][Math.floor(Math.random() * 3)] };
+      // A machine that faces the camera gets a punter drawn squarely from BEHIND; the
+      // corridor's angled cabinets keep the three-quarter set, which reads right there.
+      const set = MACHINES[ci].back ? BACKS : ['punter34A', 'punter34B', 'punter34C'];
+      c.busy = { spr: set[Math.floor(Math.random() * set.length)] };
       c.playFull = MACHINES[ci].secs * 1000 * (0.85 + Math.random() * 0.3);
       c.playT = c.playFull;
       SFX.punter();
@@ -1441,7 +1476,7 @@ function drawCabState() {
       // machine (Osimo 2026-09-04: "remove those ugly transparent rectangles over the
       // arcades"). Just a price, so a dark machine reads as "buy me" and not "broken".
       const up = UPGRADES.find(u => u.id === (i < CAB_N ? 'cab' + (i + 1) : 'hall' + (i - HALL_FIRST + 1)));
-      badge(cx, sy - 6, up ? '£' + (up.cost / 100).toFixed(2) : 'OFF', '#9a9a9a');
+      priceTag(cx, sy - 4, up, m);
       continue;
     }
     // SCREEN OVERLAYS REMOVED 2026-09-05 — Osimo: "remove those silly arcade screen
@@ -1452,6 +1487,42 @@ function drawCabState() {
     else if (c.till > 0) badge(cx, sy - 6, c.till + 'p', c.cursed ? '#c96bff' : '#ffd75e');
     else if (c.cursed) badge(cx, sy - 6, 'CURSED', '#c96bff');
   }
+}
+
+// PRICE TAGS. Osimo 2026-09-07: "can we make their price tags look more like the speech
+// bubbles, logo of arcade like in the relative ledger, and cost." So a dark machine now
+// carries the same rounded cream card the hosts speak out of, with the ledger's own cabinet
+// icon on the left and the price beside it — the tag and the ledger line are visibly the
+// same offer, seen in two places.
+function priceTag(cx, cy, up, m) {
+  const price = up ? '£' + (up.cost / 100).toFixed(2) : 'OFF';
+  const icon = SPR[ICON_FOR[(up && up.icon) || 'cab'] || 'icCab'];
+  // scaled by how near the machine is, so a tag on a far cabinet does not dwarf it
+  const s = Math.max(0.62, Math.min(1, m.body[3] / 372));
+  ctx.font = 'bold ' + Math.round(19 * s) + 'px "Barlow Condensed",sans-serif';
+  const ir = Math.round(26 * s), pad = Math.round(9 * s);
+  const tw = ctx.measureText(price).width;
+  const w = pad + ir + 6 * s + tw + pad, h = Math.round(34 * s);
+  const x = cx - w / 2, y = cy - h;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 8 * s; ctx.shadowOffsetY = 2 * s;
+  ctx.fillStyle = 'rgba(252,246,232,0.97)';
+  roundRect(x, y, w, h, 8 * s); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = Math.max(1.5, 2.4 * s);
+  roundRect(x, y, w, h, 8 * s); ctx.stroke();
+  // the little tail, pointing down at the machine it is priced for
+  ctx.beginPath();
+  ctx.moveTo(cx - 7 * s, y + h); ctx.lineTo(cx, y + h + 9 * s); ctx.lineTo(cx + 7 * s, y + h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(252,246,232,0.97)'; ctx.fill();
+  ctx.strokeStyle = '#7a4a1a'; ctx.stroke();
+  if (icon) ctx.drawImage(icon, x + pad, y + (h - ir) / 2, ir, ir);
+  ctx.fillStyle = '#1f6b3a';
+  ctx.textAlign = 'left';
+  ctx.fillText(price, x + pad + ir + 6 * s, y + h / 2 + 6.5 * s);
+  ctx.restore();
+  ctx.textAlign = 'left';
 }
 
 function badge(cx, cy, txt, col) {
@@ -1913,9 +1984,10 @@ window.__TC = {
   },
   demo() {                                  // QA only — every machine on and busy, so the
     ['cab2','cab3','cab4','cab5'].forEach(k => { owned[k] = true; });   // whole row can be
-    const sp = ['punter34A', 'punter34B', 'punter34C'];                 // judged in one frame
     cabs.forEach((c, i) => { if (!cabOn(i)) return;
-                             c.busy = { spr: sp[i % 3] }; c.playT = 60000; c.jam = false; });
+                             const sp = MACHINES[i].back ? BACKS
+                                                         : ['punter34A', 'punter34B', 'punter34C'];
+                             c.busy = { spr: sp[i % sp.length] }; c.playT = 60000; c.jam = false; });
   },
 };
 
