@@ -422,7 +422,24 @@ function loadPack() {
 // show's cold open uses (assets/diorama/jimmy-joe-title-LOOP.mp4), cut to 12s and squeezed
 // to 256x144 @15fps — 10KB, so it costs nothing to ship inside a room. Rect measured
 // against the studio plate, not guessed.
+// The studio telly's SCREEN, and the monitor in the podcast studio that carries a Buy or
+// ByeBye product. Both are placeable (tools/overlay-placer?target=tv) because a rectangle
+// eyeballed off a screenshot is exactly the thing that ends up a few pixels out.
+// Osimo 2026-09-07: "fix the TV, anything we play in it should fit perfectly."
 const TV = { x: 352, y: 108, w: 256, h: 146 };
+const POD_TV = { x: 497, y: 204, w: 150, h: 84 };
+// Cover-fit, not stretch: a clip keeps its shape and the overflow is cropped by the screen
+// it is playing on, the way a real screen shows a picture that is not its own aspect.
+function drawIntoScreen(v, r) {
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) return;
+  const s = Math.max(r.w / vw, r.h / vh);
+  const dw = vw * s, dh = vh * s;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+  ctx.drawImage(v, r.x + (r.w - dw) / 2, r.y + (r.h - dh) / 2, dw, dh);
+  ctx.restore();
+}
 let tvVideo = null;
 // THE BUY OR BYEBYE B-ROLL. Osimo 2026-09-07: "instead of smoke b-roll we should play one
 // buy or ByeBye one product only, and then they get their money." Five real single-product
@@ -454,7 +471,7 @@ function tvFrame() {
   if (rec && rec.show && rec.show.id === 'byebye' && bbbVideo &&
       bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
     ctx.save();
-    ctx.drawImage(bbbVideo, TV.x, TV.y, TV.w, TV.h);
+    drawIntoScreen(bbbVideo, TV);
     const g = ctx.createRadialGradient(TV.x + TV.w / 2, TV.y + TV.h / 2, 10,
                                        TV.x + TV.w / 2, TV.y + TV.h / 2, TV.w * 0.9);
     g.addColorStop(0, 'rgba(255,214,140,0.12)');
@@ -473,7 +490,7 @@ function tvFrame() {
   }
   if (tvVideo.readyState >= 2 && tvVideo.videoWidth) {
     ctx.save();
-    ctx.drawImage(tvVideo, TV.x, TV.y, TV.w, TV.h);
+    drawIntoScreen(tvVideo, TV);
     // a little screen glow spilling onto the brick, so it reads as ON
     const g = ctx.createRadialGradient(TV.x + TV.w / 2, TV.y + TV.h / 2, 10,
                                        TV.x + TV.w / 2, TV.y + TV.h / 2, TV.w * 0.9);
@@ -1703,8 +1720,8 @@ canvas.addEventListener('mousedown', onTap);
 // is drawn in perspective. Leave the two x's equal and it is a plumb column, as before.
 // His figures (960x540) scaled into the plate's own 640x360 space.
 const LEDGER_ART = { w: 640, h: 360, colW: 199, rows: 11,
-                     cols: [{ x0: 91,  y0: 58, x1: 91,  y1: 283 },
-                            { x0: 332, y0: 59, x1: 332, y1: 283 }] };
+                     cols: [{ x0: 99.3, y0: 62.0, x1: 90.7, y1: 282.0 },
+                            { x0: 332.0, y0: 58.7, x1: 333.3, y1: 282.0 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
@@ -1754,9 +1771,12 @@ function shopRows() {
     const col = Math.min(m.cols.length - 1, Math.floor(i / m.perCol)), k = i % m.perCol;
     const c = m.cols[col];
     const t = m.perCol > 1 ? k / (m.perCol - 1) : 0;
-    const cy = c.y0 + (c.y1 - c.y0) * t;           // the logo's CENTRE, on the line
-    const cx = c.x0 + (c.x1 - c.x0) * t;           // …and leaning with the page's own rule
-    return { u, cx, cy, x: cx - m.iconR, y: cy - m.rowH / 2, w: m.w, h: m.rowH };
+    // PIXEL LOCKED (Osimo 2026-09-07): rounded to whole device pixels, so a row never lands
+    // on a half pixel and the writing cannot shimmer or sit a hair off between devices.
+    const cy = Math.round(c.y0 + (c.y1 - c.y0) * t);   // the logo's CENTRE, on the line
+    const cx = Math.round(c.x0 + (c.x1 - c.x0) * t);   // …leaning with the page's own rule
+    return { u, cx, cy, x: cx - m.iconR, y: Math.round(cy - m.rowH / 2), w: m.w,
+             h: Math.round(m.rowH) };
   });
 }
 function shopTap(w) {
@@ -2318,16 +2338,16 @@ function drawPodRecording(now) {
   // BUY OR BYEBYE plays the product on the monitor at that position — the show IS the
   // product, so the screen carries it rather than a generic on-air card.
   if (s.id === 'byebye' && bbbVideo && bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
-    const vw = 150, vh = 84, vx = cx - vw / 2, vy = h.y + 96;
     ctx.fillStyle = '#000';
-    ctx.fillRect(vx - 3, vy - 3, vw + 6, vh + 6);
-    ctx.drawImage(bbbVideo, vx, vy, vw, vh);
+    ctx.fillRect(POD_TV.x - 3, POD_TV.y - 3, POD_TV.w + 6, POD_TV.h + 6);
+    drawIntoScreen(bbbVideo, POD_TV);
     ctx.strokeStyle = s.col; ctx.lineWidth = 2;
-    ctx.strokeRect(vx - 3, vy - 3, vw + 6, vh + 6);
+    ctx.strokeRect(POD_TV.x - 3, POD_TV.y - 3, POD_TV.w + 6, POD_TV.h + 6);
     ctx.fillStyle = '#ffe9e9';
     ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() : '', cx, vy + vh + 15);
+    ctx.fillText(bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() : '',
+                 POD_TV.x + POD_TV.w / 2, POD_TV.y + POD_TV.h + 15);
     ctx.textAlign = 'left';
   }
   ctx.restore();

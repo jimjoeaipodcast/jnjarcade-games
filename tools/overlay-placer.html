@@ -78,10 +78,12 @@
 (function () {
 'use strict';
 const QS = new URLSearchParams(location.search);
-const TARGET = ['cards', 'seats', 'stock'].includes(QS.get('target')) ? QS.get('target') : 'ledger';
-const ROOM = QS.get('room') === 'corridor' ? 'corridor' : 'hall';
+const TARGET = ['cards', 'seats', 'stock', 'tv'].includes(QS.get('target')) ? QS.get('target') : 'ledger';
+const ROOM = ['corridor', 'podcast', 'studio'].includes(QS.get('room')) ? QS.get('room') : 'hall';
 const EDIT = QS.get('edit') === '1';
-const SCENE = TARGET === 'cards' ? 'cards-' + ROOM : TARGET;
+const SCENE = TARGET === 'cards' ? 'cards-' + ROOM
+            : TARGET === 'tv' ? 'tv-' + (ROOM === 'podcast' ? 'podcast' : 'studio')
+            : TARGET;
 const W = 960, H = 540;
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
@@ -139,6 +141,15 @@ const SEATS = [
 // move and place the boxes and bottles of water, it had just cash and bottle icon." They are
 // sprites in the game too now, so what is dragged here is exactly what is drawn there, at
 // the same resolution. x is the centre, y is the FEET, h is the height.
+// THE SCREENS. Osimo 2026-09-07: "fix the TV, anything we play in it should fit perfectly,
+// we can do a placer if you want and I'll match the size and location." Two boxes: the
+// studio telly and the monitor in the podcast studio that carries a Buy or ByeBye product.
+// The box IS the screen — a clip is cover-fitted into it and clipped by it — so what is
+// dragged here is exactly the picture area.
+const TVS = {
+  studio:  [{ id: 'tv',    label: 'THE STUDIO TV',   x: 352, y: 108, w: 256, h: 146, kind: 'box' }],
+  podcast: [{ id: 'podTv', label: 'BUY OR BYEBYE MONITOR', x: 497, y: 204, w: 150, h: 84, kind: 'box' }],
+};
 const STOCK = [
   { id: 'jug', label: 'WATER JUGS',    x: 898, y: 493, h: 192, kind: 'sprite', spr: 'propJugs' },
   { id: 'box', label: 'VENDING BOXES', x: 190, y: 467, h: 151, kind: 'sprite', spr: 'propBox' },
@@ -147,6 +158,7 @@ function build() {
   if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
   if (TARGET === 'seats')  return SEATS.map(o => ({ ...o }));
   if (TARGET === 'stock')  return STOCK.map(o => ({ ...o }));
+  if (TARGET === 'tv')     return (TVS[ROOM === 'podcast' ? 'podcast' : 'studio']).map(o => ({ ...o }));
   return CARDS[ROOM].map(([label, x, y], i) => ({ id: 'card' + i, label, x, y, s: 0.85, kind: 'card' }));
 }
 let items = build();
@@ -178,6 +190,7 @@ fetch('../games/the-count-pack.json?v=22').then(r => r.json()).then(p => {
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
   else if (TARGET === 'stock') mk(p.art.prop, im => { plate = im; });
+  else if (TARGET === 'tv') mk(p.art[ROOM === 'podcast' ? 'podcast' : 'studio'], im => { plate = im; });
   else mk(p.art[ROOM], im => { plate = im; });
   for (const k of ['icCab', 'icCoin', 'jimmySit', 'joeSit', 'propJugs', 'propBox'])
     if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
@@ -278,7 +291,37 @@ function drawSprite(o, on) {
   o._box = { x: o.x - w / 2, y: o.y - o.h, w, h: o.h };
 }
 // A tappable thing in a room: the box IS the tap area, so it is drawn as one.
+let tvClip = null;
 function drawBox(o, on) {
+  // a screen box plays a real clip, cover-fitted and clipped exactly as the game does it —
+  // so the fit you see while dragging is the fit you get
+  if (o.id === 'tv' || o.id === 'podTv') {
+    if (!tvClip) {
+      const v = document.createElement('video');
+      v.src = '../assets/footage/bbb/jellyfish-lamp.mp4?v=1';
+      v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+      v.play().catch(() => {});
+      tvClip = v;
+    }
+    ctx.save();
+    ctx.fillStyle = '#000'; ctx.fillRect(o.x, o.y, o.w, o.h);
+    if (tvClip.readyState >= 2 && tvClip.videoWidth) {
+      const s2 = Math.max(o.w / tvClip.videoWidth, o.h / tvClip.videoHeight);
+      const dw = tvClip.videoWidth * s2, dh = tvClip.videoHeight * s2;
+      ctx.beginPath(); ctx.rect(o.x, o.y, o.w, o.h); ctx.clip();
+      ctx.drawImage(tvClip, o.x + (o.w - dw) / 2, o.y + (o.h - dh) / 2, dw, dh);
+    }
+    ctx.restore();
+    ctx.strokeStyle = on ? '#ffd75e' : 'rgba(94,208,255,0.9)';
+    ctx.lineWidth = on ? 3 : 2;
+    ctx.strokeRect(o.x, o.y, o.w, o.h);
+    ctx.fillStyle = '#fff3d0'; ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(o.label, o.x + o.w / 2, o.y - 6);
+    ctx.textAlign = 'left';
+    o._box = { x: o.x, y: o.y, w: o.w, h: o.h };
+    return;
+  }
   ctx.save();
   ctx.fillStyle = on ? 'rgba(255,215,94,0.26)' : 'rgba(94,208,255,0.20)';
   roundRect(o.x, o.y, o.w, o.h, 8); ctx.fill();
@@ -460,6 +503,16 @@ function updateSel() {
     (o.flip ? ' ⇄' : '') + pitch;
 }
 updateSel();
+// the hint belongs to whatever is being placed
+document.getElementById('hint').textContent =
+  TARGET === 'ledger' ? 'drag top & bottom · the rows follow the line'
+  : TARGET === 'tv'   ? 'drag the screen · pinch to size · it keeps its shape'
+  : 'drag · pinch to size';
+if (TARGET !== 'ledger') {
+  const f = document.getElementById('fewer'), m = document.getElementById('more');
+  if (f) f.style.display = 'none';
+  if (m) m.style.display = 'none';
+}
 
 document.getElementById('prev').onclick = () => { sel = (sel + items.length - 1) % items.length; updateSel(); };
 document.getElementById('next').onclick = () => { sel = (sel + 1) % items.length; updateSel(); };
@@ -470,8 +523,10 @@ function resizeSel(d) {
   if (o.kind === 'card') o.s = Math.max(0.35, Math.min(2, +(o.s + d * 0.02).toFixed(3)));
   else if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, o.h + d));
   else if (o.kind === 'box') {
-    o.w = Math.max(20, Math.min(600, o.w + d));
-    o.h = Math.max(20, Math.min(500, o.h + d));
+    // a screen keeps its shape while you size it; a crate does not have to
+    const r = (o.id === 'tv' || o.id === 'podTv') ? o.h / o.w : 1;
+    o.w = Math.max(20, Math.min(700, o.w + d));
+    o.h = Math.max(20, Math.min(500, Math.round(o.w * r)));
   } else {
     const w = items.find(i => i.id === 'width');
     if (w) w.w = Math.max(60, Math.min(600, w.w + d));
