@@ -403,7 +403,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=19').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=20').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -470,7 +470,10 @@ const SHOWS = [
   // your night around rather than the one you fall back on.
   { id: 'byebye',    name: 'BUY OR BYEBYE', ms: 18000, base: 100, per: 11, roy: 90,
     col: '#ff6bc0', minHype: 55, oncePerDay: true, cool: 60000 },
-  { id: 'unplugged', name: 'JNJ UNPLUGGED', ms: 26000, base: 400, per: 7,  roy: 130,
+  // Osimo 2026-09-07: "we don't have jnj unplugged, and the knowledge of it should have
+  // been archived." It was retired; HOROSCOPES is the live fourth channel. The memory that
+  // still described it as running is marked RETIRED so it cannot be picked up again.
+  { id: 'horoscopes', name: 'HOROSCOPES',  ms: 26000, base: 400, per: 7,  roy: 130,
     col: '#8effc2', minHype: 30 },
 ];
 const POD_PRICE = 25000;      // £250 to fit the room out, on top of owning the building
@@ -486,6 +489,43 @@ const ORDER = ['coinroom', 'studio', 'corridor', 'hall', 'podcast'];
 // which is Jimmy's — 213 tall by 142 wide, his own 38px-wide content stretched 12% in
 // height at unchanged width, exactly as asked last round.
 const HOST_BOX = { w: 142, h: 213 };
+// LOOSE PROPS — things that sit in a room as their own PNG rather than being painted into
+// the plate. Osimo 2026-09-07: "the images once stitched in lost image quality, allow me to
+// move boxes and bottles, flip, resize, and place." Baked into the 320x180 plate they were
+// squashed to about 32px wide; drawn as sprites in the 960x540 world they are three times
+// that, and they can be moved.
+// And because they ARE a PNG at a known size and place, their tap area is simply the picture
+// — "instead of colouring in, if it's png images you know exactly how to highlight the entire
+// png based on size and placement". Nothing to paint.
+const PROPS = [
+  { id: 'jug', room: 'prop', spr: 'propJugs', label: 'WATER JUGS',    x: 800, feet: 502, h: 140, flip: false },
+  { id: 'box', room: 'prop', spr: 'propBox',  label: 'VENDING BOXES', x: 690, feet: 508, h: 96,  flip: false },
+];
+function propRect(p) {
+  const im = SPR[p.spr];
+  const w = im ? im.width * (p.h / im.height) : p.h;
+  return { x: Math.round(p.x - w / 2), y: Math.round(p.feet - p.h), w: Math.round(w), h: p.h };
+}
+// The hotspot IS the sprite's rectangle, recomputed from wherever the prop currently sits.
+function propHotspots(room) {
+  return PROPS.filter(p => p.room === room).map(p => {
+    const r = propRect(p);
+    return { id: p.id, x: r.x, y: r.y, w: r.w, h: r.h,
+             walkX: Math.max(70, Math.min(890, p.x - 40)), label: p.label };
+  });
+}
+function drawProps(room) {
+  for (const p of PROPS) {
+    if (p.room !== room) continue;
+    const im = SPR[p.spr];
+    if (!im) continue;
+    const r = propRect(p);
+    ctx.save();
+    if (p.flip) { ctx.translate(p.x * 2, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(im, r.x, r.y, r.w, r.h);
+    ctx.restore();
+  }
+}
 // The two chesterfields in the studio, measured off the plate. Jimmy left, Joe right, every
 // time — and a seated sprite each, so a take actually looks like two people doing a podcast.
 const SEAT = { jimmy: 238, joe: 760, feet: 466, h: 156 };
@@ -678,8 +718,7 @@ const ROOMS = {
       // Osimo 2026-09-07: "place those water jugs and box for refill vending machine in the
       // stock room." First-guess positions — he is placing them properly in
       // tools/overlay-placer?target=stock.
-      { id: 'jug',      x: 752, y: 362, w: 96,  h: 140, walkX: 770, label: 'WATER JUGS' },
-      { id: 'box',      x: 638, y: 413, w: 104, h: 95,  walkX: 660, label: 'VENDING BOXES' },
+      // built from PROPS below, so the tap area is the picture — see propHotspots()
       { id: 'shelves',  x: 20,  y: 120, w: 210, h: 330, walkX: 180, label: 'THE SHELVES' },
     ],
   },
@@ -1513,8 +1552,13 @@ function endDay() {
 }
 
 // ── input ────────────────────────────────────────────────────────────────────
+// A room's hotspots plus whatever loose props are standing in it. The props are appended
+// LIVE rather than baked into ROOMS, because their rectangle is derived from the sprite and
+// the sprite can be moved — a list built once at load would freeze the tap area where the
+// prop used to be, and would be computed before the art had even finished loading.
+function roomHotspots(r) { return ROOMS[r].hotspots.concat(propHotspots(r)); }
 function hotspotAt(wx, wy) {
-  for (const h of ROOMS[room].hotspots) {
+  for (const h of roomHotspots(room)) {
     if (wx >= h.x && wx <= h.x + h.w && wy >= h.y && wy <= h.y + h.h) return h;
   }
   return null;
@@ -1939,7 +1983,7 @@ function hintSpots() {
   // should be an arrow on the store room door when a bottle needs picking up or money in
   // the safe is available." So this returns a LIST — every machine worth walking to, plus
   // the door that leads to the thing you need.
-  const H = ROOMS[room].hotspots;
+  const H = roomHotspots(room);
   const find = id => H.find(h => h.id === id);
   const out = [];
   const boxLive = !boxOpenedToday && cabs.some((c, i) => cabOn(i) && !c.cursed);
@@ -2423,6 +2467,7 @@ function frame(ts) {
   if (room === 'studio' && rec) drawRecording(ts);
   if (room === 'podcast' && rec) drawPodRecording(ts);
   if (room === 'podcast') drawShowSigns(ts);
+  drawProps(room);
   drawPunters();
   if (state !== 'attract') {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);

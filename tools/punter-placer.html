@@ -163,7 +163,7 @@ function toWorld(px, py) {
 }
 
 // ── art, straight from the game's own pack ──────────────────────────────────
-fetch('../games/the-count-pack.json?v=19').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=20').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   mk(p.art[ROOM], im => { hall = im; });
   for (const k of SPRITES) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });

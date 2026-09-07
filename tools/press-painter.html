@@ -14,6 +14,15 @@
   tap area — no more guessing a rectangle off a screenshot and finding the tap
   lands on the machine next door.
 
+  This is for things PAINTED INTO THE ROOM PLATE — cabinets, doors, furniture —
+  where nothing but a person can say where one ends and the next begins. A thing
+  that is its own PNG (the water jugs, the vending boxes, a punter, a seated
+  host) does NOT need painting: its tap area is derived from the sprite's own
+  size and position, automatically, and it moves when the sprite moves. Place
+  those in overlay-placer instead. Osimo 2026-09-07: "instead of colouring in, if
+  it's png images you know exactly how to highlight the entire png based on size
+  and placement."
+
   Painted at 96x54 (one cell = 10x10 world px), which is coarse enough to paint
   with a thumb and fine enough for a hit test. SUBMIT posts the grid; Claude
   turns each colour's cells into that hotspot's box.
@@ -111,9 +120,10 @@ const TARGETS = {
     ['THE SAFE', '#ff4d4d'], ['THE LEDGER', '#ffd75e'], ['THE COUNTER', '#5ed0ff'],
     ['DOOR → STUDIO', '#3a8a6a'],
   ],
+  // no jugs or boxes here: those are PNGs, so their tap area comes from the sprite
   prop: [
     ['THE WHISKY CRATE', '#ff4d4d'], ['THE BITS BOX', '#ffd75e'], ['THE SHELVES', '#5ed0ff'],
-    ['DOOR ← ARCADE', '#8a6a3a'], ['DOOR → ARCADE', '#3a8a6a'],
+    ['SPARE PARTS', '#b6ff5e'], ['DOOR ← ARCADE', '#8a6a3a'], ['DOOR → ARCADE', '#3a8a6a'],
   ],
 };
 const LIST = TARGETS[ROOM] || TARGETS.hall;
@@ -147,7 +157,7 @@ function toCell(px, py) {
   return { cx: Math.floor(wx / CELL), cy: Math.floor(wy / CELL) };
 }
 
-fetch('../games/the-count-pack.json?v=19').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=20').then(r => r.json()).then(p => {
   const im = new Image(); im.onload = () => { plate = im; }; im.src = p.art[ROOM];
 }).catch(() => toast('Could not load the art pack.'));
 

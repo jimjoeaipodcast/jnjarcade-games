@@ -127,9 +127,13 @@ const SEATS = [
 // STOCK: the water jugs and the vending boxes in the prop room, which is where a day's
 // restocking starts. Both are placed as BOXES — they are things you tap, so the size is the
 // tap area as well as the picture.
+// The real PNGs, not placeholder boxes — Osimo 2026-09-07: "in the store, I was meant to
+// move and place the boxes and bottles of water, it had just cash and bottle icon." They are
+// sprites in the game too now, so what is dragged here is exactly what is drawn there, at
+// the same resolution. x is the centre, y is the FEET, h is the height.
 const STOCK = [
-  { id: 'jug', label: 'WATER JUGS',    x: 752, y: 362, w: 96,  h: 140, kind: 'box' },
-  { id: 'box', label: 'VENDING BOXES', x: 638, y: 413, w: 104, h: 95,  kind: 'box' },
+  { id: 'jug', label: 'WATER JUGS',    x: 800, y: 502, h: 140, kind: 'sprite', spr: 'propJugs' },
+  { id: 'box', label: 'VENDING BOXES', x: 690, y: 508, h: 96,  kind: 'sprite', spr: 'propBox' },
 ];
 function build() {
   if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
@@ -161,13 +165,13 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=19').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=20').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
   else if (TARGET === 'stock') mk(p.art.prop, im => { plate = im; });
   else mk(p.art[ROOM], im => { plate = im; });
-  for (const k of ['icCab', 'icCoin', 'jimmySit', 'joeSit', 'icBottle', 'icApron'])
+  for (const k of ['icCab', 'icCoin', 'jimmySit', 'joeSit', 'propJugs', 'propBox'])
     if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
 }).catch(() => toast('Could not load the art pack.'));
 
