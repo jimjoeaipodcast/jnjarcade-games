@@ -59,6 +59,9 @@
   <p style="color:#9aa;font-size:13px">Sideways, like the game.</p></div>
 <div class="bar" id="top">
   <div id="sel">TAP A HANDLE</div>
+  <span style="flex:1"></span>
+  <button id="fewer">− ROWS</button>
+  <button id="more">+ ROWS</button>
   <button id="prev">‹</button><button id="next">›</button>
 </div>
 <div class="bar" id="bot">
@@ -92,6 +95,13 @@ const LEDGER = [
   { id: 'col2',     label: 'FIRST LINE (right page)', x: 355, y: 60,  kind: 'row' },
   { id: 'width',    label: 'COLUMN WIDTH',            x: 118, y: 180, w: 178, kind: 'width' },
 ];
+// Osimo 2026-09-07: "I need a total amount that we would use, the max per page, so you always
+// know where to place them when there's loads." Three sample rows told him nothing about how
+// a FULL page stacks. So the tool draws every row it would ever draw, evenly spaced between
+// the first and last handles, and the count is a thing he sets — the game then divides the
+// span by it instead of guessing a pitch and hoping the list fits.
+let rows = 9;
+const ROWS_MIN = 3, ROWS_MAX = 16;
 // CARDS: one handle per machine — where its price/coins/jam bubble hangs. Stored as the
 // card's anchor point in world space; the game keeps drawing the card upward from it.
 const CARDS = {
@@ -144,6 +154,7 @@ fetch('../games/the-count-pack.json?v=16').then(r => r.json()).then(p => {
 fetch('/api/press?kind=points&room=' + SCENE).then(r => r.json()).then(d => {
   if (!d || !Array.isArray(d.items)) return;
   d.items.forEach(it => {
+    if (it.id === 'rowsPerPage') { rows = Math.max(ROWS_MIN, Math.min(ROWS_MAX, it.x)); return; }
     const m = items.find(o => o.id === it.id);
     if (!m) return;
     m.x = it.x; m.y = it.y;
@@ -186,6 +197,27 @@ function drawCard(o, on) {
   o._box = { x, y, w, h: h + 9 };
 }
 
+// A row as it will really be written, but pale — these are the lines BETWEEN the handles.
+function ghostRow(x, y, skip) {
+  if (skip) return;
+  const w = (items.find(i => i.id === 'width') || { w: 178 }).w, ir = 31;
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = 'rgba(226,178,86,0.13)';
+  ctx.fillRect(x - 4, y - 15, w, 30);
+  ctx.strokeStyle = 'rgba(122,74,26,0.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x - 4, y - 15, w, 30);
+  if (SPR.icCab) ctx.drawImage(SPR.icCab, x, y - ir / 2, ir, ir);
+  ctx.fillStyle = '#5a4630'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+  ctx.fillText('POWER UP CABINET 2', x + ir + 8, y - 2);
+  ctx.font = '11px "Barlow Condensed",sans-serif'; ctx.fillStyle = '#8a7458';
+  ctx.fillText('A second machine earning…', x + ir + 8, y + 11);
+  ctx.textAlign = 'right'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = '#3f7a55';
+  ctx.fillText('£8.00', x - 4 + w - 8, y + 11);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
 function drawRow(o, on) {
   // a ledger line as the game writes it: icon, name, price under
   const ir = 31;
@@ -227,6 +259,18 @@ function frame() {
   ctx.fillStyle = '#0b0904'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
   if (plate) ctx.drawImage(plate, 0, 0, W, H);
+  if (TARGET === 'ledger') {
+    // the whole column, both pages, at the density he has chosen — the ghosts are what the
+    // page looks like FULL, and the three handles are drawn solid on top of them
+    const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
+    const col2 = items.find(i => i.id === 'col2');
+    const step = rows > 1 ? (last.y - first.y) / (rows - 1) : 0;
+    for (let n = 0; n < rows; n++) {
+      const y = first.y + step * n;
+      if (n > 0 && n < rows - 1) ghostRow(first.x, y);
+      ghostRow(col2.x, col2.y + step * n, n === 0);
+    }
+  }
   items.forEach((o, i) => {
     const on = i === sel;
     if (o.kind === 'card') drawCard(o, on);
@@ -294,9 +338,13 @@ window.addEventListener('keydown', e => {
 
 function updateSel() {
   const o = items[sel];
+  const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
+  const pitch = (TARGET === 'ledger' && rows > 1)
+    ? '  ·  ' + rows + ' rows/page, ' + Math.round((last.y - first.y) / (rows - 1)) + 'px apart'
+    : '';
   document.getElementById('sel').textContent =
     (sel + 1) + '/' + items.length + '  ' + o.label + '   x' + Math.round(o.x) +
-    ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '');
+    ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '') + pitch;
 }
 updateSel();
 
@@ -305,7 +353,9 @@ document.getElementById('next').onclick = () => { sel = (sel + 1) % items.length
 const wid = () => items.find(i => i.id === 'width');
 document.getElementById('bigger').onclick  = () => { const o = wid(); if (o) { o.w = Math.min(600, o.w + 6); updateSel(); } };
 document.getElementById('smaller').onclick = () => { const o = wid(); if (o) { o.w = Math.max(60, o.w - 6); updateSel(); } };
-document.getElementById('reset').onclick = () => { items = build(); sel = 0; updateSel(); toast('Back to the game values.', 1400); };
+document.getElementById('reset').onclick = () => { items = build(); rows = 9; sel = 0; updateSel(); toast('Back to the game values.', 1400); };
+document.getElementById('more').onclick  = () => { rows = Math.min(ROWS_MAX, rows + 1); updateSel(); };
+document.getElementById('fewer').onclick = () => { rows = Math.max(ROWS_MIN, rows - 1); updateSel(); };
 
 let toastT = 0;
 function toast(msg, ms) {
@@ -324,7 +374,9 @@ if (submitBtn) submitBtn.onclick = async () => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ by: 'osimo', room: SCENE, kind: 'points',
         items: items.map(o => ({ id: o.id, x: Math.round(o.x), y: Math.round(o.y),
-                                 w: o.w === undefined ? undefined : Math.round(o.w) })) }),
+                                 w: o.w === undefined ? undefined : Math.round(o.w) }))
+          // the row count rides along as an item so the endpoint needs no new field
+          .concat(TARGET === 'ledger' ? [{ id: 'rowsPerPage', x: rows, y: 0 }] : []) }),
     });
     const d = await r.json();
     if (d.ok) { toast('SUBMITTED ✅\nTell Claude and he will put it in the game.', 5000); retire(); }
