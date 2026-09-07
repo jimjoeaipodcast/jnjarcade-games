@@ -74,6 +74,14 @@
 'use strict';
 const QS = new URLSearchParams(location.search);
 const EDIT = QS.get('edit') === '1';
+// Osimo 2026-09-07: "you also should teach yourself to use a tool like [this]... paint,
+// look, amend, perfect, lock in pixels, publish." For a box that's computable (clear of
+// everything else on the HUD) rather than a subjective call, Claude drives this page itself
+// via Playwright — paint, screenshot, submit — instead of only hand-deriving numbers. Those
+// submissions are tagged 'claude', never 'osimo', so the self-retire rule below (which only
+// fires on Osimo's OWN submission) can't mistake a computed default for his final word, and
+// he can always paint over it later.
+const BY = QS.get('by') === 'claude' ? 'claude' : 'osimo';
 // /api/press clamps cell x/y to 0-255 (built for the 96x54 room grid) — 4px cells keep a
 // typical ~850px-wide phone screen (GX~213) safely under that ceiling while still resolving
 // a ~30px button to within 2px either side, plenty for a fingertip target.
@@ -235,7 +243,7 @@ if (submitBtn) submitBtn.onclick = async () => {
   try {
     const r = await fetch('/api/press', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ by: 'osimo', room: 'hud', cell: CELL,
+      body: JSON.stringify({ by: BY, room: 'hud', cell: CELL,
                              names: LIST.map(l => l[0]), cells }),
     });
     const d = await r.json();

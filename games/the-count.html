@@ -2748,11 +2748,14 @@ const HUD_CTRL = { pau: { x0: 2, x1: 32, y0: 0, y1: 54 },
                               y0: b.y0 * cell, y1: (b.y1 + 1) * cell };
     if (box[0]) HUD_CTRL.pau = toPx(box[0]);
     if (box[1]) HUD_CTRL.snd = toPx(box[1]);
-    // NOT repositioning the drawn glyph to match, on purpose, for now — his first
-    // submission's PAUSE box (x88-132) lands squarely on the cash figure (starts at L+78),
-    // so moving the icon there would draw it on top of "£X.XX" instead of fixing anything.
-    // Tap-zone only, until the painter shows the cash figure too and he can paint clear
-    // of it — see 2026-09-07 chat.
+    // Osimo: "teach yourself to use a tool like [hud-painter]... paint, look, amend,
+    // perfect, lock in pixels." His first paint (PAUSE x88-132) landed on the cash figure
+    // (starts at L+78), so the glyph stayed put and only the tap-zone used it. This second
+    // pass was painted and verified collision-free by Claude directly (pau 0-28, snd 28-72,
+    // clear of cash at 78+) via the same tool, submitted as by:'claude' — so now the icon
+    // moves into the box too: what's drawn and what's pressable are finally the same pixels.
+    if (HUD_CTRL.pau) HUD_VISUAL.pau0 = HUD_CTRL.pau.x0 - SAFE.l + 6;
+    if (HUD_CTRL.snd) HUD_VISUAL.snd0 = HUD_CTRL.snd.x0 - SAFE.l + 6;
   }).catch(() => {});
 })();
 function drawHUD(now) {
