@@ -2748,6 +2748,11 @@ const HUD_CTRL = { pau: { x0: 2, x1: 32, y0: 0, y1: 54 },
                               y0: b.y0 * cell, y1: (b.y1 + 1) * cell };
     if (box[0]) HUD_CTRL.pau = toPx(box[0]);
     if (box[1]) HUD_CTRL.snd = toPx(box[1]);
+    // NOT repositioning the drawn glyph to match, on purpose, for now — his first
+    // submission's PAUSE box (x88-132) lands squarely on the cash figure (starts at L+78),
+    // so moving the icon there would draw it on top of "£X.XX" instead of fixing anything.
+    // Tap-zone only, until the painter shows the cash figure too and he can paint clear
+    // of it — see 2026-09-07 chat.
   }).catch(() => {});
 })();
 function drawHUD(now) {

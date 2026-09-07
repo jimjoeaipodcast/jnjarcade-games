@@ -127,6 +127,10 @@ function drawRef() {
   ctx.fillStyle = '#ffd75e';
   ctx.fillText('⏸', L + REF.pau0, 32 + T);
   ctx.fillText('🔊', L + REF.snd0, 32 + T);
+  // The cash figure sits right next to these two, and a first round of painting put PAUSE
+  // squarely on top of it — drawn here too now so a repaint can see it and steer clear.
+  ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
+  ctx.fillText('£12.06', L + 78, 32 + T);
   ctx.globalAlpha = 1;
 }
 
