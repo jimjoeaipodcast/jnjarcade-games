@@ -530,7 +530,7 @@ function drawProps(room) {
 // The two chesterfields in the studio, measured off the plate. Jimmy left, Joe right, every
 // time — and a seated sprite each, so a take actually looks like two people doing a podcast.
 // placed by Osimo in tools/overlay-placer?target=seats, 2026-09-07
-const SEAT = { jimmy: 332, joe: 629, feetJimmy: 409, feetJoe: 410, hJimmy: 176, hJoe: 180 };
+const SEAT = { jimmy: 330, joe: 626, feetJimmy: 410, feetJoe: 407, hJimmy: 176, hJoe: 180 };
 // FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
 // game play"): four down the left wall, one on the right. The corridor plate is now the
 // ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
@@ -561,15 +561,15 @@ const MACHINES = [
   // swatches were labelled in hotspot order, so his last three colours are the water
   // cooler, the vending machine and cabinet 5, not what the labels said. The geometry
   // says which is which unambiguously; the painter's swatch order is fixed to match.
-  { pay: 22, secs: 4.5, body: [0, 0, 270, 380], tag: [139, 208],
+  { pay: 22, secs: 4.5, body: [0, 0, 270, 380], tag: [145, 157], tagS: 0.85,
     punter: { h: 225, feet: 416, x: 268 }, flip: false },
-  { pay: 34, secs: 7.0, body: [240, 160, 70, 200], tag: [214, 176],
+  { pay: 34, secs: 7.0, body: [240, 160, 70, 200], tag: [224, 173], tagS: 0.85,
     punter: { h: 166, feet: 361, x: 327 }, flip: false },
-  { pay: 16, secs: 3.2, body: [290, 180, 70, 160], tag: [289, 215],
+  { pay: 16, secs: 3.2, body: [290, 180, 70, 160], tag: [301, 188], tagS: 0.85,
     punter: { h: 121, feet: 329, x: 363 }, flip: false },
-  { pay: 48, secs: 9.5, body: [340, 170, 50, 160], tag: [367, 178],
+  { pay: 48, secs: 9.5, body: [340, 170, 50, 160], tag: [380, 200], tagS: 0.85,
     punter: { h:  97, feet: 309, x: 397 }, flip: false },
-  { pay: 70, secs: 12.0, body: [700, 140, 140, 270], tag: [767, 156],
+  { pay: 70, secs: 12.0, body: [700, 140, 140, 270], tag: [767, 145], tagS: 0.85,
     punter: { h: 216, feet: 411, x: 690 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
@@ -609,27 +609,27 @@ const HALL_MACHINES = [
   // overlap in a receding row the nearer one wins the tap, which is what you expect.
   // TAG is where that machine's price/coins/jam card hangs, placed in
   // tools/overlay-placer?target=cards&room=hall. Both read out of KV on 2026-09-07.
-  { room: 'hall', pay: 90,  secs: 11.0, body: [0, 100, 190, 320], tag: [65, 160],
+  { room: 'hall', pay: 90,  secs: 11.0, body: [0, 100, 190, 320], tag: [65, 160], tagS: 0.85,
     punter: { h: 286, feet: 490, x: 178 }, face: 'left' },
-  { room: 'hall', pay: 68,  secs: 8.5,  body: [130, 160, 120, 220], tag: [145, 180],
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [130, 160, 120, 220], tag: [145, 180], tagS: 0.85,
     punter: { h: 221, feet: 435, x: 267 }, face: 'left' },
-  { room: 'hall', pay: 52,  secs: 6.5,  body: [220, 180, 90, 200], tag: [227, 198],
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [220, 180, 90, 200], tag: [227, 198], tagS: 0.85,
     punter: { h: 164, feet: 385, x: 312 }, face: 'left' },
-  { room: 'hall', pay: 40,  secs: 5.0,  body: [280, 190, 80, 170], tag: [305, 216],
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [280, 190, 80, 170], tag: [305, 216], tagS: 0.85,
     punter: { h: 124, feet: 358, x: 345 }, face: 'left' },
-  { room: 'hall', pay: 46,  secs: 6.0,  body: [380, 210, 40, 120], tag: [402, 204],
+  { room: 'hall', pay: 46,  secs: 6.0,  body: [380, 210, 40, 120], tag: [402, 204], tagS: 0.85,
     punter: { h: 109, feet: 344, x: 404 }, face: 'back' },
-  { room: 'hall', pay: 120, secs: 15.0, body: [530, 240, 90, 110], tag: [557, 225],
+  { room: 'hall', pay: 120, secs: 15.0, body: [530, 240, 90, 110], tag: [557, 225], tagS: 0.85,
     punter: { h: 98,  feet: 353, x: 533 }, face: 'right' },
-  { room: 'hall', pay: 30,  secs: 4.0,  body: [600, 200, 70, 150], tag: [640, 224],
+  { room: 'hall', pay: 30,  secs: 4.0,  body: [600, 200, 70, 150], tag: [640, 224], tagS: 0.85,
     punter: { h: 113, feet: 350, x: 611 }, face: 'right' },
-  { room: 'hall', pay: 40,  secs: 5.0,  body: [640, 200, 60, 180], tag: [681, 154],
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [640, 200, 60, 180], tag: [681, 154], tagS: 0.85,
     punter: { h: 144, feet: 373, x: 631 }, face: 'right' },
-  { room: 'hall', pay: 52,  secs: 6.5,  body: [670, 180, 80, 240], tag: [722, 223],
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [670, 180, 80, 240], tag: [722, 223], tagS: 0.85,
     punter: { h: 172, feet: 397, x: 665 }, face: 'right' },
-  { room: 'hall', pay: 68,  secs: 8.5,  body: [710, 150, 130, 290], tag: [800, 191],
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [710, 150, 130, 290], tag: [800, 191], tagS: 0.85,
     punter: { h: 212, feet: 428, x: 708 }, face: 'right' },
-  { room: 'hall', pay: 110, secs: 14.0, body: [780, 120, 170, 300], tag: [881, 163],
+  { room: 'hall', pay: 110, secs: 14.0, body: [780, 120, 170, 300], tag: [881, 163], tagS: 0.85,
     punter: { h: 286, feet: 482, x: 776 }, face: 'right' },
 ];
 // flip and sprite set both come from `face`, so they cannot disagree with each other
@@ -1649,8 +1649,17 @@ canvas.addEventListener('mousedown', onTap);
 // rather than a fixed 30px guessed against a list of unknown length, which is what put
 // sixteen entries on top of each other. Numbers are his 960x540 figures scaled to the
 // plate's own 640x360 space.
-const LEDGER_ART = { w: 640, h: 360, pageY0: 58, pageY1: 282,
-                     colX: [91, 333], colW: 199, rows: 11 };
+// Each page is TWO handles — where its first line sits and where its last line sits — and
+// every row in between is interpolated along that line, x as well as y. Osimo 2026-09-07:
+// "allow me on the ledger to lock in the top one, and select the one at the bottom of the
+// relative page, and say I move it to the left, you get a straight line from the top one to
+// the bottom one I just moved so I can follow the red line on the page."
+// So the column LEANS with the page's own ruling instead of standing square on a book that
+// is drawn in perspective. Leave the two x's equal and it is a plumb column, as before.
+// His figures (960x540) scaled into the plate's own 640x360 space.
+const LEDGER_ART = { w: 640, h: 360, colW: 199, rows: 11,
+                     cols: [{ x0: 91,  y0: 58, x1: 91,  y1: 283 },
+                            { x0: 332, y0: 59, x1: 332, y1: 283 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
@@ -1665,16 +1674,17 @@ function bookRect() {
 }
 function shopMetrics() {
   const b = bookRect();
-  // Osimo's first-line and last-line handles ARE the first and last row centres, and his
-  // row count is the pitch. No head offset: the title sits above his first line, in the
+  // His first-line and last-line handles ARE the first and last row centres, per page, and
+  // his row count is the pitch. No head offset: the title sits above his first line, in the
   // margin he left for it.
-  const y0 = b.dy + LEDGER_ART.pageY0 * b.sc;
-  const y1 = b.dy + LEDGER_ART.pageY1 * b.sc;
   const perCol = Math.max(1, LEDGER_ART.rows);
-  const rowH = perCol > 1 ? (y1 - y0) / (perCol - 1) : LEDGER_ROW_H;
-  const cols = LEDGER_ART.colX.map(x => b.dx + x * b.sc);
+  const cols = LEDGER_ART.cols.map(c => ({
+    x0: b.dx + c.x0 * b.sc, y0: b.dy + c.y0 * b.sc,
+    x1: b.dx + c.x1 * b.sc, y1: b.dy + c.y1 * b.sc,
+  }));
+  const rowH = perCol > 1 ? (cols[0].y1 - cols[0].y0) / (perCol - 1) : LEDGER_ROW_H;
   return { SW: b.SW, SH: b.SH, book: b, rowH, perCol, cols,
-           w: Math.round(LEDGER_ART.colW * b.sc), x0: cols[0], y0,
+           w: Math.round(LEDGER_ART.colW * b.sc), x0: cols[0].x0, y0: cols[0].y0,
            iconR: Math.min(rowH * 0.52, 20) };
 }
 // Trim a string to a pixel width in the CURRENT font, ellipsis included.
@@ -1697,8 +1707,10 @@ function shopRows() {
   const list = UPGRADES.filter(upgradeAvailable);
   return list.map((u, i) => {
     const col = Math.min(m.cols.length - 1, Math.floor(i / m.perCol)), k = i % m.perCol;
-    const cy = m.y0 + k * m.rowH;                  // the logo's CENTRE, on the line
-    const cx = m.cols[col];
+    const c = m.cols[col];
+    const t = m.perCol > 1 ? k / (m.perCol - 1) : 0;
+    const cy = c.y0 + (c.y1 - c.y0) * t;           // the logo's CENTRE, on the line
+    const cx = c.x0 + (c.x1 - c.x0) * t;           // …and leaning with the page's own rule
     return { u, cx, cy, x: cx - m.iconR, y: cy - m.rowH / 2, w: m.w, h: m.rowH };
   });
 }
@@ -1882,7 +1894,7 @@ function drawShopState() {
   for (const k in SHOPS) {
     const h = ROOMS.corridor.hotspots.find(x => x.id === k);
     if (!h) continue;
-    const m = { body: [h.x, h.y, h.w, h.h], tag: SHOP_TAG[k], hotId: k };
+    const m = { body: [h.x, h.y, h.w, h.h], tag: SHOP_TAG[k], tagS: 0.85, hotId: k };
     const cx = m.tag ? m.tag[0] : h.x + h.w / 2, cy = m.tag ? m.tag[1] : h.y - 4;
     // Osimo 2026-09-07: "there's no prices on the vending machine and the water machine, add
     // them." An unbought one now carries the same price card every dark cabinet does.
@@ -1943,7 +1955,7 @@ function drawCabState() {
 // Same cream-and-brown as the hosts' speech bubbles, because it is the same voice: this is
 // the building telling you something.
 // Where the cooler's and the vending machine's cards hang. Placed like the machines' own.
-const SHOP_TAG = { cooler: [608, 196], vending: [654, 163] };
+const SHOP_TAG = { cooler: [608, 196], vending: [687, 170] };
 // THE CARD IS THE BUTTON. Osimo 2026-09-07: "scrap the idea we had of pressing the clickable
 // colours of the arcades — instead to cash in, refill, and fix arcades we shall in future
 // just press the square above the machine, it will make it easier."
@@ -2412,12 +2424,12 @@ function drawShop() {
   if (bk) ctx.drawImage(bk, m.book.dx, m.book.dy, bk.width * m.book.sc, bk.height * m.book.sc);
   // Title block sits on the paper at the top of the left page, in BOOK space, so it moves
   // with the book instead of floating at a fixed fraction of the screen.
-  const headY = m.book.dy + LEDGER_ART.pageY0 * m.book.sc - 62;
+  const headY = m.cols[0].y0 - 62;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.cols[0] - m.iconR, headY + 20);
+  ctx.fillText('THE LEDGER', m.cols[0].x0 - m.iconR, headY + 20);
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0] - m.iconR, headY + 38);
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0].x0 - m.iconR, headY + 38);
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
@@ -2604,7 +2616,7 @@ window.__TC = {
   ledgerQA() {
     const m = shopMetrics(), b = m.book;
     return { firstRowInBook: +(((m.y0 - b.dy) / (b.bh * b.sc))).toFixed(4),
-             colInBook: +(((m.cols[0] - b.dx) / (b.bw * b.sc))).toFixed(4),
+             colInBook: +(((m.cols[0].x0 - b.dx) / (b.bw * b.sc))).toFixed(4),
              widthInBook: +((m.w / (b.bw * b.sc))).toFixed(4),
              rowsPerCol: m.perCol };
   },

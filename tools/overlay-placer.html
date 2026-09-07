@@ -68,7 +68,7 @@
 <div class="bar" id="bot">
   <button id="smaller">− WIDTH</button>
   <button id="bigger">+ WIDTH</button>
-  <span id="hint">drag · pinch to size</span>
+  <span id="hint">drag top &amp; bottom · the rows follow the line</span>
   <span style="flex:1"></span>
   <button id="reset">RESET</button>
   <button class="go" id="submit">SUBMIT</button>
@@ -90,11 +90,18 @@ let plate = null, SPR = {}, sel = 0;
 // ── what each target is made of ─────────────────────────────────────────────
 // LEDGER: four handles that between them define the whole written column — the game
 // derives every row from these, exactly as it does now from LEDGER_ART.
+// FOUR row handles now — a first AND a last for each page. Osimo 2026-09-07: "allow me to
+// lock in the top one, and select the one at the bottom of the relative page, and say I move
+// it to the left, you get a straight line from the top one to the bottom one I just moved so
+// I can follow the red line on the page."
+// Every row between them is interpolated along that line, x as well as y, so the column
+// leans with the page's own ruling. Leave a page's two x's equal and it stands plumb.
 const LEDGER = [
-  { id: 'firstRow', label: 'FIRST LINE (left page)',  x: 118, y: 60,  kind: 'row' },
-  { id: 'lastRow',  label: 'LAST LINE (left page)',   x: 118, y: 306, kind: 'row' },
-  { id: 'col2',     label: 'FIRST LINE (right page)', x: 355, y: 60,  kind: 'row' },
-  { id: 'width',    label: 'COLUMN WIDTH',            x: 118, y: 180, w: 178, kind: 'width' },
+  { id: 'firstRow', label: 'TOP LINE — left page',    x: 136, y: 87,  kind: 'row', col: 0, end: 0 },
+  { id: 'lastRow',  label: 'BOTTOM LINE — left page', x: 136, y: 425, kind: 'row', col: 0, end: 1 },
+  { id: 'col2',     label: 'TOP LINE — right page',   x: 498, y: 88,  kind: 'row', col: 1, end: 0 },
+  { id: 'col2Last', label: 'BOTTOM LINE — right page',x: 498, y: 425, kind: 'row', col: 1, end: 1 },
+  { id: 'width',    label: 'COLUMN WIDTH',            x: 136, y: 256, w: 298, kind: 'width' },
 ];
 // Osimo 2026-09-07: "I need a total amount that we would use, the max per page, so you always
 // know where to place them when there's loads." Three sample rows told him nothing about how
@@ -310,13 +317,18 @@ function drawRow(o, on) {
 
 function drawWidth(o, on) {
   const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
+  // the guide follows the lean, so you can see the column running parallel to the rule
   ctx.strokeStyle = on ? '#ffd75e' : 'rgba(255,215,94,0.55)';
   ctx.lineWidth = on ? 3 : 2;
   ctx.setLineDash([8, 6]);
-  ctx.strokeRect(first.x - 4, first.y - 15, o.w, (last.y - first.y) + 30);
+  ctx.beginPath();
+  ctx.moveTo(first.x - 4, first.y - 15);
+  ctx.lineTo(first.x - 4 + o.w, first.y - 15);
+  ctx.lineTo(last.x - 4 + o.w, last.y + 15);
+  ctx.lineTo(last.x - 4, last.y + 15);
+  ctx.closePath(); ctx.stroke();
   ctx.setLineDash([]);
-  // the handle itself, on the right edge, halfway down
-  const hx = first.x - 4 + o.w, hy = (first.y + last.y) / 2;
+  const hx = (first.x + last.x) / 2 - 4 + o.w, hy = (first.y + last.y) / 2;
   ctx.fillStyle = on ? '#ffd75e' : 'rgba(255,215,94,0.7)';
   roundRect(hx - 9, hy - 22, 18, 44, 6); ctx.fill();
   o._box = { x: hx - 16, y: hy - 28, w: 32, h: 56 };
@@ -339,13 +351,16 @@ function frame() {
     ctx.fillText('£5.00 in the safe', f0.x - 20, f0.y - 24);
     // the whole column, both pages, at the density he has chosen — the ghosts are what the
     // page looks like FULL, and the three handles are drawn solid on top of them
-    const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
-    const col2 = items.find(i => i.id === 'col2');
-    const step = rows > 1 ? (last.y - first.y) / (rows - 1) : 0;
-    for (let n = 0; n < rows; n++) {
-      const y = first.y + step * n;
-      if (n > 0 && n < rows - 1) ghostRow(first.x, y);
-      ghostRow(col2.x, col2.y + step * n, n === 0);
+    // both columns, each leaning between its own pair of handles
+    for (let c = 0; c < 2; c++) {
+      const a = items.find(i => i.col === c && i.end === 0);
+      const b2 = items.find(i => i.col === c && i.end === 1);
+      if (!a || !b2) continue;
+      for (let n = 0; n < rows; n++) {
+        const t = rows > 1 ? n / (rows - 1) : 0;
+        if (n === 0 || n === rows - 1) continue;      // the handles draw those two
+        ghostRow(a.x + (b2.x - a.x) * t, a.y + (b2.y - a.y) * t);
+      }
     }
   }
   items.forEach((o, i) => {
@@ -432,8 +447,10 @@ window.addEventListener('keydown', e => {
 function updateSel() {
   const o = items[sel];
   const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
-  const pitch = (TARGET === 'ledger' && rows > 1)
+  const lean = first && last ? Math.round(last.x - first.x) : 0;
+  const pitch = (TARGET === 'ledger' && rows > 1 && first && last)
     ? '  ·  ' + rows + ' rows/page, ' + Math.round((last.y - first.y) / (rows - 1)) + 'px apart'
+      + (lean ? ', lean ' + (lean > 0 ? '+' : '') + lean : '')
     : '';
   document.getElementById('sel').textContent =
     (sel + 1) + '/' + items.length + '  ' + o.label + '   x' + Math.round(o.x) +
