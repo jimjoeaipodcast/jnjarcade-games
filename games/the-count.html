@@ -463,8 +463,13 @@ const SHOWS = [
     col: '#59b6ff', minHype: 40 },
   { id: 'bright',    name: 'BRIGHT SIDE',   ms: 14000, base: 200, per: 6,  roy: 70,
     col: '#ffd75e', minHype: 20 },
+  // Osimo 2026-09-07: "for the buy or ByeBye single product, once an episode is recorded
+  // (one product) a cool down period starts, and you can only do one per day." One episode
+  // IS one product, so there is only one a day to be had — and a cooldown on top, so you
+  // cannot record it the moment the bell has gone either. It is the show you have to plan
+  // your night around rather than the one you fall back on.
   { id: 'byebye',    name: 'BUY OR BYEBYE', ms: 18000, base: 100, per: 11, roy: 90,
-    col: '#ff6bc0', minHype: 55 },
+    col: '#ff6bc0', minHype: 55, oncePerDay: true, cool: 60000 },
   { id: 'unplugged', name: 'JNJ UNPLUGGED', ms: 26000, base: 400, per: 7,  roy: 130,
     col: '#8effc2', minHype: 30 },
 ];
@@ -817,6 +822,15 @@ let shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0,
 let held = { jug: 0, box: 0 };          // what you are carrying back from the prop room
 const HELD_MAX = 2;
 let royaltyRate = 0;          // total nightly royalty from everything ever recorded
+// Which day a limited show was last recorded, and when its cooldown lifts. Both are needed:
+// the day cap is the rule, the cooldown is what stops you queueing one the instant a night
+// rolls over.
+let showDay = {}, showCool = {};
+function showBlocked(s, now) {
+  if (s.oncePerDay && showDay[s.id] === day) return 'day';
+  if (showCool[s.id] && now < showCool[s.id]) return 'cool';
+  return null;
+}
 // PAUSE (Osimo 2026-09-07: "add a pause button, and it must save the position and
 // everything of the game play, even through days"). Pausing writes the full run — the
 // night's remaining time, every machine's till and jam, where both hosts are standing,
@@ -856,7 +870,7 @@ function saveRun() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 1, t: Date.now(), cash, day, banked, apronLvl, lvls, owned, bottles, decanter, episodes,
-      hype: Math.round(hype), carry: hosts.jimmy.carry, joeCarry: hosts.joe.carry,
+      hype: Math.round(hype), carry: hosts.jimmy.carry, joeCarry: hosts.joe.carry, showDay,
       royaltyRate, shops, held,
       // where you were standing and which of them you were driving, so a resumed run puts
       // you back where you left off rather than at the start of the corridor
@@ -888,6 +902,8 @@ function resumeRun() {
   royaltyRate = (s2.royaltyRate !== undefined) ? s2.royaltyRate : episodes * ROYALTY;
   if (s2.shops) for (const k in shops) if (s2.shops[k]) Object.assign(shops[k], s2.shops[k]);
   if (s2.held) held = { jug: s2.held.jug || 0, box: s2.held.box || 0 };
+  showDay = s2.showDay || {}; showCool = {};   // a cooldown does not survive a reload; the
+                                               // day cap does, because it is the actual rule
   hosts.jimmy.carry = s2.carry || 0;
   hosts.joe.carry = s2.joeCarry || 0;
   boxOpenedToday = !!s2.boxOpenedToday;
@@ -929,6 +945,7 @@ function newRun() {
   banked = 0; apronLvl = 0; lvls = {}; owned = {}; punters = []; floaters = []; coins = [];
   episodes = 0; rec = null; royaltyRate = 0;
   shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0, t: 0 } };
+  showDay = {}; showCool = {};
   held = { jug: 0, box: 0 };
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
@@ -1231,6 +1248,14 @@ function startRec(show) {
   const s = show || PLAIN;
   const here = s === PLAIN ? 'studio' : 'podcast';
   if (rec) { say('Already rolling.'); return; }
+  const block = showBlocked(s, performance.now());
+  if (block === 'day') {
+    say(s.name + ' is one product a day. Come back tomorrow.', 3200); SFX.deny(); return;
+  }
+  if (block === 'cool') {
+    const left = Math.ceil((showCool[s.id] - performance.now()) / 1000);
+    say(s.name + ' is still turning round — ' + left + 's.', 2600); SFX.deny(); return;
+  }
   if (hype < s.minHype) {
     say(s.name + ' needs a bigger crowd than that — ' + s.minHype + '% hype. Get on the mic.',
         3400);
@@ -1265,6 +1290,8 @@ function updateRec(dt, now) {
   // exactly the long shows that are meant to be worth the most.
   const s = rec.show, pay = recPay(rec.hype0, s);
   rec = null; episodes++;
+  showDay[s.id] = day;
+  if (s.cool) showCool[s.id] = now + s.cool;
   royaltyRate += s.roy;
   cash += pay; banked += pay;
   SFX.bank();
@@ -2077,13 +2104,18 @@ function drawShowSigns(now) {
   const H = ROOMS.podcast.hotspots;
   for (const h of H) {
     if (h.show === undefined) continue;
-    const s = SHOWS[h.show], cx = h.x + h.w / 2, ok = hype >= s.minHype && !rec;
-    // just above the desk, not below it — at the old height the cards sat behind whoever
-    // was standing at the mic
-    const y = h.y + 176;
+    const s = SHOWS[h.show], cx = h.x + h.w / 2;
+    const block = showBlocked(s, now);
+    const ok = !block && hype >= s.minHype && !rec;
+    // Just under the neon, not down at desk height: at the old height a host standing at
+    // that position stood in front of his own rate card.
+    const y = h.y + 60;
     ctx.save();
     ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
-    const txt = ok ? '£' + (recPay(hype, s) / 100).toFixed(2) : s.minHype + '% HYPE';
+    const txt = block === 'day' ? 'TOMORROW'
+              : block === 'cool' ? Math.ceil((showCool[s.id] - now) / 1000) + 's'
+              : ok ? '£' + (recPay(hype, s) / 100).toFixed(2)
+              : s.minHype + '% HYPE';
     const w = Math.max(96, ctx.measureText(txt).width + 26);
     ctx.fillStyle = 'rgba(252,246,232,0.96)';
     roundRect(cx - w / 2, y, w, 30, 8); ctx.fill();
@@ -2338,7 +2370,10 @@ function drawMsg(now) {
   if (!msg || now > msgUntil) return;
   ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
   const w = ctx.measureText(msg).width + 40, h = 38;
-  const x = (WORLD_W - w) / 2, y = WORLD_H - 96;
+  // A spoken bubble occupies the bottom of the screen, and the strip was drawing UNDER it —
+  // two cards half on top of each other saying different things. When one of them is
+  // talking, the strip moves up out of its way.
+  const x = (WORLD_W - w) / 2, y = bubble ? 96 : WORLD_H - 96;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3;
   ctx.fillStyle = 'rgba(252,246,232,0.97)';
