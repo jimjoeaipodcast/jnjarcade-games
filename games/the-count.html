@@ -612,8 +612,10 @@ function drawProps(room) {
 // Jimmy sat backwards — but the placer draws both unmirrored, so that was me introducing the
 // very mismatch he was reporting. Neither is flipped unless he presses ⇄ in the placer, and
 // that choice now survives the endpoint (it was being dropped — see functions/api/press.js).
+// Placed by Osimo, 2026-09-07 — and his ⇄ on Jimmy is here because the endpoint keeps flip
+// now. This is the first placement that could carry a mirror at all.
 const SEAT = { jimmy: 330, joe: 626, feetJimmy: 410, feetJoe: 407, hJimmy: 176, hJoe: 180,
-               flipJimmy: false, flipJoe: false };
+               flipJimmy: true, flipJoe: false };
 // FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
 // game play"): four down the left wall, one on the right. The corridor plate is now the
 // ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
@@ -653,7 +655,7 @@ const MACHINES = [
   { pay: 48, secs: 9.5, body: [340, 170, 50, 160], tag: [380, 200], tagS: 0.85,
     punter: { h:  97, feet: 309, x: 397 }, flip: false },
   { pay: 70, secs: 12.0, body: [700, 140, 140, 270], tag: [767, 145], tagS: 0.85,
-    punter: { h: 216, feet: 411, x: 690 }, flip: true },
+    punter: { h: 216, feet: 406, x: 689 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 // THE BIG ROOM (Osimo 2026-09-05: "once we unlock absolutely everything, an arrow going
@@ -946,10 +948,10 @@ let episodes = 0, rec = null; // rec = { show, until, hype0 } while the red ligh
 const SHOPS = {
   cooler:  { id: 'cooler',  name: 'THE WATER COOLER', per: 25, tick: 1800, load: 6,
              stockId: 'jug',  stockCost: 100, stockName: 'water jug',
-             cust: { x: 566, feet: 432, h: 150, flip: false } },
+             cust: { x: 569, feet: 320, h: 114, flip: true } },   // placed 2026-09-07
   vending: { id: 'vending', name: 'THE VENDING MACHINE', per: 35, tick: 2400, load: 10,
              stockId: 'box',  stockCost: 200, stockName: 'vending box',
-             cust: { x: 700, feet: 444, h: 162, flip: true } },
+             cust: { x: 621, feet: 349, h: 150, flip: true } },   // placed 2026-09-07
 };
 const CUST_MS = 2600;          // how long a customer stands at it before paying and going
 let shops = { cooler: { stock: 0, till: 0, t: 0, cust: null },
