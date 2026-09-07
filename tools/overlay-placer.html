@@ -107,14 +107,15 @@ const ROWS_MIN = 3, ROWS_MAX = 16;
 // card's anchor point in world space; the game keeps drawing the card upward from it.
 const CARDS = {
   hall: [
-    ['LEFT 1 — BY THE DOOR', 128, 234], ['LEFT 2', 218, 240], ['LEFT 3', 277, 246],
-    ['LEFT 4 — FAR END', 316, 248], ['BACK WALL', 394, 222],
-    ['THE PINBALL TABLE', 573, 240], ['RIGHT 5 — FAR END', 617, 252], ['RIGHT 4', 644, 248],
-    ['RIGHT 3', 683, 246], ['RIGHT 2', 742, 240], ['RIGHT 1 — BY THE DOOR', 865, 234],
+    ['LEFT 1 — BY THE DOOR', 65, 160], ['LEFT 2', 145, 180], ['LEFT 3', 227, 198],
+    ['LEFT 4 — FAR END', 305, 216], ['BACK WALL', 402, 204],
+    ['THE PINBALL TABLE', 557, 225], ['RIGHT 5 — FAR END', 640, 224], ['RIGHT 4', 681, 154],
+    ['RIGHT 3', 722, 223], ['RIGHT 2', 800, 191], ['RIGHT 1 — BY THE DOOR', 881, 163],
   ],
   corridor: [
-    ['CABINET 1 — NEAREST', 192, 209], ['CABINET 2', 266, 212], ['CABINET 3', 318, 215],
-    ['CABINET 4 — FAR END', 362, 218], ['CABINET 5 — THE RED ONE', 757, 212],
+    ['CABINET 1 — NEAREST', 139, 208], ['CABINET 2', 214, 176], ['CABINET 3', 289, 215],
+    ['CABINET 4 — FAR END', 367, 178], ['CABINET 5 — THE RED ONE', 767, 156],
+    ['THE WATER COOLER', 608, 196], ['THE VENDING MACHINE', 654, 163],
   ],
 };
 // SEATS: where Jimmy and Joe sit for a take, and how big they are. Jimmy is always the left
@@ -139,7 +140,7 @@ function build() {
   if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
   if (TARGET === 'seats')  return SEATS.map(o => ({ ...o }));
   if (TARGET === 'stock')  return STOCK.map(o => ({ ...o }));
-  return CARDS[ROOM].map(([label, x, y], i) => ({ id: 'card' + i, label, x, y, kind: 'card' }));
+  return CARDS[ROOM].map(([label, x, y], i) => ({ id: 'card' + i, label, x, y, s: 0.85, kind: 'card' }));
 }
 let items = build();
 
@@ -165,7 +166,7 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=21').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=22').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
@@ -182,7 +183,9 @@ fetch('/api/press?kind=points&room=' + SCENE).then(r => r.json()).then(d => {
     const m = items.find(o => o.id === it.id);
     if (!m) return;
     m.x = it.x; m.y = it.y;
-    if (it.w !== undefined && it.w !== null) m.w = it.w;
+    if (it.w !== undefined && it.w !== null) {
+      if (m.kind === 'card') m.s = it.w / 100; else m.w = it.w;
+    }
     if (it.h !== undefined && it.h !== null && m.kind !== 'row') m.h = it.h;
     if (typeof it.flip === 'boolean') m.flip = it.flip;
   });
@@ -203,7 +206,8 @@ function roundRect(x, y, w, h, r) {
 // A stand-in of the game's own card, so what is dragged looks like what will be drawn.
 function drawCard(o, on) {
   const icon = SPR.icCoin || SPR.icCab;
-  const s = 0.85, ir = Math.round(40 * s), pad = Math.round(8 * s);
+  const s = o.s === undefined ? 0.85 : o.s;
+  const ir = Math.round(40 * s), pad = Math.round(8 * s);
   ctx.font = 'bold ' + Math.round(20 * s) + 'px "Barlow Condensed",sans-serif';
   const txt = '£70.00';
   const w = Math.max(ir, ctx.measureText(txt).width) + pad * 2;
@@ -325,6 +329,14 @@ function frame() {
   ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
   if (plate) ctx.drawImage(plate, 0, 0, W, H);
   if (TARGET === 'ledger') {
+    // the title block the game writes above the first line, so the page you are laying out
+    // is the whole page and not just the list
+    const f0 = items.find(i => i.id === 'firstRow');
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
+    ctx.fillText('THE LEDGER', f0.x - 20, f0.y - 42);
+    ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+    ctx.fillText('£5.00 in the safe', f0.x - 20, f0.y - 24);
     // the whole column, both pages, at the density he has chosen — the ghosts are what the
     // page looks like FULL, and the three handles are drawn solid on top of them
     const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
@@ -363,7 +375,7 @@ canvas.addEventListener('touchstart', e => {
   if (e.touches.length === 2) {
     const o = items[sel];
     pinch = { d: dist(e.touches[0], e.touches[1]),
-              v: o.kind === 'sprite' ? o.h : (o.kind === 'box' ? o.w
+              v: o.kind === 'card' ? o.s : o.kind === 'sprite' ? o.h : (o.kind === 'box' ? o.w
                  : (items.find(i => i.id === 'width') || { w: 178 }).w) };
     drag = null; return;
   }
@@ -376,7 +388,8 @@ canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   if (pinch && e.touches.length === 2) {
     const o = items[sel], k = dist(e.touches[0], e.touches[1]) / pinch.d;
-    if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, Math.round(pinch.v * k)));
+    if (o.kind === 'card') o.s = Math.max(0.35, Math.min(2, +(pinch.v * k).toFixed(3)));
+    else if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, Math.round(pinch.v * k)));
     else if (o.kind === 'box') {
       const r = o.h / o.w;
       o.w = Math.max(20, Math.min(600, Math.round(pinch.v * k)));
@@ -426,6 +439,7 @@ function updateSel() {
     (sel + 1) + '/' + items.length + '  ' + o.label + '   x' + Math.round(o.x) +
     ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '') +
     (o.h !== undefined && o.kind !== 'row' ? ' h' + Math.round(o.h) : '') +
+    (o.s !== undefined ? ' size' + Math.round(o.s * 100) + '%' : '') +
     (o.flip ? ' ⇄' : '') + pitch;
 }
 updateSel();
@@ -436,7 +450,8 @@ document.getElementById('next').onclick = () => { sel = (sel + 1) % items.length
 // size, or the ledger column's width.
 function resizeSel(d) {
   const o = items[sel];
-  if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, o.h + d));
+  if (o.kind === 'card') o.s = Math.max(0.35, Math.min(2, +(o.s + d * 0.02).toFixed(3)));
+  else if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, o.h + d));
   else if (o.kind === 'box') {
     o.w = Math.max(20, Math.min(600, o.w + d));
     o.h = Math.max(20, Math.min(500, o.h + d));
@@ -472,7 +487,11 @@ if (submitBtn) submitBtn.onclick = async () => {
         items: items.map(o => ({ id: o.id, x: Math.round(o.x), y: Math.round(o.y),
                                  w: o.w === undefined ? undefined : Math.round(o.w),
                                  h: o.h === undefined ? undefined : Math.round(o.h),
-                                 flip: !!o.flip }))
+                                 flip: !!o.flip,
+                                 // card size rides in `w` as a percentage — the endpoint
+                                 // already clamps and stores that field
+                                 w: o.s !== undefined ? Math.round(o.s * 100)
+                                    : (o.w === undefined ? undefined : Math.round(o.w)) }))
           // the row count rides along as an item so the endpoint needs no new field
           .concat(TARGET === 'ledger' ? [{ id: 'rowsPerPage', x: rows, y: 0 }] : []) }),
     });
