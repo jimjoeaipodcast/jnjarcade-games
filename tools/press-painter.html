@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PRESS PAINTER</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  Osimo 2026-09-07: "another html that allows me to color in any page pressables
+  so color in different colours, say one colour for each arcade, so the screen
+  picks up exactly what I'm pressing correctly."
+
+  So: paint the room. One colour per target. Whatever you paint IS that target's
+  tap area — no more guessing a rectangle off a screenshot and finding the tap
+  lands on the machine next door.
+
+  Painted at 96x54 (one cell = 10x10 world px), which is coarse enough to paint
+  with a thumb and fine enough for a hit test. SUBMIT posts the grid; Claude
+  turns each colour's cells into that hotspot's box.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0b0904; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none;
+               font-family: 'Barlow Condensed', 'Helvetica Neue', sans-serif; color: #e8c35a; }
+  #c { display: block; position: fixed; left: 0; top: 0; }
+  .bar { position: fixed; left: 0; right: 0; display: flex; align-items: center; gap: 6px;
+         padding: 7px 10px; z-index: 5; pointer-events: none; flex-wrap: nowrap;
+         overflow-x: auto; }
+  .bar > * { pointer-events: auto; flex: 0 0 auto; }
+  #top { top: 0; background: linear-gradient(rgba(6,5,4,.88), rgba(6,5,4,0)); }
+  #bot { bottom: 0; background: linear-gradient(rgba(6,5,4,0), rgba(6,5,4,.92)); }
+  button { font: bold 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .04em;
+           padding: 10px 13px; border-radius: 9px; border: 1.5px solid #ffffff33;
+           background: #1a1409; color: #cfc6b4; cursor: pointer; }
+  button.go { background: #e8c35a; color: #241a06; border-color: #e8c35a; }
+  .sw { width: 40px; height: 40px; border-radius: 9px; border: 2px solid #ffffff33;
+        cursor: pointer; padding: 0; }
+  .sw.on { border-color: #fff; box-shadow: 0 0 0 3px #ffffff55; }
+  #sel { font-size: 15px; color: #fff3d0; white-space: nowrap; overflow: hidden;
+         text-overflow: ellipsis; max-width: 42vw; }
+  #top { flex-wrap: nowrap; }
+  #toast { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+           background: rgba(10,8,4,.95); border: 2px solid #e8c35a; border-radius: 14px;
+           padding: 18px 24px; font-size: 17px; text-align: center; z-index: 9;
+           display: none; max-width: 80vw; }
+  #rot { display: none; }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rot { display: flex; position: fixed; inset: 0; z-index: 40; flex-direction: column;
+           align-items: center; justify-content: center; gap: 18px; background: #0b0904;
+           text-align: center; padding: 24px; }
+    #rot .ph { font-size: 62px; }
+    #c, .bar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="rot"><div class="ph">📱</div><h2>TURN YOUR PHONE</h2>
+  <p style="color:#9aa;font-size:13px">These rooms are sideways.</p></div>
+<!-- SUBMIT lives in the TOP bar: the swatch row is as long as the room has pressables and
+     scrolls sideways, which pushed the button off the edge of a phone entirely. -->
+<div class="bar" id="top">
+  <div id="sel">PICK A COLOUR, THEN PAINT</div>
+  <span style="flex:1"></span>
+  <button id="erase">ERASE</button>
+  <button id="brush">BRUSH 2</button>
+  <button id="fade">ART 60%</button>
+  <button id="clear">CLEAR</button>
+  <button class="go" id="submit">SUBMIT</button>
+</div>
+<div class="bar" id="bot"><div id="swatches" style="display:flex;gap:6px"></div></div>
+<div id="toast"></div>
+<script>
+(function () {
+'use strict';
+const QS = new URLSearchParams(location.search);
+const ROOM = ['hall', 'corridor', 'studio', 'coinroom', 'prop', 'podcast']
+  .includes(QS.get('room')) ? QS.get('room') : 'hall';
+const EDIT = QS.get('edit') === '1';
+const W = 960, H = 540;                 // the game's world
+const GX = 96, GY = 54, CELL = 10;      // paint grid: one cell is 10x10 world px
+
+// What is pressable in each room, in the game's own hotspot order. One colour each — Osimo
+// paints machine 1 red, machine 2 orange and so on, and whatever he paints becomes that
+// hotspot's box.
+const TARGETS = {
+  hall: [
+    ['LEFT 1 — BY THE DOOR', '#ff4d4d'], ['LEFT 2', '#ff9a3d'], ['LEFT 3', '#ffd75e'],
+    ['LEFT 4 — FAR END', '#b6ff5e'], ['BACK WALL', '#5effc2'], ['THE PINBALL TABLE', '#5ed0ff'],
+    ['RIGHT 5 — FAR END', '#7a8cff'], ['RIGHT 4', '#b98cff'], ['RIGHT 3', '#ff7ae0'],
+    ['RIGHT 2', '#ff5e9a'], ['RIGHT 1 — BY THE DOOR', '#ffffff'],
+    ['DOOR ← ARCADE', '#8a6a3a'], ['DOOR → PODCAST', '#3a8a6a'],
+  ],
+  corridor: [
+    ['CABINET 1 — NEAREST', '#ff4d4d'], ['CABINET 2', '#ff9a3d'], ['CABINET 3', '#ffd75e'],
+    ['CABINET 4 — FAR END', '#b6ff5e'], ['CABINET 5 — THE RED ONE', '#5ed0ff'],
+    ['PROP ROOM DOOR', '#b98cff'], ['DOOR ← STUDIO', '#8a6a3a'], ['DOOR → BIG ROOM', '#3a8a6a'],
+    ['WATER COOLER', '#5effc2'], ['VENDING MACHINE', '#ff7ae0'],
+  ],
+  podcast: [
+    ['SERIOUSLY', '#59b6ff'], ['BRIGHT SIDE', '#ffd75e'], ['BUY OR BYEBYE', '#ff6bc0'],
+    ['JNJ UNPLUGGED', '#8effc2'], ['DOOR ← BIG ROOM', '#8a6a3a'],
+  ],
+  studio: [
+    ['THE MIC', '#ff4d4d'], ['THE TV', '#5ed0ff'], ['THE DECANTER', '#ffd75e'],
+    ['THE CHESTERFIELD', '#b6ff5e'], ['DOOR ← COIN CLOSET', '#8a6a3a'],
+    ['DOOR → ARCADE', '#3a8a6a'],
+  ],
+  coinroom: [
+    ['THE SAFE', '#ff4d4d'], ['THE LEDGER', '#ffd75e'], ['THE COUNTER', '#5ed0ff'],
+    ['DOOR → STUDIO', '#3a8a6a'],
+  ],
+  prop: [
+    ['THE WHISKY CRATE', '#ff4d4d'], ['THE BITS BOX', '#ffd75e'], ['THE SHELVES', '#5ed0ff'],
+    ['DOOR ← ARCADE', '#8a6a3a'], ['DOOR → ARCADE', '#3a8a6a'],
+  ],
+};
+const LIST = TARGETS[ROOM] || TARGETS.hall;
+
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
+let plate = null, sel = 0, brush = 2, erasing = false, fade = 0.6;
+// grid[y][x] = target index, or -1
+const grid = Array.from({ length: GY }, () => new Int8Array(GX).fill(-1));
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(document.documentElement.clientWidth);
+  const h = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  canvas.width = Math.round(w * DPR); canvas.height = Math.round(h * DPR);
+  VIEW.scale = Math.min(canvas.width / W, canvas.height / H);   // contain — paint it all
+  VIEW.ox = Math.round((canvas.width - W * VIEW.scale) / 2);
+  VIEW.oy = Math.round((canvas.height - H * VIEW.scale) / 2);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+setInterval(resize, 300);
+resize();
+
+function toCell(px, py) {
+  const r = canvas.getBoundingClientRect();
+  const wx = ((px - r.left) * DPR - VIEW.ox) / VIEW.scale;
+  const wy = ((py - r.top) * DPR - VIEW.oy) / VIEW.scale;
+  return { cx: Math.floor(wx / CELL), cy: Math.floor(wy / CELL) };
+}
+
+fetch('../games/the-count-pack.json?v=16').then(r => r.json()).then(p => {
+  const im = new Image(); im.onload = () => { plate = im; }; im.src = p.art[ROOM];
+}).catch(() => toast('Could not load the art pack.'));
+
+fetch('/api/press?room=' + ROOM).then(r => r.json()).then(d => {
+  if (!d || !Array.isArray(d.cells)) return;
+  d.cells.forEach(([x, y, i]) => { if (grid[y]) grid[y][x] = i; });
+  if (d.by === 'osimo' && d.savedAt && !EDIT) retire();
+}).catch(() => {});
+
+function paint(cx, cy) {
+  const r = brush - 1;
+  for (let y = cy - r; y <= cy + r; y++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || y < 0 || x >= GX || y >= GY) continue;
+      grid[y][x] = erasing ? -1 : sel;
+    }
+  }
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0b0904'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (plate) { ctx.globalAlpha = fade; ctx.drawImage(plate, 0, 0, W, H); ctx.globalAlpha = 1; }
+  for (let y = 0; y < GY; y++) {
+    for (let x = 0; x < GX; x++) {
+      const i = grid[y][x];
+      if (i < 0 || !LIST[i]) continue;
+      ctx.fillStyle = LIST[i][1];
+      ctx.globalAlpha = 0.62;
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+  }
+  ctx.globalAlpha = 1;
+  // a faint grid, so a thumb has something to aim at
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= GX; x += 4) { ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H); ctx.stroke(); }
+  for (let y = 0; y <= GY; y += 4) { ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(W, y * CELL); ctx.stroke(); }
+}
+requestAnimationFrame(frame);
+
+let down = false;
+function at(e) {
+  const t = e.touches ? e.touches[0] : e;
+  const { cx, cy } = toCell(t.clientX, t.clientY);
+  paint(cx, cy);
+}
+canvas.addEventListener('touchstart', e => { e.preventDefault(); down = true; at(e); }, { passive: false });
+canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (down) at(e); }, { passive: false });
+canvas.addEventListener('touchend',   () => { down = false; });
+canvas.addEventListener('mousedown', e => { down = true; at(e); });
+window.addEventListener('mousemove', e => { if (down) at(e); });
+window.addEventListener('mouseup', () => { down = false; });
+
+const sw = document.getElementById('swatches');
+LIST.forEach(([name, col], i) => {
+  const b = document.createElement('button');
+  b.className = 'sw' + (i === 0 ? ' on' : '');
+  b.style.background = col;
+  b.title = name;
+  b.onclick = () => {
+    sel = i; erasing = false;
+    [...sw.children].forEach((c, j) => c.classList.toggle('on', j === i));
+    document.getElementById('erase').classList.remove('go');
+    updateSel();
+  };
+  sw.appendChild(b);
+});
+function updateSel() {
+  document.getElementById('sel').textContent =
+    erasing ? 'ERASING' : (sel + 1) + '/' + LIST.length + '  ' + LIST[sel][0];
+}
+updateSel();
+
+document.getElementById('erase').onclick = e => {
+  erasing = !erasing; e.target.classList.toggle('go', erasing); updateSel();
+};
+document.getElementById('brush').onclick = e => {
+  brush = brush >= 4 ? 1 : brush + 1; e.target.textContent = 'BRUSH ' + brush;
+};
+document.getElementById('clear').onclick = () => {
+  for (const row of grid) row.fill(-1);
+  toast('Cleared.', 1000);
+};
+document.getElementById('fade').onclick = e => {
+  fade = fade >= 0.9 ? 0.3 : fade + 0.3;
+  e.target.textContent = 'ART ' + Math.round(fade * 100) + '%';
+};
+
+let toastT = 0;
+function toast(msg, ms) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.style.display = 'none'; }, ms || 2600);
+}
+function retire() {
+  const b = document.getElementById('submit');
+  if (b) b.remove();
+}
+
+const submitBtn = document.getElementById('submit');
+if (submitBtn) submitBtn.onclick = async () => {
+  const cells = [];
+  for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
+    if (grid[y][x] >= 0) cells.push([x, y, grid[y][x]]);
+  }
+  if (!cells.length) { toast('Nothing painted yet.', 2000); return; }
+  submitBtn.disabled = true; submitBtn.textContent = 'SENDING…';
+  try {
+    const r = await fetch('/api/press', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ by: 'osimo', room: ROOM, cell: CELL,
+                             names: LIST.map(l => l[0]), cells }),
+    });
+    const d = await r.json();
+    if (d.ok) { toast('SUBMITTED ✅\nTell Claude and he will wire the taps.', 5000); retire(); }
+    else toast('Did not save: ' + (d.error || r.status), 5000);
+  } catch (e) { toast('Did not save: ' + e.message, 5000); }
+  submitBtn.disabled = false; submitBtn.textContent = 'SUBMIT';
+};
+})();
+</script>
+</body>
+</html>

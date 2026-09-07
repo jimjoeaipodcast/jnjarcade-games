@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>OVERLAY PLACER</title>
+<!-- ══════════════════════════════════════════════════════════════════════════
+  Osimo 2026-09-07: "let's try the placer on the ledger and see if I can best
+  position the ledger overlays. and another placer for both arcades where I'm
+  placing all the speech bubbles with money over the machines."
+
+  Same handshake as the Punter Placer, different cargo. Two targets:
+
+    ?target=ledger              — the writing on the open book: where the first
+                                  line sits, where the last one sits, where the
+                                  right-hand page starts, how wide the column is
+    ?target=cards&room=hall     — the money/price card over every machine
+    ?target=cards&room=corridor
+
+  Everything is drawn the way the game draws it, at the game's own scale, so a
+  thing dragged here lands in the same place in the game.
+═══════════════════════════════════════════════════════════════════════════ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0b0904; overflow: hidden;
+               touch-action: none; -webkit-user-select: none; user-select: none;
+               font-family: 'Barlow Condensed', 'Helvetica Neue', sans-serif; color: #e8c35a; }
+  #c { display: block; position: fixed; left: 0; top: 0; }
+  .bar { position: fixed; left: 0; right: 0; display: flex; align-items: center; gap: 8px;
+         padding: 8px 12px; z-index: 5; pointer-events: none; }
+  .bar > * { pointer-events: auto; }
+  #top { top: 0; background: linear-gradient(rgba(6,5,4,.88), rgba(6,5,4,0)); }
+  #bot { bottom: 0; background: linear-gradient(rgba(6,5,4,0), rgba(6,5,4,.92)); }
+  button { font: bold 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .05em;
+           padding: 11px 15px; border-radius: 9px; border: 1.5px solid #ffffff33;
+           background: #1a1409; color: #cfc6b4; cursor: pointer; }
+  button.go { background: #e8c35a; color: #241a06; border-color: #e8c35a; }
+  #sel { font-size: 15px; color: #fff3d0; flex: 1; white-space: nowrap;
+         overflow: hidden; text-overflow: ellipsis; }
+  #hint { font-size: 13px; color: #a99b80; }
+  #toast { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+           background: rgba(10,8,4,.95); border: 2px solid #e8c35a; border-radius: 14px;
+           padding: 18px 24px; font-size: 17px; text-align: center; z-index: 9;
+           display: none; max-width: 80vw; }
+  #rot { display: none; }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rot { display: flex; position: fixed; inset: 0; z-index: 40; flex-direction: column;
+           align-items: center; justify-content: center; gap: 18px; background: #0b0904;
+           text-align: center; padding: 24px; }
+    #rot .ph { font-size: 62px; }
+    #c, .bar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="rot"><div class="ph">📱</div><h2>TURN YOUR PHONE</h2>
+  <p style="color:#9aa;font-size:13px">Sideways, like the game.</p></div>
+<div class="bar" id="top">
+  <div id="sel">TAP A HANDLE</div>
+  <button id="prev">‹</button><button id="next">›</button>
+</div>
+<div class="bar" id="bot">
+  <button id="smaller">− WIDTH</button>
+  <button id="bigger">+ WIDTH</button>
+  <span id="hint">drag a handle · pinch for width</span>
+  <span style="flex:1"></span>
+  <button id="reset">RESET</button>
+  <button class="go" id="submit">SUBMIT</button>
+</div>
+<div id="toast"></div>
+<script>
+(function () {
+'use strict';
+const QS = new URLSearchParams(location.search);
+const TARGET = QS.get('target') === 'cards' ? 'cards' : 'ledger';
+const ROOM = QS.get('room') === 'corridor' ? 'corridor' : 'hall';
+const EDIT = QS.get('edit') === '1';
+const SCENE = TARGET === 'ledger' ? 'ledger' : 'cards-' + ROOM;
+const W = 960, H = 540;
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
+let plate = null, SPR = {}, sel = 0;
+
+// ── what each target is made of ─────────────────────────────────────────────
+// LEDGER: four handles that between them define the whole written column — the game
+// derives every row from these, exactly as it does now from LEDGER_ART.
+const LEDGER = [
+  { id: 'firstRow', label: 'FIRST LINE (left page)',  x: 118, y: 60,  kind: 'row' },
+  { id: 'lastRow',  label: 'LAST LINE (left page)',   x: 118, y: 306, kind: 'row' },
+  { id: 'col2',     label: 'FIRST LINE (right page)', x: 355, y: 60,  kind: 'row' },
+  { id: 'width',    label: 'COLUMN WIDTH',            x: 118, y: 180, w: 178, kind: 'width' },
+];
+// CARDS: one handle per machine — where its price/coins/jam bubble hangs. Stored as the
+// card's anchor point in world space; the game keeps drawing the card upward from it.
+const CARDS = {
+  hall: [
+    ['LEFT 1 — BY THE DOOR', 128, 234], ['LEFT 2', 218, 240], ['LEFT 3', 277, 246],
+    ['LEFT 4 — FAR END', 316, 248], ['BACK WALL', 394, 222],
+    ['THE PINBALL TABLE', 573, 240], ['RIGHT 5 — FAR END', 617, 252], ['RIGHT 4', 644, 248],
+    ['RIGHT 3', 683, 246], ['RIGHT 2', 742, 240], ['RIGHT 1 — BY THE DOOR', 865, 234],
+  ],
+  corridor: [
+    ['CABINET 1 — NEAREST', 192, 209], ['CABINET 2', 266, 212], ['CABINET 3', 318, 215],
+    ['CABINET 4 — FAR END', 362, 218], ['CABINET 5 — THE RED ONE', 757, 212],
+  ],
+};
+function build() {
+  if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
+  return CARDS[ROOM].map(([label, x, y], i) => ({ id: 'card' + i, label, x, y, kind: 'card' }));
+}
+let items = build();
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(document.documentElement.clientWidth);
+  const h = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  canvas.width = Math.round(w * DPR); canvas.height = Math.round(h * DPR);
+  VIEW.scale = Math.min(canvas.width / W, canvas.height / H);
+  VIEW.ox = Math.round((canvas.width - W * VIEW.scale) / 2);
+  VIEW.oy = Math.round((canvas.height - H * VIEW.scale) / 2);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+setInterval(resize, 300);
+resize();
+
+function toWorld(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((px - r.left) * DPR - VIEW.ox) / VIEW.scale,
+           y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
+}
+
+fetch('../games/the-count-pack.json?v=16').then(r => r.json()).then(p => {
+  const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
+  if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
+  else mk(p.art[ROOM], im => { plate = im; });
+  for (const k of ['icCab', 'icCoin']) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
+}).catch(() => toast('Could not load the art pack.'));
+
+fetch('/api/press?kind=points&room=' + SCENE).then(r => r.json()).then(d => {
+  if (!d || !Array.isArray(d.items)) return;
+  d.items.forEach(it => {
+    const m = items.find(o => o.id === it.id);
+    if (!m) return;
+    m.x = it.x; m.y = it.y;
+    if (it.w !== undefined && it.w !== null) m.w = it.w;
+  });
+  updateSel();
+  if (d.by === 'osimo' && d.savedAt && !EDIT) retire();
+}).catch(() => {});
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// A stand-in of the game's own card, so what is dragged looks like what will be drawn.
+function drawCard(o, on) {
+  const icon = SPR.icCoin || SPR.icCab;
+  const s = 0.85, ir = Math.round(40 * s), pad = Math.round(8 * s);
+  ctx.font = 'bold ' + Math.round(20 * s) + 'px "Barlow Condensed",sans-serif';
+  const txt = '£70.00';
+  const w = Math.max(ir, ctx.measureText(txt).width) + pad * 2;
+  const h = ir + Math.round(22 * s) + pad;
+  const x = o.x - w / 2, y = o.y - h;
+  ctx.fillStyle = 'rgba(252,246,232,0.97)';
+  roundRect(x, y, w, h, 9 * s); ctx.fill();
+  ctx.strokeStyle = on ? '#ffd75e' : '#7a4a1a'; ctx.lineWidth = on ? 3 : 2.2;
+  roundRect(x, y, w, h, 9 * s); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(o.x - 7 * s, y + h); ctx.lineTo(o.x, y + h + 9 * s); ctx.lineTo(o.x + 7 * s, y + h);
+  ctx.closePath(); ctx.fillStyle = 'rgba(252,246,232,0.97)'; ctx.fill(); ctx.stroke();
+  if (icon) ctx.drawImage(icon, o.x - ir / 2, y + pad * 0.6, ir, ir);
+  ctx.fillStyle = '#1f6b3a'; ctx.textAlign = 'center';
+  ctx.fillText(txt, o.x, y + h - pad * 0.8);
+  ctx.textAlign = 'left';
+  o._box = { x, y, w, h: h + 9 };
+}
+
+function drawRow(o, on) {
+  // a ledger line as the game writes it: icon, name, price under
+  const ir = 31;
+  ctx.fillStyle = on ? 'rgba(226,178,86,0.30)' : 'rgba(226,178,86,0.16)';
+  const w = (items.find(i => i.id === 'width') || { w: 178 }).w;
+  ctx.fillRect(o.x - 4, o.y - 15, w, 30);
+  ctx.strokeStyle = on ? '#ffd75e' : 'rgba(122,74,26,0.55)';
+  ctx.lineWidth = on ? 2.5 : 1.4;
+  ctx.strokeRect(o.x - 4, o.y - 15, w, 30);
+  if (SPR.icCab) ctx.drawImage(SPR.icCab, o.x, o.y - ir / 2, ir, ir);
+  ctx.fillStyle = '#3c2410'; ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+  ctx.fillText('POWER UP CABINET 2', o.x + ir + 8, o.y - 2);
+  ctx.font = '11px "Barlow Condensed",sans-serif'; ctx.fillStyle = '#6b4a24';
+  ctx.fillText('A second machine earning…', o.x + ir + 8, o.y + 11);
+  ctx.textAlign = 'right'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = '#1f6b3a';
+  ctx.fillText('£8.00', o.x - 4 + w - 8, o.y + 11);
+  ctx.textAlign = 'left';
+  o._box = { x: o.x - 4, y: o.y - 15, w, h: 30 };
+}
+
+function drawWidth(o, on) {
+  const first = items.find(i => i.id === 'firstRow'), last = items.find(i => i.id === 'lastRow');
+  ctx.strokeStyle = on ? '#ffd75e' : 'rgba(255,215,94,0.55)';
+  ctx.lineWidth = on ? 3 : 2;
+  ctx.setLineDash([8, 6]);
+  ctx.strokeRect(first.x - 4, first.y - 15, o.w, (last.y - first.y) + 30);
+  ctx.setLineDash([]);
+  // the handle itself, on the right edge, halfway down
+  const hx = first.x - 4 + o.w, hy = (first.y + last.y) / 2;
+  ctx.fillStyle = on ? '#ffd75e' : 'rgba(255,215,94,0.7)';
+  roundRect(hx - 9, hy - 22, 18, 44, 6); ctx.fill();
+  o._box = { x: hx - 16, y: hy - 28, w: 32, h: 56 };
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0b0904'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);
+  if (plate) ctx.drawImage(plate, 0, 0, W, H);
+  items.forEach((o, i) => {
+    const on = i === sel;
+    if (o.kind === 'card') drawCard(o, on);
+    else if (o.kind === 'width') drawWidth(o, on);
+    else drawRow(o, on);
+  });
+}
+requestAnimationFrame(frame);
+
+function pick(w) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const b = items[i]._box;
+    if (!b) continue;
+    if (w.x >= b.x - 6 && w.x <= b.x + b.w + 6 && w.y >= b.y - 6 && w.y <= b.y + b.h + 6) return i;
+  }
+  return -1;
+}
+let drag = null, pinch = null;
+function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const wid = items.find(i => i.id === 'width');
+  if (e.touches.length === 2 && wid) { pinch = { d: dist(e.touches[0], e.touches[1]), w: wid.w }; drag = null; return; }
+  const w = toWorld(e.touches[0].clientX, e.touches[0].clientY);
+  const hit = pick(w);
+  if (hit >= 0) { sel = hit; updateSel(); }
+  drag = { dx: w.x - items[sel].x, dy: w.y - items[sel].y };
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const wid = items.find(i => i.id === 'width');
+  if (pinch && e.touches.length === 2 && wid) {
+    wid.w = Math.max(60, Math.min(600, Math.round(pinch.w * (dist(e.touches[0], e.touches[1]) / pinch.d))));
+    updateSel(); return;
+  }
+  if (!drag || !e.touches.length) return;
+  const w = toWorld(e.touches[0].clientX, e.touches[0].clientY);
+  items[sel].x = Math.round(w.x - drag.dx); items[sel].y = Math.round(w.y - drag.dy);
+  updateSel();
+}, { passive: false });
+canvas.addEventListener('touchend', e => { if (!e.touches.length) { drag = null; pinch = null; } });
+canvas.addEventListener('mousedown', e => {
+  const w = toWorld(e.clientX, e.clientY);
+  const hit = pick(w);
+  if (hit >= 0) { sel = hit; updateSel(); }
+  drag = { dx: w.x - items[sel].x, dy: w.y - items[sel].y };
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const w = toWorld(e.clientX, e.clientY);
+  items[sel].x = Math.round(w.x - drag.dx); items[sel].y = Math.round(w.y - drag.dy);
+  updateSel();
+});
+window.addEventListener('mouseup', () => { drag = null; });
+window.addEventListener('keydown', e => {
+  const o = items[sel], step = e.shiftKey ? 10 : 1;
+  if (e.key === 'ArrowLeft') o.x -= step;
+  else if (e.key === 'ArrowRight') o.x += step;
+  else if (e.key === 'ArrowUp') o.y -= step;
+  else if (e.key === 'ArrowDown') o.y += step;
+  else return;
+  e.preventDefault(); updateSel();
+});
+
+function updateSel() {
+  const o = items[sel];
+  document.getElementById('sel').textContent =
+    (sel + 1) + '/' + items.length + '  ' + o.label + '   x' + Math.round(o.x) +
+    ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '');
+}
+updateSel();
+
+document.getElementById('prev').onclick = () => { sel = (sel + items.length - 1) % items.length; updateSel(); };
+document.getElementById('next').onclick = () => { sel = (sel + 1) % items.length; updateSel(); };
+const wid = () => items.find(i => i.id === 'width');
+document.getElementById('bigger').onclick  = () => { const o = wid(); if (o) { o.w = Math.min(600, o.w + 6); updateSel(); } };
+document.getElementById('smaller').onclick = () => { const o = wid(); if (o) { o.w = Math.max(60, o.w - 6); updateSel(); } };
+document.getElementById('reset').onclick = () => { items = build(); sel = 0; updateSel(); toast('Back to the game values.', 1400); };
+
+let toastT = 0;
+function toast(msg, ms) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.style.display = 'none'; }, ms || 2600);
+}
+function retire() { const b = document.getElementById('submit'); if (b) b.remove(); }
+
+const submitBtn = document.getElementById('submit');
+if (submitBtn) submitBtn.onclick = async () => {
+  submitBtn.disabled = true; submitBtn.textContent = 'SENDING…';
+  try {
+    const r = await fetch('/api/press', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ by: 'osimo', room: SCENE, kind: 'points',
+        items: items.map(o => ({ id: o.id, x: Math.round(o.x), y: Math.round(o.y),
+                                 w: o.w === undefined ? undefined : Math.round(o.w) })) }),
+    });
+    const d = await r.json();
+    if (d.ok) { toast('SUBMITTED ✅\nTell Claude and he will put it in the game.', 5000); retire(); }
+    else toast('Did not save: ' + (d.error || r.status), 5000);
+  } catch (e) { toast('Did not save: ' + e.message, 5000); }
+  submitBtn.disabled = false; submitBtn.textContent = 'SUBMIT';
+};
+})();
+</script>
+</body>
+</html>
