@@ -535,6 +535,39 @@ const BBB_CLIPS = ['button-pusher', 'dumpling-mold', 'jellyfish-lamp', 'mini-cho
                    'paper-stool'];
 const BBB_LEN = { 'button-pusher': 43700, 'dumpling-mold': 44200, 'jellyfish-lamp': 47900,
                   'mini-chopper': 41600, 'paper-stool': 43350 };
+// Osimo 2026-09-07: "they always talk/say the same thing... doesn't even match the video
+// broll playing." True — the only line in a whole 40+ second take was the one product-name
+// announcement at the start, so every take read as the same template with a noun swapped in,
+// and nothing either host said referred to anything actually happening on screen for the
+// other 90% of the clip. These are two real beats per product, written against the actual
+// footage (grabbed frames from each clip rather than guessing from the filename), fired
+// partway through and near the end of the take — see updateRec. Personality-consistency-
+// guard applied inline: Jimmy hypes the real feature, never spells a word out, never hedges;
+// Joe's skepticism aims at the PRODUCT'S premise (the established BUY OR BYEBYE convention —
+// checked against the real show script.json, where Joe needles the item, not Jimmy) and
+// concedes the specific while holding the principle.
+const BBB_LINES = {
+  'button-pusher': [
+    { t: 0.20, who: 'JIMMY', text: "A robot that presses your light switch. We automated the shortest walk of your life." },
+    { t: 0.62, who: 'JOE', text: "It needs a hub and an app to skip one step. That is four steps to save one." },
+  ],
+  'dumpling-mold': [
+    { t: 0.20, who: 'JIMMY', text: "One press, nineteen dumplings. That is not cooking, that is a production line." },
+    { t: 0.62, who: 'JOE', text: "Every hole is identical. You are the only inconsistent part of that kitchen." },
+  ],
+  'jellyfish-lamp': [
+    { t: 0.20, who: 'JIMMY', text: "The tentacles rotate on their own. It is swimming on your nightstand." },
+    { t: 0.62, who: 'JOE', text: "It glows to avoid being eaten in the wild. We put it by the bed for the mood." },
+  ],
+  'mini-chopper': [
+    { t: 0.20, who: 'JIMMY', text: "No batteries, no plug — pull the cord and it chops. Veg, eggs, the baby's dinner." },
+    { t: 0.62, who: 'JOE', text: "One gadget for salad, cream, and infant food. Wash it properly between jobs." },
+  ],
+  'paper-stool': [
+    { t: 0.20, who: 'JIMMY', text: "It is made of paper and it holds four hundred pounds. Folds flat, holds a person." },
+    { t: 0.62, who: 'JOE', text: "A stool built from the inside of a greetings card. I will stand, thank you." },
+  ],
+};
 let bbbVideo = null, bbbName = null;
 // THE SHOW'S OWN JINGLE. Osimo 2026-09-07: "when we run buy or ByeBye we use a jingle in the
 // actual b-roll of our segment — maybe play that and interrupt any other music and play the
@@ -571,7 +604,22 @@ function bbbStart() {
     bbbVideo = v; bbbName = pick;
   }
   try { bbbVideo.currentTime = 0; bbbVideo.play().catch(() => {}); } catch (e) {}
+  bbbBeat = 0;                        // fresh commentary beats for this take
   return pick;
+}
+// Fires BBB_LINES' two beats partway through and near the end of the take. Reads elapsed
+// time from rec itself rather than a separate timer, so it cannot drift out of sync with
+// the clip even if a frame hitches.
+let bbbBeat = 0;
+function bbbCommentary(rec, now) {
+  const lines = BBB_LINES[bbbName];
+  if (!lines || bbbBeat >= lines.length) return;
+  const total = rec.ms || (rec.show ? rec.show.ms : REC_MS);
+  const frac = 1 - Math.max(0, rec.until - now) / total;
+  if (frac >= lines[bbbBeat].t) {
+    const b = lines[bbbBeat]; bbbBeat++;
+    bubbleShow(b.who, b.text);
+  }
 }
 function bbbStop() {
   if (bbbVideo) { try { bbbVideo.pause(); } catch (e) {} }
@@ -1585,6 +1633,7 @@ function startRec(show) {
 }
 function updateRec(dt, now) {
   if (!rec) return;
+  if (rec.show && (rec.show.id === 'plain' || rec.show.id === 'byebye')) bbbCommentary(rec, now);
   const here = rec.show === PLAIN ? 'studio' : 'podcast';
   // walk either of them out and the take is lost — that is what makes it a commitment
   if (hosts.jimmy.room !== here || hosts.joe.room !== here) {
@@ -3052,6 +3101,8 @@ window.__TC = {
   recQA() { return rec ? { show: rec.show.id, ms: rec.ms, clip: bbbName,
                            videoDur: bbbVideo ? +bbbVideo.duration.toFixed(1) : null,
                            left: Math.round(rec.until - performance.now()) } : null; },
+  bbbSkip(ms) { if (rec) rec.until -= ms; },   // QA only — fast-forward a live take
+  bubbleQA() { return bubble ? { who: bubble.who, text: bubble.text } : null; },  // QA only
   audioQA() { return { bbb: bbbAudio ? { paused: bbbAudio.paused,
                                          t: +bbbAudio.currentTime.toFixed(2) } : null,
                        music: musicEl ? { src: musicEl.src.split('/').pop(),
