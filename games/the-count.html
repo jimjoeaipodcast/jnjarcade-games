@@ -402,7 +402,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=16').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=17').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -480,6 +480,9 @@ const ORDER = ['coinroom', 'studio', 'corridor', 'hall', 'podcast'];
 // which is Jimmy's — 213 tall by 142 wide, his own 38px-wide content stretched 12% in
 // height at unchanged width, exactly as asked last round.
 const HOST_BOX = { w: 142, h: 213 };
+// The two chesterfields in the studio, measured off the plate. Jimmy left, Joe right, every
+// time — and a seated sprite each, so a take actually looks like two people doing a podcast.
+const SEAT = { jimmy: 238, joe: 760, feet: 466, h: 156 };
 // FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
 // game play"): four down the left wall, one on the right. The corridor plate is now the
 // ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
@@ -547,34 +550,33 @@ const FRONTS = ['punter34A', 'punter34B', 'punter34C'];
 // face: 'left' | 'right' | 'back' drives BOTH the sprite set and the mirroring, so a
 // machine can never end up with a punter facing away from it.
 const HALL_MACHINES = [
-  // ELEVEN, and every punter position below is OSIMO'S OWN, placed by hand in
-  // tools/punter-placer and read back out of KV on 2026-09-07. He corrected the count while
-  // he was in there: "I told you to add 5 on the left but it was indeed 4" — so the far-end
-  // left cabinet is gone and its punter with it. Nothing here is my guess any more.
-  // LEFT WALL, front to back — four machines, punters facing left into them
-  { room: 'hall', pay: 90,  secs: 11.0, body: [43, 118, 140, 372], screen: [58, 238, 132, 302],
+  // BODIES are what Osimo PAINTED in tools/press-painter?room=hall — the bounding box of
+  // the pixels he coloured for each machine, so the tap area is the shape he says it is
+  // rather than a rectangle I measured. Nearer machines are listed first, so where two
+  // overlap in a receding row the nearer one wins the tap, which is what you expect.
+  // TAG is where that machine's price/coins/jam card hangs, placed in
+  // tools/overlay-placer?target=cards&room=hall. Both read out of KV on 2026-09-07.
+  { room: 'hall', pay: 90,  secs: 11.0, body: [0, 100, 190, 320], tag: [65, 160],
     punter: { h: 286, feet: 490, x: 178 }, face: 'left' },
-  { room: 'hall', pay: 68,  secs: 8.5,  body: [183, 145, 71, 305], screen: [190, 244, 246, 296],
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [130, 160, 120, 220], tag: [145, 180],
     punter: { h: 221, feet: 435, x: 267 }, face: 'left' },
-  { room: 'hall', pay: 52,  secs: 6.5,  body: [254, 168, 46, 252], screen: [258, 250, 296, 292],
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [220, 180, 90, 200], tag: [227, 198],
     punter: { h: 164, feet: 385, x: 312 }, face: 'left' },
-  { room: 'hall', pay: 40,  secs: 5.0,  body: [300, 186, 32, 214], screen: [302, 252, 330, 288],
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [280, 190, 80, 170], tag: [305, 216],
     punter: { h: 124, feet: 358, x: 345 }, face: 'left' },
-  // BACK WALL — the only punter in the room whose back we see
-  { room: 'hall', pay: 46,  secs: 6.0,  body: [372, 205, 44, 118], screen: [378, 226, 410, 268],
+  { room: 'hall', pay: 46,  secs: 6.0,  body: [380, 210, 40, 120], tag: [402, 204],
     punter: { h: 109, feet: 344, x: 404 }, face: 'back' },
-  // RIGHT WALL, back to front — six, counting the pinball table
-  { room: 'hall', pay: 120, secs: 15.0, body: [532, 235, 85, 100], screen: [540, 244, 606, 282],
+  { room: 'hall', pay: 120, secs: 15.0, body: [530, 240, 90, 110], tag: [557, 225],
     punter: { h: 98,  feet: 353, x: 533 }, face: 'right' },
-  { room: 'hall', pay: 30,  secs: 4.0,  body: [606, 200, 22, 186], screen: [608, 256, 626, 286],
+  { room: 'hall', pay: 30,  secs: 4.0,  body: [600, 200, 70, 150], tag: [640, 224],
     punter: { h: 113, feet: 350, x: 611 }, face: 'right' },
-  { room: 'hall', pay: 40,  secs: 5.0,  body: [628, 186, 32, 214], screen: [630, 252, 658, 288],
+  { room: 'hall', pay: 40,  secs: 5.0,  body: [640, 200, 60, 180], tag: [681, 154],
     punter: { h: 144, feet: 373, x: 631 }, face: 'right' },
-  { room: 'hall', pay: 52,  secs: 6.5,  body: [660, 168, 46, 252], screen: [664, 250, 702, 292],
+  { room: 'hall', pay: 52,  secs: 6.5,  body: [670, 180, 80, 240], tag: [722, 223],
     punter: { h: 172, feet: 397, x: 665 }, face: 'right' },
-  { room: 'hall', pay: 68,  secs: 8.5,  body: [706, 145, 71, 305], screen: [714, 244, 770, 296],
+  { room: 'hall', pay: 68,  secs: 8.5,  body: [710, 150, 130, 290], tag: [800, 191],
     punter: { h: 212, feet: 428, x: 708 }, face: 'right' },
-  { room: 'hall', pay: 110, secs: 14.0, body: [777, 118, 140, 372], screen: [828, 238, 902, 302],
+  { room: 'hall', pay: 110, secs: 14.0, body: [780, 120, 170, 300], tag: [881, 163],
     punter: { h: 286, feet: 482, x: 776 }, face: 'right' },
 ];
 // flip and sprite set both come from `face`, so they cannot disagree with each other
@@ -1174,6 +1176,13 @@ function startRec(show) {
     say('Both of you, in here. You cannot record a double act on your own.', 3200);
     SFX.deny(); return;
   }
+  // Osimo 2026-09-07: "when recording could we make Jimmy and Joe sit on their sofa, Jimmy
+  // always left and Joe always right." They take their places the moment the light goes on —
+  // always the same seat, so the show always looks like the show.
+  if (s === PLAIN) {
+    hosts.jimmy.x = hosts.jimmy.target = SEAT.jimmy;
+    hosts.joe.x = hosts.joe.target = SEAT.joe;
+  }
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
   vo('recStart', { icon: 'icOnair' });
   SFX.day();
@@ -1394,10 +1403,10 @@ function onTap(e) {
     if (sxp > sr.width - SAFE.r - 56 && syp < 46 + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
-    // PAUSE, just inboard of the speaker. Tested before everything else for the same reason
-    // the speaker is: you reach for it at exactly the moments the tutorial or the shop would
-    // otherwise be eating taps.
-    if (sxp > sr.width - SAFE.r - 112 && sxp < sr.width - SAFE.r - 56 && syp < 46 + SAFE.t) {
+    // PAUSE now sits on the LEFT of the bar, in the gap beside the money. Tested before
+    // everything else for the same reason the speaker is: you reach for it at exactly the
+    // moments the tutorial or the shop would otherwise be eating taps.
+    if (sxp > SAFE.l && sxp < SAFE.l + 42 && syp < 46 + SAFE.t) {
       togglePause(); return;
     }
     if (paused) { togglePause(); return; }        // tap anywhere to come back
@@ -1441,13 +1450,16 @@ canvas.addEventListener('mousedown', onTap);
 // place and the writing drifted off the paper. These figures are measured off the PLATE
 // itself and pushed through the same cover-fit transform the book is drawn with, so the
 // rows sit on the ruling at every screen shape.
-// Measured on the 640x360 plate itself: ruled paper runs y24..312, the left page spans
-// x80..296 with its red margin rule at x114, the right page x333..556 with its rule at
-// x351. Osimo 2026-09-05 reverted the plate to the original art to re-place the writing
-// himself, so these are that plate's own numbers, read off the pixels.
-const LEDGER_ART = { w: 640, h: 360, pageY0: 30, pageY1: 306,
-                     colX: [118, 355], colW: 178 };
-const LEDGER_ROW_H = 30;   // a 16px name with a 12px blurb under it needs this much
+// OSIMO'S OWN, placed in tools/overlay-placer?target=ledger and read back out of KV on
+// 2026-09-07. He set the first line, the last line, where the right page starts, how wide a
+// column is, and — the thing he asked for — how many rows a page holds at most: eleven, so
+// twenty-two entries fit the open book. The pitch is DERIVED from that (span / (rows - 1))
+// rather than a fixed 30px guessed against a list of unknown length, which is what put
+// sixteen entries on top of each other. Numbers are his 960x540 figures scaled to the
+// plate's own 640x360 space.
+const LEDGER_ART = { w: 640, h: 360, pageY0: 58, pageY1: 282,
+                     colX: [91, 333], colW: 199, rows: 11 };
+const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   const bk = SPR.ledger;
@@ -1461,15 +1473,17 @@ function bookRect() {
 }
 function shopMetrics() {
   const b = bookRect();
-  const head = 52;                                  // the title block at the top of the page
-  const y0 = b.dy + LEDGER_ART.pageY0 * b.sc + head + LEDGER_ROW_H / 2;
+  // Osimo's first-line and last-line handles ARE the first and last row centres, and his
+  // row count is the pitch. No head offset: the title sits above his first line, in the
+  // margin he left for it.
+  const y0 = b.dy + LEDGER_ART.pageY0 * b.sc;
   const y1 = b.dy + LEDGER_ART.pageY1 * b.sc;
-  const span = Math.max(LEDGER_ROW_H, y1 - y0);
-  const perCol = Math.max(1, Math.floor(span / LEDGER_ROW_H));
+  const perCol = Math.max(1, LEDGER_ART.rows);
+  const rowH = perCol > 1 ? (y1 - y0) / (perCol - 1) : LEDGER_ROW_H;
   const cols = LEDGER_ART.colX.map(x => b.dx + x * b.sc);
-  return { SW: b.SW, SH: b.SH, book: b, rowH: LEDGER_ROW_H, perCol, cols,
+  return { SW: b.SW, SH: b.SH, book: b, rowH, perCol, cols,
            w: Math.round(LEDGER_ART.colW * b.sc), x0: cols[0], y0,
-           iconR: Math.min(LEDGER_ROW_H * 0.52, 18) };
+           iconR: Math.min(rowH * 0.52, 20) };
 }
 // Trim a string to a pixel width in the CURRENT font, ellipsis included.
 function fitText(s, maxW) {
@@ -1557,6 +1571,15 @@ function drawSpriteBox(im, x, feetY, w, h) {
   return true;
 }
 function drawHost(who, h) {
+  // sat down for a take in the little studio
+  if (rec && rec.show === PLAIN && h.room === 'studio') {
+    const im = SPR[who === 'jimmy' ? 'jimmySit' : 'joeSit'];
+    if (im) {
+      const w = im.width * (SEAT.h / im.height);
+      ctx.drawImage(im, SEAT[who] - w / 2, SEAT.feet - SEAT.h, w, SEAT.h);
+      return;
+    }
+  }
   const walking = Math.abs(h.target - h.x) > 3;
   const feet = ROOMS[h.room].floorY;
   const frames = who === 'jimmy' ? SPR.jimmyWalk : SPR.joeWalk;
@@ -1634,8 +1657,10 @@ function drawCabState() {
   if (room !== 'corridor' && room !== 'hall') return;
   for (const i of roomMachines()) {
     const m = MACHINES[i], c = cabs[i];
-    const [sx, sy, sx1, sy1] = m.screen, sw = sx1 - sx, sh = sy1 - sy;
-    const cx = sx + sw / 2;
+    // Where the card hangs: Osimo's own anchor where he placed one, otherwise the middle of
+    // the machine's screen — the corridor still uses the measured screen rect.
+    const cx = m.tag ? m.tag[0] : (m.screen[0] + m.screen[2]) / 2;
+    const sy = m.tag ? m.tag[1] : m.screen[1];
     if (!cabOn(i)) {
       // OFF: the plate already draws dead black glass, so NOTHING is painted over the
       // machine (Osimo 2026-09-04: "remove those ugly transparent rectangles over the
@@ -1975,14 +2000,14 @@ function drawHUD(now) {
   ctx.translate(0, T);
   ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
   ctx.fillStyle = '#ffd75e';
-  ctx.fillText('£' + (cash / 100).toFixed(2), L + 14, 32);
+  ctx.fillText('£' + (cash / 100).toFixed(2), L + 46, 32);
   ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   ctx.fillStyle = carry >= apronCap() ? '#ff6b6b' : '#e8e2d8';
-  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', L + 128, 31);
+  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', L + 176, 31);
   // hype bar — the show's pull on the floor. The whole row is laid out inside the safe
   // width, so a notch on either side squeezes it rather than hiding an end of it.
   const usable = SW - L - R;
-  const hx = L + Math.max(240, usable * 0.31), hw = Math.max(110, Math.min(190, usable * 0.23));
+  const hx = L + Math.max(300, usable * 0.34), hw = Math.max(110, Math.min(190, usable * 0.23));
   ctx.fillStyle = '#e8e2d8'; ctx.fillText('HYPE', hx, 31);
   ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(hx + 46, 16, hw, 15);
   ctx.fillStyle = hype > 55 ? '#8effc2' : hype > 25 ? '#ffd75e' : '#ff6b6b';
@@ -2049,28 +2074,31 @@ function drawHUD(now) {
   // freehold is watching this number come down, and eventually read NO RENT.
   const own = ownedPct();
   ctx.fillText('DAY ' + day + '   RENT ' + (own >= 100 ? 'NONE' : '£' + (rentDue(day) / 100).toFixed(2)),
-               SW - R - 66, 31);
+               SW - R - 44, 31);
   if (own > 0) {
     ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
     ctx.fillStyle = own >= 100 ? '#8effc2' : '#c9a6ff';
-    ctx.fillText('YOU OWN ' + own + '% OF THE SITE', SW - R - 66, 43);
+    ctx.fillText('YOU OWN ' + own + '% OF THE SITE', SW - R - 44, 43);
     ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
     ctx.fillStyle = '#e8e2d8';
   }
   ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
   ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 190, 31);
+  ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 168, 31);
   ctx.textAlign = 'left';
   ctx.restore();
   // speaker
   ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - R - 14, 32 + T);
-  ctx.fillText(paused ? '▶' : '⏸', SW - R - 70, 32 + T);
-  if (musicIdx >= 0 && !muted) {
-    ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = 'rgba(232,195,90,0.8)';
-    ctx.fillText(JINGLES[musicIdx].label, SW - R - 34, 32 + T);
-  }
+  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - R - 16, 32 + T);
+  // …and the pause moved to the LEFT, into the gap beside the money, where there was room
+  // (Osimo 2026-09-07: "move the pause button on the left where the rest space").
+  // FIRST in the bar, before the money. It was after it, and '£4000.00' is wider than
+  // '£5.00' — so the button hid behind the cash figure the moment you had a good night.
+  // textAlign is still 'right' from the speaker above, which drew this one off the edge.
+  ctx.textAlign = 'left';
+  ctx.fillText(paused ? '▶' : '⏸', L + 12, 32 + T);
+  // No jingle name beside the speaker any more — it ran under the rent figure, and the
+  // icon already says which of the four states you are in. Osimo 2026-09-07.
   ctx.textAlign = 'left';
   // turned-away count — the quiet version of the old flashing NO FREE MACHINE
   // …and only where the machines are. In the prop room or the studio it reads as a fault
@@ -2103,12 +2131,12 @@ function drawShop() {
   if (bk) ctx.drawImage(bk, m.book.dx, m.book.dy, bk.width * m.book.sc, bk.height * m.book.sc);
   // Title block sits on the paper at the top of the left page, in BOOK space, so it moves
   // with the book instead of floating at a fixed fraction of the screen.
-  const headY = m.book.dy + LEDGER_ART.pageY0 * m.book.sc;
+  const headY = m.book.dy + LEDGER_ART.pageY0 * m.book.sc - 62;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.cols[0] - m.iconR, headY + 18);
+  ctx.fillText('THE LEDGER', m.cols[0] - m.iconR, headY + 20);
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0] - m.iconR, headY + 32);
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0] - m.iconR, headY + 38);
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
@@ -2163,17 +2191,25 @@ function drawFloaters(now) {
     ctx.textAlign = 'left'; ctx.globalAlpha = 1;
   }
 }
+// Osimo 2026-09-07: "try to make all boxes with indication same as the speech bubbles."
+// This was the last black-and-yellow slab in the game — every other thing that talks to you
+// is a cream card with a brown edge, so this is one too. Same fill, same stroke, same radius.
 function drawMsg(now) {
   if (!msg || now > msgUntil) return;
   ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
-  const w = ctx.measureText(msg).width + 34;
-  ctx.fillStyle = 'rgba(6,5,4,0.86)';
-  ctx.fillRect((WORLD_W - w) / 2, WORLD_H - 92, w, 34);
-  ctx.strokeStyle = 'rgba(232,195,90,0.5)'; ctx.lineWidth = 1.5;
-  ctx.strokeRect((WORLD_W - w) / 2, WORLD_H - 92, w, 34);
-  ctx.fillStyle = '#ffe9a8'; ctx.textAlign = 'center';
-  ctx.fillText(msg, WORLD_W / 2, WORLD_H - 69);
+  const w = ctx.measureText(msg).width + 40, h = 38;
+  const x = (WORLD_W - w) / 2, y = WORLD_H - 96;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3;
+  ctx.fillStyle = 'rgba(252,246,232,0.97)';
+  roundRect(x, y, w, h, 11); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = 2.5;
+  roundRect(x, y, w, h, 11); ctx.stroke();
+  ctx.fillStyle = '#5a3618'; ctx.textAlign = 'center';
+  ctx.fillText(msg, WORLD_W / 2, y + 26);
   ctx.textAlign = 'left';
+  ctx.restore();
 }
 
 // ── loop ─────────────────────────────────────────────────────────────────────

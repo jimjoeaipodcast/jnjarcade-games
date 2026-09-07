@@ -144,7 +144,7 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=16').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=17').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else mk(p.art[ROOM], im => { plate = im; });
