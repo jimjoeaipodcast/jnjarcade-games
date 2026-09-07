@@ -1592,14 +1592,25 @@ function startRec(show) {
   }
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
   if (s.id === 'plain' || s.id === 'byebye') {
-    const pick = bbbStart();
-    // the take is as long as the product — nothing gets cut off half way
-    rec.until = performance.now() + (BBB_LEN[pick] || s.ms);
-    rec.ms = BBB_LEN[pick] || s.ms;
-    say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
-        3600);
+    // Osimo 2026-09-07: "let Jimmy say nobody leaves the room then cue the BBB as they
+    // currently overlap." bbbStart() used to fire in the same instant as recStart's own
+    // line, so "We're rolling! Nobody leave the room" and the clip's own real dialogue
+    // both tried to play at once. The line lands first now; the clip (and its audio)
+    // cues in right after it finishes, same running order a real broadcast would use.
+    vo('recStart', { icon: 'icOnair' });
+    const s2 = s;
+    setTimeout(() => {
+      if (!rec || rec.show !== s2) return;      // take was bailed or swapped while we waited
+      const pick = bbbStart();
+      // the take is as long as the product — nothing gets cut off half way
+      rec.until = performance.now() + (BBB_LEN[pick] || s2.ms);
+      rec.ms = BBB_LEN[pick] || s2.ms;
+      say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
+          3600);
+    }, 2600);
+  } else {
+    vo('recStart', { icon: 'icOnair' });
   }
-  vo('recStart', { icon: 'icOnair' });
   SFX.day();
 }
 function updateRec(dt, now) {
