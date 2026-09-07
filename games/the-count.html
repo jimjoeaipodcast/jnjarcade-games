@@ -402,7 +402,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=15').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=16').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -451,7 +451,24 @@ function tvFrame() {
 // interactive props are listed BEFORE big scenery (the jnj-on-air lesson —
 // a chesterfield rect listed above a doorway silently ate the doorway).
 // prop is NOT in ORDER — it hangs off the corridor's middle door and is special-cased
-const ORDER = ['coinroom', 'studio', 'corridor', 'hall'];
+// THE PODCAST STUDIO (Osimo 2026-09-07): "if you buy all the site 100% of it, you can then
+// buy another room adjacent to the arcade, and it's a podcast studio... use our channels
+// theme." Four positions, one per show, and they are not interchangeable — SERIOUSLY is the
+// flagship and pays like it, BRIGHT SIDE is quick and forgiving, BUY OR BYEBYE lives or dies
+// on the size of the crowd, JNJ UNPLUGGED is the long one that sets up the best back
+// catalogue. What you record is a real choice about the night you are having.
+const SHOWS = [
+  { id: 'seriously', name: 'SERIOUSLY',     ms: 22000, base: 300, per: 9,  roy: 110,
+    col: '#59b6ff', minHype: 40 },
+  { id: 'bright',    name: 'BRIGHT SIDE',   ms: 14000, base: 200, per: 6,  roy: 70,
+    col: '#ffd75e', minHype: 20 },
+  { id: 'byebye',    name: 'BUY OR BYEBYE', ms: 18000, base: 100, per: 11, roy: 90,
+    col: '#ff6bc0', minHype: 55 },
+  { id: 'unplugged', name: 'JNJ UNPLUGGED', ms: 26000, base: 400, per: 7,  roy: 130,
+    col: '#8effc2', minHype: 30 },
+];
+const POD_PRICE = 25000;      // £250 to fit the room out, on top of owning the building
+const ORDER = ['coinroom', 'studio', 'corridor', 'hall', 'podcast'];
 // Osimo 2026-09-04: "make everyone a lot bigger, so they may [reach] the height of the
 // consoles, maybe make jnj bigger too same height as each other". Hosts are one height
 // everywhere; punters are sized PER CABINET because the corridor art recedes — a punter
@@ -485,16 +502,19 @@ const MACHINES = [
   // hand on it. Every height carries the same x1.105, feet unchanged, and each x is nudged
   // right by 0.186 (0.357 mirrored) of the new width so the LEFT FOOT TIP stays on the
   // cell he gave.
+  // SUPERSEDED 2026-09-07: these five are now Osimo's own, placed by hand in
+  // tools/punter-placer?room=corridor and read back out of KV. The grid-cell history above
+  // is kept because it explains the foot-offset arithmetic the Placer inherited.
   { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
-    punter: { h: 210, feet: 410, x: 271 }, flip: false },
+    punter: { h: 225, feet: 416, x: 268 }, flip: false },
   { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
-    punter: { h: 160, feet: 370, x: 306 }, flip: false },
+    punter: { h: 166, feet: 361, x: 327 }, flip: false },
   { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
-    punter: { h: 109, feet: 330, x: 361 }, flip: false },
+    punter: { h: 121, feet: 329, x: 363 }, flip: false },
   { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
-    punter: { h:  85, feet: 310, x: 399 }, flip: false },
+    punter: { h:  97, feet: 309, x: 397 }, flip: false },
   { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
-    punter: { h: 210, feet: 410, x: 731 }, flip: true },
+    punter: { h: 216, feet: 411, x: 690 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
 // THE BIG ROOM (Osimo 2026-09-05: "once we unlock absolutely everything, an arrow going
@@ -611,6 +631,19 @@ const ROOMS = {
       label: 'BIG ROOM CABINET ' + (i + 1), cab: HALL_FIRST + i,
     })).concat([
       { id: 'toCorr3', x: 0, y: 150, w: 60, h: 340, walkX: 60, label: 'BACK TO THE ARCADE', exit: 'corridor' },
+      { id: 'toPod',   x: 900, y: 150, w: 60, h: 340, walkX: 890, label: 'THE PODCAST STUDIO', exit: 'podcast' },
+    ]),
+  },
+  // The room you only get by owning the building outright. Four positions, one per show,
+  // measured off the plate: each neon sign sits over its own mic and monitor.
+  podcast: {
+    name: 'THE PODCAST STUDIO', floorY: 500,
+    hotspots: SHOWS.map((s, i) => ({
+      id: 'show' + i, x: [140, 305, 485, 670][i], y: 118,
+      w: [150, 165, 175, 175][i], h: 250,
+      walkX: [215, 388, 572, 758][i], label: s.name, show: i,
+    })).concat([
+      { id: 'toHall2', x: 0, y: 150, w: 60, h: 350, walkX: 60, label: 'BACK TO THE BIG ROOM', exit: 'hall' },
     ]),
   },
   prop: {
@@ -642,6 +675,14 @@ const DAY_MS = 200000;                  // a shift is 200 seconds (Osimo 2026-09
 // run stalled instead of growing. It now steps £1 a night for the first week and eases
 // after that, which keeps the pressure without outrunning the arcade.
 const RENT = d => 300 + Math.round((d - 1) * 100 + Math.max(0, d - 7) * 60);
+// THE FREEHOLD (Osimo 2026-09-07): "you can pay off the cost of the building and the more
+// percentage of the site you purchase you pay less rent, so the objective is to own the site
+// and not pay rent." Ten slices of ten per cent. Each one is dearer than the last, and each
+// one permanently takes a tenth off the rent — so the thing you are really playing for is
+// the night the rent line reads NOTHING.
+const DEED_MAX = 10;
+function ownedPct() { return lvl('deed') * 10; }
+function rentDue(d) { return Math.round(RENT(d) * (1 - ownedPct() / 100)); }
 const UPGRADES = [
   { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true, icon: 'cab',
     blurb: 'A second machine earning at the same time.' },
@@ -663,6 +704,11 @@ const UPGRADES = [
     blurb: 'The decanter holds double. Fewer trips to the prop room.' },
   { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true, icon: 'coin',
     blurb: 'The safe pays a 10% counting bonus on every bag.' },
+  // Buy the building out from under the landlord, a tenth at a time. Only offered once the
+  // first arcade is earning, because until then the rent is the game.
+  { id: 'deed',    name: 'BUY 10% OF THE SITE', cost: 4000, max: DEED_MAX, scale: 1.28,
+    icon: 'counter', need: () => !anyOffInFirstRoom(),
+    blurb: 'Own it and the rent drops with every tenth. Own it all and there is no rent.' },
   // ── the expansion (Osimo 2026-09-05) ───────────────────────────────────────
   // Only appears once the first arcade is fully lit, so it always reads as the NEXT thing
   // rather than a distraction from the first five machines.
@@ -691,12 +737,21 @@ const UPGRADES = [
   // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
   // expansion is FOR (Osimo: "you can pay Joe some money daily so that he collects money
   // from the first arcade for you and banks them").
+  // The last thing on the list, and only once the building is yours.
+  { id: 'pod',     name: 'THE PODCAST STUDIO', cost: POD_PRICE, once: true, icon: 'onair',
+    need: () => ownedPct() >= 100,
+    blurb: 'The room next to the big hall. Four shows, four times the money.' },
   { id: 'joePay',  name: 'PUT JOE ON WAGES',    cost: 4000,  once: true, icon: 'onair',
     need: () => has('hall'),
     blurb: 'He works the first arcade and banks it. £1.50 a night off the rent.' },
 ];
 
 let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
+// Levels for every REPEATABLE upgrade, by id. It used to be a single apronLvl, which is
+// fine while exactly one thing repeats — the freehold is the second, and it buys the
+// building ten per cent at a time.
+let lvls = {};
+function lvl(id) { return lvls[id] || 0; }
 let banked, punters, floaters, coins, state, room, msg, msgUntil, shopOpen;
 let lastTs, dayPaused, turnedAway = 0;
 let tutorial = -1;            // index into INTRO while the first night is being taught
@@ -711,10 +766,11 @@ let boxOpenedToday = false;   // the DO NOT OPEN box is a once-a-night decision,
 // payday, and every episode you have recorded pays a ROYALTY every night afterwards. That
 // royalty is the money arriving in the safe, and it is money the pair earned rather than
 // rent collected off somebody.
-const REC_MS = 14000;         // a take runs fourteen seconds
+const REC_MS = 14000;         // a take in the little studio runs fourteen seconds
 const REC_MIN_HYPE = 25;      // below this there is no audience worth recording for
-const ROYALTY = 60;           // 60p a night, per episode in the catalogue
-let episodes = 0, rec = null; // rec = { until, hype0 } while the red light is on
+const ROYALTY = 60;           // 60p a night for a plain episode off the studio mic
+let episodes = 0, rec = null; // rec = { show, until, hype0 } while the red light is on
+let royaltyRate = 0;          // total nightly royalty from everything ever recorded
 // PAUSE (Osimo 2026-09-07: "add a pause button, and it must save the position and
 // everything of the game play, even through days"). Pausing writes the full run — the
 // night's remaining time, every machine's till and jam, where both hosts are standing,
@@ -753,8 +809,8 @@ function saveRun() {
   if (state !== 'play') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      v: 1, t: Date.now(), cash, day, banked, apronLvl, owned, bottles, decanter, episodes,
-      hype: Math.round(hype), carry,
+      v: 1, t: Date.now(), cash, day, banked, apronLvl, lvls, owned, bottles, decanter, episodes,
+      hype: Math.round(hype), carry, royaltyRate,
       // where you were standing and which of them you were driving, so a resumed run puts
       // you back where you left off rather than at the start of the corridor
       room, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room,
@@ -779,7 +835,10 @@ function resumeRun() {
   if (!s2) return false;
   newRun();
   cash = s2.cash; day = s2.day; banked = s2.banked || 0; apronLvl = s2.apronLvl || 0;
+  lvls = s2.lvls || { apron: apronLvl };     // saves from before the freehold only had apron
   episodes = s2.episodes || 0; rec = null;   // a take in progress does not survive a reload
+  // saves from before the podcast studio only knew a flat 60p an episode
+  royaltyRate = (s2.royaltyRate !== undefined) ? s2.royaltyRate : episodes * ROYALTY;
   carry = s2.carry || 0;
   boxOpenedToday = !!s2.boxOpenedToday;
   if (Array.isArray(s2.said)) for (const [k, n] of s2.said) voSaid.set(k, n);
@@ -817,8 +876,8 @@ document.addEventListener('visibilitychange', () => {
 
 function newRun() {
   cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
-  banked = 0; apronLvl = 0; owned = {}; punters = []; floaters = []; coins = [];
-  episodes = 0; rec = null;
+  banked = 0; apronLvl = 0; lvls = {}; owned = {}; punters = []; floaters = []; coins = [];
+  episodes = 0; rec = null; royaltyRate = 0;
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
   dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0; boxOpenedToday = false;
@@ -1009,13 +1068,13 @@ function voWatch() {
     if (cabs[i].till >= 40) vo('fullCab', { icon: 'icCab' });
   }
   if (decanter === 0) vo('dryTot', { icon: 'icBottle' });
-  if (hosts.joe.room !== 'studio' && !has('joePay')) vo('noMic', { icon: 'icOnair' });
+  if (!micHost() && !has('joePay')) vo('noMic', { icon: 'icOnair' });
   // 'offMach' is NOT here any more. It used to fire on its own the moment you stood in a
   // room with an unlit machine, so it landed on taps that had nothing to do with a machine
   // — Osimo 2026-09-05: "the message those dark machines appears pressing in places that
   // are not related to me pressing on a machine that hasn't been purchased". It is now
   // spoken only when you actually tap a machine you have not bought, in onTap.
-  if (cash < RENT(day) && (dayEndsAt - performance.now()) < 30000) vo('rentShort', { icon: 'icCounter' });
+  if (cash < rentDue(day) && (dayEndsAt - performance.now()) < 30000) vo('rentShort', { icon: 'icCounter' });
 }
 
 // Joe on wages (Osimo 2026-09-05). Once the big room is leased you can pay him a nightly
@@ -1054,8 +1113,12 @@ function updateJoe(dt) {
 // Either host counts. You only ever drive one, so the other staying put IS the decision —
 // and with Joe on wages working the first arcade, keeping hype up falls to Jimmy.
 function micHost() {
-  if (hosts.jimmy.room === 'studio') return 'jimmy';
-  if (hosts.joe.room === 'studio') return 'joe';
+  // The podcast studio counts as being on the mic too. It did not, so a 22-second show in
+  // there drained hype at the no-one-talking rate the whole time and SERIOUSLY paid out
+  // £3.36 instead of £10.20 — the longest show was the worst paid.
+  const on = r => r === 'studio' || r === 'podcast';
+  if (on(hosts.jimmy.room)) return 'jimmy';
+  if (on(hosts.joe.room)) return 'joe';
   return null;
 }
 function hypeReason() {
@@ -1093,35 +1156,48 @@ function updateHype(dt) {
 // Both hosts have to be in the studio for the whole take. That is the cost: for fourteen
 // seconds nobody is on the arcade floor, the cabinets fill up unattended, and the audience
 // you built gets spent. The payout scales with the hype you brought to it.
-function recPay(h) { return Math.round(h * 7) + 120; }
-function startRec() {
+// A plain take off the studio mic, or a named show in the podcast studio. Same shape either
+// way: both hosts, a fixed length, a payout that scales with the crowd you brought.
+const PLAIN = { id: 'plain', name: 'AN EPISODE', ms: REC_MS, base: 120, per: 7,
+                roy: ROYALTY, col: '#e8c35a', minHype: REC_MIN_HYPE };
+function recPay(h, show) { const s = show || PLAIN; return Math.round(h * s.per) + s.base; }
+function startRec(show) {
+  const s = show || PLAIN;
+  const here = s === PLAIN ? 'studio' : 'podcast';
   if (rec) { say('Already rolling.'); return; }
-  if (hype < REC_MIN_HYPE) {
-    say('Not enough of a crowd yet — get someone on the mic first.', 3000); SFX.deny(); return;
+  if (hype < s.minHype) {
+    say(s.name + ' needs a bigger crowd than that — ' + s.minHype + '% hype. Get on the mic.',
+        3400);
+    SFX.deny(); return;
   }
-  if (hosts.jimmy.room !== 'studio' || hosts.joe.room !== 'studio') {
+  if (hosts.jimmy.room !== here || hosts.joe.room !== here) {
     say('Both of you, in here. You cannot record a double act on your own.', 3200);
     SFX.deny(); return;
   }
-  rec = { until: performance.now() + REC_MS, hype0: hype };
+  rec = { show: s, until: performance.now() + s.ms, hype0: hype };
   vo('recStart', { icon: 'icOnair' });
   SFX.day();
 }
 function updateRec(dt, now) {
   if (!rec) return;
+  const here = rec.show === PLAIN ? 'studio' : 'podcast';
   // walk either of them out and the take is lost — that is what makes it a commitment
-  if (hosts.jimmy.room !== 'studio' || hosts.joe.room !== 'studio') {
+  if (hosts.jimmy.room !== here || hosts.joe.room !== here) {
     rec = null; vo('recBail', { icon: 'icOnair', max: 3 }); SFX.deny();
     return;
   }
   if (now < rec.until) return;
-  const pay = recPay(hype);
+  // Paid on the crowd you BROUGHT to it, not what is left at the end — a take spends its
+  // audience by design, so charging the payout against the drained figure would punish
+  // exactly the long shows that are meant to be worth the most.
+  const s = rec.show, pay = recPay(rec.hype0, s);
   rec = null; episodes++;
+  royaltyRate += s.roy;
   cash += pay; banked += pay;
   SFX.bank();
   vo('recDone', { icon: 'icOnair' });
-  say('EPISODE ' + episodes + ' RECORDED — £' + (pay / 100).toFixed(2)
-      + '. It pays £' + (ROYALTY / 100).toFixed(2) + ' a night from now on.', 4200);
+  say(s.name + ' RECORDED — £' + (pay / 100).toFixed(2) + '. It pays £'
+      + (s.roy / 100).toFixed(2) + ' a night from now on.', 4400);
   floaters.push({ x: 480, y: 260, t: now, txt: '+' + (pay / 100).toFixed(2), col: '#8effc2' });
   saveRun();
 }
@@ -1129,7 +1205,17 @@ function updateRec(dt, now) {
 // ── interactions ─────────────────────────────────────────────────────────────
 function act(h) {
   const now = performance.now();
+  if (h.show !== undefined) { startRec(SHOWS[h.show]); return; }
   if (h.exit) {
+    if (h.exit === 'podcast' && !has('pod')) {
+      if (ownedPct() < 100) {
+        say('That door is the landlord\u2019s until the whole site is yours.', 3200);
+      } else {
+        say('THE PODCAST STUDIO \u2014 \u00a3' + (POD_PRICE / 100).toFixed(2) + ' at the ledger.', 3000);
+      }
+      SFX.deny();
+      return;
+    }
     if (h.exit === 'hall' && (anyOffInFirstRoom() || !has('hall'))) {
       if (anyOffInFirstRoom()) return;          // not offered yet — the door reads as wall
 
@@ -1233,27 +1319,28 @@ function changeRoom(to) {
 
 // ── shop ─────────────────────────────────────────────────────────────────────
 function upgradeCost(u) {
-  if (u.max) return Math.round(u.cost * Math.pow(u.scale, apronLvl));
+  if (u.max) return Math.round(u.cost * Math.pow(u.scale, lvl(u.id)));
   return u.cost;
 }
 function upgradeAvailable(u) {
   if (u.need && !u.need()) return false;     // gated behind another purchase
   if (u.once) return !has(u.id);
-  if (u.max) return apronLvl < u.max;
+  if (u.max) return lvl(u.id) < u.max;
   return true;
 }
 function buy(u) {
   const c = upgradeCost(u);
   if (cash < c) { SFX.deny(); say('Not enough. ' + ((c - cash) / 100).toFixed(2) + ' short.'); return; }
   cash -= c;
-  if (u.max) apronLvl++; else owned[u.id] = true;
+  if (u.max) { lvls[u.id] = lvl(u.id) + 1; if (u.id === 'apron') apronLvl = lvls.apron; }
+  else owned[u.id] = true;
   SFX.buy();
   say(u.name + ' — bought.');
 }
 
 // ── day cycle ────────────────────────────────────────────────────────────────
 function endDay() {
-  const rent = RENT(day);
+  const rent = rentDue(day);
   dayPaused = true;
   if (cash < rent) {
     state = 'bust'; SFX.bust(); vo('bust', { once: false }); clearSave();
@@ -1267,7 +1354,7 @@ function endDay() {
   // ROYALTIES — the answer to "where is this money coming from". Every episode already
   // recorded pays out again tonight. It is income the pair earned, itemised on the day-end
   // line so it can never read as rent arriving from nowhere.
-  const roy = episodes * ROYALTY;
+  const roy = royaltyRate;
   if (roy > 0) { cash += roy; banked += roy; vo('royalty', { icon: 'icOnair', max: 2 }); }
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
   saveRun();                     // a survived night is the checkpoint worth keeping
@@ -1661,6 +1748,8 @@ function sideExits() {
     // The big room only advertises itself once the first arcade is fully lit — Osimo asked
     // for it as the reward for finishing, not as a distraction from it.
     if (h.exit === 'hall' && anyOffInFirstRoom()) continue;
+    // and the podcast door stays a wall until the whole site is yours
+    if (h.exit === 'podcast' && ownedPct() < 100) continue;
     out.push({ h, dir: h.x < WORLD_W / 2 ? -1 : 1 });
   }
   return out;
@@ -1733,7 +1822,7 @@ function drawExitArrows(now) {
   const calm = 0.4 + Math.sin(now * 0.004) * 0.25;
   // While rent is short, the chevron that leads toward the SAFE flashes hard — the coin
   // closet is at the far left of the run, so from anywhere but there the answer is "left".
-  const rentShort = !dayPaused && cash < RENT(day) && (dayEndsAt - now) < 30000;
+  const rentShort = !dayPaused && cash < rentDue(day) && (dayEndsAt - now) < 30000;
   const towardSafe = room === 'coinroom' ? 0 : -1;
   for (const e of sideExits()) {
     const flash = rentShort && e.dir === towardSafe;
@@ -1749,12 +1838,13 @@ function drawExitArrows(now) {
     ctx.closePath(); ctx.fill();
     // An unleased big room quotes its price next to the chevron, so the arrow itself
     // tells you what it costs instead of sending you to the ledger to find out.
-    if (e.h.exit === 'hall' && !has('hall')) {
+    if ((e.h.exit === 'hall' && !has('hall')) || (e.h.exit === 'podcast' && !has('pod'))) {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
-      ctx.textAlign = 'right';
+      ctx.textAlign = e.dir < 0 ? 'left' : 'right';
       ctx.fillStyle = 'rgba(255,215,94,' + (0.55 + a * 0.45).toFixed(3) + ')';
-      ctx.fillText('£' + (HALL_PRICE / 100).toFixed(0), x - 22, y + 7);
+      const tag = e.h.exit === 'hall' ? HALL_PRICE : POD_PRICE;
+      ctx.fillText('£' + (tag / 100).toFixed(0), x + (e.dir < 0 ? 22 : -22), y + 7);
       ctx.textAlign = 'left';
     }
     ctx.restore();
@@ -1765,7 +1855,7 @@ function drawExitArrows(now) {
 // studio actually looks like a room where something is being made rather than a room with
 // a mic prop in it.
 function drawRecording(now) {
-  const left = Math.max(0, rec.until - now), frac = left / REC_MS;
+  const left = Math.max(0, rec.until - now), frac = left / (rec.show ? rec.show.ms : REC_MS);
   ctx.save();
   const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.006));
   ctx.strokeStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
@@ -1786,7 +1876,7 @@ function drawRecording(now) {
   ctx.fillStyle = '#ffd75e';
   ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('WORTH £' + (recPay(hype) / 100).toFixed(2), TV.x + TV.w / 2, TV.y + TV.h - 34);
+  ctx.fillText('WORTH £' + (recPay(rec.hype0, rec.show) / 100).toFixed(2), TV.x + TV.w / 2, TV.y + TV.h - 34);
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -1821,6 +1911,55 @@ function drawPaused(now) {
   ctx.fillStyle = '#1f6b3a'; ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
   ctx.fillText('TAP ANYWHERE TO CARRY ON', x + w / 2, y + 118);
   ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// Each show's position carries a card saying what it pays and what crowd it needs, in that
+// channel's own neon colour — the room reads as a rate card you can walk around.
+function drawShowSigns(now) {
+  const H = ROOMS.podcast.hotspots;
+  for (const h of H) {
+    if (h.show === undefined) continue;
+    const s = SHOWS[h.show], cx = h.x + h.w / 2, ok = hype >= s.minHype && !rec;
+    // just above the desk, not below it — at the old height the cards sat behind whoever
+    // was standing at the mic
+    const y = h.y + 176;
+    ctx.save();
+    ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+    const txt = ok ? '£' + (recPay(hype, s) / 100).toFixed(2) : s.minHype + '% HYPE';
+    const w = Math.max(96, ctx.measureText(txt).width + 26);
+    ctx.fillStyle = 'rgba(252,246,232,0.96)';
+    roundRect(cx - w / 2, y, w, 30, 8); ctx.fill();
+    ctx.strokeStyle = ok ? s.col : '#8a7a62'; ctx.lineWidth = 2.5;
+    roundRect(cx - w / 2, y, w, 30, 8); ctx.stroke();
+    ctx.fillStyle = ok ? '#1f6b3a' : '#a05a5a';
+    ctx.textAlign = 'center';
+    ctx.fillText(txt, cx, y + 21);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+}
+// The red light in the podcast studio hangs over whichever position is rolling.
+function drawPodRecording(now) {
+  const h = ROOMS.podcast.hotspots.find(x => x.show !== undefined && SHOWS[x.show] === rec.show);
+  if (!h) return;
+  const cx = h.x + h.w / 2, s = rec.show;
+  const left = Math.max(0, rec.until - now), frac = left / s.ms;
+  const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.006));
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
+  ctx.lineWidth = 5;
+  roundRect(h.x - 6, h.y - 6, h.w + 12, h.h + 12, 10); ctx.stroke();
+  ctx.fillStyle = 'rgba(10,4,4,0.8)';
+  roundRect(cx - 82, h.y + 8, 164, 34, 9); ctx.fill();
+  ctx.fillStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(cx - 62, h.y + 25, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffe9e9'; ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
+  ctx.fillText('RECORDING', cx - 48, h.y + 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(cx - 78, h.y + h.h - 14, 156, 9);
+  ctx.fillStyle = s.col;
+  ctx.fillRect(cx - 78, h.y + h.h - 14, 156 * frac, 9);
   ctx.restore();
 }
 
@@ -1871,7 +2010,7 @@ function drawHUD(now) {
   // flash indicating what room you should go to."
   // So: ONE soft card that slides down, carries a draining time bar, and leaves. After that
   // the doorway chevrons do the nagging, pointing at the room with the safe in it.
-  if (!dayPaused && !rentWarned && left < 30000 && cash < RENT(day)) {
+  if (!dayPaused && !rentWarned && left < 30000 && cash < rentDue(day)) {
     rentWarned = true; rentCardAt = now; SFX.deny();
   }
   if (rentCardAt) {
@@ -1892,7 +2031,7 @@ function drawHUD(now) {
       ctx.textAlign = 'center';
       ctx.fillText(secs + ' SECONDS TO PAY RENT', SW / 2, cy2 + 26);
       ctx.fillStyle = '#e8dcc4'; ctx.font = '14px "Barlow Condensed",sans-serif';
-      ctx.fillText('£' + ((RENT(day) - cash) / 100).toFixed(2) + ' short — bank what you are carrying',
+      ctx.fillText('£' + ((rentDue(day) - cash) / 100).toFixed(2) + ' short — bank what you are carrying',
                    SW / 2, cy2 + 44);
       ctx.textAlign = 'left';
       // the slider: how much of the night is left
@@ -1906,7 +2045,18 @@ function drawHUD(now) {
   }
   ctx.textAlign = 'right';
   ctx.fillStyle = '#e8e2d8';
-  ctx.fillText('DAY ' + day + '   RENT £' + (RENT(day) / 100).toFixed(2), SW - R - 66, 31);
+  // Once you own a slice, the rent line has to SHOW the discount — the whole point of the
+  // freehold is watching this number come down, and eventually read NO RENT.
+  const own = ownedPct();
+  ctx.fillText('DAY ' + day + '   RENT ' + (own >= 100 ? 'NONE' : '£' + (rentDue(day) / 100).toFixed(2)),
+               SW - R - 66, 31);
+  if (own > 0) {
+    ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = own >= 100 ? '#8effc2' : '#c9a6ff';
+    ctx.fillText('YOU OWN ' + own + '% OF THE SITE', SW - R - 66, 43);
+    ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
+    ctx.fillStyle = '#e8e2d8';
+  }
   ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
   ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
   ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 190, 31);
@@ -1980,7 +2130,7 @@ function drawShop() {
     const price = '£' + (c / 100).toFixed(2);
     ctx.fillStyle = can ? '#3c2410' : '#8a795f';
     ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-    ctx.fillText(fitText(r.u.name + (r.u.max ? ' ' + (apronLvl + 1) + '/' + r.u.max : ''),
+    ctx.fillText(fitText(r.u.name + (r.u.max ? ' ' + (lvl(r.u.id) + 1) + '/' + r.u.max : ''),
                          right - tx), tx, r.cy - 2);
     ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
     const pw = ctx.measureText(price).width;
@@ -2059,6 +2209,8 @@ function frame(ts) {
   drawPlate(room);
   if (room === 'studio') tvFrame();
   if (room === 'studio' && rec) drawRecording(ts);
+  if (room === 'podcast' && rec) drawPodRecording(ts);
+  if (room === 'podcast') drawShowSigns(ts);
   drawPunters();
   if (state !== 'attract') {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
@@ -2119,6 +2271,10 @@ window.__TC = {
   pause() { togglePause(); return paused; },// QA only
   save() { saveRun(); },                    // QA only
   setHype(v) { hype = v; },                 // QA only — reach a recordable crowd instantly
+  deed(n) { lvls.deed = n; },               // QA only — own n tenths of the site
+  goRoom(r) { hosts.jimmy.room = hosts.joe.room = room = r;
+              hosts.jimmy.x = hosts.jimmy.target = 300;
+              hosts.joe.x = hosts.joe.target = 560; },   // QA only
   bothInStudio() { hosts.jimmy.room = hosts.joe.room = room = 'studio';
                    hosts.jimmy.x = hosts.jimmy.target = 300;
                    hosts.joe.x = hosts.joe.target = 560; },
