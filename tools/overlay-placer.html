@@ -311,8 +311,15 @@ function drawBox(o, on) {
   // so the fit you see while dragging is the fit you get
   if (o.id === 'tv' || o.id.startsWith('podTv')) {
     if (!tvClip) {
+      // Osimo 2026-09-07: "can we share the pixel location with the smoke b roll too" —
+      // this preview was always the BBB sample clip, so it never actually proved the fit
+      // for the idle smoke bumper, which is the other feed this same TV rect carries.
+      // ?clip=smoke swaps the preview source; the cover-fit/clip math below is identical
+      // either way, so whichever one is loaded is the exact fit the game will show.
       const v = document.createElement('video');
-      v.src = '../assets/footage/bbb/jellyfish-lamp.mp4?v=1';
+      v.src = QS.get('clip') === 'smoke'
+        ? '../assets/footage/jnj-smoke-screen.mp4?v=1'
+        : '../assets/footage/bbb/jellyfish-lamp.mp4?v=1';
       v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
       v.play().catch(() => {});
       tvClip = v;

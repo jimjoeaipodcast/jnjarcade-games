@@ -240,6 +240,10 @@ const JINGLES = [
   { label: '8-BIT',      file: '../assets/audio/candy-tris/jingle-8bit-town.mp3' },
   { label: 'MUSIC BOX',  file: '../assets/audio/candy-tris/jingle-music-box.mp3' },
   { label: 'RETRO WAVE', file: '../assets/audio/candy-tris/jingle-retro-wave.mp3' },
+  // Osimo 2026-09-07: a real freesound pinball/arcade ambience recording — loudnorm'd to
+  // -19 LUFS / -1.5dBTP to sit at the same level as the three above (it came in ~9dB
+  // quieter on average, being a sparse ambience track rather than a continuous melody).
+  { label: 'ARCADE',     file: '../assets/audio/the-count/jingle-arcade-ambience.mp3' },
 ];
 const MUSIC_VOL = 0.32;
 let musicIdx = -1, musicEl = null;      // -1 = no music, 0..2 = a jingle
