@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>PUNTER PLACER — THE BIG ROOM</title>
+<title>PUNTER PLACER</title>
 <!-- ══════════════════════════════════════════════════════════════════════════
   Osimo 2026-09-07: "make an html page, background image, full screen of the new
   arcade, then place the 9 punters on the 9 arcades, and allow me while on that
@@ -80,8 +80,14 @@
 // button from the page so patreons can just play around with the sprites"). The page then
 // stops being a work order and becomes a toy: everything still drags and pinches, nothing
 // is sent anywhere. ?edit=1 puts the button back for the next round of placement.
-const LOCKED = false;
-const EDIT = new URLSearchParams(location.search).get('edit') === '1';
+// ?room=hall (the big room, default) or ?room=corridor (the first arcade). One page, one
+// endpoint, a layout per room — Osimo 2026-09-07: "can we use the Placer for the other
+// arcade please too."
+const QS = new URLSearchParams(location.search);
+const ROOM = QS.get('room') === 'corridor' ? 'corridor' : 'hall';
+// LOCKED is per room: the big room's layout is placed and shipped, the corridor's is not.
+const LOCKED = ROOM === 'hall';
+const EDIT = QS.get('edit') === '1';
 const W = 960, H = 540;                       // the game's world, one to one
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
@@ -94,24 +100,38 @@ let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
 // wall beside the cash machine — the only one whose back we see. `face` picks BOTH the
 // sprite set and the mirroring here exactly as it does in the game, so a punter in this
 // tool can never be facing a different way from the same punter in the arcade.
+// ELEVEN — Osimo's own placement, submitted 2026-09-07 and shipped. He corrected the count
+// while he was in here ("I told you to add 5 on the left but it was indeed 4"), so the
+// far-end left cabinet and its punter are gone. These numbers ARE the game's numbers.
 const DEFAULTS = [
-  { label: 'LEFT 1 — BY THE DOOR', x: 200, feet: 470, h: 200, face: 'left'  },
-  { label: 'LEFT 2',               x: 272, feet: 448, h: 172, face: 'left'  },
-  { label: 'LEFT 3',               x: 318, feet: 424, h: 148, face: 'left'  },
-  { label: 'LEFT 4',               x: 350, feet: 404, h: 128, face: 'left'  },
-  { label: 'LEFT 5 — FAR END',     x: 372, feet: 388, h: 112, face: 'left'  },
-  { label: 'BACK WALL (his back)', x: 394, feet: 352, h: 104, face: 'back'  },
-  { label: 'THE PINBALL TABLE',    x: 560, feet: 352, h: 104, face: 'right' },
-  { label: 'RIGHT 5 — FAR END',    x: 590, feet: 388, h: 112, face: 'right' },
-  { label: 'RIGHT 4',              x: 610, feet: 404, h: 128, face: 'right' },
-  { label: 'RIGHT 3',              x: 642, feet: 424, h: 148, face: 'right' },
-  { label: 'RIGHT 2',              x: 688, feet: 448, h: 172, face: 'right' },
-  { label: 'RIGHT 1 — BY THE DOOR',x: 760, feet: 470, h: 200, face: 'right' },
+  { label: 'LEFT 1 — BY THE DOOR', x: 178, feet: 490, h: 286, face: 'left'  },
+  { label: 'LEFT 2',               x: 267, feet: 435, h: 221, face: 'left'  },
+  { label: 'LEFT 3',               x: 312, feet: 385, h: 164, face: 'left'  },
+  { label: 'LEFT 4 — FAR END',     x: 345, feet: 358, h: 124, face: 'left'  },
+  { label: 'BACK WALL (his back)', x: 404, feet: 344, h: 109, face: 'back'  },
+  { label: 'THE PINBALL TABLE',    x: 533, feet: 353, h:  98, face: 'right' },
+  { label: 'RIGHT 5 — FAR END',    x: 611, feet: 350, h: 113, face: 'right' },
+  { label: 'RIGHT 4',              x: 631, feet: 373, h: 144, face: 'right' },
+  { label: 'RIGHT 3',              x: 665, feet: 397, h: 172, face: 'right' },
+  { label: 'RIGHT 2',              x: 708, feet: 428, h: 212, face: 'right' },
+  { label: 'RIGHT 1 — BY THE DOOR',x: 776, feet: 482, h: 286, face: 'right' },
 ];
+// THE FIRST ARCADE — the five corridor machines, as the game has them today. All five face
+// left into their cabinets, the way that room's art is angled.
+// Read straight off the game's MACHINES table, so RESET really is "back to the game".
+const CORRIDOR = [
+  { label: 'CABINET 1 — NEAREST',     x: 271, feet: 410, h: 210, face: 'left'  },
+  { label: 'CABINET 2',               x: 306, feet: 370, h: 160, face: 'left'  },
+  { label: 'CABINET 3',               x: 361, feet: 330, h: 109, face: 'left'  },
+  { label: 'CABINET 4 — FAR END',     x: 399, feet: 310, h:  85, face: 'left'  },
+  { label: 'CABINET 5 — THE RED ONE', x: 731, feet: 410, h: 210, face: 'right' },
+];
+const ROOMS = { hall: DEFAULTS, corridor: CORRIDOR };
 const BACKS  = ['punterBackA', 'punterBackB', 'punterBackC'];
 const FRONTS = ['punter34A', 'punter34B', 'punter34C'];
 const SPRITES = [...BACKS, ...FRONTS];
-let punters = DEFAULTS.map((d, i) => ({
+const START = ROOMS[ROOM];
+let punters = START.map((d, i) => ({
   ...d,
   flip: d.face === 'right',
   spr: (d.face === 'back' ? BACKS : FRONTS)[i % 3],
@@ -144,21 +164,34 @@ function toWorld(px, py) {
 // ── art, straight from the game's own pack ──────────────────────────────────
 fetch('../games/the-count-pack.json?v=15').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
-  mk(p.art.hall, im => { hall = im; });
+  mk(p.art[ROOM], im => { hall = im; });
   for (const k of SPRITES) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
   ready = true;
 }).catch(() => toast('Could not load the art pack.'));
 
-// ── a layout already submitted wins over the defaults ───────────────────────
-fetch('/api/punters').then(r => r.json()).then(d => {
-  if (d && Array.isArray(d.punters) && d.punters.length === punters.length) {
+// ── a layout already submitted wins over the defaults, AND retires the button ─
+// Osimo 2026-09-07: "I pressed submit, and the submit button should have vanished unless I
+// ask you to add it again, but after you hide it once it needs to auto delete so no more
+// submissions are made and html record for patreon list." So one submission closes the
+// page: SUBMIT goes on the next load and stays gone. Only a write by HIM counts — my own
+// resets are tagged differently so they cannot lock the page by accident. ?edit=1 reopens.
+fetch('/api/punters?room=' + ROOM).then(r => r.json()).then(d => {
+  if (!d || !Array.isArray(d.punters)) return;
+  if (d.punters.length === punters.length) {
     d.punters.forEach((p, i) => {
       punters[i].x = p.x; punters[i].feet = p.feet; punters[i].h = p.h;
       if (typeof p.flip === 'boolean') punters[i].flip = p.flip;
     });
-    toast('Loaded your last submission.', 1400);
+    updateSel();
   }
+  if (d.by === 'osimo' && d.savedAt) retireSubmit();
 }).catch(() => {});
+function retireSubmit() {
+  if (EDIT) return;
+  const b = document.getElementById('submit');
+  if (b) b.remove();
+  document.getElementById('hint').textContent = 'submitted · drag · pinch · play about with it';
+}
 
 function drawPunter(p, on) {
   const im = SPR[p.spr];
@@ -284,14 +317,12 @@ document.getElementById('next').onclick = () => { sel = (sel + 1) % punters.leng
 document.getElementById('bigger').onclick  = () => { punters[sel].h = Math.min(420, punters[sel].h + 6); updateSel(); };
 document.getElementById('smaller').onclick = () => { punters[sel].h = Math.max(30, punters[sel].h - 6); updateSel(); };
 document.getElementById('reset').onclick = () => {
-  punters = DEFAULTS.map((d, i) => ({ ...d, spr: SPRITES[i % SPRITES.length] }));
+  punters = START.map((d, i) => ({ ...d, flip: d.face === 'right',
+                                   spr: (d.face === 'back' ? BACKS : FRONTS)[i % 3] }));
   updateSel(); toast('Back to the current game positions.', 1400);
 };
 
-if (LOCKED && !EDIT) {
-  document.getElementById('submit').style.display = 'none';
-  document.getElementById('hint').textContent = 'drag · pinch · play about with it';
-}
+if (LOCKED && !EDIT) retireSubmit();
 let toastT = 0;
 function toast(msg, ms) {
   const el = document.getElementById('toast');
@@ -300,22 +331,29 @@ function toast(msg, ms) {
   toastT = setTimeout(() => { el.style.display = 'none'; }, ms || 2600);
 }
 
-document.getElementById('submit').onclick = async () => {
-  const btn = document.getElementById('submit');
+// LOCKED removes the button before this line runs, so the handler has to tolerate its
+// absence — binding onclick on null threw on every locked load.
+const submitBtn = document.getElementById('submit');
+if (submitBtn) submitBtn.onclick = async () => {
+  const btn = submitBtn;
   btn.disabled = true; btn.textContent = 'SENDING…';
   try {
     const r = await fetch('/api/punters', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        by: 'osimo',
+        by: 'osimo', room: ROOM,
         punters: punters.map(p => ({ x: Math.round(p.x), feet: Math.round(p.feet),
                                      h: Math.round(p.h), flip: p.flip })),
       }),
     });
     const d = await r.json();
-    if (d.ok) toast('SUBMITTED ✅\nTell Claude and he will put it in the game.', 5000);
-    else toast('Did not save: ' + (d.error || r.status), 5000);
+    if (d.ok) {
+      toast('SUBMITTED ✅\nTell Claude and he will put it in the game.', 5000);
+      retireSubmit();                    // one submission closes the page
+      return;
+    }
+    toast('Did not save: ' + (d.error || r.status), 5000);
   } catch (e) {
     toast('Did not save: ' + e.message, 5000);
   }

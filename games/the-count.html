@@ -527,33 +527,35 @@ const FRONTS = ['punter34A', 'punter34B', 'punter34C'];
 // face: 'left' | 'right' | 'back' drives BOTH the sprite set and the mirroring, so a
 // machine can never end up with a punter facing away from it.
 const HALL_MACHINES = [
-  // LEFT WALL, front to back — punters stand in the aisle facing left, into the cabinet
+  // ELEVEN, and every punter position below is OSIMO'S OWN, placed by hand in
+  // tools/punter-placer and read back out of KV on 2026-09-07. He corrected the count while
+  // he was in there: "I told you to add 5 on the left but it was indeed 4" — so the far-end
+  // left cabinet is gone and its punter with it. Nothing here is my guess any more.
+  // LEFT WALL, front to back — four machines, punters facing left into them
   { room: 'hall', pay: 90,  secs: 11.0, body: [43, 118, 140, 372], screen: [58, 238, 132, 302],
-    punter: { h: 200, feet: 470, x: 200 }, face: 'left' },
+    punter: { h: 286, feet: 490, x: 178 }, face: 'left' },
   { room: 'hall', pay: 68,  secs: 8.5,  body: [183, 145, 71, 305], screen: [190, 244, 246, 296],
-    punter: { h: 172, feet: 448, x: 272 }, face: 'left' },
+    punter: { h: 221, feet: 435, x: 267 }, face: 'left' },
   { room: 'hall', pay: 52,  secs: 6.5,  body: [254, 168, 46, 252], screen: [258, 250, 296, 292],
-    punter: { h: 148, feet: 424, x: 318 }, face: 'left' },
+    punter: { h: 164, feet: 385, x: 312 }, face: 'left' },
   { room: 'hall', pay: 40,  secs: 5.0,  body: [300, 186, 32, 214], screen: [302, 252, 330, 288],
-    punter: { h: 128, feet: 404, x: 350 }, face: 'left' },
-  { room: 'hall', pay: 30,  secs: 4.0,  body: [332, 200, 22, 186], screen: [334, 256, 352, 286],
-    punter: { h: 112, feet: 388, x: 372 }, face: 'left' },
-  // BACK WALL — the one you see from behind, beside the cash machine
+    punter: { h: 124, feet: 358, x: 345 }, face: 'left' },
+  // BACK WALL — the only punter in the room whose back we see
   { room: 'hall', pay: 46,  secs: 6.0,  body: [372, 205, 44, 118], screen: [378, 226, 410, 268],
-    punter: { h: 104, feet: 352, x: 394 }, face: 'back' },
-  // RIGHT WALL, back to front — punters face right, into the cabinet
+    punter: { h: 109, feet: 344, x: 404 }, face: 'back' },
+  // RIGHT WALL, back to front — six, counting the pinball table
   { room: 'hall', pay: 120, secs: 15.0, body: [532, 235, 85, 100], screen: [540, 244, 606, 282],
-    punter: { h: 104, feet: 352, x: 560 }, face: 'right' },
+    punter: { h: 98,  feet: 353, x: 533 }, face: 'right' },
   { room: 'hall', pay: 30,  secs: 4.0,  body: [606, 200, 22, 186], screen: [608, 256, 626, 286],
-    punter: { h: 112, feet: 388, x: 590 }, face: 'right' },
+    punter: { h: 113, feet: 350, x: 611 }, face: 'right' },
   { room: 'hall', pay: 40,  secs: 5.0,  body: [628, 186, 32, 214], screen: [630, 252, 658, 288],
-    punter: { h: 128, feet: 404, x: 610 }, face: 'right' },
+    punter: { h: 144, feet: 373, x: 631 }, face: 'right' },
   { room: 'hall', pay: 52,  secs: 6.5,  body: [660, 168, 46, 252], screen: [664, 250, 702, 292],
-    punter: { h: 148, feet: 424, x: 642 }, face: 'right' },
+    punter: { h: 172, feet: 397, x: 665 }, face: 'right' },
   { room: 'hall', pay: 68,  secs: 8.5,  body: [706, 145, 71, 305], screen: [714, 244, 770, 296],
-    punter: { h: 172, feet: 448, x: 688 }, face: 'right' },
+    punter: { h: 212, feet: 428, x: 708 }, face: 'right' },
   { room: 'hall', pay: 110, secs: 14.0, body: [777, 118, 140, 372], screen: [828, 238, 902, 302],
-    punter: { h: 200, feet: 470, x: 760 }, face: 'right' },
+    punter: { h: 286, feet: 482, x: 776 }, face: 'right' },
 ];
 // flip and sprite set both come from `face`, so they cannot disagree with each other
 HALL_MACHINES.forEach(m => { m.flip = m.face === 'right'; m.back = m.face === 'back'; });
@@ -666,7 +668,7 @@ const UPGRADES = [
   // rather than a distraction from the first five machines.
   { id: 'hall',    name: 'LEASE THE BIG ROOM',  cost: HALL_PRICE, once: true, icon: 'cab',
     need: () => !anyOffInFirstRoom(),
-    blurb: 'The double hall next door. Twelve more machines to light up.' },
+    blurb: 'The double hall next door. Eleven more machines to light up.' },
   // One ledger line per hall machine, in the order you meet them walking in. Built from
   // HALL_MACHINES so a machine can never exist on the floor without a price on it — which
   // is exactly how six of them ended up unbuyable scenery.
@@ -674,8 +676,7 @@ const UPGRADES = [
     ['LEFT 1 — BY THE DOOR', 7000, 'The big one by the door. 90p a play.'],
     ['LEFT 2',               5200, 'Steady money. 68p a play.'],
     ['LEFT 3',               3800, 'Quicker, smaller takings.'],
-    ['LEFT 4',               2800, 'Halfway down the wall. Never stops.'],
-    ['LEFT 5 — FAR END',     2000, 'The little one at the far end.'],
+    ['LEFT 4 — FAR END',     2800, 'The little one at the far end. Never stops.'],
     ['BACK WALL',            3200, 'Beside the cash machine. Faces the room.'],
     ['THE PINBALL TABLE',   11000, 'The showpiece. £1.20 a play, and they stay on it.'],
     ['RIGHT 5 — FAR END',    2000, 'The far corner. Cheap to light, quick to pay.'],
@@ -685,7 +686,7 @@ const UPGRADES = [
     ['RIGHT 1 — BY THE DOOR',8500, 'The best earner in the building. £1.10 a play.'],
   ].map(([name, cost, blurb], i) => ({
     id: 'hall' + (i + 1), name: 'BIG ROOM: ' + name, cost, once: true,
-    icon: i === 6 ? 'coin' : 'cab', need: () => has('hall'), blurb,
+    icon: i === 5 ? 'coin' : 'cab', need: () => has('hall'), blurb,
   })),
   // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
   // expansion is FOR (Osimo: "you can pay Joe some money daily so that he collects money

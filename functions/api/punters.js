@@ -10,7 +10,10 @@
    Uses the SUBMISSIONS KV binding that already exists in wrangler.toml. Without
    the binding it degrades the same way plays.js does: GET {}, POST 503. */
 
-const KEY = 'the-count-punters';
+// One key per room, so the two arcades cannot overwrite each other. 'hall' keeps the
+// original unsuffixed key so the layout Osimo already submitted is not orphaned.
+const ROOMS = { hall: 'the-count-punters', corridor: 'the-count-punters-corridor' };
+function keyFor(room) { return ROOMS[room] || ROOMS.hall; }
 const MAX = 40;                       // more than the nine machines, room to grow
 
 function json(body, status = 200) {
@@ -20,10 +23,11 @@ function json(body, status = 200) {
   });
 }
 
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ request, env }) {
   if (!env.SUBMISSIONS) return json({});
   try {
-    const raw = await env.SUBMISSIONS.get(KEY);
+    const room = new URL(request.url).searchParams.get('room') || 'hall';
+    const raw = await env.SUBMISSIONS.get(keyFor(room));
     return json(raw ? JSON.parse(raw) : {});
   } catch {
     return json({});
@@ -55,15 +59,17 @@ export async function onRequestPost({ request, env }) {
     clean.push({ i: clean.length, x, feet, h, flip: !!p.flip });
   }
 
+  const room = ROOMS[body.room] ? body.room : 'hall';
   const rec = {
     savedAt: new Date().toISOString(),
+    room,
     by: (typeof body.by === 'string' ? body.by : 'osimo').slice(0, 40),
     note: (typeof body.note === 'string' ? body.note : '').slice(0, 300),
     punters: clean,
   };
   try {
-    await env.SUBMISSIONS.put(KEY, JSON.stringify(rec));
-    return json({ ok: true, savedAt: rec.savedAt, count: clean.length });
+    await env.SUBMISSIONS.put(keyFor(room), JSON.stringify(rec));
+    return json({ ok: true, savedAt: rec.savedAt, room, count: clean.length });
   } catch (e) {
     return json({ error: 'write failed' }, 500);
   }
