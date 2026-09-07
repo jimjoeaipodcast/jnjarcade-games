@@ -101,11 +101,11 @@ let plate = null, SPR = {}, sel = 0;
 // Every row between them is interpolated along that line, x as well as y, so the column
 // leans with the page's own ruling. Leave a page's two x's equal and it stands plumb.
 const LEDGER = [
-  { id: 'firstRow', label: 'TOP LINE — left page',    x: 136, y: 87,  kind: 'row', col: 0, end: 0 },
-  { id: 'lastRow',  label: 'BOTTOM LINE — left page', x: 136, y: 425, kind: 'row', col: 0, end: 1 },
-  { id: 'col2',     label: 'TOP LINE — right page',   x: 498, y: 88,  kind: 'row', col: 1, end: 0 },
-  { id: 'col2Last', label: 'BOTTOM LINE — right page',x: 498, y: 425, kind: 'row', col: 1, end: 1 },
-  { id: 'width',    label: 'COLUMN WIDTH',            x: 136, y: 256, w: 298, kind: 'width' },
+  { id: 'firstRow', label: 'TOP LINE — left page',    x: 217, y: 112, kind: 'row', col: 0, end: 0 },
+  { id: 'lastRow',  label: 'BOTTOM LINE — left page', x: 204, y: 402, kind: 'row', col: 0, end: 1 },
+  { id: 'col2',     label: 'TOP LINE — right page',   x: 495, y: 99,  kind: 'row', col: 1, end: 0 },
+  { id: 'col2Last', label: 'BOTTOM LINE — right page',x: 496, y: 404, kind: 'row', col: 1, end: 1 },
+  { id: 'width',    label: 'COLUMN WIDTH',            x: 217, y: 256, w: 249, kind: 'width' },
 ];
 // Osimo 2026-09-07: "I need a total amount that we would use, the max per page, so you always
 // know where to place them when there's loads." Three sample rows told him nothing about how
@@ -149,14 +149,14 @@ const SEATS = [
 // The box IS the screen — a clip is cover-fitted into it and clipped by it — so what is
 // dragged here is exactly the picture area.
 const TVS = {
-  studio:  [{ id: 'tv',    label: 'THE STUDIO TV',   x: 358, y: 121, w: 240, h: 143, kind: 'box' }],
+  studio:  [{ id: 'tv',    label: 'THE STUDIO TV',   x: 349, y: 118, w: 252, h: 143, kind: 'box' }],
   // FOUR monitors, one per show — Osimo 2026-09-07: "should we have four images to place?"
   // Yes: each position has its own screen, and whichever show is recording lights its own.
   podcast: [
-    { id: 'podTv0', label: 'SERIOUSLY MONITOR',     x: 232, y: 289, w: 58, h: 40, kind: 'box' },
-    { id: 'podTv1', label: 'BRIGHT SIDE MONITOR',   x: 404, y: 289, w: 58, h: 40, kind: 'box' },
-    { id: 'podTv2', label: 'BUY OR BYEBYE MONITOR', x: 576, y: 289, w: 58, h: 40, kind: 'box' },
-    { id: 'podTv3', label: 'HOROSCOPES MONITOR',    x: 742, y: 289, w: 58, h: 40, kind: 'box' },
+    { id: 'podTv0', label: 'SERIOUSLY MONITOR',     x: 239, y: 293, w: 46, h: 34, kind: 'box' },
+    { id: 'podTv1', label: 'BRIGHT SIDE MONITOR',   x: 411, y: 293, w: 46, h: 34, kind: 'box' },
+    { id: 'podTv2', label: 'BUY OR BYEBYE MONITOR', x: 601, y: 293, w: 46, h: 34, kind: 'box' },
+    { id: 'podTv3', label: 'HOROSCOPES MONITOR',    x: 763, y: 294, w: 40, h: 34, kind: 'box' },
   ],
 };
 const STOCK = [

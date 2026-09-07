@@ -426,14 +426,14 @@ function loadPack() {
 // ByeBye product. Both are placeable (tools/overlay-placer?target=tv) because a rectangle
 // eyeballed off a screenshot is exactly the thing that ends up a few pixels out.
 // Osimo 2026-09-07: "fix the TV, anything we play in it should fit perfectly."
-const TV = { x: 358, y: 121, w: 240, h: 143 };
+const TV = { x: 349, y: 118, w: 252, h: 143 };   // placed 2026-09-07
 // One screen per position. Whichever show is rolling lights ITS monitor — Buy or ByeBye
 // carries the product it is reviewing, the other three carry the studio feed for now.
-const POD_TV = [
-  { x: 232, y: 289, w: 58, h: 40 },   // SERIOUSLY
-  { x: 404, y: 289, w: 58, h: 40 },   // BRIGHT SIDE
-  { x: 576, y: 289, w: 58, h: 40 },   // BUY OR BYEBYE
-  { x: 742, y: 289, w: 58, h: 40 },   // HOROSCOPES
+const POD_TV = [                      // all four placed by Osimo, 2026-09-07
+  { x: 239, y: 293, w: 46, h: 34 },   // SERIOUSLY
+  { x: 411, y: 293, w: 46, h: 34 },   // BRIGHT SIDE
+  { x: 601, y: 293, w: 46, h: 34 },   // BUY OR BYEBYE
+  { x: 763, y: 294, w: 40, h: 34 },   // HOROSCOPES
 ];
 // Cover-fit, not stretch: a clip keeps its shape and the overflow is cropped by the screen
 // it is playing on, the way a real screen shows a picture that is not its own aspect.
@@ -1741,9 +1741,12 @@ canvas.addEventListener('mousedown', onTap);
 // plate: ruled paper y34..277, left page x133..301 with its red rule at x161, right page
 // x333..507 with its rule at x347. Its pages are narrower than the old book's, so these are
 // starting values and he is re-placing them in the placer.
-const LEDGER_ART = { w: 640, h: 360, colW: 138, rows: 11,
-                     cols: [{ x0: 165, y0: 46, x1: 165, y1: 268 },
-                            { x0: 351, y0: 46, x1: 351, y1: 268 }] };
+// Placed by Osimo on the new book, 2026-09-07: left page leans from x217 at the top to x204
+// at the bottom, right page 495 to 496, eleven rows, a 249-wide column. His 960x540 figures
+// in the plate's own 640x360 space.
+const LEDGER_ART = { w: 640, h: 360, colW: 166, rows: 11,
+                     cols: [{ x0: 144.7, y0: 74.7, x1: 136.0, y1: 268.0 },
+                            { x0: 330.0, y0: 66.0, x1: 330.7, y1: 269.3 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
