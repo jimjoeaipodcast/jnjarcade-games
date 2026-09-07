@@ -264,6 +264,14 @@ function cycleSound() {
     localStorage.setItem('music_' + SLUG, String(musicIdx));
   } catch (e) {}
   applyMusic();
+  // a take is running its own jingle; muting has to silence that too, and a change of
+  // station should not start the arcade's music underneath it
+  if (bbbAudio && rec) {
+    if (muted) { try { bbbAudio.pause(); } catch (e) {} }
+    else { try { bbbAudio.play().catch(() => {}); } catch (e) {} }
+    if (musicEl) musicEl.pause();
+    musicWasPlaying = !muted && musicIdx >= 0;
+  }
   if (!muted) say(musicIdx < 0 ? 'Sound FX only.' : JINGLES[musicIdx].label + ' playing.');
 }
 function unlockAudio() {
@@ -284,9 +292,41 @@ function tone(f0, f1, dur, type, vol) {
     o.start(t); o.stop(t + dur + 0.02);
   } catch (e) {}
 }
+// A short burst of filtered noise — the till drawer, and the only thing in this game that
+// is not a tone.
+function noise(dur, vol, cut) {
+  if (muted || !audioCtx || state === 'attract') return;
+  try {
+    const n = Math.floor(audioCtx.sampleRate * dur);
+    const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const f = audioCtx.createBiquadFilter(); f.type = 'bandpass';
+    f.frequency.value = cut || 1200; f.Q.value = 0.8;
+    const g = audioCtx.createGain(); g.gain.value = vol || 0.1;
+    src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start();
+  } catch (e) {}
+}
 const SFX = {
   coin:   () => { tone(880, 1320, 0.07, 'square', 0.13); setTimeout(() => tone(1320, 1760, 0.07, 'square', 0.10), 60); },
   bank:   () => { tone(320, 880, 0.22, 'triangle', 0.16); },
+  // CHA-CHING. Osimo 2026-09-07: "when we collect cash anywhere we should have a cha-ching
+  // sound." A shop till, built the way a till actually sounds: the drawer's clack, then two
+  // bell strikes a fifth apart ringing over it, the second brighter and longer than the
+  // first. Every place money moves toward you plays this and nothing else, so the sound
+  // means one thing.
+  chaChing: () => {
+    noise(0.05, 0.10, 1400);                                  // the drawer
+    tone(1480, 1480, 0.10, 'triangle', 0.15);                 // ka-
+    setTimeout(() => tone(1180, 1180, 0.09, 'triangle', 0.11), 20);
+    setTimeout(() => {                                        // -ching
+      tone(2220, 2200, 0.30, 'triangle', 0.16);
+      tone(2960, 2930, 0.26, 'sine', 0.07);
+      setTimeout(() => tone(1480, 1470, 0.34, 'sine', 0.06), 12);
+    }, 105);
+  },
   buy:    () => { tone(440, 660, 0.12, 'sawtooth', 0.13); setTimeout(() => tone(660, 990, 0.14, 'sawtooth', 0.12), 110); },
   deny:   () => { tone(220, 130, 0.18, 'square', 0.12); },
   // A cabinet giving up. Osimo 2026-09-07 asked for "a sound, like an arcade machine noise
@@ -460,6 +500,31 @@ let tvVideo = null;
 const BBB_CLIPS = ['button-pusher', 'dumpling-mold', 'jellyfish-lamp', 'mini-chopper',
                    'paper-stool'];
 let bbbVideo = null, bbbName = null;
+// THE SHOW'S OWN JINGLE. Osimo 2026-09-07: "when we run buy or ByeBye we use a jingle in the
+// actual b-roll of our segment — maybe play that and interrupt any other music and play the
+// BBB jingle while they're recording BBB." Twenty seconds cut from the real segment track,
+// loudness-matched to the arcade's own jingles so it does not jump out at you. It takes over
+// for the length of the take and hands the music back exactly as it found it — including
+// which of the three was playing, or none at all.
+let bbbAudio = null, musicWasPlaying = false;
+function bbbJingleStart() {
+  if (muted) return;
+  if (!bbbAudio) {
+    bbbAudio = new Audio('../assets/audio/bbb/bbb-jingle.mp3?v=1');
+    bbbAudio.loop = true;
+    bbbAudio.volume = MUSIC_VOL * 1.15;   // it is the point of the moment, so a shade louder
+  }
+  musicWasPlaying = !!(musicEl && !musicEl.paused);
+  if (musicEl) musicEl.pause();
+  try { bbbAudio.currentTime = 0; bbbAudio.play().catch(() => {}); } catch (e) {}
+}
+function bbbJingleStop() {
+  if (bbbAudio) { try { bbbAudio.pause(); } catch (e) {} }
+  // hand the music back exactly as it was — a run with the speaker on FX only or muted
+  // stays that way
+  if (musicWasPlaying && musicEl && !muted) musicEl.play().catch(() => {});
+  musicWasPlaying = false;
+}
 function bbbStart() {
   const pick = BBB_CLIPS[Math.floor(Math.random() * BBB_CLIPS.length)];
   if (bbbName !== pick) {
@@ -472,7 +537,10 @@ function bbbStart() {
   try { bbbVideo.currentTime = 0; bbbVideo.play().catch(() => {}); } catch (e) {}
   return pick;
 }
-function bbbStop() { if (bbbVideo) { try { bbbVideo.pause(); } catch (e) {} } }
+function bbbStop() {
+  if (bbbVideo) { try { bbbVideo.pause(); } catch (e) {} }
+  bbbJingleStop();
+}
 // The studio feed, created on demand — the podcast studio's monitors want it too, and it
 // used to exist only if you had stood in the studio first.
 function tvFeedReady() {
@@ -1075,7 +1143,7 @@ function resumeRun() {
   });
   return true;
 }
-window.addEventListener('pagehide', saveRun);
+window.addEventListener('pagehide', () => { saveRun(); bbbJingleStop(); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveRun();
 });
@@ -1310,6 +1378,7 @@ function updateJoe(dt) {
   if (took > 0) {
     const bonus = has('counter') ? Math.round(took * 0.1) : 0;
     cash += took + bonus; banked += took + bonus;
+    if (room === 'corridor') SFX.chaChing();      // you hear him bank it if you are on the floor
     if (room === 'corridor') {
       floaters.push({ x: 480, y: 300, t: performance.now(),
                       txt: 'JOE BANKED +' + ((took + bonus) / 100).toFixed(2), col: '#8effc2' });
@@ -1354,7 +1423,7 @@ function updateShops(dt, now) {
       s.cust = null;
       s.stock--;
       s.till += cfg.per;
-      SFX.coin();
+      SFX.chaChing();
       if (s.stock === 0) vo('outOfStock', { icon: 'icBottle', max: 2 });
       continue;
     }
@@ -1446,12 +1515,16 @@ function startRec(show) {
   // always left and Joe always right." They take their places the moment the light goes on —
   // always the same seat, so the show always looks like the show.
   if (s === PLAIN) {
+    // "should you sit down to start a BBB he comes back to his seat" — whoever was mooching
+    // stops where he is and takes his place for the take.
     hosts.jimmy.x = hosts.jimmy.target = SEAT.jimmy;
     hosts.joe.x = hosts.joe.target = SEAT.joe;
+    hosts.jimmy.wanderAt = hosts.joe.wanderAt = performance.now() + 9e9;
   }
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
   if (s.id === 'plain' || s.id === 'byebye') {
     const pick = bbbStart();
+    bbbJingleStart();
     say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
         3600);
   }
@@ -1464,6 +1537,7 @@ function updateRec(dt, now) {
   // walk either of them out and the take is lost — that is what makes it a commitment
   if (hosts.jimmy.room !== here || hosts.joe.room !== here) {
     rec = null; bbbStop(); vo('recBail', { icon: 'icOnair', max: 3 }); SFX.deny();
+    hosts.jimmy.wanderAt = hosts.joe.wanderAt = now + 2000;
     return;
   }
   if (now < rec.until) return;
@@ -1473,11 +1547,12 @@ function updateRec(dt, now) {
   // exactly the long shows that are meant to be worth the most.
   const s = rec.show, pay = recPay(rec.hype0, s);
   rec = null; episodes++;
+  hosts.jimmy.wanderAt = hosts.joe.wanderAt = now + 2000;   // free to mooch again
   showDay[s.id] = day;
   if (s.cool) showCool[s.id] = now + s.cool;
   royaltyRate += s.roy;
   cash += pay; banked += pay;
-  SFX.bank();
+  SFX.chaChing();
   vo('recDone', { icon: 'icOnair' });
   say(s.name + ' RECORDED — £' + (pay / 100).toFixed(2) + '. It pays £'
       + (s.roy / 100).toFixed(2) + ' a night from now on.', 4400);
@@ -1520,7 +1595,7 @@ function act(h) {
     if (room4 <= 0) { vo('fullApron', { icon: 'icApron', once: false }); SFX.deny(); return; }
     const took = Math.min(c.till, room4);
     c.till -= took; me().carry = carryOf(me()) + took;
-    SFX.coin();
+    SFX.chaChing();
     floaters.push({ x: h.x + h.w / 2, y: h.y + 30, t: now, txt: '+' + took + 'p', col: '#ffd75e' });
     if (c.till > 0) say('Apron full at ' + carryOf(me()) + 'p — some left in the machine.');
     return;
@@ -1533,7 +1608,7 @@ function act(h) {
       cash += bag + bonus; banked += bag + bonus;
       floaters.push({ x: h.x + h.w / 2, y: h.y, t: now,
                       txt: '+' + ((bag + bonus) / 100).toFixed(2) + (bonus ? ' (+10%)' : ''), col: '#8effc2' });
-      me().carry = 0; SFX.bank();
+      me().carry = 0; SFX.chaChing();
       return;
     }
     case 'ledger':  shopOpen = true; return;
@@ -1587,7 +1662,7 @@ function act(h) {
       const win = 250 + Math.round(Math.random() * 400);
       const c = live[Math.floor(Math.random() * live.length)];
       cabs[c].cursed = true;
-      cash += win; banked += win; SFX.box();
+      cash += win; banked += win; SFX.chaChing();
       say('£' + (win / 100).toFixed(2) + ' in the box. Cabinet ' + (c + 1) + ' has never been the same since.', 3200);
       floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + (win / 100).toFixed(2), col: '#c96bff' });
       return;
@@ -1607,7 +1682,7 @@ function act(h) {
       if (s.till > 0) {                                  // money first, always
         const take = Math.min(s.till, apronCap() - carryOf(me()));
         if (take <= 0) { vo('fullApron', { icon: 'icApron', max: 2 }); SFX.deny(); return; }
-        s.till -= take; me().carry = carryOf(me()) + take; SFX.coin();
+        s.till -= take; me().carry = carryOf(me()) + take; SFX.chaChing();
         floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + take + 'p', col: '#ffd75e' });
         return;
       }
@@ -1682,7 +1757,7 @@ function endDay() {
   // recorded pays out again tonight. It is income the pair earned, itemised on the day-end
   // line so it can never read as rent arriving from nowhere.
   const roy = royaltyRate;
-  if (roy > 0) { cash += roy; banked += roy; vo('royalty', { icon: 'icOnair', max: 2 }); }
+  if (roy > 0) { cash += roy; banked += roy; SFX.chaChing(); vo('royalty', { icon: 'icOnair', max: 2 }); }
   cash -= rent; day++; turnedAway = 0; boxOpenedToday = false; SFX.day();   // per shift
   saveRun();                     // a survived night is the checkpoint worth keeping
   rentWarned = false; rentCardAt = 0;
@@ -1893,8 +1968,26 @@ function shopIcon(kind, x, y, size, on) {
 }
 
 // ── walking ──────────────────────────────────────────────────────────────────
+// Osimo 2026-09-07: "instead of leaving Joe static make him walk around." The one you are
+// not driving now mooches about his room — a new spot every few seconds, at half pace, never
+// far. He stops dead for a take (and is drawn in his seat), and he never wanders in the coin
+// closet, where standing still at the safe is the point.
+const WANDER_ROOMS = { corridor: [110, 860], studio: [150, 800], hall: [120, 840],
+                       prop: [120, 840], podcast: [180, 780] };
+function updateIdle(h, now) {
+  if (h === me() || rec || paused) return;
+  const span = WANDER_ROOMS[h.room];
+  if (!span) return;
+  if (h.wanderAt === undefined) h.wanderAt = now + 1200 + Math.random() * 2600;
+  if (now < h.wanderAt) return;
+  if (Math.abs(h.target - h.x) > 3) return;        // let him finish the walk he is on
+  h.wanderAt = now + 2200 + Math.random() * 4200;
+  const reach = 190;
+  const lo = Math.max(span[0], h.x - reach), hi = Math.min(span[1], h.x + reach);
+  h.target = Math.round(lo + Math.random() * (hi - lo));
+}
 function stepHost(h, dt) {
-  const sp = 0.44 * dt;   // ~420 world px/s — crossing a room should cost ~2s, not 4
+  const sp = (h === me() ? 0.44 : 0.22) * dt;   // ~420 world px/s driven, half that mooching
   if (Math.abs(h.target - h.x) > 3) {
     h.face = h.target > h.x ? 1 : -1;
     h.x += Math.sign(h.target - h.x) * Math.min(sp, Math.abs(h.target - h.x));
@@ -2253,7 +2346,11 @@ function hintSpots() {
   if (room === 'studio' && decanter === 0 && bottles > 0) out.push(find('decanter'));
   // a crowd worth recording, both of them in the room, nothing rolling — point at the mic.
   // Discovering the show is a business should not depend on tapping a prop on a hunch.
-  if (room === 'studio' && !rec && hype >= REC_MIN_HYPE
+  // Osimo 2026-09-07: "the arrow was bouncing but we had to wait for the next day — the
+  // arrow should only appear once the day refreshes." Right: an arrow pointing at a thing
+  // that will refuse you is worse than no arrow. It now asks the same question the mic does.
+  if (room === 'studio' && !rec && !showBlocked(PLAIN, performance.now())
+      && hype >= PLAIN.minHype
       && hosts.jimmy.room === 'studio' && hosts.joe.room === 'studio') out.push(find('mic'));
   if (room === 'prop') {
     if (has('cooler') && shops.cooler.stock <= 0 && !held.jug) out.push(find('jug'));
@@ -2361,6 +2458,11 @@ function drawRecording(now) {
 function togglePause() {
   if (state !== 'play') return;
   paused = !paused;
+  // a paused take should not keep playing its jingle at you
+  if (bbbAudio && rec) {
+    if (paused) { try { bbbAudio.pause(); } catch (e) {} }
+    else if (!muted) { try { bbbAudio.play().catch(() => {}); } catch (e) {} }
+  }
   if (paused) { saveRun(); SFX.deny(); } else SFX.swap();
 }
 // The pause card, in the hosts' own cream-and-brown, because everything the building says
@@ -2718,6 +2820,8 @@ function frame(ts) {
     updateShops(dt, ts);
     updateRec(dt, ts);
     voWatch();
+    updateIdle(hosts.jimmy, ts);
+    updateIdle(hosts.joe, ts);
     stepHost(hosts.jimmy, dt);
     stepHost(hosts.joe, dt);
     if (ts > dayEndsAt) endDay();
@@ -2805,6 +2909,11 @@ window.__TC = {
   deed(n) { lvls.deed = n; },               // QA only — own n tenths of the site
   shopsQA() { return { shops: JSON.parse(JSON.stringify(shops)), held: { ...held } }; },
   stockQA() { shops.cooler.stock = 6; shops.vending.stock = 10; },   // QA only
+  audioQA() { return { bbb: bbbAudio ? { paused: bbbAudio.paused,
+                                         t: +bbbAudio.currentTime.toFixed(2) } : null,
+                       music: musicEl ? { src: musicEl.src.split('/').pop(),
+                                          paused: musicEl.paused } : null,
+                       musicIdx, muted, recording: !!rec }; },
   swapQA() { active = otherName(); },        // QA only
   // QA only — the ledger's first row and column, expressed as a FRACTION of the book. If
   // these are equal on every screen shape then nothing can shift per device.
