@@ -932,13 +932,22 @@ let episodes = 0, rec = null; // rec = { show, until, hype0 } while the red ligh
 // on their own — but only while there is stock in them, and stock is a thing you carry from
 // the prop room like the whisky. A jug costs £1.00 and returns £1.50; a vending box costs
 // £2.00 and returns £3.50. Small, certain, and a chore.
+// Osimo 2026-09-07: "money appeared in the water cooler but there was no punter, thought we
+// arranged for all machines." Quite right — a sale with nobody there is the same complaint as
+// money turning up in the safe from nowhere. Somebody has to buy it. A customer walks up,
+// stands for a couple of seconds, and the coin goes in when he LEAVES, so the money is always
+// something you watched happen.
 const SHOPS = {
   cooler:  { id: 'cooler',  name: 'THE WATER COOLER', per: 25, tick: 1800, load: 6,
-             stockId: 'jug',  stockCost: 100, stockName: 'water jug' },
+             stockId: 'jug',  stockCost: 100, stockName: 'water jug',
+             cust: { x: 566, feet: 432, h: 150, flip: false } },
   vending: { id: 'vending', name: 'THE VENDING MACHINE', per: 35, tick: 2400, load: 10,
-             stockId: 'box',  stockCost: 200, stockName: 'vending box' },
+             stockId: 'box',  stockCost: 200, stockName: 'vending box',
+             cust: { x: 700, feet: 444, h: 162, flip: true } },
 };
-let shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0, t: 0 } };
+const CUST_MS = 2600;          // how long a customer stands at it before paying and going
+let shops = { cooler: { stock: 0, till: 0, t: 0, cust: null },
+              vending: { stock: 0, till: 0, t: 0, cust: null } };
 let held = { jug: 0, box: 0 };          // what you are carrying back from the prop room
 const HELD_MAX = 2;
 let royaltyRate = 0;          // total nightly royalty from everything ever recorded
@@ -1020,7 +1029,10 @@ function resumeRun() {
   episodes = s2.episodes || 0; rec = null;   // a take in progress does not survive a reload
   // saves from before the podcast studio only knew a flat 60p an episode
   royaltyRate = (s2.royaltyRate !== undefined) ? s2.royaltyRate : episodes * ROYALTY;
-  if (s2.shops) for (const k in shops) if (s2.shops[k]) Object.assign(shops[k], s2.shops[k]);
+  // a customer mid-purchase does not survive a reload; his stock and till do
+  if (s2.shops) for (const k in shops) if (s2.shops[k]) {
+    Object.assign(shops[k], s2.shops[k]); shops[k].cust = null;
+  }
   if (s2.held) held = { jug: s2.held.jug || 0, box: s2.held.box || 0 };
   showDay = s2.showDay || {}; showCool = {};   // a cooldown does not survive a reload; the
                                                // day cap does, because it is the actual rule
@@ -1064,7 +1076,8 @@ function newRun() {
   cash = START_CASH; day = 1; hype = 80; decanter = 3; bottles = 0;
   banked = 0; apronLvl = 0; lvls = {}; owned = {}; punters = []; floaters = []; coins = [];
   episodes = 0; rec = null; royaltyRate = 0;
-  shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0, t: 0 } };
+  shops = { cooler: { stock: 0, till: 0, t: 0, cust: null },
+            vending: { stock: 0, till: 0, t: 0, cust: null } };
   showDay = {}; showCool = {};
   held = { jug: 0, box: 0 };
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
@@ -1326,13 +1339,37 @@ function hypeReason() {
 function updateShops(dt, now) {
   for (const k in SHOPS) {
     const cfg = SHOPS[k], s = shops[k];
-    if (!has(k) || s.stock <= 0) continue;
+    if (!has(k)) { s.cust = null; continue; }
+    // somebody is at it: when he has had his two seconds he pays and goes
+    if (s.cust) {
+      if (now < s.cust.until) continue;
+      s.cust = null;
+      s.stock--;
+      s.till += cfg.per;
+      SFX.coin();
+      if (s.stock === 0) vo('outOfStock', { icon: 'icBottle', max: 2 });
+      continue;
+    }
+    if (s.stock <= 0) continue;
     s.t += dt;
     if (s.t < cfg.tick) continue;
     s.t = 0;
-    s.stock--;
-    s.till += cfg.per;
-    if (s.stock === 0) vo('outOfStock', { icon: 'icBottle', max: 2 });
+    s.cust = { spr: FRONTS[Math.floor(Math.random() * FRONTS.length)], until: now + CUST_MS };
+  }
+}
+// The customers at the cooler and the vending machine, drawn with the punters so the
+// painter's order still holds.
+function drawShopCustomers() {
+  if (room !== 'corridor') return;
+  for (const k in SHOPS) {
+    const s = shops[k], c = SHOPS[k].cust;
+    if (!s.cust || !c) continue;
+    const im = SPR[s.cust.spr];
+    if (!im) continue;
+    ctx.save();
+    if (c.flip) { ctx.translate(c.x * 2, 0); ctx.scale(-1, 1); }
+    drawSprite(im, c.x, c.feet, c.h);
+    ctx.restore();
   }
 }
 
@@ -2689,6 +2726,7 @@ function frame(ts) {
   if (room === 'podcast') drawShowSigns(ts);
   drawProps(room);
   drawPunters();
+  drawShopCustomers();
   if (state !== 'attract') {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
   }
@@ -2753,6 +2791,7 @@ window.__TC = {
   setHype(v) { hype = v; },                 // QA only — reach a recordable crowd instantly
   deed(n) { lvls.deed = n; },               // QA only — own n tenths of the site
   shopsQA() { return { shops: JSON.parse(JSON.stringify(shops)), held: { ...held } }; },
+  stockQA() { shops.cooler.stock = 6; shops.vending.stock = 10; },   // QA only
   swapQA() { active = otherName(); },        // QA only
   // QA only — the ledger's first row and column, expressed as a FRACTION of the book. If
   // these are equal on every screen shape then nothing can shift per device.
