@@ -403,7 +403,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=20').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=21').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -498,8 +498,9 @@ const HOST_BOX = { w: 142, h: 213 };
 // — "instead of colouring in, if it's png images you know exactly how to highlight the entire
 // png based on size and placement". Nothing to paint.
 const PROPS = [
-  { id: 'jug', room: 'prop', spr: 'propJugs', label: 'WATER JUGS',    x: 800, feet: 502, h: 140, flip: false },
-  { id: 'box', room: 'prop', spr: 'propBox',  label: 'VENDING BOXES', x: 690, feet: 508, h: 96,  flip: false },
+  // placed by Osimo in tools/overlay-placer?target=stock, 2026-09-07
+  { id: 'jug', room: 'prop', spr: 'propJugs', label: 'WATER JUGS',    x: 898, feet: 493, h: 192, flip: false },
+  { id: 'box', room: 'prop', spr: 'propBox',  label: 'VENDING BOXES', x: 190, feet: 467, h: 151, flip: false },
 ];
 function propRect(p) {
   const im = SPR[p.spr];

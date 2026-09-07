@@ -132,8 +132,8 @@ const SEATS = [
 // sprites in the game too now, so what is dragged here is exactly what is drawn there, at
 // the same resolution. x is the centre, y is the FEET, h is the height.
 const STOCK = [
-  { id: 'jug', label: 'WATER JUGS',    x: 800, y: 502, h: 140, kind: 'sprite', spr: 'propJugs' },
-  { id: 'box', label: 'VENDING BOXES', x: 690, y: 508, h: 96,  kind: 'sprite', spr: 'propBox' },
+  { id: 'jug', label: 'WATER JUGS',    x: 898, y: 493, h: 192, kind: 'sprite', spr: 'propJugs' },
+  { id: 'box', label: 'VENDING BOXES', x: 190, y: 467, h: 151, kind: 'sprite', spr: 'propBox' },
 ];
 function build() {
   if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
@@ -165,7 +165,7 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=20').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=21').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
