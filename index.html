@@ -23,6 +23,20 @@
 <link rel="stylesheet" href="cabinet.css?v=34">
   <title>JnJ Arcade — Games from the Jimmy &amp; Joe AI Podcast</title>
   <link rel="stylesheet" href="style.css?v=33">
+  <!-- Landing-page-only ambience: kept OUT of style.css/app.js on purpose — those are
+       shared across all 5 halls (JNJARCADE_SITE_BIBLE.md), and this is index.html only. -->
+  <style>
+    #ambMute {
+      position: fixed; right: 14px; bottom: 14px; z-index: 40;
+      width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(10,8,4,0.72); border: 1.5px solid rgba(255,255,255,0.18);
+      color: var(--cream, #f0e6d2); font-size: 18px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; backdrop-filter: blur(2px);
+    }
+    #ambMute:active { transform: scale(0.94); }
+    .footer-credit { color: var(--cream-dim); font-size: 12px; opacity: 0.7; margin: 4px 0 0; }
+  </style>
 </head>
 <body>
 
@@ -156,8 +170,11 @@
   <footer class="lobby-end">
     <div class="coin-row" id="socialRow" aria-label="Links"></div>
     <p class="footer-line">A fan arcade for the <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">Jimmy &amp; Joe AI Podcast</a>. Two AI hosts. Real arguments.</p>
+    <p class="footer-credit">Music: Pixabay.</p>
     <p class="footer-egg" id="egg" title="You know what to do">&uarr;&uarr;&darr;&darr;&larr;&rarr;&larr;&rarr;&nbsp;B&nbsp;A</p>
   </footer>
+
+  <button id="ambMute" aria-label="Mute sound" title="Mute sound">&#128266;</button>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -281,6 +298,66 @@
     );
 
     scheduleNext();
+  })();
+  </script>
+  <script>
+  /* ── JnJ presence: background lounge loop + a rotating Jimmy greeter ──────────
+     Osimo 2026-09-08: lounge music "loop low ~15%", credit in the footer; Jimmy lines
+     "8-12 sec, play on first click, rotate". Kept OUT of app.js/style.css on purpose —
+     JNJARCADE_SITE_BIBLE.md's shared bundle drives all 5 halls, this is index.html only.
+     Music file is Osimo's own pick from Pixabay (he said "I can do the jingles") — this
+     just needs assets/audio/site/landing-loop.mp3 to exist; nothing else to wire.
+     The 8 lines are real Chatterbox renders through the same locked Jimmy voice every
+     other line in the show uses (tools/voices/chatterbox_voice.py, verify=True). */
+  (function () {
+    'use strict';
+    var MUTE_KEY = 'jnj_landing_muted', IDX_KEY = 'jnj_landing_line_idx';
+    var LINES = [
+      'landing-01', 'landing-02', 'landing-03', 'landing-04',
+      'landing-05', 'landing-06', 'landing-07', 'landing-08',
+    ];
+    var btn = document.getElementById('ambMute');
+    var muted = localStorage.getItem(MUTE_KEY) === '1';
+    var music = null, started = false;
+
+    function paintBtn() { btn.innerHTML = muted ? '&#128263;' : '&#128266;'; }
+    paintBtn();
+
+    function ensureMusic() {
+      if (music) return music;
+      music = new Audio('assets/audio/site/landing-loop.mp3');
+      music.loop = true; music.volume = 0.15; music.preload = 'none';
+      music.onerror = function () { music = null; }; // Osimo's file isn't dropped in yet
+      return music;
+    }
+
+    function nextLineFile() {
+      var i = parseInt(localStorage.getItem(IDX_KEY) || '0', 10);
+      if (!(i >= 0 && i < LINES.length)) i = 0;
+      localStorage.setItem(IDX_KEY, String((i + 1) % LINES.length));
+      return LINES[i];
+    }
+
+    function startPresence() {
+      if (started || muted) return;
+      started = true;
+      try { ensureMusic().play().catch(function () {}); } catch (e) {}
+      try {
+        var line = new Audio('assets/audio/site/' + nextLineFile() + '.mp3');
+        line.volume = 0.9;
+        line.play().catch(function () {});
+      } catch (e) {}
+    }
+
+    document.addEventListener('pointerdown', startPresence, { once: true, passive: true });
+
+    btn.addEventListener('click', function () {
+      muted = !muted;
+      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+      paintBtn();
+      if (muted) { if (music) music.pause(); }
+      else if (started) { ensureMusic().play().catch(function () {}); }
+    });
   })();
   </script>
   <script>
