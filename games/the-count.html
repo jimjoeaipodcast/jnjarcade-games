@@ -1124,7 +1124,6 @@ function roomMachines() {
 // "Any machine off" is a per-ROOM question now that there are two arcades — telling you to
 // turn on more machines while you stand in a room where every machine is already lit reads
 // as a bug, which is exactly what it looked like the first time the hall went in.
-function anyOff() { for (const i of roomMachines()) if (!cabOn(i)) return true; return false; }
 function anyOffInFirstRoom() { for (let i = 0; i < CAB_N; i++) if (!cabOn(i)) return true; return false; }
 
 // Osimo 2026-09-05: "just like in jnj on air, restart the game or resume last played game."
@@ -1695,6 +1694,13 @@ function act(h) {
     }
     case 'jug':
     case 'box': {
+      // Osimo 2026-09-07: "only Joe can load the water into the water machine" — the jugs
+      // specifically, not the vending boxes. Jimmy still walks over and reads the same
+      // door, he just will not be the one carrying it.
+      if (h.id === 'jug' && active === 'jimmy') {
+        bubbleShow('JIMMY', "Nah, that one's Joe's. I throw my back out lifting that and who's left on the mic?");
+        SFX.deny(); return;
+      }
       const cfg = h.id === 'jug' ? SHOPS.cooler : SHOPS.vending;
       if (!has(cfg.id)) { say('Nothing to put a ' + cfg.stockName + ' in yet.'); SFX.deny(); return; }
       if (held[h.id] >= HELD_MAX) { say('Two is all you can carry.'); SFX.deny(); return; }
@@ -1890,10 +1896,10 @@ function onTap(e) {
     // Speaker tested first meant that whole strip always resolved to "speaker" — pause was
     // dead there. HUD_CTRL below is the one place both the draw and the hit-test now read
     // their numbers from, so they cannot drift apart again.
-    if (sxp > HUD_CTRL.snd0 && sxp < HUD_CTRL.snd1 && syp < 46 + SAFE.t) {
+    if (sxp > HUD_CTRL.snd0 && sxp < HUD_CTRL.snd1 && syp < HUD_CTRL.h + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
-    if (sxp > HUD_CTRL.pau0 && sxp < HUD_CTRL.pau1 && syp < 46 + SAFE.t) {
+    if (sxp > HUD_CTRL.pau0 && sxp < HUD_CTRL.pau1 && syp < HUD_CTRL.h + SAFE.t) {
       togglePause(); return;
     }
     if (paused) { togglePause(); return; }        // tap anywhere to come back
@@ -2583,17 +2589,10 @@ function drawRecording(now) {
   ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, TV.w - 24, 9);
   ctx.fillStyle = '#ff6b6b';
   ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, (TV.w - 24) * frac, 9);
-  // on its own dark strip along the bottom of the screen — over the product footage the
-  // yellow was unreadable
-  const lbl = (bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() + '  ·  ' : '')
-            + '£' + (recPay(rec.hype0, rec.show) / 100).toFixed(2);
-  ctx.fillStyle = 'rgba(10,6,4,0.82)';
-  ctx.fillRect(TV.x, TV.y + TV.h - 46, TV.w, 26);
-  ctx.fillStyle = '#ffd75e';
-  ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(lbl, TV.x + TV.w / 2, TV.y + TV.h - 28);
-  ctx.textAlign = 'left';
+  // Osimo 2026-09-07: "don't cover the screen with the bit title and profits from it."
+  // The clip now has its own real audio saying the product's name, and the payout is
+  // already announced in the message bubble when the take starts and when it ends — this
+  // strip was only ever hiding the last 46px of the real broll it sat on top of.
   ctx.restore();
 }
 
@@ -2711,8 +2710,13 @@ function drawPodRecording(now) {
 
 // Both the drawing in drawHUD and the tap-test in the pointer handler read these — one
 // pair of numbers for what you see and what you can press, so they cannot drift apart
-// again (see the 2026-09-07 "pause overlapping sound" fix).
-const HUD_CTRL = { pau0: 10, pau1: 34, snd0: 40, snd1: 64 };
+// again (see the 2026-09-07 "pause overlapping sound" fix). Osimo 2026-09-07 again: "move
+// the pause button more to the left, and the speaker with it" — shifted the pair 8px
+// closer to the true edge — and "when I try to press the speaker nothing happened", so
+// both boxes are also fattened (24px wide/46 tall -> 30 wide/54 tall) to give a real phone
+// fingertip more to land on, since the mechanism itself tests clean (verified live via a
+// simulated tap) and a too-small hit box was the one plausible device-side explanation.
+const HUD_CTRL = { pau0: 2, pau1: 32, snd0: 38, snd1: 68, h: 54 };
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
@@ -2828,26 +2832,9 @@ function drawHUD(now) {
   // No jingle name beside the speaker any more — it ran under the rent figure, and the
   // icon already says which of the four states you are in. Osimo 2026-09-07.
   ctx.textAlign = 'left';
-  // turned-away count — the quiet version of the old flashing NO FREE MACHINE
-  // …and only where the machines are. In the prop room or the studio it reads as a fault
-  // report about a room you cannot see.
-  if (turnedAway > 0 && (room === 'corridor' || room === 'hall')) {
-    // Osimo 2026-09-04: "instead of no free machine, maybe it should say, turn on more
-    // machines, and place it somewhere where it doesn't show over the b-roll screen."
-    // It now says what to DO, and sits low-left — the studio's big screen is dead centre,
-    // which is exactly where this used to land.
-    ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
-    ctx.fillStyle = 'rgba(255,107,107,0.92)';
-    // With every machine in the room already lit there is nothing to turn on, so the line
-    // has to say the true thing instead: the room is full and the queue is walking.
-    ctx.fillText((anyOff() ? 'TURN ON MORE MACHINES — ' : 'ALL MACHINES BUSY — ')
-                 + turnedAway + ' walked out', SAFE.l + 14, SH - SAFE.b - 58);
-  }
-  // room name
-  ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
-  ctx.fillStyle = 'rgba(232,195,90,0.65)'; ctx.textAlign = 'center';
-  ctx.fillText(ROOMS[room].name, SW / 2, SH - 10);
-  ctx.textAlign = 'left';
+  // Osimo 2026-09-07: "remove how many people walked out" and "remove the name of each
+  // room written on the screen." turnedAway still counts (other logic may read it later),
+  // it just no longer prints — same for the room label under the floor.
 }
 function drawShop() {
   const m = shopMetrics();
@@ -2857,17 +2844,9 @@ function drawShop() {
   ctx.fillStyle = 'rgba(4,3,2,0.96)'; ctx.fillRect(0, 0, m.SW, m.SH);
   const bk = SPR.ledger;
   if (bk) ctx.drawImage(bk, m.book.dx, m.book.dy, bk.width * m.book.sc, bk.height * m.book.sc);
-  // Title block sits on the paper at the top of the left page, in BOOK space, so it moves
-  // with the book instead of floating at a fixed fraction of the screen.
+  // Osimo 2026-09-07: "remove 'The Ledger' and our balance." The book reads as itself
+  // without a title, and the safe total is already on the HUD strip above it.
   const sc = m.book.sc;
-  const headY = Math.round(m.cols[0].y0 - m.rowH * 2.3);
-  const headX = Math.round(m.cols[0].x0 - m.iconR + LEDGER_NUDGE);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#5a3618'; ctx.font = lfont(LEDGER_TYPE.head, sc);
-  ctx.fillText('THE LEDGER', headX, Math.round(headY + LEDGER_TYPE.head * sc));
-  ctx.fillStyle = '#7a5a38'; ctx.font = lfont(LEDGER_TYPE.sub, sc);
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe',
-               headX, Math.round(headY + (LEDGER_TYPE.head + LEDGER_TYPE.sub + 5) * sc));
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
@@ -2911,15 +2890,22 @@ function drawShop() {
     ctx.fillText('+' + n + ' more once these are bought',
                  Math.round(c.x1) + LEDGER_NUDGE, Math.round(c.y1) + Math.round(mm.rowH * 0.75));
   });
+  // Osimo 2026-09-07: "the close button make sure it's themed like the other speech
+  // bubbles" — same cream card, brown rule and drop shadow as drawMsg/drawBubble/drawPaused,
+  // instead of the flat brown-and-gold box it was drawn as before.
   const cl = shopCloseRect();
-  ctx.fillStyle = 'rgba(122,74,26,0.9)';
-  ctx.fillRect(cl.x, cl.y, cl.w, cl.h);
-  ctx.strokeStyle = '#e2b256'; ctx.lineWidth = 2;
-  ctx.strokeRect(cl.x, cl.y, cl.w, cl.h);
-  ctx.fillStyle = '#ffe9c0'; ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3;
+  ctx.fillStyle = 'rgba(252,246,232,0.97)';
+  roundRect(cl.x, cl.y, cl.w, cl.h, 11); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#7a4a1a'; ctx.lineWidth = 2.5;
+  roundRect(cl.x, cl.y, cl.w, cl.h, 11); ctx.stroke();
+  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 18px "Barlow Condensed",sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('✕  CLOSE', cl.x + cl.w / 2, cl.y + 25);
+  ctx.fillText('✕  CLOSE', cl.x + cl.w / 2, cl.y + cl.h / 2 + 6);
   ctx.textAlign = 'left';
+  ctx.restore();
 }
 function drawFloaters(now) {
   for (let i = floaters.length - 1; i >= 0; i--) {
