@@ -325,7 +325,7 @@
 
     function ensureMusic() {
       if (music) return music;
-      music = new Audio('assets/audio/site/landing-loop.mp3');
+      music = new Audio('assets/audio/site/landing-loop.mp3?v=1');
       music.loop = true; music.volume = 0.15; music.preload = 'none';
       music.onerror = function () { music = null; }; // Osimo's file isn't dropped in yet
       return music;
@@ -343,7 +343,7 @@
       started = true;
       try { ensureMusic().play().catch(function () {}); } catch (e) {}
       try {
-        var line = new Audio('assets/audio/site/' + nextLineFile() + '.mp3');
+        var line = new Audio('assets/audio/site/' + nextLineFile() + '.mp3?v=1');
         line.volume = 0.9;
         line.play().catch(function () {});
       } catch (e) {}
