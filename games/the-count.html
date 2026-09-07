@@ -277,6 +277,33 @@ function cycleSound() {
 function unlockAudio() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  loadChaChing();
+}
+// THE REAL TILL. Osimo recorded one and sent it over (2026-09-07) — the file held two
+// consecutive rings, so this is the first one on its own, trimmed to its own silence.
+// Decoded once into a buffer and fired from there: a buffer source is cheap enough to
+// start on every coin, and several can overlap when you empty a row of machines fast.
+// If the file ever fails to load the synthesised till below still plays, so the sound
+// that means MONEY is never simply missing.
+let chaBuf = null, chaLoading = false;
+function loadChaChing() {
+  if (chaBuf || chaLoading || !audioCtx) return;
+  chaLoading = true;
+  fetch('../assets/audio/the-count/cha-ching.mp3?v=1')
+    .then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status))
+    .then(b => audioCtx.decodeAudioData(b))
+    .then(buf => { chaBuf = buf; })
+    .catch(() => { chaLoading = false; });          // let a later gesture try again
+}
+function sample(buf, vol) {
+  if (muted || !audioCtx || state === 'attract') return false;
+  try {
+    const s = audioCtx.createBufferSource(), g = audioCtx.createGain();
+    s.buffer = buf; g.gain.value = vol === undefined ? 1 : vol;
+    s.connect(g); g.connect(audioCtx.destination);
+    s.start();
+    return true;
+  } catch (e) { return false; }
 }
 function tone(f0, f1, dur, type, vol) {
   if (muted || !audioCtx || state === 'attract') return;
@@ -318,6 +345,7 @@ const SFX = {
   // first. Every place money moves toward you plays this and nothing else, so the sound
   // means one thing.
   chaChing: () => {
+    if (chaBuf && sample(chaBuf, 0.6)) return;               // Osimo's own till
     noise(0.05, 0.10, 1400);                                  // the drawer
     tone(1480, 1480, 0.10, 'triangle', 0.15);                 // ka-
     setTimeout(() => tone(1180, 1180, 0.09, 'triangle', 0.11), 20);
@@ -497,8 +525,16 @@ let tvVideo = null;
 // cannot be sliced by offset, and the script.json that IS on disk is a different episode
 // with different products. A guessed audio offset would land mid-sentence on the wrong
 // product, which is worse than none — and the arcade's own jingle is already playing.
+// Full product segments, 41.6 to 47.9 seconds — no intro card, no segue, just the product
+// from first frame to last (checked the first and last frame of each: product both ends).
+// Osimo 2026-09-07: "it cuts a recording short. was meant to do one product — either we
+// manage to add the product with no intro no segue and play it in full, or we revert to the
+// BBB jingle." So the TAKE now lasts exactly as long as the clip does, rather than the clip
+// being cut off by a fixed fourteen seconds.
 const BBB_CLIPS = ['button-pusher', 'dumpling-mold', 'jellyfish-lamp', 'mini-chopper',
                    'paper-stool'];
+const BBB_LEN = { 'button-pusher': 43700, 'dumpling-mold': 44200, 'jellyfish-lamp': 47900,
+                  'mini-chopper': 41600, 'paper-stool': 43350 };
 let bbbVideo = null, bbbName = null;
 // THE SHOW'S OWN JINGLE. Osimo 2026-09-07: "when we run buy or ByeBye we use a jingle in the
 // actual b-roll of our segment — maybe play that and interrupt any other music and play the
@@ -664,10 +700,8 @@ function drawProps(room) {
     const im = SPR[p.spr];
     if (!im) continue;
     const r = propRect(p);
-    ctx.save();
-    if (p.flip) { ctx.translate(Math.round(p.x) * 2, 0); ctx.scale(-1, 1); }
-    drawSpriteBox(im, Math.round(p.x), Math.round(p.feet), r.w, r.h);   // room's own grid
-    ctx.restore();
+    drawSpriteBox(p.flip ? mirrored(im) : im,
+                  Math.round(p.x), Math.round(p.feet), r.w, r.h);   // room's own grid
   }
 }
 // The two chesterfields in the studio, measured off the plate. Jimmy left, Joe right, every
@@ -792,6 +826,17 @@ HALL_MACHINES.forEach(m => MACHINES.push(m));
 const HALL_FIRST = CAB_N;                 // index of the first hall machine
 const HALL_PRICE = 10000;                 // £100 for the lease on the big room
 const ALL_N = MACHINES.length;
+// WHAT EACH MACHINE IS RUNNING. Osimo 2026-09-07: "instead of location and Left right, name
+// the arcades by the game they housing." So a cabinet is not "BIG ROOM: LEFT 4 — FAR END"
+// any more, it is TOMB HUNT — a real jnjarcade cabinet, the same sixteen you can play on the
+// site. The location did not vanish, it moved into the blurb underneath, which is where a
+// direction belongs. One list, in floor order (the five in the arcade, then the eleven in the
+// big room), so the ledger row, the tap label and the voice line can never disagree.
+const CAB_GAMES = [
+  'HOP-MAN', 'FLAP FIGHT', 'CRUSHTRIS', 'SNAKE BLASTER', 'DOOM MARI-OH 3D',
+  'ANGRY WORMS', 'JIMMY RUN', 'ASTRO-HOP', 'BOMB GARDEN', 'JNJ: ON AIR', 'PIN-VADERS',
+  'CAVE-PLUNGE', 'PAC-LEMMING', 'TOMB HUNT', 'JUNGLE-HOP', 'BRICK-INVADERS',
+];
 const ROOMS = {
   coinroom: {
     name: 'THE COIN CLOSET', floorY: 470,
@@ -827,7 +872,7 @@ const ROOMS = {
     hotspots: MACHINES.slice(0, CAB_N).map((m, i) => ({
       id: 'cab' + i, x: m.body[0], y: m.body[1], w: m.body[2], h: m.body[3],
       walkX: Math.max(70, Math.min(890, m.punter.x + (m.flip ? -80 : 70))),
-      label: 'CABINET ' + (i + 1), cab: i,
+      label: CAB_GAMES[i], cab: i,
     })).concat([
       { id: 'toStudio2', x: 0,   y: 150, w: 56,  h: 340, walkX: 60,  label: 'TO THE STUDIO', exit: 'studio' },
       { id: 'toProp',    x: 428, y: 155, w: 94,  h: 155, walkX: 470, label: 'PROP ROOM', exit: 'prop' },
@@ -841,7 +886,7 @@ const ROOMS = {
     hotspots: HALL_MACHINES.map((m, i) => ({
       id: 'cab' + (HALL_FIRST + i), x: m.body[0], y: m.body[1], w: m.body[2], h: m.body[3],
       walkX: Math.max(70, Math.min(890, m.punter.x + (m.flip ? -80 : 70))),
-      label: 'BIG ROOM CABINET ' + (i + 1), cab: HALL_FIRST + i,
+      label: CAB_GAMES[HALL_FIRST + i], cab: HALL_FIRST + i,
     })).concat([
       { id: 'toCorr3', x: 0, y: 150, w: 60, h: 340, walkX: 60, label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'toPod',   x: 900, y: 150, w: 60, h: 340, walkX: 890, label: 'THE PODCAST STUDIO', exit: 'podcast' },
@@ -903,14 +948,14 @@ const DEED_MAX = 10;
 function ownedPct() { return lvl('deed') * 10; }
 function rentDue(d) { return Math.round(RENT(d) * (1 - ownedPct() / 100)); }
 const UPGRADES = [
-  { id: 'cab2',    name: 'POWER UP CABINET 2', cost: 800,  once: true, icon: 'cab',
-    blurb: 'A second machine earning at the same time.' },
-  { id: 'cab3',    name: 'POWER UP CABINET 3', cost: 2000, once: true, icon: 'cab',
-    blurb: 'Three machines. Three queues.' },
-  { id: 'cab4',    name: 'POWER UP CABINET 4', cost: 3600, once: true, icon: 'cab',
+  { id: 'cab2',    name: CAB_GAMES[1], cost: 800,  once: true, icon: 'cab',
+    blurb: 'Second machine in the row. Earns while you walk.' },
+  { id: 'cab3',    name: CAB_GAMES[2], cost: 2000, once: true, icon: 'cab',
+    blurb: 'Third along. Three machines, three queues.' },
+  { id: 'cab4',    name: CAB_GAMES[3], cost: 3600, once: true, icon: 'cab',
     blurb: 'The one at the dark end of the row.' },
-  { id: 'cab5',    name: 'POWER UP THE RED ONE', cost: 5200, once: true, icon: 'cab',
-    blurb: 'The big machine on the right. Earns the most.' },
+  { id: 'cab5',    name: CAB_GAMES[4], cost: 5200, once: true, icon: 'cab',
+    blurb: 'The big red machine on the right. Earns the most.' },
   { id: 'apron',   name: 'BIGGER APRON',       cost: 600,  max: 3, scale: 2.2, icon: 'apron',
     blurb: 'Carry more coins per trip to the safe.' },
   { id: 'marquee', name: 'MARQUEE LIGHTS',     cost: 1200, once: true, icon: 'bulb',
@@ -942,19 +987,19 @@ const UPGRADES = [
   // HALL_MACHINES so a machine can never exist on the floor without a price on it — which
   // is exactly how six of them ended up unbuyable scenery.
   ...[
-    ['LEFT 1 — BY THE DOOR', 7000, 'The big one by the door. 90p a play.'],
-    ['LEFT 2',               5200, 'Steady money. 68p a play.'],
-    ['LEFT 3',               3800, 'Quicker, smaller takings.'],
-    ['LEFT 4 — FAR END',     2800, 'The little one at the far end. Never stops.'],
-    ['BACK WALL',            3200, 'Beside the cash machine. Faces the room.'],
-    ['THE PINBALL TABLE',   11000, 'The showpiece. £1.20 a play, and they stay on it.'],
-    ['RIGHT 5 — FAR END',    2000, 'The far corner. Cheap to light, quick to pay.'],
-    ['RIGHT 4',              2800, 'Middle of the row, middle of the money.'],
-    ['RIGHT 3',              3800, 'Picks up when the room is busy.'],
-    ['RIGHT 2',              5200, 'Steady money. 68p a play.'],
-    ['RIGHT 1 — BY THE DOOR',8500, 'The best earner in the building. £1.10 a play.'],
-  ].map(([name, cost, blurb], i) => ({
-    id: 'hall' + (i + 1), name: 'BIG ROOM: ' + name, cost, once: true,
+    [ 7000, 'Left of the door, the big one. 90p a play.'],
+    [ 5200, 'Second on the left. Steady money, 68p a play.'],
+    [ 3800, 'Third on the left. Quicker, smaller takings.'],
+    [ 2800, 'The little one at the far left end. Never stops.'],
+    [ 3200, 'Back wall, beside the cash machine. Faces the room.'],
+    [11000, 'The pinball table in the middle. £1.20 a play, and they stay on it.'],
+    [ 2000, 'Far right corner. Cheap to light, quick to pay.'],
+    [ 2800, 'Middle of the right row, middle of the money.'],
+    [ 3800, 'Third on the right. Picks up when the room is busy.'],
+    [ 5200, 'Second on the right. Steady money, 68p a play.'],
+    [ 8500, 'Right of the door. Best earner in the building, £1.10 a play.'],
+  ].map(([cost, blurb], i) => ({
+    id: 'hall' + (i + 1), name: CAB_GAMES[HALL_FIRST + i], cost, once: true,
     icon: i === 5 ? 'coin' : 'cab', need: () => has('hall'), blurb,
   })),
   // Joe on wages: the big room is too much floor for one pair of legs, so this is what the
@@ -1443,10 +1488,8 @@ function drawShopCustomers() {
     if (!s.cust || !c) continue;
     const im = SPR[s.cust.spr];
     if (!im) continue;
-    ctx.save();
-    if (c.flip) { ctx.translate(Math.round(c.x) * 2, 0); ctx.scale(-1, 1); }
-    drawSprite(im, Math.round(c.x), Math.round(c.feet), Math.round(c.h));
-    ctx.restore();
+    drawSprite(c.flip ? mirrored(im) : im,
+               Math.round(c.x), Math.round(c.feet), Math.round(c.h));
   }
 }
 
@@ -1454,7 +1497,9 @@ function updateHype(dt) {
   const talking = !!micHost() && decanter > 0;
   let drain = talking ? 0.5 : 1.3;
   if (has('onair')) drain *= 0.6;
-  if (rec) drain *= 2.6;             // a take spends the audience it was recorded for
+  // a take spends the audience it was recorded for — gentler now the takes are three times
+  // longer, so a full product does not empty the room by itself
+  if (rec) drain *= 1.5;
   if (talking) {
     hype += 0.9 * (dt / 1000);
     // one measure roughly every 40s of talking, so a full decanter outlasts a shift and
@@ -1486,7 +1531,11 @@ function updateHype(dt) {
 // for most of a run the rule and the b-roll may as well not have existed. The little studio
 // records ONE PRODUCT A DAY now, with the product on the telly, which is what he has been
 // describing all along. The podcast studio's four channels remain the later, richer version.
-const PLAIN = { id: 'plain', name: 'BUY OR BYEBYE', ms: REC_MS, base: 120, per: 7,
+// The take runs the length of the product it is recording (see startRec), so `ms` is only
+// the fallback. The payout is up with it: this is a fifth of a night now rather than a
+// seventh, and the whole product plays out, so it is worth 200 + 11 a hype point — about
+// £11.35 at a good crowd where the fourteen-second version paid £7.15.
+const PLAIN = { id: 'plain', name: 'BUY OR BYEBYE', ms: REC_MS, base: 200, per: 11,
                 roy: ROYALTY, col: '#e8c35a', minHype: REC_MIN_HYPE,
                 oncePerDay: true, cool: 60000 };
 function recPay(h, show) { const s = show || PLAIN; return Math.round(h * s.per) + s.base; }
@@ -1524,6 +1573,9 @@ function startRec(show) {
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
   if (s.id === 'plain' || s.id === 'byebye') {
     const pick = bbbStart();
+    // the take is as long as the product — nothing gets cut off half way
+    rec.until = performance.now() + (BBB_LEN[pick] || s.ms);
+    rec.ms = BBB_LEN[pick] || s.ms;
     bbbJingleStart();
     say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
         3600);
@@ -1645,7 +1697,7 @@ function act(h) {
     case 'parts': {
       const jammed = cabs.findIndex((c, i) => i < cabCount() && c.jam);
       if (jammed < 0) { say('Nothing jammed right now.'); return; }
-      cabs[jammed].jam = false; SFX.fix(); say('Fixed cabinet ' + (jammed + 1) + ' from here.');
+      cabs[jammed].jam = false; SFX.fix(); say('Fixed ' + CAB_GAMES[jammed] + ' from here.');
       return;
     }
     case 'bitsBox': {
@@ -1663,7 +1715,7 @@ function act(h) {
       const c = live[Math.floor(Math.random() * live.length)];
       cabs[c].cursed = true;
       cash += win; banked += win; SFX.chaChing();
-      say('£' + (win / 100).toFixed(2) + ' in the box. Cabinet ' + (c + 1) + ' has never been the same since.', 3200);
+      say('£' + (win / 100).toFixed(2) + ' in the box. ' + CAB_GAMES[c] + ' has never been the same since.', 3200);
       floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + (win / 100).toFixed(2), col: '#c96bff' });
       return;
     }
@@ -1775,7 +1827,15 @@ function endDay() {
 // LIVE rather than baked into ROOMS, because their rectangle is derived from the sprite and
 // the sprite can be moved — a list built once at load would freeze the tap area where the
 // prop used to be, and would be computed before the art had even finished loading.
-function roomHotspots(r) { return ROOMS[r].hotspots.concat(propHotspots(r)); }
+// PROPS FIRST. Osimo 2026-09-07: "when I press the box it just says the shelves... you
+// should know exactly the boundaries of each object." hotspotAt() returns the FIRST match,
+// and the prop room's big decorative 'shelves' rectangle (it exists to catch taps on the
+// shelf art between the real props) was listed ahead of the props in the array — so
+// anywhere 'shelves' and the vending BOX's own picture-shaped hitbox overlapped, 'shelves'
+// always won and the box was unreachable there. A PROP's tap area IS its picture — that is
+// the whole point of propHotspots() — so it has to be checked before a generic backdrop box
+// gets the chance to claim the same pixels, not after.
+function roomHotspots(r) { return propHotspots(r).concat(ROOMS[r].hotspots); }
 function hotspotAt(wx, wy) {
   // The cards first: they are drawn ON TOP and they are what Osimo wants to press, so a tap
   // that lands on one belongs to that machine even if some other body is underneath it.
@@ -1806,13 +1866,18 @@ function onTap(e) {
   {
     const sr = canvas.getBoundingClientRect();
     const sxp = p.clientX - sr.left, syp = p.clientY - sr.top;
-    if (sxp > sr.width - SAFE.r - 56 && syp < 46 + SAFE.t) {
+    // Osimo 2026-09-07: "the pause button is overlapping the sound button." It was — both
+    // the drawn glyphs AND their tap zones. Speaker was 32-74 and pause was 0-42: an 8-10px
+    // strip (32-42) belonged to both. Visually the same thing had happened one layer up —
+    // the speaker draws right-aligned to L+44 (glyph runs ~24-44) and pause draws left-
+    // aligned from L+12 (glyph runs ~12-32), so the two glyphs overlapped 24-32 as well.
+    // Speaker tested first meant that whole strip always resolved to "speaker" — pause was
+    // dead there. HUD_CTRL below is the one place both the draw and the hit-test now read
+    // their numbers from, so they cannot drift apart again.
+    if (sxp > HUD_CTRL.snd0 && sxp < HUD_CTRL.snd1 && syp < 46 + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
-    // PAUSE now sits on the LEFT of the bar, in the gap beside the money. Tested before
-    // everything else for the same reason the speaker is: you reach for it at exactly the
-    // moments the tutorial or the shop would otherwise be eating taps.
-    if (sxp > SAFE.l && sxp < SAFE.l + 42 && syp < 46 + SAFE.t) {
+    if (sxp > HUD_CTRL.pau0 && sxp < HUD_CTRL.pau1 && syp < 46 + SAFE.t) {
       togglePause(); return;
     }
     if (paused) { togglePause(); return; }        // tap anywhere to come back
@@ -1878,12 +1943,32 @@ canvas.addEventListener('mousedown', onTap);
 // Placed by Osimo on the new book, 2026-09-07: left page leans from x217 at the top to x204
 // at the bottom, right page 495 to 496, eleven rows, a 249-wide column. His 960x540 figures
 // in the plate's own 640x360 space.
-const LEDGER_ART = { w: 640, h: 360, colW: 166, rows: 11,
+// Osimo 2026-09-07: "it looks too busy... need two less per page." Nine a page, so eighteen
+// across the open book with room to breathe.
+const LEDGER_ART = { w: 640, h: 360, colW: 166, rows: 9,
                      cols: [{ x0: 144.7, y0: 74.7, x1: 136.0, y1: 268.0 },
                             { x0: 330.0, y0: 66.0, x1: 330.7, y1: 269.3 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
+// THE WRITING IS PART OF THE PAGE. Osimo 2026-09-07: "looks nothing like what you showed me
+// the first time... make it pixel fixed." The row POSITIONS were already fractions of the
+// book and identical on every screen — but the type and the icons were absolute pixels, so
+// on a big screen the page grew and the writing did not, and the icons (fixed at 41px against
+// a ~26px pitch) ran into each other and chained down the margin. These are BOOK units, the
+// same 640x360 space the row handles live in, multiplied by the book's own scale and rounded
+// to whole pixels at draw time. Change the page size and everything on it changes with it.
+// name/price/blurb tuned down from the original fixed-px values (15/14/11), and rowNameDy/
+// rowLineDy replace what used to be bare "-2"/"+11" pixel nudges — same relationship, but
+// now the two text lines are pulled in close enough to the row's own centre that they clear
+// the NEXT row's title at any book scale. Verified by screenshot at 851x393 and 2244x1008;
+// the fixed-offset version this replaced only cleared the gap by luck at phone scale — the
+// same numbers held at a 2.8x book scale and the blurb line ran into the row below it.
+const LEDGER_TYPE = { head: 20, sub: 13, name: 13, price: 12, blurb: 9, icon: 22,
+                       rowNameDy: 5, rowLineDy: 7 };
 // "shift everything a few pixels to the right" — both pages, off the margin rule
-const LEDGER_NUDGE = 10;
+// The icon is drawn CENTRED on the row's x, so a small nudge left it straddling the red
+// margin rule — half the icon in the margin. This clears the rule by the icon's own radius.
+const LEDGER_NUDGE = 26;
+let shopMore = [0, 0];   // items that did not fit on each page
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   const bk = SPR.ledger;
@@ -1906,9 +1991,12 @@ function shopMetrics() {
     x1: b.dx + c.x1 * b.sc, y1: b.dy + c.y1 * b.sc,
   }));
   const rowH = perCol > 1 ? (cols[0].y1 - cols[0].y0) / (perCol - 1) : LEDGER_ROW_H;
+  // The icon is sized in book units AND held under the pitch, so a denser page shrinks its
+  // icons instead of stacking them.
+  const icon = Math.round(Math.min(LEDGER_TYPE.icon * b.sc, rowH * 0.94));
   return { SW: b.SW, SH: b.SH, book: b, rowH, perCol, cols,
            w: Math.round(LEDGER_ART.colW * b.sc), x0: cols[0].x0, y0: cols[0].y0,
-           iconR: Math.min(rowH * 0.52, 20) };
+           icon, iconR: icon / 2 };
 }
 // Trim a string to a pixel width in the CURRENT font, ellipsis included.
 function fitText(s, maxW) {
@@ -1925,11 +2013,29 @@ function shopCloseRect() {
   const { SW } = shopMetrics();
   return { x: SW - SAFE.r - SHOP_CLOSE_W - 12, y: 10 + SAFE.t, w: SHOP_CLOSE_W, h: SHOP_CLOSE_H };
 }
+// A ledger font, in book units — the one place the page's type size is turned into pixels.
+function lfont(sizeBook, sc, weight) {
+  return (weight === false ? '' : (weight || 'bold') + ' ')
+         + Math.max(8, Math.round(sizeBook * sc)) + 'px "Barlow Condensed",sans-serif';
+}
 function shopRows() {
   const m = shopMetrics();
-  const list = UPGRADES.filter(upgradeAvailable);
-  return list.map((u, i) => {
-    const col = Math.min(m.cols.length - 1, Math.floor(i / m.perCol)), k = i % m.perCol;
+  // Osimo 2026-09-07: "shift all machines and arcades to the right and all the rest to the
+  // left." So the book is split by KIND, not by whatever spills over: the machines that
+  // stand on a floor and earn are the right-hand page, everything you buy to make the place
+  // work better is the left. Each page fills independently, so a long list of cabinets no
+  // longer pushes the joysticks onto the wrong side.
+  const all = UPGRADES.filter(upgradeAvailable);
+  const left = all.filter(u => !isFloorMachine(u));
+  const right = all.filter(isFloorMachine);
+  const list = [];
+  for (let i = 0; i < m.perCol; i++) if (left[i]) list.push({ u: left[i], col: 0, k: i });
+  for (let i = 0; i < m.perCol; i++) if (right[i]) list.push({ u: right[i], col: 1, k: i });
+  // Nine a page means a long machine list does not fit, and silently hiding something you
+  // could buy reads as a bug. It is not a dead end — the hidden ones are the ones further
+  // down the room, and each purchase lifts the next into view — but the page says so.
+  shopMore = [Math.max(0, left.length - m.perCol), Math.max(0, right.length - m.perCol)];
+  return list.map(({ u, col, k }) => {
     const c = m.cols[col];
     const t = m.perCol > 1 ? k / (m.perCol - 1) : 0;
     // PIXEL LOCKED (Osimo 2026-09-07): rounded to whole device pixels, so a row never lands
@@ -1939,6 +2045,11 @@ function shopRows() {
     return { u, cx, cy, x: cx - m.iconR, y: Math.round(cy - m.rowH / 2), w: m.w,
              h: Math.round(m.rowH) };
   });
+}
+// A thing that stands on an arcade floor and takes money from a punter. The lease and the
+// podcast studio are rooms, not machines, so they stay on the left with the rest of the kit.
+function isFloorMachine(u) {
+  return /^cab\d/.test(u.id) || /^hall\d/.test(u.id) || u.id === 'cooler' || u.id === 'vending';
 }
 function shopTap(w) {
   // Osimo 2026-09-04: "if you can't buy anything there's no intuitive way to exit the
@@ -2015,6 +2126,26 @@ function drawPlate(id) {
 // proper downsample from the high-resolution art), then blown back up 3x with smoothing off.
 // The result is the same 3x3 block as the plate, from the best source available. Cached per
 // sprite per size, so it costs one resample and then nothing.
+// MIRRORING, without mirroring the canvas. Osimo 2026-09-07: "Jimmy out of focus while
+// sitting down" — and he was the only flipped sprite in the room. ctx.scale(-1, 1) draws the
+// sprite through a negative transform, which lands its pixels on a different sub-pixel phase
+// from an unflipped one once the room's own VIEW scale is in play (0.887 on his phone), so a
+// mirrored sprite resamples where its neighbour does not. Flipping the IMAGE once, into a
+// cache, means every draw in the game is a plain upright blit at the same phase.
+const FLIPCACHE = new Map();
+function mirrored(im) {
+  const key = (im.src ? im.src.length : 0) + ':' + im.width + 'x' + im.height;
+  let c = FLIPCACHE.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = im.width; c.height = im.height;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.translate(im.width, 0); g.scale(-1, 1);
+  g.drawImage(im, 0, 0);
+  FLIPCACHE.set(key, c);
+  return c;
+}
 const PIXCACHE = new Map();
 function pixelated(im, w, h) {
   const key = (im.src ? im.src.length : 0) + ':' + im.width + 'x' + im.height + ':'
@@ -2066,10 +2197,7 @@ function drawHost(who, h) {
       const hh = who === 'jimmy' ? SEAT.hJimmy : SEAT.hJoe;
       const ff = who === 'jimmy' ? SEAT.feetJimmy : SEAT.feetJoe;
       const fl = who === 'jimmy' ? SEAT.flipJimmy : SEAT.flipJoe;
-      ctx.save();
-      if (fl) { ctx.translate(Math.round(SEAT[who]) * 2, 0); ctx.scale(-1, 1); }
-      drawSprite(im, SEAT[who], ff, hh);
-      ctx.restore();
+      drawSprite(fl ? mirrored(im) : im, SEAT[who], ff, hh);
       return;
     }
   }
@@ -2127,23 +2255,21 @@ function drawPunters() {
     // for." So the punter IS the progress bar — he arrives drained of colour and fills up
     // from the feet as his session runs; when he is fully coloured, he pays and leaves.
     const prog = c.playFull ? Math.max(0, Math.min(1, 1 - c.playT / c.playFull)) : 1;
-    ctx.save();
-    if (m.flip) { ctx.translate(Math.round(m.punter.x) * 2, 0); ctx.scale(-1, 1); }
+    const im2 = m.flip ? mirrored(im) : im;
     const px = m.punter.x, feet = m.punter.feet, ph = m.punter.h;
     const pw = im.width * (ph / im.height);
     ctx.save();                                   // grey version, whole body
     ctx.filter = 'grayscale(1) brightness(0.78)';
-    drawSprite(im, px, feet, ph);
+    drawSprite(im2, px, feet, ph);
     ctx.restore();
     if (prog > 0) {                               // colour rises from the feet
       ctx.save();
       ctx.beginPath();
       ctx.rect(px - pw / 2 - 2, feet - ph * prog, pw + 4, ph * prog + 2);
       ctx.clip();
-      drawSprite(im, px, feet, ph);
+      drawSprite(im2, px, feet, ph);
       ctx.restore();
     }
-    ctx.restore();
   }
 }
 // The two little businesses get the same card over them as a machine does — takings when
@@ -2423,7 +2549,7 @@ function drawExitArrows(now) {
 // studio actually looks like a room where something is being made rather than a room with
 // a mic prop in it.
 function drawRecording(now) {
-  const left = Math.max(0, rec.until - now), frac = left / (rec.show ? rec.show.ms : REC_MS);
+  const left = Math.max(0, rec.until - now), frac = left / (rec.ms || (rec.show ? rec.show.ms : REC_MS));
   ctx.save();
   const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.006));
   ctx.strokeStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
@@ -2528,7 +2654,7 @@ function drawPodRecording(now) {
   const h = ROOMS.podcast.hotspots.find(x => x.show !== undefined && SHOWS[x.show] === rec.show);
   if (!h) return;
   const cx = h.x + h.w / 2, s = rec.show;
-  const left = Math.max(0, rec.until - now), frac = left / s.ms;
+  const left = Math.max(0, rec.until - now), frac = left / (rec.ms || s.ms);
   const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.006));
   ctx.save();
   ctx.strokeStyle = 'rgba(255,60,60,' + pulse.toFixed(3) + ')';
@@ -2567,6 +2693,10 @@ function drawPodRecording(now) {
   ctx.restore();
 }
 
+// Both the drawing in drawHUD and the tap-test in the pointer handler read these — one
+// pair of numbers for what you see and what you can press, so they cannot drift apart
+// again (see the 2026-09-07 "pause overlapping sound" fix).
+const HUD_CTRL = { pau0: 10, pau1: 34, snd0: 40, snd1: 64 };
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
@@ -2579,22 +2709,22 @@ function drawHUD(now) {
   ctx.translate(0, T);
   ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
   ctx.fillStyle = '#ffd75e';
-  ctx.fillText('£' + (cash / 100).toFixed(2), L + 46, 32);
+  ctx.fillText('£' + (cash / 100).toFixed(2), L + 78, 32);
   ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   // BOTH aprons, always — the whole point is knowing the other one is still loaded. The
   // one you are driving is bright; the other is dimmed but still legible.
   const mine = carryOf(me()), theirs = carryOf(other());
   ctx.fillStyle = mine >= apronCap() ? '#ff6b6b' : '#e8e2d8';
   ctx.fillText((active === 'jimmy' ? 'J' : 'JOE') + ' ' + mine + '/' + apronCap() + 'p',
-               L + 176, 31);
+               L + 206, 31);
   ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
   ctx.fillStyle = theirs >= apronCap() ? 'rgba(255,107,107,0.85)' : 'rgba(232,226,216,0.55)';
-  ctx.fillText((active === 'jimmy' ? 'JOE' : 'J') + ' ' + theirs + 'p', L + 176, 43);
+  ctx.fillText((active === 'jimmy' ? 'JOE' : 'J') + ' ' + theirs + 'p', L + 206, 43);
   ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   // hype bar — the show's pull on the floor. The whole row is laid out inside the safe
   // width, so a notch on either side squeezes it rather than hiding an end of it.
   const usable = SW - L - R;
-  const hx = L + Math.max(300, usable * 0.34), hw = Math.max(110, Math.min(190, usable * 0.23));
+  const hx = L + Math.max(330, usable * 0.36), hw = Math.max(110, Math.min(190, usable * 0.23));
   ctx.fillStyle = '#e8e2d8'; ctx.fillText('HYPE', hx, 31);
   ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(hx + 46, 16, hw, 15);
   ctx.fillStyle = hype > 55 ? '#8effc2' : hype > 25 ? '#ffd75e' : '#ff6b6b';
@@ -2661,29 +2791,24 @@ function drawHUD(now) {
   // freehold is watching this number come down, and eventually read NO RENT.
   const own = ownedPct();
   ctx.fillText('DAY ' + day + '   RENT ' + (own >= 100 ? 'NONE' : '£' + (rentDue(day) / 100).toFixed(2)),
-               SW - R - 44, 31);
+               SW - R - 14, 31);
   if (own > 0) {
     ctx.font = 'bold 11px "Barlow Condensed",sans-serif';
     ctx.fillStyle = own >= 100 ? '#8effc2' : '#c9a6ff';
-    ctx.fillText('YOU OWN ' + own + '% OF THE SITE', SW - R - 44, 43);
+    ctx.fillText('YOU OWN ' + own + '% OF THE SITE', SW - R - 14, 43);
     ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
     ctx.fillStyle = '#e8e2d8';
   }
   ctx.fillStyle = left < 15000 ? '#ff6b6b' : '#ffd75e';
   ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 168, 31);
+  ctx.fillText(Math.ceil(left / 1000) + 's', SW - R - 138, 31);
   ctx.textAlign = 'left';
   ctx.restore();
-  // speaker
-  ctx.font = '20px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', SW - R - 16, 32 + T);
-  // …and the pause moved to the LEFT, into the gap beside the money, where there was room
-  // (Osimo 2026-09-07: "move the pause button on the left where the rest space").
-  // FIRST in the bar, before the money. It was after it, and '£4000.00' is wider than
-  // '£5.00' — so the button hid behind the cash figure the moment you had a good night.
-  // textAlign is still 'right' from the speaker above, which drew this one off the edge.
-  ctx.textAlign = 'left';
-  ctx.fillText(paused ? '▶' : '⏸', L + 12, 32 + T);
+  // speaker + pause — both LEFT-aligned from HUD_CTRL's own anchors, so the gap between
+  // them is the one set there and cannot silently reopen from a mismatched textAlign again.
+  ctx.font = '20px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(paused ? '▶' : '⏸', L + HUD_CTRL.pau0, 32 + T);
+  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', L + HUD_CTRL.snd0, 32 + T);
   // No jingle name beside the speaker any more — it ran under the rent figure, and the
   // icon already says which of the four states you are in. Osimo 2026-09-07.
   ctx.textAlign = 'left';
@@ -2718,22 +2843,25 @@ function drawShop() {
   if (bk) ctx.drawImage(bk, m.book.dx, m.book.dy, bk.width * m.book.sc, bk.height * m.book.sc);
   // Title block sits on the paper at the top of the left page, in BOOK space, so it moves
   // with the book instead of floating at a fixed fraction of the screen.
-  const headY = m.cols[0].y0 - 62;
+  const sc = m.book.sc;
+  const headY = Math.round(m.cols[0].y0 - m.rowH * 2.3);
+  const headX = Math.round(m.cols[0].x0 - m.iconR + LEDGER_NUDGE);
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.cols[0].x0 - m.iconR + LEDGER_NUDGE, headY + 20);
-  ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = '#5a3618'; ctx.font = lfont(LEDGER_TYPE.head, sc);
+  ctx.fillText('THE LEDGER', headX, Math.round(headY + LEDGER_TYPE.head * sc));
+  ctx.fillStyle = '#7a5a38'; ctx.font = lfont(LEDGER_TYPE.sub, sc);
   ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe',
-               m.cols[0].x0 - m.iconR + LEDGER_NUDGE, headY + 38);
+               headX, Math.round(headY + (LEDGER_TYPE.head + LEDGER_TYPE.sub + 5) * sc));
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
     // Osimo 2026-09-07: "remove those boxes around each item." A line you can afford is now
     // told apart by its INK — full-strength writing and a green price against a faded one —
     // rather than by a pencil box, which is what a real ledger would look like anyway.
-    shopIcon(r.u.icon, r.cx, r.cy, m2.iconR * 2.05, can);
-    const tx = r.cx + m2.iconR + 8;
-    const right = r.cx - m2.iconR + r.w - 8;
+    shopIcon(r.u.icon, r.cx, r.cy, m2.icon, can);
+    const gap = Math.round(6 * sc);
+    const tx = Math.round(r.cx + m2.iconR + gap);
+    const right = Math.round(r.cx - m2.iconR + r.w - gap);
     // A page column is narrow, so the price is measured FIRST and the name is trimmed to
     // whatever is left. Writing the name at full length and hoping the price cleared it is
     // what put the two on top of each other.
@@ -2741,20 +2869,32 @@ function drawShop() {
     // and price side by side left about 90px for the name in a page column and every entry
     // came out as an ellipsis.
     const price = '£' + (c / 100).toFixed(2);
+    const nameY = Math.round(r.cy - LEDGER_TYPE.rowNameDy * sc);
+    const lineY = Math.round(r.cy + LEDGER_TYPE.rowLineDy * sc);
     ctx.fillStyle = can ? '#3c2410' : '#8a795f';
-    ctx.font = 'bold 15px "Barlow Condensed",sans-serif';
+    ctx.font = lfont(LEDGER_TYPE.name, sc);
     ctx.fillText(fitText(r.u.name + (r.u.max ? ' ' + (lvl(r.u.id) + 1) + '/' + r.u.max : ''),
-                         right - tx), tx, r.cy - 2);
-    ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
+                         right - tx), tx, nameY);
+    ctx.font = lfont(LEDGER_TYPE.price, sc);
     const pw = ctx.measureText(price).width;
     ctx.textAlign = 'right';
     ctx.fillStyle = can ? '#1f6b3a' : '#a05a5a';
-    ctx.fillText(price, right, r.cy + 11);
+    ctx.fillText(price, right, lineY);
     ctx.textAlign = 'left';
-    ctx.font = '11px "Barlow Condensed",sans-serif';
+    ctx.font = lfont(LEDGER_TYPE.blurb, sc, false);
     ctx.fillStyle = can ? '#6b4a24' : '#9d8f77';
-    ctx.fillText(fitText(r.u.blurb, right - pw - 8 - tx), tx, r.cy + 11);
+    ctx.fillText(fitText(r.u.blurb, right - pw - gap * 2 - tx), tx, lineY);
   }
+  // "+N more" under a page that overflowed, so nothing is hidden without saying so
+  const mm = shopMetrics();
+  shopMore.forEach((n, col) => {
+    if (!n) return;
+    const c = mm.cols[col];
+    ctx.font = lfont(LEDGER_TYPE.blurb + 2, mm.book.sc, 'italic');
+    ctx.fillStyle = '#7a5a38';
+    ctx.fillText('+' + n + ' more once these are bought',
+                 Math.round(c.x1) + LEDGER_NUDGE, Math.round(c.y1) + Math.round(mm.rowH * 0.75));
+  });
   const cl = shopCloseRect();
   ctx.fillStyle = 'rgba(122,74,26,0.9)';
   ctx.fillRect(cl.x, cl.y, cl.w, cl.h);
@@ -2909,10 +3049,14 @@ window.__TC = {
   deed(n) { lvls.deed = n; },               // QA only — own n tenths of the site
   shopsQA() { return { shops: JSON.parse(JSON.stringify(shops)), held: { ...held } }; },
   stockQA() { shops.cooler.stock = 6; shops.vending.stock = 10; },   // QA only
+  recQA() { return rec ? { show: rec.show.id, ms: rec.ms, clip: bbbName,
+                           videoDur: bbbVideo ? +bbbVideo.duration.toFixed(1) : null,
+                           left: Math.round(rec.until - performance.now()) } : null; },
   audioQA() { return { bbb: bbbAudio ? { paused: bbbAudio.paused,
                                          t: +bbbAudio.currentTime.toFixed(2) } : null,
                        music: musicEl ? { src: musicEl.src.split('/').pop(),
                                           paused: musicEl.paused } : null,
+                       cha: chaBuf ? +chaBuf.duration.toFixed(2) : null,
                        musicIdx, muted, recording: !!rec }; },
   swapQA() { active = otherName(); },        // QA only
   // QA only — the ledger's first row and column, expressed as a FRACTION of the book. If
@@ -2922,6 +3066,12 @@ window.__TC = {
     return { firstRowInBook: +(((m.y0 - b.dy) / (b.bh * b.sc))).toFixed(4),
              colInBook: +(((m.cols[0].x0 - b.dx) / (b.bw * b.sc))).toFixed(4),
              widthInBook: +((m.w / (b.bw * b.sc))).toFixed(4),
+             // The same question asked of the WRITING: a row's height, its icon and its type
+             // all as fractions of the book. Positions were already device-proof; these three
+             // were not, and nothing measured them.
+             rowHInBook: +((m.rowH / (b.bh * b.sc))).toFixed(4),
+             iconInBook: +(((m.iconR * 2.05) / (b.bh * b.sc))).toFixed(4),
+             nameInBook: +((LEDGER_TYPE.name * b.sc / (b.bh * b.sc))).toFixed(4),
              rowsPerCol: m.perCol };
   },
   probe(wx, wy) { const h = hotspotAt(wx, wy);

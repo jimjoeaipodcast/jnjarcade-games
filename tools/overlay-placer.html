@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- The placer draws the game's own text, so it needs the game's own font. cabinet.css
+     is where every @font-face lives; without it Barlow Condensed silently falls back and the
+     page lies about what the game will look like. -->
+<link rel="stylesheet" href="../cabinet.css">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>OVERLAY PLACER</title>
