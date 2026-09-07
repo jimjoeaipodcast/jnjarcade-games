@@ -486,7 +486,8 @@ function tvFeedReady() {
 }
 function tvFrame() {
   // during a Buy or ByeBye take the telly carries the product, not the smoke
-  if (rec && rec.show && rec.show.id === 'byebye' && bbbVideo &&
+  // the studio telly carries the product for the take that is rolling
+  if (rec && rec.show && (rec.show.id === 'byebye' || rec.show.id === 'plain') && bbbVideo &&
       bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
     ctx.save();
     drawIntoScreen(bbbVideo, TV);
@@ -604,7 +605,11 @@ function drawProps(room) {
 // The two chesterfields in the studio, measured off the plate. Jimmy left, Joe right, every
 // time — and a seated sprite each, so a take actually looks like two people doing a podcast.
 // placed by Osimo in tools/overlay-placer?target=seats, 2026-09-07
-const SEAT = { jimmy: 330, joe: 626, feetJimmy: 410, feetJoe: 407, hJimmy: 176, hJoe: 180 };
+// Osimo 2026-09-07: "Jimmy backwards when sitting down, not like I did in the placer."
+// The placer draws him unmirrored; the game was inheriting a mirror from the walk state, so
+// he sat facing out of the room. The seated draw now sets its own facing explicitly.
+const SEAT = { jimmy: 330, joe: 626, feetJimmy: 410, feetJoe: 407, hJimmy: 176, hJoe: 180,
+               flipJimmy: false, flipJoe: true };
 // FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
 // game play"): four down the left wall, one on the right. The corridor plate is now the
 // ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
@@ -1359,8 +1364,17 @@ function updateHype(dt) {
 // you built gets spent. The payout scales with the hype you brought to it.
 // A plain take off the studio mic, or a named show in the podcast studio. Same shape either
 // way: both hosts, a fixed length, a payout that scales with the crowd you brought.
-const PLAIN = { id: 'plain', name: 'AN EPISODE', ms: REC_MS, base: 120, per: 7,
-                roy: ROYALTY, col: '#e8c35a', minHype: REC_MIN_HYPE };
+// THE STUDIO TAKE *IS* A BUY OR BYEBYE. Osimo 2026-09-07: "when I click it doesn't run the
+// one BBB product, once a day — I can go anytime, it just runs that red line, but we want
+// BBB to come on and only once a day."
+// He was tapping the studio mic, which was a generic episode with no product and no limit —
+// and the podcast studio, where BUY OR BYEBYE lived, is behind owning the whole building, so
+// for most of a run the rule and the b-roll may as well not have existed. The little studio
+// records ONE PRODUCT A DAY now, with the product on the telly, which is what he has been
+// describing all along. The podcast studio's four channels remain the later, richer version.
+const PLAIN = { id: 'plain', name: 'BUY OR BYEBYE', ms: REC_MS, base: 120, per: 7,
+                roy: ROYALTY, col: '#e8c35a', minHype: REC_MIN_HYPE,
+                oncePerDay: true, cool: 60000 };
 function recPay(h, show) { const s = show || PLAIN; return Math.round(h * s.per) + s.base; }
 function startRec(show) {
   const s = show || PLAIN;
@@ -1391,7 +1405,7 @@ function startRec(show) {
     hosts.joe.x = hosts.joe.target = SEAT.joe;
   }
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
-  if (s.id === 'byebye') {
+  if (s.id === 'plain' || s.id === 'byebye') {
     const pick = bbbStart();
     say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
         3600);
@@ -1748,6 +1762,8 @@ const LEDGER_ART = { w: 640, h: 360, colW: 166, rows: 11,
                      cols: [{ x0: 144.7, y0: 74.7, x1: 136.0, y1: 268.0 },
                             { x0: 330.0, y0: 66.0, x1: 330.7, y1: 269.3 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
+// "shift everything a few pixels to the right" — both pages, off the margin rule
+const LEDGER_NUDGE = 10;
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   const bk = SPR.ledger;
@@ -1799,7 +1815,7 @@ function shopRows() {
     // PIXEL LOCKED (Osimo 2026-09-07): rounded to whole device pixels, so a row never lands
     // on a half pixel and the writing cannot shimmer or sit a hair off between devices.
     const cy = Math.round(c.y0 + (c.y1 - c.y0) * t);   // the logo's CENTRE, on the line
-    const cx = Math.round(c.x0 + (c.x1 - c.x0) * t);   // …leaning with the page's own rule
+    const cx = Math.round(c.x0 + (c.x1 - c.x0) * t) + LEDGER_NUDGE;  // …leaning with the rule
     return { u, cx, cy, x: cx - m.iconR, y: Math.round(cy - m.rowH / 2), w: m.w,
              h: Math.round(m.rowH) };
   });
@@ -1867,7 +1883,13 @@ function pixelated(im, w, h) {
             + Math.round(w) + 'x' + Math.round(h);
   let c = PIXCACHE.get(key);
   if (c) return c;
+  // ONLY when the source has pixels to spare. Osimo 2026-09-07: "when standing their sprite
+  // quality has been degraded" — right, and this was why. The hosts are stored 57px tall and
+  // drawn at 213, so a third of the target is 71px: the pass was UPSCALING a 57px sprite to
+  // 71 and then blowing that up 3x, resampling twice. A sprite that is already at or below
+  // the room's density is left alone and drawn straight, as it was before.
   const lw = Math.max(1, Math.round(w / 3)), lh = Math.max(1, Math.round(h / 3));
+  if (im.height <= lh * 1.05) return im;
   c = document.createElement('canvas');
   c.width = lw; c.height = lh;
   const g = c.getContext('2d');
@@ -1900,7 +1922,11 @@ function drawHost(who, h) {
     if (im) {
       const hh = who === 'jimmy' ? SEAT.hJimmy : SEAT.hJoe;
       const ff = who === 'jimmy' ? SEAT.feetJimmy : SEAT.feetJoe;
+      const fl = who === 'jimmy' ? SEAT.flipJimmy : SEAT.flipJoe;
+      ctx.save();
+      if (fl) { ctx.translate(SEAT[who] * 2, 0); ctx.scale(-1, 1); }
       drawSprite(im, SEAT[who], ff, hh);
+      ctx.restore();
       return;
     }
   }
@@ -2268,10 +2294,16 @@ function drawRecording(now) {
   ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, TV.w - 24, 9);
   ctx.fillStyle = '#ff6b6b';
   ctx.fillRect(TV.x + 12, TV.y + TV.h - 22, (TV.w - 24) * frac, 9);
+  // on its own dark strip along the bottom of the screen — over the product footage the
+  // yellow was unreadable
+  const lbl = (bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() + '  ·  ' : '')
+            + '£' + (recPay(rec.hype0, rec.show) / 100).toFixed(2);
+  ctx.fillStyle = 'rgba(10,6,4,0.82)';
+  ctx.fillRect(TV.x, TV.y + TV.h - 46, TV.w, 26);
   ctx.fillStyle = '#ffd75e';
-  ctx.font = 'bold 21px "Barlow Condensed",sans-serif';
+  ctx.font = 'bold 19px "Barlow Condensed",sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('WORTH £' + (recPay(rec.hype0, rec.show) / 100).toFixed(2), TV.x + TV.w / 2, TV.y + TV.h - 34);
+  ctx.fillText(lbl, TV.x + TV.w / 2, TV.y + TV.h - 28);
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -2364,7 +2396,7 @@ function drawPodRecording(now) {
   // product, so the screen carries it rather than a generic on-air card.
   // this position's own monitor carries the take
   const scr = POD_TV[h.show];
-  const feed = (s.id === 'byebye') ? bbbVideo : tvVideo;
+  const feed = (s.id === 'byebye' || s.id === 'plain') ? bbbVideo : tvVideo;
   if (scr && feed && feed.readyState >= 2 && feed.videoWidth) {
     ctx.fillStyle = '#000';
     ctx.fillRect(scr.x - 2, scr.y - 2, scr.w + 4, scr.h + 4);
@@ -2537,18 +2569,16 @@ function drawShop() {
   const headY = m.cols[0].y0 - 62;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#5a3618'; ctx.font = 'bold 22px "Barlow Condensed",sans-serif';
-  ctx.fillText('THE LEDGER', m.cols[0].x0 - m.iconR, headY + 20);
+  ctx.fillText('THE LEDGER', m.cols[0].x0 - m.iconR + LEDGER_NUDGE, headY + 20);
   ctx.fillStyle = '#7a5a38'; ctx.font = 'bold 14px "Barlow Condensed",sans-serif';
-  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe', m.cols[0].x0 - m.iconR, headY + 38);
+  ctx.fillText('£' + (cash / 100).toFixed(2) + ' in the safe',
+               m.cols[0].x0 - m.iconR + LEDGER_NUDGE, headY + 38);
   for (const r of shopRows()) {
     const c = upgradeCost(r.u), can = cash >= c;
     const m2 = shopMetrics();
-    if (can) {                                   // an affordable line is ringed in pencil
-      ctx.fillStyle = 'rgba(226,178,86,0.22)';
-      ctx.fillRect(r.cx - m2.iconR - 4, r.cy - r.h / 2 + 1, r.w, r.h - 2);
-      ctx.strokeStyle = 'rgba(122,74,26,0.5)'; ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.cx - m2.iconR - 4, r.cy - r.h / 2 + 1, r.w, r.h - 2);
-    }
+    // Osimo 2026-09-07: "remove those boxes around each item." A line you can afford is now
+    // told apart by its INK — full-strength writing and a green price against a faded one —
+    // rather than by a pencil box, which is what a real ledger would look like anyway.
     shopIcon(r.u.icon, r.cx, r.cy, m2.iconR * 2.05, can);
     const tx = r.cx + m2.iconR + 8;
     const right = r.cx - m2.iconR + r.w - 8;
