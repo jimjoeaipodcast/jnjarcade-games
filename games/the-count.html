@@ -424,7 +424,46 @@ function loadPack() {
 // against the studio plate, not guessed.
 const TV = { x: 352, y: 108, w: 256, h: 146 };
 let tvVideo = null;
+// THE BUY OR BYEBYE B-ROLL. Osimo 2026-09-07: "instead of smoke b-roll we should play one
+// buy or ByeBye one product only, and then they get their money." Five real single-product
+// cuts from the show's own b-roll renders, one picked per take, 320x180 and 22 seconds each
+// so all five together are 336KB.
+// They are MUTE on purpose and for a reason: the b-roll renders carry no audio track of
+// their own, four of that episode's ten product clips are not on disk so the episode audio
+// cannot be sliced by offset, and the script.json that IS on disk is a different episode
+// with different products. A guessed audio offset would land mid-sentence on the wrong
+// product, which is worse than none — and the arcade's own jingle is already playing.
+const BBB_CLIPS = ['button-pusher', 'dumpling-mold', 'jellyfish-lamp', 'mini-chopper',
+                   'paper-stool'];
+let bbbVideo = null, bbbName = null;
+function bbbStart() {
+  const pick = BBB_CLIPS[Math.floor(Math.random() * BBB_CLIPS.length)];
+  if (bbbName !== pick) {
+    if (bbbVideo) bbbVideo.pause();
+    const v = document.createElement('video');
+    v.src = '../assets/footage/bbb/' + pick + '.mp4?v=1';
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto';
+    bbbVideo = v; bbbName = pick;
+  }
+  try { bbbVideo.currentTime = 0; bbbVideo.play().catch(() => {}); } catch (e) {}
+  return pick;
+}
+function bbbStop() { if (bbbVideo) { try { bbbVideo.pause(); } catch (e) {} } }
 function tvFrame() {
+  // during a Buy or ByeBye take the telly carries the product, not the smoke
+  if (rec && rec.show && rec.show.id === 'byebye' && bbbVideo &&
+      bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
+    ctx.save();
+    ctx.drawImage(bbbVideo, TV.x, TV.y, TV.w, TV.h);
+    const g = ctx.createRadialGradient(TV.x + TV.w / 2, TV.y + TV.h / 2, 10,
+                                       TV.x + TV.w / 2, TV.y + TV.h / 2, TV.w * 0.9);
+    g.addColorStop(0, 'rgba(255,214,140,0.12)');
+    g.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(TV.x - 90, TV.y - 60, TV.w + 180, TV.h + 140);
+    ctx.restore();
+    return;
+  }
   if (!tvVideo) {
     const v = document.createElement('video');
     v.src = '../assets/footage/jnj-smoke-screen.mp4?v=1';
@@ -1317,6 +1356,11 @@ function startRec(show) {
     hosts.joe.x = hosts.joe.target = SEAT.joe;
   }
   rec = { show: s, until: performance.now() + s.ms, hype0: hype };
+  if (s.id === 'byebye') {
+    const pick = bbbStart();
+    say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
+        3600);
+  }
   vo('recStart', { icon: 'icOnair' });
   SFX.day();
 }
@@ -1325,10 +1369,11 @@ function updateRec(dt, now) {
   const here = rec.show === PLAIN ? 'studio' : 'podcast';
   // walk either of them out and the take is lost — that is what makes it a commitment
   if (hosts.jimmy.room !== here || hosts.joe.room !== here) {
-    rec = null; vo('recBail', { icon: 'icOnair', max: 3 }); SFX.deny();
+    rec = null; bbbStop(); vo('recBail', { icon: 'icOnair', max: 3 }); SFX.deny();
     return;
   }
   if (now < rec.until) return;
+  bbbStop();
   // Paid on the crowd you BROUGHT to it, not what is left at the end — a take spends its
   // audience by design, so charging the payout against the drained figure would punish
   // exactly the long shows that are meant to be worth the most.
@@ -2270,6 +2315,21 @@ function drawPodRecording(now) {
   ctx.fillRect(cx - 78, h.y + h.h - 14, 156, 9);
   ctx.fillStyle = s.col;
   ctx.fillRect(cx - 78, h.y + h.h - 14, 156 * frac, 9);
+  // BUY OR BYEBYE plays the product on the monitor at that position — the show IS the
+  // product, so the screen carries it rather than a generic on-air card.
+  if (s.id === 'byebye' && bbbVideo && bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
+    const vw = 150, vh = 84, vx = cx - vw / 2, vy = h.y + 96;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(vx - 3, vy - 3, vw + 6, vh + 6);
+    ctx.drawImage(bbbVideo, vx, vy, vw, vh);
+    ctx.strokeStyle = s.col; ctx.lineWidth = 2;
+    ctx.strokeRect(vx - 3, vy - 3, vw + 6, vh + 6);
+    ctx.fillStyle = '#ffe9e9';
+    ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() : '', cx, vy + vh + 15);
+    ctx.textAlign = 'left';
+  }
   ctx.restore();
 }
 
