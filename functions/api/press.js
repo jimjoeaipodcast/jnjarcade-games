@@ -74,11 +74,15 @@ export async function onRequestPost({ request, env }) {
     if (!Array.isArray(body.items) || !body.items.length || body.items.length > MAX_ITEMS) {
       return json({ error: 'bad items' }, 400);
     }
+    // `flip` is stored. It was not, and the overlay placer has been sending it since the ⇄
+    // button went in — so every mirroring Osimo chose was accepted by the page, posted, and
+    // silently dropped here. That is why the seats never came back the way he placed them.
     rec.items = body.items.map(it => ({
       id: String(it.id || '').slice(0, 40),
       x: int(it.x, -400, 1400), y: int(it.y, -400, 1000),
       w: it.w === undefined ? undefined : int(it.w, 0, 1400),
       h: it.h === undefined ? undefined : int(it.h, 0, 1000),
+      flip: !!it.flip,
     }));
     if (rec.items.some(it => it.x === null || it.y === null)) return json({ error: 'bad numbers' }, 400);
   }

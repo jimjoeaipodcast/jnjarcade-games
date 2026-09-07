@@ -597,8 +597,8 @@ function drawProps(room) {
     if (!im) continue;
     const r = propRect(p);
     ctx.save();
-    if (p.flip) { ctx.translate(p.x * 2, 0); ctx.scale(-1, 1); }
-    drawSpriteBox(im, p.x, p.feet, r.w, r.h);   // same 3x block as the room around it
+    if (p.flip) { ctx.translate(Math.round(p.x) * 2, 0); ctx.scale(-1, 1); }
+    drawSpriteBox(im, Math.round(p.x), Math.round(p.feet), r.w, r.h);   // room's own grid
     ctx.restore();
   }
 }
@@ -608,8 +608,12 @@ function drawProps(room) {
 // Osimo 2026-09-07: "Jimmy backwards when sitting down, not like I did in the placer."
 // The placer draws him unmirrored; the game was inheriting a mirror from the walk state, so
 // he sat facing out of the room. The seated draw now sets its own facing explicitly.
+// EXACTLY as the placer draws them. I had added a mirror to Joe by hand when Osimo said
+// Jimmy sat backwards — but the placer draws both unmirrored, so that was me introducing the
+// very mismatch he was reporting. Neither is flipped unless he presses ⇄ in the placer, and
+// that choice now survives the endpoint (it was being dropped — see functions/api/press.js).
 const SEAT = { jimmy: 330, joe: 626, feetJimmy: 410, feetJoe: 407, hJimmy: 176, hJoe: 180,
-               flipJimmy: false, flipJoe: true };
+               flipJimmy: false, flipJoe: false };
 // FIVE playable machines (Osimo 2026-09-04: "make all 5 arcades available in total for
 // game play"): four down the left wall, one on the right. The corridor plate is now the
 // ALL-SCREENS-OFF art, so an unpowered machine simply LOOKS off — no translucent rectangle
@@ -791,8 +795,10 @@ const ROOMS = {
       // Osimo 2026-09-04: "once I entered to store room at the end of the corridor could
       // only exit to the right make it left and right". The prop room is through a door in
       // the MIDDLE of the corridor, so either end of it should put you back on the floor.
+      // Osimo 2026-09-07: "remove the arrow on the right to return to arcade, only leave the
+      // one on the left." Two doors out of one room was the old fix for a different problem
+      // and it just made the room ambiguous — and the right-hand one sat on the water jugs.
       { id: 'toCorrL',  x: 0,   y: 150, w: 70,  h: 340, walkX: 65,  label: 'BACK TO THE ARCADE', exit: 'corridor' },
-      { id: 'toCorr2',  x: 890, y: 150, w: 70,  h: 340, walkX: 895, label: 'BACK TO THE ARCADE', exit: 'corridor' },
       { id: 'whisky',   x: 250, y: 300, w: 130, h: 130, walkX: 300, label: 'WHISKY CRATE' },
       { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'THE OLD SAFE — DO NOT OPEN' },
       { id: 'parts',    x: 600, y: 260, w: 120, h: 190, walkX: 610, label: 'SPARE PARTS' },
@@ -1367,8 +1373,8 @@ function drawShopCustomers() {
     const im = SPR[s.cust.spr];
     if (!im) continue;
     ctx.save();
-    if (c.flip) { ctx.translate(c.x * 2, 0); ctx.scale(-1, 1); }
-    drawSprite(im, c.x, c.feet, c.h);
+    if (c.flip) { ctx.translate(Math.round(c.x) * 2, 0); ctx.scale(-1, 1); }
+    drawSprite(im, Math.round(c.x), Math.round(c.feet), Math.round(c.h));
     ctx.restore();
   }
 }
@@ -1944,6 +1950,11 @@ function drawSprite(im, x, feetY, h) {
 }
 // draws into an EXACT box, so two sprites of different source shapes can be made to
 // occupy identical space on screen
+// PIXEL LOCKED. Osimo 2026-09-07: "I don't know if we did a pixel lock after." Every sprite
+// in a room lands on whole world pixels — position AND size rounded before it is drawn — so
+// nothing sits on a half pixel and nothing shifts by a fraction between devices. The ledger
+// got this when its rows were placed; this is the same guarantee for everyone standing in a
+// room.
 function drawSpriteBox(im, x, feetY, w, h) {
   if (!im) return false;
   const W = Math.round(w), H = Math.round(h);
@@ -1961,7 +1972,7 @@ function drawHost(who, h) {
       const ff = who === 'jimmy' ? SEAT.feetJimmy : SEAT.feetJoe;
       const fl = who === 'jimmy' ? SEAT.flipJimmy : SEAT.flipJoe;
       ctx.save();
-      if (fl) { ctx.translate(SEAT[who] * 2, 0); ctx.scale(-1, 1); }
+      if (fl) { ctx.translate(Math.round(SEAT[who]) * 2, 0); ctx.scale(-1, 1); }
       drawSprite(im, SEAT[who], ff, hh);
       ctx.restore();
       return;
@@ -2022,7 +2033,7 @@ function drawPunters() {
     // from the feet as his session runs; when he is fully coloured, he pays and leaves.
     const prog = c.playFull ? Math.max(0, Math.min(1, 1 - c.playT / c.playFull)) : 1;
     ctx.save();
-    if (m.flip) { ctx.translate(m.punter.x * 2, 0); ctx.scale(-1, 1); }
+    if (m.flip) { ctx.translate(Math.round(m.punter.x) * 2, 0); ctx.scale(-1, 1); }
     const px = m.punter.x, feet = m.punter.feet, ph = m.punter.h;
     const pw = im.width * (ph / im.height);
     ctx.save();                                   // grey version, whole body
