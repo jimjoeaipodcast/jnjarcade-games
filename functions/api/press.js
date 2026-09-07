@@ -12,7 +12,7 @@
 
    Uses the SUBMISSIONS KV binding. Without it: GET {}, POST 503, same as plays.js. */
 
-const OK_ROOM = /^[a-z][a-z0-9-]{0,20}$/;
+const OK_ROOM = /^[a-z][a-z0-9-]{0,24}$/;
 const MAX_CELLS = 6000;                 // the whole 96x54 grid is 5184
 const MAX_ITEMS = 60;
 

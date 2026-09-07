@@ -60,6 +60,7 @@
   <p style="color:#9aa;font-size:13px">The big room is sideways.</p></div>
 <div class="bar" id="top">
   <div id="sel">TAP A PUNTER</div>
+  <button class="ghost" id="flip">⇄</button>
   <button class="ghost" id="prev">‹</button>
   <button class="ghost" id="next">›</button>
 </div>
@@ -162,7 +163,7 @@ function toWorld(px, py) {
 }
 
 // ── art, straight from the game's own pack ──────────────────────────────────
-fetch('../games/the-count-pack.json?v=17').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=19').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   mk(p.art[ROOM], im => { hall = im; });
   for (const k of SPRITES) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
@@ -308,12 +309,13 @@ function updateSel() {
   const p = punters[sel];
   document.getElementById('sel').textContent =
     (sel + 1) + '/' + punters.length + '  ' + p.label + '   x' + Math.round(p.x) +
-    ' feet' + Math.round(p.feet) + ' h' + Math.round(p.h);
+    ' feet' + Math.round(p.feet) + ' h' + Math.round(p.h) + (p.flip ? ' ⇄' : '');
 }
 updateSel();
 
 document.getElementById('prev').onclick = () => { sel = (sel + punters.length - 1) % punters.length; updateSel(); };
 document.getElementById('next').onclick = () => { sel = (sel + 1) % punters.length; updateSel(); };
+document.getElementById('flip').onclick = () => { punters[sel].flip = !punters[sel].flip; updateSel(); };
 document.getElementById('bigger').onclick  = () => { punters[sel].h = Math.min(420, punters[sel].h + 6); updateSel(); };
 document.getElementById('smaller').onclick = () => { punters[sel].h = Math.max(30, punters[sel].h - 6); updateSel(); };
 document.getElementById('reset').onclick = () => {

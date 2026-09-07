@@ -60,6 +60,7 @@
 <div class="bar" id="top">
   <div id="sel">TAP A HANDLE</div>
   <span style="flex:1"></span>
+  <button id="flip">⇄ FLIP</button>
   <button id="fewer">− ROWS</button>
   <button id="more">+ ROWS</button>
   <button id="prev">‹</button><button id="next">›</button>
@@ -67,7 +68,7 @@
 <div class="bar" id="bot">
   <button id="smaller">− WIDTH</button>
   <button id="bigger">+ WIDTH</button>
-  <span id="hint">drag a handle · pinch for width</span>
+  <span id="hint">drag · pinch to size</span>
   <span style="flex:1"></span>
   <button id="reset">RESET</button>
   <button class="go" id="submit">SUBMIT</button>
@@ -77,10 +78,10 @@
 (function () {
 'use strict';
 const QS = new URLSearchParams(location.search);
-const TARGET = QS.get('target') === 'cards' ? 'cards' : 'ledger';
+const TARGET = ['cards', 'seats', 'stock'].includes(QS.get('target')) ? QS.get('target') : 'ledger';
 const ROOM = QS.get('room') === 'corridor' ? 'corridor' : 'hall';
 const EDIT = QS.get('edit') === '1';
-const SCENE = TARGET === 'ledger' ? 'ledger' : 'cards-' + ROOM;
+const SCENE = TARGET === 'cards' ? 'cards-' + ROOM : TARGET;
 const W = 960, H = 540;
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 let DPR = 1, VIEW = { scale: 1, ox: 0, oy: 0 };
@@ -116,8 +117,24 @@ const CARDS = {
     ['CABINET 4 — FAR END', 362, 218], ['CABINET 5 — THE RED ONE', 757, 212],
   ],
 };
+// SEATS: where Jimmy and Joe sit for a take, and how big they are. Jimmy is always the left
+// chesterfield and Joe the right — that is fixed; what is being placed is where on the
+// cushion, and the scale (Osimo 2026-09-07).
+const SEATS = [
+  { id: 'jimmySeat', label: 'JIMMY (left sofa)', x: 238, y: 466, h: 156, kind: 'sprite', spr: 'jimmySit' },
+  { id: 'joeSeat',   label: 'JOE (right sofa)',  x: 760, y: 466, h: 156, kind: 'sprite', spr: 'joeSit' },
+];
+// STOCK: the water jugs and the vending boxes in the prop room, which is where a day's
+// restocking starts. Both are placed as BOXES — they are things you tap, so the size is the
+// tap area as well as the picture.
+const STOCK = [
+  { id: 'jug', label: 'WATER JUGS',    x: 752, y: 362, w: 96,  h: 140, kind: 'box' },
+  { id: 'box', label: 'VENDING BOXES', x: 638, y: 413, w: 104, h: 95,  kind: 'box' },
+];
 function build() {
   if (TARGET === 'ledger') return LEDGER.map(o => ({ ...o }));
+  if (TARGET === 'seats')  return SEATS.map(o => ({ ...o }));
+  if (TARGET === 'stock')  return STOCK.map(o => ({ ...o }));
   return CARDS[ROOM].map(([label, x, y], i) => ({ id: 'card' + i, label, x, y, kind: 'card' }));
 }
 let items = build();
@@ -144,11 +161,14 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=17').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=19').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
+  else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
+  else if (TARGET === 'stock') mk(p.art.prop, im => { plate = im; });
   else mk(p.art[ROOM], im => { plate = im; });
-  for (const k of ['icCab', 'icCoin']) if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
+  for (const k of ['icCab', 'icCoin', 'jimmySit', 'joeSit', 'icBottle', 'icApron'])
+    if (p.sprites[k]) mk(p.sprites[k], im => { SPR[k] = im; });
 }).catch(() => toast('Could not load the art pack.'));
 
 fetch('/api/press?kind=points&room=' + SCENE).then(r => r.json()).then(d => {
@@ -159,6 +179,8 @@ fetch('/api/press?kind=points&room=' + SCENE).then(r => r.json()).then(d => {
     if (!m) return;
     m.x = it.x; m.y = it.y;
     if (it.w !== undefined && it.w !== null) m.w = it.w;
+    if (it.h !== undefined && it.h !== null && m.kind !== 'row') m.h = it.h;
+    if (typeof it.flip === 'boolean') m.flip = it.flip;
   });
   updateSel();
   if (d.by === 'osimo' && d.savedAt && !EDIT) retire();
@@ -218,6 +240,45 @@ function ghostRow(x, y, skip) {
   ctx.textAlign = 'left';
   ctx.restore();
 }
+// A seated host, drawn exactly as the game draws him — same sprite, same anchor (feet), so
+// what is dragged here is what sits on the sofa in the game.
+function drawSprite(o, on) {
+  const im = SPR[o.spr];
+  if (!im) { o._box = { x: o.x - 40, y: o.y - o.h, w: 80, h: o.h }; return; }
+  const w = im.width * (o.h / im.height);
+  // ⇄ FLIP mirrors the art, the same way the game's own `flip` does
+  ctx.save();
+  if (o.flip) { ctx.translate(o.x * 2, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(im, o.x - w / 2, o.y - o.h, w, o.h);
+  ctx.restore();
+  if (on) {
+    ctx.save();
+    ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]);
+    ctx.strokeRect(o.x - w / 2 - 4, o.y - o.h - 4, w + 8, o.h + 8);
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,215,94,0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(o.x - w, o.y); ctx.lineTo(o.x + w, o.y); ctx.stroke();
+    ctx.restore();
+  }
+  o._box = { x: o.x - w / 2, y: o.y - o.h, w, h: o.h };
+}
+// A tappable thing in a room: the box IS the tap area, so it is drawn as one.
+function drawBox(o, on) {
+  ctx.save();
+  ctx.fillStyle = on ? 'rgba(255,215,94,0.26)' : 'rgba(94,208,255,0.20)';
+  roundRect(o.x, o.y, o.w, o.h, 8); ctx.fill();
+  ctx.strokeStyle = on ? '#ffd75e' : 'rgba(94,208,255,0.85)';
+  ctx.lineWidth = on ? 3 : 2;
+  roundRect(o.x, o.y, o.w, o.h, 8); ctx.stroke();
+  const im = SPR[o.id === 'jug' ? 'icBottle' : 'icApron'];
+  if (im) ctx.drawImage(im, o.x + o.w / 2 - 18, o.y + o.h / 2 - 18, 36, 36);
+  ctx.fillStyle = '#fff3d0'; ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(o.label, o.x + o.w / 2, o.y - 6);
+  ctx.textAlign = 'left';
+  ctx.restore();
+  o._box = { x: o.x, y: o.y, w: o.w, h: o.h };
+}
 function drawRow(o, on) {
   // a ledger line as the game writes it: icon, name, price under
   const ir = 31;
@@ -274,6 +335,8 @@ function frame() {
   items.forEach((o, i) => {
     const on = i === sel;
     if (o.kind === 'card') drawCard(o, on);
+    else if (o.kind === 'sprite') drawSprite(o, on);
+    else if (o.kind === 'box') drawBox(o, on);
     else if (o.kind === 'width') drawWidth(o, on);
     else drawRow(o, on);
   });
@@ -293,8 +356,13 @@ function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.cli
 
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
-  const wid = items.find(i => i.id === 'width');
-  if (e.touches.length === 2 && wid) { pinch = { d: dist(e.touches[0], e.touches[1]), w: wid.w }; drag = null; return; }
+  if (e.touches.length === 2) {
+    const o = items[sel];
+    pinch = { d: dist(e.touches[0], e.touches[1]),
+              v: o.kind === 'sprite' ? o.h : (o.kind === 'box' ? o.w
+                 : (items.find(i => i.id === 'width') || { w: 178 }).w) };
+    drag = null; return;
+  }
   const w = toWorld(e.touches[0].clientX, e.touches[0].clientY);
   const hit = pick(w);
   if (hit >= 0) { sel = hit; updateSel(); }
@@ -302,9 +370,17 @@ canvas.addEventListener('touchstart', e => {
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
-  const wid = items.find(i => i.id === 'width');
-  if (pinch && e.touches.length === 2 && wid) {
-    wid.w = Math.max(60, Math.min(600, Math.round(pinch.w * (dist(e.touches[0], e.touches[1]) / pinch.d))));
+  if (pinch && e.touches.length === 2) {
+    const o = items[sel], k = dist(e.touches[0], e.touches[1]) / pinch.d;
+    if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, Math.round(pinch.v * k)));
+    else if (o.kind === 'box') {
+      const r = o.h / o.w;
+      o.w = Math.max(20, Math.min(600, Math.round(pinch.v * k)));
+      o.h = Math.max(20, Math.min(500, Math.round(o.w * r)));
+    } else {
+      const w = items.find(i => i.id === 'width');
+      if (w) w.w = Math.max(60, Math.min(600, Math.round(pinch.v * k)));
+    }
     updateSel(); return;
   }
   if (!drag || !e.touches.length) return;
@@ -344,17 +420,33 @@ function updateSel() {
     : '';
   document.getElementById('sel').textContent =
     (sel + 1) + '/' + items.length + '  ' + o.label + '   x' + Math.round(o.x) +
-    ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '') + pitch;
+    ' y' + Math.round(o.y) + (o.w !== undefined ? ' w' + Math.round(o.w) : '') +
+    (o.h !== undefined && o.kind !== 'row' ? ' h' + Math.round(o.h) : '') +
+    (o.flip ? ' ⇄' : '') + pitch;
 }
 updateSel();
 
 document.getElementById('prev').onclick = () => { sel = (sel + items.length - 1) % items.length; updateSel(); };
 document.getElementById('next').onclick = () => { sel = (sel + 1) % items.length; updateSel(); };
-const wid = () => items.find(i => i.id === 'width');
-document.getElementById('bigger').onclick  = () => { const o = wid(); if (o) { o.w = Math.min(600, o.w + 6); updateSel(); } };
-document.getElementById('smaller').onclick = () => { const o = wid(); if (o) { o.w = Math.max(60, o.w - 6); updateSel(); } };
+// − / + act on whatever the selected handle actually scales: a sprite's height, a box's
+// size, or the ledger column's width.
+function resizeSel(d) {
+  const o = items[sel];
+  if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, o.h + d));
+  else if (o.kind === 'box') {
+    o.w = Math.max(20, Math.min(600, o.w + d));
+    o.h = Math.max(20, Math.min(500, o.h + d));
+  } else {
+    const w = items.find(i => i.id === 'width');
+    if (w) w.w = Math.max(60, Math.min(600, w.w + d));
+  }
+  updateSel();
+}
+document.getElementById('bigger').onclick  = () => resizeSel(6);
+document.getElementById('smaller').onclick = () => resizeSel(-6);
 document.getElementById('reset').onclick = () => { items = build(); rows = 9; sel = 0; updateSel(); toast('Back to the game values.', 1400); };
 document.getElementById('more').onclick  = () => { rows = Math.min(ROWS_MAX, rows + 1); updateSel(); };
+document.getElementById('flip').onclick  = () => { items[sel].flip = !items[sel].flip; updateSel(); };
 document.getElementById('fewer').onclick = () => { rows = Math.max(ROWS_MIN, rows - 1); updateSel(); };
 
 let toastT = 0;
@@ -374,7 +466,9 @@ if (submitBtn) submitBtn.onclick = async () => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ by: 'osimo', room: SCENE, kind: 'points',
         items: items.map(o => ({ id: o.id, x: Math.round(o.x), y: Math.round(o.y),
-                                 w: o.w === undefined ? undefined : Math.round(o.w) }))
+                                 w: o.w === undefined ? undefined : Math.round(o.w),
+                                 h: o.h === undefined ? undefined : Math.round(o.h),
+                                 flip: !!o.flip }))
           // the row count rides along as an item so the endpoint needs no new field
           .concat(TARGET === 'ledger' ? [{ id: 'rowsPerPage', x: rows, y: 0 }] : []) }),
     });

@@ -347,6 +347,7 @@ const VO_LINES = {
   recDone:  ['JIMMY', "That's an episode in the can. It pays tonight, and it pays every night after."],
   royalty:  ['JOE',   "the back catalogue paid out. turns out people rewatch us."],
   hypeLow:  ['JIMMY', "Hype's on the floor — nobody's talking. One of us needs to be on that mic."],
+  outOfStock:['JIMMY', "One of them's sold out. There's stock in the prop room, it pays for itself."],
 };
 const VO = { b64: null, loading: false, until: 0 };
 function djb2(str) {
@@ -402,7 +403,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=17').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=19').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -508,15 +509,20 @@ const MACHINES = [
   // SUPERSEDED 2026-09-07: these five are now Osimo's own, placed by hand in
   // tools/punter-placer?room=corridor and read back out of KV. The grid-cell history above
   // is kept because it explains the foot-offset arithmetic the Placer inherited.
-  { pay: 22, secs: 4.5, body: [100, 185, 152, 240], screen: [170, 213, 214, 261],
+  // BODIES painted and CARDS placed by Osimo, 2026-09-07, read back out of KV.
+  // He painted by POSITION — left to right as he sees them — while the painter's
+  // swatches were labelled in hotspot order, so his last three colours are the water
+  // cooler, the vending machine and cabinet 5, not what the labels said. The geometry
+  // says which is which unambiguously; the painter's swatch order is fixed to match.
+  { pay: 22, secs: 4.5, body: [0, 0, 270, 380], tag: [139, 208],
     punter: { h: 225, feet: 416, x: 268 }, flip: false },
-  { pay: 34, secs: 7.0, body: [240, 195,  72, 200], screen: [246, 216, 286, 256],
+  { pay: 34, secs: 7.0, body: [240, 160, 70, 200], tag: [214, 176],
     punter: { h: 166, feet: 361, x: 327 }, flip: false },
-  { pay: 16, secs: 3.2, body: [300, 205,  52, 168], screen: [305, 219, 332, 252],
+  { pay: 16, secs: 3.2, body: [290, 180, 70, 160], tag: [289, 215],
     punter: { h: 121, feet: 329, x: 363 }, flip: false },
-  { pay: 48, secs: 9.5, body: [345, 210,  42, 145], screen: [350, 222, 374, 249],
+  { pay: 48, secs: 9.5, body: [340, 170, 50, 160], tag: [367, 178],
     punter: { h:  97, feet: 309, x: 397 }, flip: false },
-  { pay: 70, secs: 12.0, body: [686, 150, 130, 275], screen: [736, 216, 778, 260],
+  { pay: 70, secs: 12.0, body: [700, 140, 140, 270], tag: [767, 156],
     punter: { h: 216, feet: 411, x: 690 }, flip: true },
 ];
 const CAB_N = MACHINES.length;
@@ -613,7 +619,12 @@ const ROOMS = {
   },
   corridor: {
     name: 'THE ARCADE', floorY: 486,
-    hotspots: MACHINES.map((m, i) => ({
+    // .slice(0, CAB_N) — MACHINES has the BIG ROOM's eleven appended to it by the time this
+    // runs, and without the slice the corridor hit-tested all sixteen. A tap on the water
+    // cooler was landing on hall machine 10, whose body happens to sit over that part of the
+    // corridor, and walking you to the middle of the room instead. Nothing was visible, so it
+    // just looked like the cooler did not respond.
+    hotspots: MACHINES.slice(0, CAB_N).map((m, i) => ({
       id: 'cab' + i, x: m.body[0], y: m.body[1], w: m.body[2], h: m.body[3],
       walkX: Math.max(70, Math.min(890, m.punter.x + (m.flip ? -80 : 70))),
       label: 'CABINET ' + (i + 1), cab: i,
@@ -659,6 +670,11 @@ const ROOMS = {
       { id: 'whisky',   x: 250, y: 300, w: 130, h: 130, walkX: 300, label: 'WHISKY CRATE' },
       { id: 'bitsBox',  x: 420, y: 320, w: 130, h: 110, walkX: 430, label: 'THE OLD SAFE — DO NOT OPEN' },
       { id: 'parts',    x: 600, y: 260, w: 120, h: 190, walkX: 610, label: 'SPARE PARTS' },
+      // Osimo 2026-09-07: "place those water jugs and box for refill vending machine in the
+      // stock room." First-guess positions — he is placing them properly in
+      // tools/overlay-placer?target=stock.
+      { id: 'jug',      x: 752, y: 362, w: 96,  h: 140, walkX: 770, label: 'WATER JUGS' },
+      { id: 'box',      x: 638, y: 413, w: 104, h: 95,  walkX: 660, label: 'VENDING BOXES' },
       { id: 'shelves',  x: 20,  y: 120, w: 210, h: 330, walkX: 180, label: 'THE SHELVES' },
     ],
   },
@@ -706,6 +722,10 @@ const UPGRADES = [
     blurb: 'The decanter holds double. Fewer trips to the prop room.' },
   { id: 'counter', name: 'COIN COUNTER',       cost: 2500, once: true, icon: 'coin',
     blurb: 'The safe pays a 10% counting bonus on every bag.' },
+  { id: 'cooler',  name: 'THE WATER COOLER',   cost: 1000, once: true, icon: 'bottle',
+    blurb: 'Sells itself while it has water in it. Jugs are in the prop room.' },
+  { id: 'vending', name: 'THE VENDING MACHINE',cost: 1800, once: true, icon: 'apron',
+    blurb: 'Quick money, all night, until it runs out. Boxes are in the prop room.' },
   // Buy the building out from under the landlord, a tenth at a time. Only offered once the
   // first arcade is earning, because until then the rent is the game.
   { id: 'deed',    name: 'BUY 10% OF THE SITE', cost: 4000, max: DEED_MAX, scale: 1.28,
@@ -748,7 +768,14 @@ const UPGRADES = [
     blurb: 'He works the first arcade and banks it. £1.50 a night off the rent.' },
 ];
 
-let cash, carry, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
+let cash, day, dayEndsAt, hype, decanter, bottles, cabs, owned, apronLvl;
+// AN APRON EACH (Osimo 2026-09-07): "Jimmy and Joe should have their own apron, thus if
+// Jimmy fills up his apron Joe's should have its own to fill. if the user wanted he could
+// fill both up and travel with each individually to empty their aprons in the safe."
+// So the pockets live on the HOST, not on the game, and `carry` is just whoever you are
+// driving. Filling both and walking them to the safe one at a time is now a real tactic:
+// two aprons is two trips' worth of coins collected in one sweep of the floor.
+function carryOf(h) { return h.carry || 0; }
 // Levels for every REPEATABLE upgrade, by id. It used to be a single apronLvl, which is
 // fine while exactly one thing repeats — the freehold is the second, and it buys the
 // building ten per cent at a time.
@@ -772,6 +799,23 @@ const REC_MS = 14000;         // a take in the little studio runs fourteen secon
 const REC_MIN_HYPE = 25;      // below this there is no audience worth recording for
 const ROYALTY = 60;           // 60p a night for a plain episode off the studio mic
 let episodes = 0, rec = null; // rec = { show, until, hype0 } while the red light is on
+// ── THE VENDING MACHINE AND THE WATER COOLER ────────────────────────────────
+// Osimo 2026-09-07: "these give low but fast money, but you have to restock them both once a
+// day. you also have to buy them to unlock them, and it cost money to stock them (all
+// relative and cost money but must turn a profit every day even after cost)."
+// So they are the opposite trade to a cabinet: no punter has to sit at them, they tick away
+// on their own — but only while there is stock in them, and stock is a thing you carry from
+// the prop room like the whisky. A jug costs £1.00 and returns £1.50; a vending box costs
+// £2.00 and returns £3.50. Small, certain, and a chore.
+const SHOPS = {
+  cooler:  { id: 'cooler',  name: 'THE WATER COOLER', per: 25, tick: 1800, load: 6,
+             stockId: 'jug',  stockCost: 100, stockName: 'water jug' },
+  vending: { id: 'vending', name: 'THE VENDING MACHINE', per: 35, tick: 2400, load: 10,
+             stockId: 'box',  stockCost: 200, stockName: 'vending box' },
+};
+let shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0, t: 0 } };
+let held = { jug: 0, box: 0 };          // what you are carrying back from the prop room
+const HELD_MAX = 2;
 let royaltyRate = 0;          // total nightly royalty from everything ever recorded
 // PAUSE (Osimo 2026-09-07: "add a pause button, and it must save the position and
 // everything of the game play, even through days"). Pausing writes the full run — the
@@ -812,7 +856,8 @@ function saveRun() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 1, t: Date.now(), cash, day, banked, apronLvl, lvls, owned, bottles, decanter, episodes,
-      hype: Math.round(hype), carry, royaltyRate,
+      hype: Math.round(hype), carry: hosts.jimmy.carry, joeCarry: hosts.joe.carry,
+      royaltyRate, shops, held,
       // where you were standing and which of them you were driving, so a resumed run puts
       // you back where you left off rather than at the start of the corridor
       room, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room,
@@ -841,7 +886,10 @@ function resumeRun() {
   episodes = s2.episodes || 0; rec = null;   // a take in progress does not survive a reload
   // saves from before the podcast studio only knew a flat 60p an episode
   royaltyRate = (s2.royaltyRate !== undefined) ? s2.royaltyRate : episodes * ROYALTY;
-  carry = s2.carry || 0;
+  if (s2.shops) for (const k in shops) if (s2.shops[k]) Object.assign(shops[k], s2.shops[k]);
+  if (s2.held) held = { jug: s2.held.jug || 0, box: s2.held.box || 0 };
+  hosts.jimmy.carry = s2.carry || 0;
+  hosts.joe.carry = s2.joeCarry || 0;
   boxOpenedToday = !!s2.boxOpenedToday;
   if (Array.isArray(s2.said)) for (const [k, n] of s2.said) voSaid.set(k, n);
   if (s2.room && ROOMS[s2.room]) room = s2.room;
@@ -877,15 +925,17 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function newRun() {
-  cash = START_CASH; carry = 0; day = 1; hype = 80; decanter = 3; bottles = 0;
+  cash = START_CASH; day = 1; hype = 80; decanter = 3; bottles = 0;
   banked = 0; apronLvl = 0; lvls = {}; owned = {}; punters = []; floaters = []; coins = [];
   episodes = 0; rec = null; royaltyRate = 0;
+  shops = { cooler: { stock: 0, till: 0, t: 0 }, vending: { stock: 0, till: 0, t: 0 } };
+  held = { jug: 0, box: 0 };
   cabs = MACHINES.map(() => ({ till: 0, jam: false, cursed: false, busy: null, playT: 0 }));
   room = 'corridor'; shopOpen = false; msg = ''; msgUntil = 0;
   dayEndsAt = performance.now() + DAY_MS; dayPaused = false; turnedAway = 0; boxOpenedToday = false;
   rentWarned = false; rentCardAt = 0;
-  hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1 };
-  hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1 };
+  hosts.jimmy = { room: 'corridor', x: 300, target: 300, walk: 0, face: 1, carry: 0 };
+  hosts.joe   = { room: 'studio',   x: 560, target: 560, walk: 0, face: 1, carry: 0 };
   active = 'jimmy';
 }
 const hosts = { jimmy: null, joe: null };
@@ -1059,7 +1109,7 @@ function updateFloor(dt, now) {
 // then never again (vo() latches the key), so the game guides without nagging.
 function voWatch() {
   if (tutorial >= 0) return;                       // the intro owns the bubble
-  if (carry >= apronCap()) vo('fullApron', { icon: 'icApron', max: 2 });
+  if (carryOf(me()) >= apronCap()) vo('fullApron', { icon: 'icApron', max: 2 });
   for (let i = 0; i < ALL_N; i++) {
     if (!cabOn(i)) continue;
     // Osimo 2026-09-07: "that phrase they keep on using about the machines... use it once
@@ -1132,6 +1182,20 @@ function hypeReason() {
   if (performance.now() - lastTurnAt < 3500) return { dir: -1, txt: 'QUEUE WALKING OUT' };
   return { dir: 1, txt: 'ON MIC' };
 }
+// They earn on their own, but only while stocked — that is the whole bargain.
+function updateShops(dt, now) {
+  for (const k in SHOPS) {
+    const cfg = SHOPS[k], s = shops[k];
+    if (!has(k) || s.stock <= 0) continue;
+    s.t += dt;
+    if (s.t < cfg.tick) continue;
+    s.t = 0;
+    s.stock--;
+    s.till += cfg.per;
+    if (s.stock === 0) vo('outOfStock', { icon: 'icBottle', max: 2 });
+  }
+}
+
 function updateHype(dt) {
   const talking = !!micHost() && decanter > 0;
   let drain = talking ? 0.5 : 1.3;
@@ -1242,23 +1306,24 @@ function act(h) {
     if (!cabOn(i)) { vo('offMach', { icon: 'icCab', once: false }); SFX.deny(); return; }
     if (c.jam) { c.jam = false; SFX.fix(); say('Unjammed. Back in service.'); return; }
     if (c.till <= 0) { say('Empty. Let someone play it.'); SFX.deny(); return; }
-    const room4 = apronCap() - carry;
+    const room4 = apronCap() - carryOf(me());
     if (room4 <= 0) { vo('fullApron', { icon: 'icApron', once: false }); SFX.deny(); return; }
     const took = Math.min(c.till, room4);
-    c.till -= took; carry += took;
+    c.till -= took; me().carry = carryOf(me()) + took;
     SFX.coin();
     floaters.push({ x: h.x + h.w / 2, y: h.y + 30, t: now, txt: '+' + took + 'p', col: '#ffd75e' });
-    if (c.till > 0) say('Apron full at ' + carry + 'p — some left in the machine.');
+    if (c.till > 0) say('Apron full at ' + carryOf(me()) + 'p — some left in the machine.');
     return;
   }
   switch (h.id) {
     case 'safe': {
-      if (carry <= 0) { say('Nothing to bank.'); SFX.deny(); return; }
-      const bonus = has('counter') ? Math.round(carry * 0.1) : 0;
-      cash += carry + bonus; banked += carry + bonus;
+      const bag = carryOf(me());
+      if (bag <= 0) { say('Nothing to bank — the other one may still be carrying.'); SFX.deny(); return; }
+      const bonus = has('counter') ? Math.round(bag * 0.1) : 0;
+      cash += bag + bonus; banked += bag + bonus;
       floaters.push({ x: h.x + h.w / 2, y: h.y, t: now,
-                      txt: '+' + ((carry + bonus) / 100).toFixed(2) + (bonus ? ' (+10%)' : ''), col: '#8effc2' });
-      carry = 0; SFX.bank();
+                      txt: '+' + ((bag + bonus) / 100).toFixed(2) + (bonus ? ' (+10%)' : ''), col: '#8effc2' });
+      me().carry = 0; SFX.bank();
       return;
     }
     case 'ledger':  shopOpen = true; return;
@@ -1273,6 +1338,23 @@ function act(h) {
     case 'whisky': {
       if (bottles >= 2) { say('Two bottles is all you can carry.'); SFX.deny(); return; }
       bottles++; SFX.fix(); say('Bottle taken. The decanter is in the studio.');
+      return;
+    }
+    case 'jug':
+    case 'box': {
+      const cfg = h.id === 'jug' ? SHOPS.cooler : SHOPS.vending;
+      if (!has(cfg.id)) { say('Nothing to put a ' + cfg.stockName + ' in yet.'); SFX.deny(); return; }
+      if (held[h.id] >= HELD_MAX) { say('Two is all you can carry.'); SFX.deny(); return; }
+      if (cash < cfg.stockCost) {
+        say('A ' + cfg.stockName + ' is £' + (cfg.stockCost / 100).toFixed(2)
+            + '. You have not got it.', 3000);
+        SFX.deny(); return;
+      }
+      cash -= cfg.stockCost; held[h.id]++;
+      SFX.fix();
+      say(cfg.stockName.toUpperCase() + ' — £' + (cfg.stockCost / 100).toFixed(2)
+          + '. It fills ' + cfg.name.toLowerCase() + ' with ' + cfg.load
+          + ', worth £' + ((cfg.load * cfg.per) / 100).toFixed(2) + '.', 3800);
       return;
     }
     case 'parts': {
@@ -1304,8 +1386,34 @@ function act(h) {
     case 'tv':
       startRec();
       return;
-    case 'vending': say('Stocked for now.'); return;
-    case 'cooler':  say('Cold water. No money in it.'); return;
+    case 'vending':
+    case 'cooler': {
+      const cfg = SHOPS[h.id], s = shops[h.id];
+      if (!has(h.id)) {
+        const up = UPGRADES.find(u => u.id === h.id);
+        say(cfg.name + ' — £' + (up.cost / 100).toFixed(2) + ' at the ledger.', 3000);
+        SFX.deny(); return;
+      }
+      if (s.till > 0) {                                  // money first, always
+        const take = Math.min(s.till, apronCap() - carryOf(me()));
+        if (take <= 0) { vo('fullApron', { icon: 'icApron', max: 2 }); SFX.deny(); return; }
+        s.till -= take; me().carry = carryOf(me()) + take; SFX.coin();
+        floaters.push({ x: h.x + h.w / 2, y: h.y, t: now, txt: '+' + take + 'p', col: '#ffd75e' });
+        return;
+      }
+      if (held[cfg.stockId] > 0) {                       // then restock it
+        held[cfg.stockId]--;
+        s.stock += cfg.load;
+        SFX.bank();
+        say(cfg.name + ' restocked — ' + s.stock + ' left in it.', 2600);
+        return;
+      }
+      say(s.stock > 0
+          ? s.stock + ' left in it. It sells on its own.'
+          : 'Empty. Fetch a ' + cfg.stockName + ' from the prop room.', 3000);
+      if (s.stock <= 0) SFX.deny();
+      return;
+    }
     case 'change':  say('The machine takes notes and gives coins. The coins end up in the cabinets.'); return;
     default: say(h.label);
   }
@@ -1653,6 +1761,21 @@ function drawPunters() {
     ctx.restore();
   }
 }
+// The two little businesses get the same card over them as a machine does — takings when
+// there are takings, EMPTY when they need a trip to the prop room. Same shape, same voice.
+function drawShopState() {
+  if (room !== 'corridor') return;
+  for (const k in SHOPS) {
+    if (!has(k)) continue;
+    const h = ROOMS.corridor.hotspots.find(x => x.id === k);
+    if (!h) continue;
+    const s = shops[k], m = { body: [h.x, h.y, h.w, h.h] };
+    const cx = h.x + h.w / 2, cy = h.y - 4;
+    if (s.till > 0) cardTag(cx, cy, m, 'coin', s.till + 'p', '#1f6b3a', false);
+    else if (s.stock <= 0) cardTag(cx, cy, m, 'cab', 'EMPTY', '#a83a3a', true);
+  }
+}
+
 function drawCabState() {
   if (room !== 'corridor' && room !== 'hall') return;
   for (const i of roomMachines()) {
@@ -1797,13 +1920,20 @@ function hintSpots() {
   if (room === 'corridor' || room === 'hall') {
     for (const i of roomMachines()) {
       const c = cabs[i];
-      if (c.jam || (c.till >= 15 && carry < apronCap())) out.push(find('cab' + i));
+      if (c.jam || (c.till >= 15 && carryOf(me()) < apronCap())) out.push(find('cab' + i));
     }
     // the prop room is through that door, so the door carries the errand
-    if (needBottle || boxLive) out.push(find('toProp'));
+    const needStock = (has('cooler') && shops.cooler.stock <= 0 && !held.jug)
+                   || (has('vending') && shops.vending.stock <= 0 && !held.box);
+    if (needBottle || boxLive || needStock) out.push(find('toProp'));
+    for (const k in SHOPS) {
+      if (!has(k)) continue;
+      if (shops[k].till > 0 && carryOf(me()) < apronCap()) out.push(find(k));
+      else if (shops[k].stock <= 0 && held[SHOPS[k].stockId] > 0) out.push(find(k));
+    }
   }
   if (room === 'coinroom') {
-    if (carry > 0) out.push(find('safe'));
+    if (carryOf(me()) > 0) out.push(find('safe'));
     else if (cash >= 600) out.push(find('ledger'));
   }
   if (room === 'studio' && decanter === 0 && bottles > 0) out.push(find('decanter'));
@@ -1812,6 +1942,8 @@ function hintSpots() {
   if (room === 'studio' && !rec && hype >= REC_MIN_HYPE
       && hosts.jimmy.room === 'studio' && hosts.joe.room === 'studio') out.push(find('mic'));
   if (room === 'prop') {
+    if (has('cooler') && shops.cooler.stock <= 0 && !held.jug) out.push(find('jug'));
+    if (has('vending') && shops.vending.stock <= 0 && !held.box) out.push(find('box'));
     if (needBottle) out.push(find('whisky'));
     if (boxLive) out.push(find('bitsBox'));
   }
@@ -2002,8 +2134,16 @@ function drawHUD(now) {
   ctx.fillStyle = '#ffd75e';
   ctx.fillText('£' + (cash / 100).toFixed(2), L + 46, 32);
   ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
-  ctx.fillStyle = carry >= apronCap() ? '#ff6b6b' : '#e8e2d8';
-  ctx.fillText('APRON ' + carry + '/' + apronCap() + 'p', L + 176, 31);
+  // BOTH aprons, always — the whole point is knowing the other one is still loaded. The
+  // one you are driving is bright; the other is dimmed but still legible.
+  const mine = carryOf(me()), theirs = carryOf(other());
+  ctx.fillStyle = mine >= apronCap() ? '#ff6b6b' : '#e8e2d8';
+  ctx.fillText((active === 'jimmy' ? 'J' : 'JOE') + ' ' + mine + '/' + apronCap() + 'p',
+               L + 176, 31);
+  ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
+  ctx.fillStyle = theirs >= apronCap() ? 'rgba(255,107,107,0.85)' : 'rgba(232,226,216,0.55)';
+  ctx.fillText((active === 'jimmy' ? 'JOE' : 'J') + ' ' + theirs + 'p', L + 176, 43);
+  ctx.font = 'bold 17px "Barlow Condensed",sans-serif';
   // hype bar — the show's pull on the floor. The whole row is laid out inside the safe
   // width, so a notch on either side squeezes it rather than hiding an end of it.
   const usable = SW - L - R;
@@ -2229,6 +2369,7 @@ function frame(ts) {
     updateFloor(dt, ts);
     updateHype(dt);
     updateJoe(dt);
+    updateShops(dt, ts);
     updateRec(dt, ts);
     voWatch();
     stepHost(hosts.jimmy, dt);
@@ -2252,6 +2393,7 @@ function frame(ts) {
     for (const who of ['jimmy', 'joe']) if (hosts[who] && hosts[who].room === room) drawHost(who, hosts[who]);
   }
   drawCabState();
+  drawShopState();
   if (state !== 'attract') { drawHint(ts); drawExitArrows(ts); }
   drawFloaters(ts);
   if (state !== 'attract') drawMsg(ts);
@@ -2281,7 +2423,8 @@ requestAnimationFrame(frame);
 // Read-only debug hook for QA and the cassette recorder (the pattern game-builder STEP 3
 // asks for). Exposes state and a world-coordinate tap; changes nothing about play.
 window.__TC = {
-  get state() { return { cash, carry, apron: apronCap(), day, hype: Math.round(hype), room,
+  get state() { return { cash, carry: carryOf(me()), joeCarry: carryOf(hosts.joe),
+                         jimCarry: carryOf(hosts.jimmy), apron: apronCap(), day, hype: Math.round(hype), room,
                          bottles, decanter, banked, cabs: cabs.map(c => ({ till: c.till, jam: c.jam,
                          cursed: c.cursed, busy: !!c.busy })), cabCount: cabCount(), owned: Object.keys(owned),
                          shopOpen, active, jimmyRoom: hosts.jimmy.room, joeRoom: hosts.joe.room,
@@ -2308,6 +2451,11 @@ window.__TC = {
   save() { saveRun(); },                    // QA only
   setHype(v) { hype = v; },                 // QA only — reach a recordable crowd instantly
   deed(n) { lvls.deed = n; },               // QA only — own n tenths of the site
+  shopsQA() { return { shops: JSON.parse(JSON.stringify(shops)), held: { ...held } }; },
+  swapQA() { active = otherName(); },        // QA only
+  probe(wx, wy) { const h = hotspotAt(wx, wy);
+                  return { room, hit: h && h.id, walkX: h && h.walkX, active,
+                           joeX: Math.round(hosts.joe.x), jimX: Math.round(hosts.jimmy.x) }; },
   goRoom(r) { hosts.jimmy.room = hosts.joe.room = room = r;
               hosts.jimmy.x = hosts.jimmy.target = 300;
               hosts.joe.x = hosts.joe.target = 560; },   // QA only
