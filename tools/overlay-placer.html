@@ -66,8 +66,10 @@
   <button id="prev">‹</button><button id="next">›</button>
 </div>
 <div class="bar" id="bot">
-  <button id="smaller">− WIDTH</button>
-  <button id="bigger">+ WIDTH</button>
+  <button id="smaller">− W</button>
+  <button id="bigger">+ W</button>
+  <button id="shorter">− H</button>
+  <button id="taller">+ H</button>
   <span id="hint">drag top &amp; bottom · the rows follow the line</span>
   <span style="flex:1"></span>
   <button id="reset">RESET</button>
@@ -147,8 +149,15 @@ const SEATS = [
 // The box IS the screen — a clip is cover-fitted into it and clipped by it — so what is
 // dragged here is exactly the picture area.
 const TVS = {
-  studio:  [{ id: 'tv',    label: 'THE STUDIO TV',   x: 352, y: 108, w: 256, h: 146, kind: 'box' }],
-  podcast: [{ id: 'podTv', label: 'BUY OR BYEBYE MONITOR', x: 497, y: 204, w: 150, h: 84, kind: 'box' }],
+  studio:  [{ id: 'tv',    label: 'THE STUDIO TV',   x: 358, y: 121, w: 240, h: 143, kind: 'box' }],
+  // FOUR monitors, one per show — Osimo 2026-09-07: "should we have four images to place?"
+  // Yes: each position has its own screen, and whichever show is recording lights its own.
+  podcast: [
+    { id: 'podTv0', label: 'SERIOUSLY MONITOR',     x: 232, y: 289, w: 58, h: 40, kind: 'box' },
+    { id: 'podTv1', label: 'BRIGHT SIDE MONITOR',   x: 404, y: 289, w: 58, h: 40, kind: 'box' },
+    { id: 'podTv2', label: 'BUY OR BYEBYE MONITOR', x: 576, y: 289, w: 58, h: 40, kind: 'box' },
+    { id: 'podTv3', label: 'HOROSCOPES MONITOR',    x: 742, y: 289, w: 58, h: 40, kind: 'box' },
+  ],
 };
 const STOCK = [
   { id: 'jug', label: 'WATER JUGS',    x: 898, y: 493, h: 192, kind: 'sprite', spr: 'propJugs' },
@@ -185,7 +194,7 @@ function toWorld(px, py) {
            y: ((py - r.top) * DPR - VIEW.oy) / VIEW.scale };
 }
 
-fetch('../games/the-count-pack.json?v=22').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=23').then(r => r.json()).then(p => {
   const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
   if (TARGET === 'ledger') mk(p.sprites.ledger, im => { plate = im; });
   else if (TARGET === 'seats') mk(p.art.studio, im => { plate = im; });
@@ -295,7 +304,7 @@ let tvClip = null;
 function drawBox(o, on) {
   // a screen box plays a real clip, cover-fitted and clipped exactly as the game does it —
   // so the fit you see while dragging is the fit you get
-  if (o.id === 'tv' || o.id === 'podTv') {
+  if (o.id === 'tv' || o.id.startsWith('podTv')) {
     if (!tvClip) {
       const v = document.createElement('video');
       v.src = '../assets/footage/bbb/jellyfish-lamp.mp4?v=1';
@@ -449,8 +458,9 @@ canvas.addEventListener('touchmove', e => {
     if (o.kind === 'card') o.s = Math.max(0.35, Math.min(2, +(pinch.v * k).toFixed(3)));
     else if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, Math.round(pinch.v * k)));
     else if (o.kind === 'box') {
+      // pinch scales both together; the − W / + W and − H / + H buttons move one at a time
       const r = o.h / o.w;
-      o.w = Math.max(20, Math.min(600, Math.round(pinch.v * k)));
+      o.w = Math.max(20, Math.min(700, Math.round(pinch.v * k)));
       o.h = Math.max(20, Math.min(500, Math.round(o.w * r)));
     } else {
       const w = items.find(i => i.id === 'width');
@@ -506,7 +516,7 @@ updateSel();
 // the hint belongs to whatever is being placed
 document.getElementById('hint').textContent =
   TARGET === 'ledger' ? 'drag top & bottom · the rows follow the line'
-  : TARGET === 'tv'   ? 'drag the screen · pinch to size · it keeps its shape'
+  : TARGET === 'tv'   ? 'drag · pinch to scale · − W + W and − H + H to match the frame'
   : 'drag · pinch to size';
 if (TARGET !== 'ledger') {
   const f = document.getElementById('fewer'), m = document.getElementById('more');
@@ -523,18 +533,30 @@ function resizeSel(d) {
   if (o.kind === 'card') o.s = Math.max(0.35, Math.min(2, +(o.s + d * 0.02).toFixed(3)));
   else if (o.kind === 'sprite') o.h = Math.max(40, Math.min(420, o.h + d));
   else if (o.kind === 'box') {
-    // a screen keeps its shape while you size it; a crate does not have to
-    const r = (o.id === 'tv' || o.id === 'podTv') ? o.h / o.w : 1;
+    // Osimo 2026-09-07: "allow me to stretch the image width wise as well as placing and
+    // resizing so that it perfectly matches the TV frame." So width and height move
+    // independently — a painted TV is whatever shape the artist drew, not 16:9.
     o.w = Math.max(20, Math.min(700, o.w + d));
-    o.h = Math.max(20, Math.min(500, Math.round(o.w * r)));
   } else {
     const w = items.find(i => i.id === 'width');
     if (w) w.w = Math.max(60, Math.min(600, w.w + d));
   }
   updateSel();
 }
+function resizeSelH(d) {
+  const o = items[sel];
+  if (o.kind === 'box') { o.h = Math.max(20, Math.min(500, o.h + d)); updateSel(); }
+}
 document.getElementById('bigger').onclick  = () => resizeSel(6);
 document.getElementById('smaller').onclick = () => resizeSel(-6);
+document.getElementById('taller').onclick  = () => resizeSelH(6);
+document.getElementById('shorter').onclick = () => resizeSelH(-6);
+if (TARGET !== 'tv' && TARGET !== 'stock') {
+  for (const id of ['shorter', 'taller']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';        // only a box has a height of its own
+  }
+}
 document.getElementById('reset').onclick = () => { items = build(); rows = 9; sel = 0; updateSel(); toast('Back to the game values.', 1400); };
 document.getElementById('more').onclick  = () => { rows = Math.min(ROWS_MAX, rows + 1); updateSel(); };
 document.getElementById('flip').onclick  = () => { items[sel].flip = !items[sel].flip; updateSel(); };

@@ -157,7 +157,7 @@ function toCell(px, py) {
   return { cx: Math.floor(wx / CELL), cy: Math.floor(wy / CELL) };
 }
 
-fetch('../games/the-count-pack.json?v=22').then(r => r.json()).then(p => {
+fetch('../games/the-count-pack.json?v=23').then(r => r.json()).then(p => {
   const im = new Image(); im.onload = () => { plate = im; }; im.src = p.art[ROOM];
 }).catch(() => toast('Could not load the art pack.'));
 

@@ -403,7 +403,7 @@ let packState = 'idle';
 function loadPack() {
   if (packState !== 'idle') return;
   packState = 'loading';
-  fetch('the-count-pack.json?v=22').then(r => r.json()).then(p => {
+  fetch('the-count-pack.json?v=23').then(r => r.json()).then(p => {
     const mk = (src, cb) => { const im = new Image(); im.onload = () => cb(im); im.src = src; };
     for (const k in p.art) mk(p.art[k], im => { PLATES[k] = im; });
     VO.b64 = p.voice || {};
@@ -426,8 +426,15 @@ function loadPack() {
 // ByeBye product. Both are placeable (tools/overlay-placer?target=tv) because a rectangle
 // eyeballed off a screenshot is exactly the thing that ends up a few pixels out.
 // Osimo 2026-09-07: "fix the TV, anything we play in it should fit perfectly."
-const TV = { x: 352, y: 108, w: 256, h: 146 };
-const POD_TV = { x: 497, y: 204, w: 150, h: 84 };
+const TV = { x: 358, y: 121, w: 240, h: 143 };
+// One screen per position. Whichever show is rolling lights ITS monitor — Buy or ByeBye
+// carries the product it is reviewing, the other three carry the studio feed for now.
+const POD_TV = [
+  { x: 232, y: 289, w: 58, h: 40 },   // SERIOUSLY
+  { x: 404, y: 289, w: 58, h: 40 },   // BRIGHT SIDE
+  { x: 576, y: 289, w: 58, h: 40 },   // BUY OR BYEBYE
+  { x: 742, y: 289, w: 58, h: 40 },   // HOROSCOPES
+];
 // Cover-fit, not stretch: a clip keeps its shape and the overflow is cropped by the screen
 // it is playing on, the way a real screen shows a picture that is not its own aspect.
 function drawIntoScreen(v, r) {
@@ -466,6 +473,17 @@ function bbbStart() {
   return pick;
 }
 function bbbStop() { if (bbbVideo) { try { bbbVideo.pause(); } catch (e) {} } }
+// The studio feed, created on demand — the podcast studio's monitors want it too, and it
+// used to exist only if you had stood in the studio first.
+function tvFeedReady() {
+  if (tvVideo) return tvVideo;
+  const v = document.createElement('video');
+  v.src = '../assets/footage/jnj-smoke-screen.mp4?v=1';
+  v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.preload = 'auto';
+  v.play().catch(() => {});
+  tvVideo = v;
+  return v;
+}
 function tvFrame() {
   // during a Buy or ByeBye take the telly carries the product, not the smoke
   if (rec && rec.show && rec.show.id === 'byebye' && bbbVideo &&
@@ -1719,9 +1737,13 @@ canvas.addEventListener('mousedown', onTap);
 // So the column LEANS with the page's own ruling instead of standing square on a book that
 // is drawn in perspective. Leave the two x's equal and it is a plumb column, as before.
 // His figures (960x540) scaled into the plate's own 640x360 space.
-const LEDGER_ART = { w: 640, h: 360, colW: 199, rows: 11,
-                     cols: [{ x0: 99.3, y0: 62.0, x1: 90.7, y1: 282.0 },
-                            { x0: 332.0, y0: 58.7, x1: 333.3, y1: 282.0 }] };
+// NEW BOOK, 2026-09-07 — Osimo amended the thumbs to Jimmy's own hands. Measured off the new
+// plate: ruled paper y34..277, left page x133..301 with its red rule at x161, right page
+// x333..507 with its rule at x347. Its pages are narrower than the old book's, so these are
+// starting values and he is re-placing them in the placer.
+const LEDGER_ART = { w: 640, h: 360, colW: 138, rows: 11,
+                     cols: [{ x0: 165, y0: 46, x1: 165, y1: 268 },
+                            { x0: 351, y0: 46, x1: 351, y1: 268 }] };
 const LEDGER_ROW_H = 30;   // only a floor for the icon size now; the pitch is derived
 function bookRect() {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
@@ -2337,18 +2359,23 @@ function drawPodRecording(now) {
   ctx.fillRect(cx - 78, h.y + h.h - 14, 156 * frac, 9);
   // BUY OR BYEBYE plays the product on the monitor at that position — the show IS the
   // product, so the screen carries it rather than a generic on-air card.
-  if (s.id === 'byebye' && bbbVideo && bbbVideo.readyState >= 2 && bbbVideo.videoWidth) {
+  // this position's own monitor carries the take
+  const scr = POD_TV[h.show];
+  const feed = (s.id === 'byebye') ? bbbVideo : tvVideo;
+  if (scr && feed && feed.readyState >= 2 && feed.videoWidth) {
     ctx.fillStyle = '#000';
-    ctx.fillRect(POD_TV.x - 3, POD_TV.y - 3, POD_TV.w + 6, POD_TV.h + 6);
-    drawIntoScreen(bbbVideo, POD_TV);
+    ctx.fillRect(scr.x - 2, scr.y - 2, scr.w + 4, scr.h + 4);
+    drawIntoScreen(feed, scr);
     ctx.strokeStyle = s.col; ctx.lineWidth = 2;
-    ctx.strokeRect(POD_TV.x - 3, POD_TV.y - 3, POD_TV.w + 6, POD_TV.h + 6);
-    ctx.fillStyle = '#ffe9e9';
-    ctx.font = 'bold 13px "Barlow Condensed",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(bbbName ? bbbName.replace(/-/g, ' ').toUpperCase() : '',
-                 POD_TV.x + POD_TV.w / 2, POD_TV.y + POD_TV.h + 15);
-    ctx.textAlign = 'left';
+    ctx.strokeRect(scr.x - 2, scr.y - 2, scr.w + 4, scr.h + 4);
+    if (s.id === 'byebye' && bbbName) {
+      ctx.fillStyle = '#ffe9e9';
+      ctx.font = 'bold 12px "Barlow Condensed",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(bbbName.replace(/-/g, ' ').toUpperCase(),
+                   scr.x + scr.w / 2, scr.y + scr.h + 14);
+      ctx.textAlign = 'left';
+    }
   }
   ctx.restore();
 }
@@ -2622,7 +2649,10 @@ function frame(ts) {
   drawPlate(room);
   if (room === 'studio') tvFrame();
   if (room === 'studio' && rec) drawRecording(ts);
-  if (room === 'podcast' && rec) drawPodRecording(ts);
+  if (room === 'podcast' && rec) {
+    tvFeedReady();                 // the other three positions carry the studio feed
+    drawPodRecording(ts);
+  }
   if (room === 'podcast') drawShowSigns(ts);
   drawProps(room);
   drawPunters();
