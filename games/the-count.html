@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>THE COUNT — JnJ Arcade</title>
+<title>DOUBLE SHIFT — JnJ Arcade</title>
 <!-- ══════════════════════════════════════════════════════════════════════════
-  THE COUNT — Jim & Joe's arcade, from the money side.
+  DOUBLE SHIFT — Jim & Joe's arcade, from the money side.
   Osimo 2026-09-04, picking concept 2 of four brainstormed with Grok Build:
   "make it like actual games where you start with little money and buy/pay for
   things that will help us yield more money just like the farmer games."
@@ -95,10 +95,10 @@
 <div id="rot">
   <div class="ph">📱</div>
   <h2>TURN YOUR PHONE</h2>
-  <p>THE COUNT is played sideways — the arcade floor runs the width of the room.</p>
+  <p>DOUBLE SHIFT is played sideways — the arcade floor runs the width of the room.</p>
 </div>
 <div id="overlay">
-  <h1>THE COUNT</h1>
+  <h1>DOUBLE SHIFT</h1>
   <p id="ovText">Jim &amp; Joe's arcade, from the money side.<br>
      You start with <b>£5</b> and one working cabinet.<br><br>
      Empty the cabinets into your apron, walk the takings to the <b>safe</b> in the coin
@@ -1836,7 +1836,7 @@ function endDay() {
   if (cash < rent) {
     state = 'bust'; SFX.bust(); vo('bust', { once: false }); clearSave();
     setTimeout(() => {
-      ArcadeScores.show({ game: SLUG, title: 'THE COUNT', score: banked, accent: ACCENT,
+      ArcadeScores.show({ game: SLUG, title: 'DOUBLE SHIFT', score: banked, accent: ACCENT,
                           onClose: () => { newRun(); state = 'play'; } });
     }, 900);
     return;
@@ -1903,18 +1903,16 @@ function onTap(e) {
   {
     const sr = canvas.getBoundingClientRect();
     const sxp = p.clientX - sr.left, syp = p.clientY - sr.top;
-    // Osimo 2026-09-07: "the pause button is overlapping the sound button." It was — both
-    // the drawn glyphs AND their tap zones. Speaker was 32-74 and pause was 0-42: an 8-10px
-    // strip (32-42) belonged to both. Visually the same thing had happened one layer up —
-    // the speaker draws right-aligned to L+44 (glyph runs ~24-44) and pause draws left-
-    // aligned from L+12 (glyph runs ~12-32), so the two glyphs overlapped 24-32 as well.
-    // Speaker tested first meant that whole strip always resolved to "speaker" — pause was
-    // dead there. HUD_CTRL below is the one place both the draw and the hit-test now read
-    // their numbers from, so they cannot drift apart again.
-    if (sxp > HUD_CTRL.snd0 && sxp < HUD_CTRL.snd1 && syp < HUD_CTRL.h + SAFE.t) {
+    // Osimo 2026-09-07: "the pause button is overlapping the sound button" (fixed), then
+    // "when I try to press the speaker nothing happened... let me paint the clickable area
+    // and lock it in pixel perfect" — HUD_CTRL.pau/snd are boxes, painted by Osimo himself
+    // on his own device via tools/hud-painter.html (or the plain rectangle default below,
+    // until he does), so the hit-test can never silently disagree with the real screen again.
+    const snd = HUD_CTRL.snd, pau = HUD_CTRL.pau;
+    if (sxp > snd.x0 && sxp < snd.x1 && syp > snd.y0 && syp < snd.y1 + SAFE.t) {
       unlockAudio(); cycleSound(); return;
     }
-    if (sxp > HUD_CTRL.pau0 && sxp < HUD_CTRL.pau1 && syp < HUD_CTRL.h + SAFE.t) {
+    if (sxp > pau.x0 && sxp < pau.x1 && syp > pau.y0 && syp < pau.y1 + SAFE.t) {
       togglePause(); return;
     }
     if (paused) { togglePause(); return; }        // tap anywhere to come back
@@ -2723,15 +2721,35 @@ function drawPodRecording(now) {
   ctx.restore();
 }
 
-// Both the drawing in drawHUD and the tap-test in the pointer handler read these — one
-// pair of numbers for what you see and what you can press, so they cannot drift apart
-// again (see the 2026-09-07 "pause overlapping sound" fix). Osimo 2026-09-07 again: "move
-// the pause button more to the left, and the speaker with it" — shifted the pair 8px
-// closer to the true edge — and "when I try to press the speaker nothing happened", so
-// both boxes are also fattened (24px wide/46 tall -> 30 wide/54 tall) to give a real phone
-// fingertip more to land on, since the mechanism itself tests clean (verified live via a
-// simulated tap) and a too-small hit box was the one plausible device-side explanation.
-const HUD_CTRL = { pau0: 2, pau1: 32, snd0: 38, snd1: 68, h: 54 };
+// HUD_VISUAL is where the glyphs are actually DRAWN — unchanged by any of this.
+const HUD_VISUAL = { pau0: 2, snd0: 38 };
+// HUD_CTRL is the TAP-TEST box. It starts as a plain rectangle around those same glyphs,
+// then gets overwritten in place — same object, so every reader sees the update the moment
+// it lands — the instant tools/hud-painter.html's submission comes back. Osimo 2026-09-07,
+// after a reinstall and a widened box still "didn't respond": "let me use placer and two
+// colours yellow and grey and let me paint the clickable area and lock it in pixel perfect."
+// That paint happens in the SAME raw CSS-pixel space this tap-test already reads (sxp/syp,
+// canvas.clientWidth-relative) on HIS OWN device, so nothing here needs converting — the
+// bounding box of whatever he painted IS the box below, verbatim.
+const HUD_CTRL = { pau: { x0: 2, x1: 32, y0: 0, y1: 54 },
+                    snd: { x0: 38, x1: 68, y0: 0, y1: 54 } };
+(function loadHudPaint() {
+  fetch('/api/press?room=hud').then(r => r.json()).then(d => {
+    if (!d || !Array.isArray(d.cells) || !d.cells.length) return;
+    const cell = d.cell || 4;
+    const box = [null, null];                 // 0 = pause, 1 = speaker
+    for (const [x, y, i] of d.cells) {
+      if (i !== 0 && i !== 1) continue;
+      const b = box[i] || (box[i] = { x0: x, x1: x, y0: y, y1: y });
+      b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x);
+      b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y);
+    }
+    const toPx = b => b && { x0: b.x0 * cell, x1: (b.x1 + 1) * cell,
+                              y0: b.y0 * cell, y1: (b.y1 + 1) * cell };
+    if (box[0]) HUD_CTRL.pau = toPx(box[0]);
+    if (box[1]) HUD_CTRL.snd = toPx(box[1]);
+  }).catch(() => {});
+})();
 function drawHUD(now) {
   const SW = canvas.clientWidth, SH = canvas.clientHeight;
   // On an iPhone in landscape the notch is on one SIDE, which is exactly where the cash
@@ -2842,8 +2860,8 @@ function drawHUD(now) {
   // speaker + pause — both LEFT-aligned from HUD_CTRL's own anchors, so the gap between
   // them is the one set there and cannot silently reopen from a mismatched textAlign again.
   ctx.font = '20px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText(paused ? '▶' : '⏸', L + HUD_CTRL.pau0, 32 + T);
-  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', L + HUD_CTRL.snd0, 32 + T);
+  ctx.fillText(paused ? '▶' : '⏸', L + HUD_VISUAL.pau0, 32 + T);
+  ctx.fillText(muted ? '🔇' : musicIdx >= 0 ? '🎵' : '🔊', L + HUD_VISUAL.snd0, 32 + T);
   // No jingle name beside the speaker any more — it ran under the rent figure, and the
   // icon already says which of the four states you are in. Osimo 2026-09-07.
   ctx.textAlign = 'left';
