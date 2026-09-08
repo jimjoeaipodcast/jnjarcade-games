@@ -419,6 +419,11 @@ const VO_LINES = {
   royalty:  ['JOE',   "the back catalogue paid out. turns out people rewatch us."],
   hypeLow:  ['JIMMY', "Hype's on the floor — nobody's talking. One of us needs to be on that mic."],
   outOfStock:['JIMMY', "One of them's sold out. There's stock in the prop room, it pays for itself."],
+  // Osimo 2026-09-08: "the first time Jimmy refuses to carry the water it should be a
+  // spoken response" — real VO_LINES entry (not a bare bubbleShow) so it gets a real
+  // Chatterbox render via thecount_voice_pack.py, and vo()'s own max:1 default makes
+  // "the first time" the actual behaviour for free — he never says it twice.
+  waterRefuse: ['JIMMY', "Nah, that one's Joe's. I throw my back out lifting that and who's left on the mic?"],
 };
 const VO = { b64: null, loading: false, until: 0 };
 function djb2(str) {
@@ -1488,7 +1493,11 @@ function updateShops(dt, now) {
       s.cust = null;
       s.stock--;
       s.till += cfg.per;
-      SFX.chaChing();
+      // Osimo 2026-09-08: "the water cooler makes the cha-ching sound every time a
+      // customer uses it, it shouldn't make that sound till you collect the cash from it
+      // just like the other machines." Right — a cabinet's till fills silently and only
+      // pays out cha-ching when YOU walk over and collect (act()'s 'vending'/'cooler'
+      // case, below). This one was firing on every customer paying INTO the till instead.
       if (s.stock === 0) vo('outOfStock', { icon: 'icBottle', max: 2 });
       continue;
     }
@@ -1597,6 +1606,13 @@ function startRec(show) {
     // line, so "We're rolling! Nobody leave the room" and the clip's own real dialogue
     // both tried to play at once. The line lands first now; the clip (and its audio)
     // cues in right after it finishes, same running order a real broadcast would use.
+    // Osimo 2026-09-08: "Jimmy says no one go anywhere once. after that we can just jump
+    // straight into BBB as he doesn't [say it] again... you dont need a filler on the
+    // screen." recStart's own budget (max:1, the vo() default) already means he only ever
+    // SAYS it once — but this delay was firing every time regardless, so every take after
+    // the first sat through 2.6s of dead air for a line that no longer played. Now the
+    // delay only happens the take that actually earns it.
+    const firstTime = !voSaid.get('recStart');
     vo('recStart', { icon: 'icOnair' });
     const s2 = s;
     setTimeout(() => {
@@ -1607,7 +1623,7 @@ function startRec(show) {
       rec.ms = BBB_LEN[pick] || s2.ms;
       say('BUY OR BYEBYE — ' + pick.replace(/-/g, ' ').toUpperCase() + '. One product, one take.',
           3600);
-    }, 2600);
+    }, firstTime ? 2600 : 0);
   } else {
     vo('recStart', { icon: 'icOnair' });
   }
@@ -1713,7 +1729,7 @@ function act(h) {
       // specifically, not the vending boxes. Jimmy still walks over and reads the same
       // door, he just will not be the one carrying it.
       if (h.id === 'jug' && active === 'jimmy') {
-        bubbleShow('JIMMY', "Nah, that one's Joe's. I throw my back out lifting that and who's left on the mic?");
+        vo('waterRefuse', { icon: 'icBottle' });
         SFX.deny(); return;
       }
       const cfg = h.id === 'jug' ? SHOPS.cooler : SHOPS.vending;
@@ -2754,8 +2770,12 @@ const HUD_CTRL = { pau: { x0: 2, x1: 32, y0: 0, y1: 54 },
     // pass was painted and verified collision-free by Claude directly (pau 0-28, snd 28-72,
     // clear of cash at 78+) via the same tool, submitted as by:'claude' — so now the icon
     // moves into the box too: what's drawn and what's pressable are finally the same pixels.
-    if (HUD_CTRL.pau) HUD_VISUAL.pau0 = HUD_CTRL.pau.x0 - SAFE.l + 6;
-    if (HUD_CTRL.snd) HUD_VISUAL.snd0 = HUD_CTRL.snd.x0 - SAFE.l + 6;
+    // Osimo 2026-09-08: "move that pause button more to the left" — repainted flush to
+    // the true edge (pau 0-20) and trimmed the glyph's own inset 6px -> 2px so the icon
+    // actually sits as far left as the box now allows, instead of leaving old padding that
+    // ate the gain.
+    if (HUD_CTRL.pau) HUD_VISUAL.pau0 = HUD_CTRL.pau.x0 - SAFE.l + 2;
+    if (HUD_CTRL.snd) HUD_VISUAL.snd0 = HUD_CTRL.snd.x0 - SAFE.l + 2;
   }).catch(() => {});
 })();
 function drawHUD(now) {
