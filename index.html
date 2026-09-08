@@ -300,66 +300,9 @@
     scheduleNext();
   })();
   </script>
-  <script>
-  /* ── JnJ presence: background lounge loop + a rotating Jimmy greeter ──────────
-     Osimo 2026-09-08: lounge music "loop low ~15%", credit in the footer; Jimmy lines
-     "8-12 sec, play on first click, rotate". Kept OUT of app.js/style.css on purpose —
-     JNJARCADE_SITE_BIBLE.md's shared bundle drives all 5 halls, this is index.html only.
-     Music file is Osimo's own pick from Pixabay (he said "I can do the jingles") — this
-     just needs assets/audio/site/landing-loop.mp3 to exist; nothing else to wire.
-     The 8 lines are real Chatterbox renders through the same locked Jimmy voice every
-     other line in the show uses (tools/voices/chatterbox_voice.py, verify=True). */
-  (function () {
-    'use strict';
-    var MUTE_KEY = 'jnj_landing_muted', IDX_KEY = 'jnj_landing_line_idx';
-    var LINES = [
-      'landing-01', 'landing-02', 'landing-03', 'landing-04',
-      'landing-05', 'landing-06', 'landing-07', 'landing-08',
-    ];
-    var btn = document.getElementById('ambMute');
-    var muted = localStorage.getItem(MUTE_KEY) === '1';
-    var music = null, started = false;
-
-    function paintBtn() { btn.innerHTML = muted ? '&#128263;' : '&#128266;'; }
-    paintBtn();
-
-    function ensureMusic() {
-      if (music) return music;
-      music = new Audio('assets/audio/site/landing-loop.mp3?v=1');
-      music.loop = true; music.volume = 0.15; music.preload = 'none';
-      music.onerror = function () { music = null; }; // Osimo's file isn't dropped in yet
-      return music;
-    }
-
-    function nextLineFile() {
-      var i = parseInt(localStorage.getItem(IDX_KEY) || '0', 10);
-      if (!(i >= 0 && i < LINES.length)) i = 0;
-      localStorage.setItem(IDX_KEY, String((i + 1) % LINES.length));
-      return LINES[i];
-    }
-
-    function startPresence() {
-      if (started || muted) return;
-      started = true;
-      try { ensureMusic().play().catch(function () {}); } catch (e) {}
-      try {
-        var line = new Audio('assets/audio/site/' + nextLineFile() + '.mp3?v=1');
-        line.volume = 0.9;
-        line.play().catch(function () {});
-      } catch (e) {}
-    }
-
-    document.addEventListener('pointerdown', startPresence, { once: true, passive: true });
-
-    btn.addEventListener('click', function () {
-      muted = !muted;
-      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
-      paintBtn();
-      if (muted) { if (music) music.pause(); }
-      else if (started) { ensureMusic().play().catch(function () {}); }
-    });
-  })();
-  </script>
+  <!-- JnJ presence (greeter lines + music loop) — shared with patreon.html, see the
+       file's own header comment for why it's a separate script, not app.js. -->
+  <script src="assets/js/site-ambience.js?v=1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function(){});

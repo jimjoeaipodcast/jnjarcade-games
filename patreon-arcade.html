@@ -95,6 +95,11 @@
       return music;
     }
 
+    // Osimo 2026-09-08: "the jingle starts automatically as you open the arcade" — try
+    // immediately (works for repeat visitors/PWA contexts a browser already trusts);
+    // pointerdown stays as the real fallback every cold visitor actually gets, since no
+    // browser allows JS to force audible autoplay with zero interaction.
+    if (!muted) ensureMusic().play().catch(function () {});
     document.addEventListener('pointerdown', function () {
       if (!muted) ensureMusic().play().catch(function () {});
     }, { once: true, passive: true });
