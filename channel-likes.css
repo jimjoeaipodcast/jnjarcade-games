@@ -3,55 +3,70 @@
    pages are already near-identical twins, and a shadow copy of a style block is how
    one of them silently drifts (memory: shared-file-shadow-copies). */
 
-.cass-like {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+/* COMING SOON and the thumb share one row. align-items:stretch makes the thumb's box
+   exactly as tall as the CTA beside it — height comes from the row, not from padding
+   arithmetic, so the two cannot drift apart when either one's type or padding changes
+   (Osimo 2026-09-13: "same height as the neighbouring coming soon, and in line with it"). */
+.cass-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 16px;
-  margin-left: 10px;
-  vertical-align: middle;
+}
+
+/* The row owns the top margin now; the children must not add their own or the thumb
+   sits lower than the CTA it is supposed to line up with. */
+.cass-actions .cass-soon-cta,
+.cass-actions .cass-cta {
+  margin-top: 0;
+}
+
+.cass-like {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+
+  /* No vertical padding on purpose — the flex row sets the height. Horizontal padding
+     gives the chip a deliberate width instead of collapsing to the 15px icon. */
+  padding: 0 20px;
+  margin: 0;
 
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--ink-dim);
   border-radius: 7px;
-  padding: 10px 16px;
-
-  font-family: 'Bungee', sans-serif;
-  font-size: 13px;
-  letter-spacing: .04em;
-  line-height: 1;
 
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background .16s ease, border-color .16s ease, transform .12s ease;
 }
 
-/* Touch target: the visual chip is ~38px tall, which is under the 44px minimum on a
-   phone. Grow the hit area without growing the chip. */
+/* Touch target: the chip inherits the CTA's ~40px height, just under the 44px phone
+   minimum. Grow the hit area without growing the box. */
 .cass-like::after {
   content: '';
   position: absolute;
-  inset: -6px -4px;
+  inset: -4px -2px;
 }
-.cass-like { position: relative; }
 
 .cass-like:hover { border-color: var(--ink); }
 .cass-like:active { transform: scale(.96); }
 
 /* Inline SVG on currentColor — inherits the cassette's --ink, and flips to --shell
-   with the label when the chip fills. An emoji thumb could not do either. */
+   when the chip fills. An emoji thumb could not do either. */
 .cass-like .thumb {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   display: block;
   flex: none;
   opacity: .8;
   transition: opacity .16s ease, transform .16s ease;
 }
 
-/* Liked state. The COUNT IS NEVER RENDERED — the filled thumb is the only feedback a
-   visitor gets, so it has to be unmistakable. */
+/* Liked state. The COUNT IS NEVER RENDERED and there is no label — the filled chip is
+   the only feedback a visitor gets, so it has to be unmistakable. */
 .cass-like[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
@@ -62,8 +77,8 @@
   transform: translateY(-1px) scale(1.08);
 }
 
-/* In-flight POST: dim, ignore further taps (pointer-events), but never collapse the
-   chip — a button that changes size mid-tap moves everything under the thumb. */
+/* In-flight POST: dim, ignore further taps, but never collapse the chip — a button
+   that changes size mid-tap moves everything under the thumb. */
 .cass-like[data-busy="1"] {
   opacity: .55;
   pointer-events: none;

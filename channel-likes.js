@@ -92,9 +92,8 @@
 
   function paint(btn, liked) {
     btn.setAttribute('aria-pressed', liked ? 'true' : 'false');
-    var label = btn.querySelector('.like-label');
-    if (label) label.textContent = liked ? 'LIKED' : 'LIKE';
-    // No count anywhere in here, by design.
+    // The chip carries no visible word and no count, by design — so aria-label is the
+    // ONLY name a screen reader gets. It has to track the state.
     btn.setAttribute('aria-label',
       (liked ? 'Liked ' : 'Like ') + (btn.dataset.channelName || 'this channel'));
   }
