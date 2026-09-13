@@ -16,6 +16,7 @@
      no-CDN rule; these new pages deliberately do not add to that debt. -->
 <link rel="stylesheet" href="/cabinet.css?v=11">
 <link rel="stylesheet" href="/style.css?v=35">
+<link rel="stylesheet" href="/channel-likes.css?v=1">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   /* shared --shell/--surface/--cream/--muted/--bulb come from style.css
@@ -100,72 +101,90 @@
 </header>
 
 <div class="cass-row">
-  <section class="cass" style="--ink:#ff4d6d;--ink-dim:rgba(255,77,109,.25);--glow:rgba(255,77,109,.10)">
+  <section class="cass" data-channel="jnj" data-rank="top"
+           style="--ink:#ff4d6d;--ink-dim:rgba(255,77,109,.25);--glow:rgba(255,77,109,.10)">
     <img class="cass-img" src="/assets/icons/jnj-podcast-cassette.jpg?v=3" alt="Jimmy and Joe podcast cassette">
     <a class="cass-head" href="/patreon-jnj">
       <div class="cass-tag">Channel 01</div>
       <div class="cass-title">🎙️ JIMMY &amp; JOE</div>
       <div class="cass-desc">The original. Buy or ByeBye, The Bright Side and Seriously?! — three segments, one episode, every day.</div>
-      <div class="cass-quote">"We started with one show. We are not stopping at one show." — JIMMY</div>
+      <div class="cass-quote">&quot;We started with one show. We are not stopping at one show.&quot; — JIMMY</div>
       <span class="cass-cta">OPEN CHANNEL</span>
     </a>
   </section>
-  <section class="cass cass--soon" style="--ink:#c084fc;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
-    <img class="cass-img" src="/assets/icons/ch-movies.jpg" alt="Jimmy and Joe on a film set">
-    <div class="cass-head">
-      <div class="cass-tag">Channel 02 · in the works</div>
-      <div class="cass-title">🎬 MOVIE REVIEWS</div>
-      <div class="cass-desc">Two AI hosts who have never been outside arguing about films. Verdicts, not synopses.</div>
-      <span class="cass-soon-cta">COMING SOON</span>
-    </div>
-  </section>
-  <section class="cass cass--soon" style="--ink:#ff6b35;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
-    <img class="cass-img" src="/assets/icons/ch-muskverse.jpg" alt="Jimmy and Joe on Mars">
-    <div class="cass-head">
-      <div class="cass-tag">Channel 03 · in the works</div>
-      <div class="cass-title">🚀 MUSKVERSE</div>
-      <div class="cass-desc">Rockets, robots and whatever he posted at 3am. Daily — we read it so you do not have to.</div>
-      <span class="cass-soon-cta">COMING SOON</span>
-    </div>
-  </section>
-  <section class="cass cass--soon" style="--ink:#22c55e;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
-    <img class="cass-img" src="/assets/icons/ch-sports.jpg" alt="Jimmy and Joe at a sports desk">
-    <div class="cass-head">
-      <div class="cass-tag">Channel 04 · in the works</div>
-      <div class="cass-title">🏟️ SPORTS TONIGHT</div>
-      <div class="cass-desc">The desk, the graphics, the confident predictions. Accuracy not guaranteed.</div>
-      <span class="cass-soon-cta">COMING SOON</span>
-    </div>
-  </section>
-  <section class="cass cass--soon" style="--ink:#38bdf8;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+  <section class="cass cass--soon" data-channel="horoscopes" data-rank="top"
+           style="--ink:#38bdf8;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
     <img class="cass-img" src="/assets/icons/ch-horoscopes.jpg" alt="Jimmy and Joe reading the stars">
     <div class="cass-head">
-      <div class="cass-tag">Channel 05 · in the works</div>
+      <div class="cass-tag">Channel 02 · next up</div>
       <div class="cass-title">🔮 HOROSCOPES</div>
       <div class="cass-desc">Daily readings and long-form for all twelve signs. Joe does not believe in it. Joe still listens.</div>
       <span class="cass-soon-cta">COMING SOON</span>
     </div>
   </section>
-  <section class="cass cass--soon" style="--ink:#fbbf24;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+  <section class="cass cass--soon" data-channel="movies" data-rank="vote"
+           style="--ink:#c084fc;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-movies.jpg" alt="Jimmy and Joe on a film set">
+    <div class="cass-head">
+      <div class="cass-tag">In the works</div>
+      <div class="cass-title">🎬 MOVIE REVIEWS</div>
+      <div class="cass-desc">Two AI hosts who have never been outside arguing about films. Verdicts, not synopses.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+      <button class="cass-like" type="button" data-channel="movies"
+              data-channel-name="Movie Reviews" aria-pressed="false"><svg class="thumb" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z"/></svg><span class="like-label">LIKE</span></button>
+    </div>
+  </section>
+  <section class="cass cass--soon" data-channel="muskverse" data-rank="vote"
+           style="--ink:#ff6b35;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-muskverse.jpg" alt="Jimmy and Joe on Mars">
+    <div class="cass-head">
+      <div class="cass-tag">In the works</div>
+      <div class="cass-title">🚀 MUSKVERSE</div>
+      <div class="cass-desc">Rockets, robots and whatever he posted at 3am. Daily — we read it so you do not have to.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+      <button class="cass-like" type="button" data-channel="muskverse"
+              data-channel-name="Muskverse" aria-pressed="false"><svg class="thumb" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z"/></svg><span class="like-label">LIKE</span></button>
+    </div>
+  </section>
+  <section class="cass cass--soon" data-channel="sports" data-rank="vote"
+           style="--ink:#22c55e;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+    <img class="cass-img" src="/assets/icons/ch-sports.jpg" alt="Jimmy and Joe at a sports desk">
+    <div class="cass-head">
+      <div class="cass-tag">In the works</div>
+      <div class="cass-title">🏟️ SPORTS TONIGHT</div>
+      <div class="cass-desc">The desk, the graphics, the confident predictions. Accuracy not guaranteed.</div>
+      <span class="cass-soon-cta">COMING SOON</span>
+      <button class="cass-like" type="button" data-channel="sports"
+              data-channel-name="Sports Tonight" aria-pressed="false"><svg class="thumb" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z"/></svg><span class="like-label">LIKE</span></button>
+    </div>
+  </section>
+  <section class="cass cass--soon" data-channel="macdell" data-rank="vote"
+           style="--ink:#fbbf24;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
     <img class="cass-img" src="/assets/icons/ch-macdell.jpg" alt="A Mac and a Dell facing each other">
     <div class="cass-head">
-      <div class="cass-tag">Channel 06 · in the works</div>
+      <div class="cass-tag">In the works</div>
       <div class="cass-title">💻 MAC &amp; DELL</div>
       <div class="cass-desc">Markets, crypto and money talk between two machines that should not have opinions.</div>
       <span class="cass-soon-cta">COMING SOON</span>
+      <button class="cass-like" type="button" data-channel="macdell"
+              data-channel-name="Mac &amp; Dell" aria-pressed="false"><svg class="thumb" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z"/></svg><span class="like-label">LIKE</span></button>
     </div>
   </section>
-  <section class="cass cass--soon" style="--ink:#f96854;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
+  <section class="cass cass--soon" data-channel="war-of-words" data-rank="bottom"
+           style="--ink:#f96854;--ink-dim:rgba(255,255,255,.16);--glow:rgba(0,0,0,0)">
     <img class="cass-img" src="/assets/icons/war-of-words-cassette.jpg?v=3" alt="War of Words — Jimmy and Joe argue">
     <div class="cass-head">
-      <div class="cass-tag">Channel 07 · Patreon only · in the works</div>
+      <div class="cass-tag">Patreon only · in the works</div>
       <div class="cass-title">⚔️ WAR OF WORDS</div>
       <div class="cass-desc">Game show. Three rounds, no mercy — would you rather, made-up facts, caption this. Drops on Patreon straight after the main episode, every day.</div>
       <span class="cass-soon-cta">COMING SOON · PATREON ONLY</span>
+      <button class="cass-like" type="button" data-channel="war-of-words"
+              data-channel-name="War of Words" aria-pressed="false"><svg class="thumb" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z"/></svg><span class="like-label">LIKE</span></button>
     </div>
   </section>
 </div>
 
 <a href="/patreon" class="back">‹ back to the members arcade</a>
+<script src="/channel-likes.js?v=1"></script>
 </body>
 </html>

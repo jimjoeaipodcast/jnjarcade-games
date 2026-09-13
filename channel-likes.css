@@ -1,0 +1,81 @@
+/* Upcoming-channel like thumb — shared by /cinema and /patreon-cinema.
+   Kept in its own file rather than pasted into both pages' <style> blocks: those two
+   pages are already near-identical twins, and a shadow copy of a style block is how
+   one of them silently drifts (memory: shared-file-shadow-copies). */
+
+.cass-like {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  margin-left: 10px;
+  vertical-align: middle;
+
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink-dim);
+  border-radius: 7px;
+  padding: 10px 16px;
+
+  font-family: 'Bungee', sans-serif;
+  font-size: 13px;
+  letter-spacing: .04em;
+  line-height: 1;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .16s ease, border-color .16s ease, transform .12s ease;
+}
+
+/* Touch target: the visual chip is ~38px tall, which is under the 44px minimum on a
+   phone. Grow the hit area without growing the chip. */
+.cass-like::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.cass-like { position: relative; }
+
+.cass-like:hover { border-color: var(--ink); }
+.cass-like:active { transform: scale(.96); }
+
+/* Inline SVG on currentColor — inherits the cassette's --ink, and flips to --shell
+   with the label when the chip fills. An emoji thumb could not do either. */
+.cass-like .thumb {
+  width: 15px;
+  height: 15px;
+  display: block;
+  flex: none;
+  opacity: .8;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+/* Liked state. The COUNT IS NEVER RENDERED — the filled thumb is the only feedback a
+   visitor gets, so it has to be unmistakable. */
+.cass-like[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--shell);
+}
+.cass-like[aria-pressed="true"] .thumb {
+  opacity: 1;
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* In-flight POST: dim, ignore further taps (pointer-events), but never collapse the
+   chip — a button that changes size mid-tap moves everything under the thumb. */
+.cass-like[data-busy="1"] {
+  opacity: .55;
+  pointer-events: none;
+}
+
+.cass-like:focus-visible {
+  outline: 2px solid var(--bulb);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cass-like,
+  .cass-like .thumb { transition: none; }
+  .cass-like:active { transform: none; }
+}
