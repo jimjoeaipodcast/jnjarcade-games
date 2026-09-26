@@ -1,12 +1,25 @@
 /* Global per-game leaderboards — Cloudflare Pages Function.
    GET  /api/scores?game=snake        → { scores: [{n,s,t}...] }  (top 100)
-   POST /api/scores {game,name,score} → { rank, total, scores }
+   POST /api/scores {game,name,score,run} → { rank, total, scores }
+
+   SECURITY (2026-09-26 — Osimo's brother: "people were just adding scores without ever even
+   playing"): a POST now needs a valid single-use RUN token from /api/run (issued when the game
+   page loaded), at least MIN_RUN_S seconds of play, a score plausible for that time
+   (per-game points-per-second cap), our own site as Origin, application/json, a known game
+   (functions/_lib/games.js), and ≤ 30 submits/hour per player. See functions/_lib/guard.js.
 
    Uses the same PLAYS KV binding as /api/plays (keys: scores:<game>).
    Degrades gracefully without the binding: GET returns {scores:[]},
    POST returns 503 and the games fall back to local-only boards. */
 
+import { json, sameSite, jsonBody, rateLimit, checkRun, markRunUsed, knownGame } from '../_lib/guard.js';
+
 const GAME_RE = /^[a-z0-9-]{1,40}$/;
+const MIN_RUN_S = 8;
+// Points-per-second ceilings, generous on purpose (a real great run must never be refused).
+// Calibrated against the live boards 2026-09-26; raise a game's cap here if a genuine record trips it.
+const PPS = { 'pin-vaders': 40000, 'pin-vaders-2': 40000, 'the-count': 10000 };
+const PPS_DEFAULT = 4000, SCORE_BASE = 5000;
 const KEEP = 200;   // stored per game
 const SHOW = 100;   // returned per request
 
@@ -65,17 +78,24 @@ export async function onRequestGet({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!env.PLAYS) return json({ error: 'no storage' }, 503);
-
-  let body;
-  try { body = JSON.parse(await request.text()); } catch { return json({ error: 'bad body' }, 400); }
+  if (!sameSite(request)) return json({ error: 'forbidden' }, 403);
+  const { body, error } = await jsonBody(request, 4096);
+  if (error) return error;
 
   const game = body.game;
   const score = Math.floor(Number(body.score));
   const name = cleanName(body.name);
-  if (!GAME_RE.test(game || '')) return json({ error: 'bad game' }, 400);
+  if (!GAME_RE.test(game || '') || !knownGame(game)) return json({ error: 'bad game' }, 400);
   if (!Number.isFinite(score) || score < 0 || score > 10_000_000) return json({ error: 'bad score' }, 400);
   if (!name) return json({ error: 'name too short' }, 400);
   if (!nameAllowed(name)) return json({ error: 'name not allowed' }, 422);
+
+  const run = await checkRun(env, env.PLAYS, body.run);
+  if (!run.ok) return json({ error: run.why }, 403);
+  if (run.ageS < MIN_RUN_S) return json({ error: 'too quick' }, 403);
+  if (score > SCORE_BASE + (PPS[game] || PPS_DEFAULT) * run.ageS) return json({ error: 'implausible score' }, 403);
+  if (!(await rateLimit(env, env.PLAYS, request, 'score', 30, 3600))) return json({ error: 'slow down' }, 429);
+  await markRunUsed(env.PLAYS, run.nonce);
 
   try {
     const scores = await readScores(env, game);
@@ -101,11 +121,4 @@ export async function onRequestPost({ request, env }) {
   } catch {
     return json({ error: 'storage error' }, 500);
   }
-}
-
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-  });
 }

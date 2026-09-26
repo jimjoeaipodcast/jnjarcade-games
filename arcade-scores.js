@@ -1,4 +1,4 @@
-/* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet. v10 */
+/* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet. v11 (run tokens) */
 /* JnJ Arcade — global hi-score board, drawn as a real arcade cabinet.
    Usage (from a game's end screen):
      ArcadeScores.show({ game: 'snake', title: 'SNAKE BLASTER', score: 1234,
@@ -91,6 +91,21 @@ var NAME_KEY = 'jnj_arcade_name';
 // enough that a merely-slow mobile connection still submits for real, short enough that a
 // dead one doesn't strand the player on a disabled button.
 var SUBMIT_TIMEOUT_MS = 6000;
+
+/* RUN TOKEN (2026-09-26 security hardening). The server only accepts a score that carries a
+   signed, single-use token issued to this page, old enough for the score claimed. Fetched on
+   load and refreshed after every submit, so a new game on the same page gets a fresh one.
+   Games need no change — this file does it for all of them. */
+var RUN = null;
+function fetchRun() {
+  try {
+    fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.run) RUN = d.run; })
+      .catch(function () {});
+  } catch (e) {}
+}
+fetchRun();
 function savedName() {
   try { return (localStorage.getItem(NAME_KEY) || '').toUpperCase(); } catch (e) { return ''; }
 }
@@ -388,7 +403,7 @@ function show(opts) {
       fetch('/api/scores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: game, name: name, score: score }),
+        body: JSON.stringify({ game: game, name: name, score: score, run: RUN }),
         signal: ctl ? ctl.signal : undefined,
       }).then(function (r) {
         if (r.status === 422) { throw { handled: true, msg: 'NOT ON THIS CABINET. PICK ANOTHER.' }; }
@@ -396,6 +411,7 @@ function show(opts) {
         return r.json();
       }).then(function (data) {
         clearTimeout(timer);
+        RUN = null; fetchRun();          // token is single-use — arm the next game
         renderBoard(data.rank, data.scores, name, false);
       }).catch(function (e) {
         clearTimeout(timer);

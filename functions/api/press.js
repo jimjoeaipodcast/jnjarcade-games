@@ -11,6 +11,8 @@
                      from tools/overlay-placer.html: dragged anchors and boxes.
 
    Uses the SUBMISSIONS KV binding. Without it: GET {}, POST 503, same as plays.js. */
+import { sameSite, placerAuthorised, placerBy } from '../_lib/guard.js';
+
 
 const OK_ROOM = /^[a-z][a-z0-9-]{0,24}$/;
 const MAX_CELLS = 6000;                 // the whole 96x54 grid is 5184
@@ -40,6 +42,9 @@ export async function onRequestGet({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!env.SUBMISSIONS) return json({ error: 'no storage' }, 503);
+  // SECURITY (2026-09-26): layouts become live-game geometry and are read by Claude as Osimo's
+  // decisions — writes need the placer key (X-Placer-Key) and must come from our own pages.
+  if (!sameSite(request) || !placerAuthorised(request, env)) return json({ error: 'forbidden' }, 403);
 
   let body;
   try { body = JSON.parse(await request.text()); } catch { return json({ error: 'bad body' }, 400); }
@@ -54,7 +59,7 @@ export async function onRequestPost({ request, env }) {
     return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null;
   };
   const rec = { savedAt: new Date().toISOString(), room, kind,
-                by: String(body.by || 'osimo').slice(0, 40) };
+                by: placerBy(body.by) };
 
   if (kind === 'paint') {
     if (!Array.isArray(body.cells) || !body.cells.length || body.cells.length > MAX_CELLS) {

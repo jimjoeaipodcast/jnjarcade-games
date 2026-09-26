@@ -14,6 +14,8 @@
      message   string  required
      file      File    optional (photo / video / audio, max 10 MB)
 */
+import { sameSite } from '../_lib/guard.js';
+
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_BODY_BYTES = 11 * 1024 * 1024; // 11 MB (body overhead)
@@ -23,7 +25,7 @@ function json(obj, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
     },
   });
 }
@@ -31,7 +33,7 @@ function json(obj, status = 200) {
 export async function onRequestOptions() {
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
@@ -39,6 +41,8 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestPost({ request, env }) {
+  // SECURITY (2026-09-26): only from our own submit pages (blocks cross-site form posts).
+  if (!sameSite(request)) return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   if (!env.SUBMISSIONS) {
     return json({ error: 'server not configured' }, 503);
   }

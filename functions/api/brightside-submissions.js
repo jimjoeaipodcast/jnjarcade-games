@@ -8,7 +8,7 @@ function json(obj, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
     },
   });
 }
@@ -18,7 +18,8 @@ function json(obj, status = 200) {
    that routing gap served the submission LIST as image bytes on 2026-07-08). */
 export async function onRequestGet({ request, env }) {
   const secret = request.headers.get('X-Dashboard-Secret');
-  if (env.DASHBOARD_SECRET && secret !== env.DASHBOARD_SECRET) {
+  // SECURITY (2026-09-26): fail CLOSED — this used to let everyone in if the secret was unset.
+  if (!env.DASHBOARD_SECRET || secret !== env.DASHBOARD_SECRET) {
     return json({ error: 'unauthorized' }, 401);
   }
   if (!env.SUBMISSIONS) return json({ error: 'not configured' }, 503);
@@ -26,12 +27,14 @@ export async function onRequestGet({ request, env }) {
   // ?file=sub_xxx_file — return the stored base64 payload
   const fileId = new URL(request.url).searchParams.get('file');
   if (fileId) {
+    // only submission payload keys — ?file= used to read ANY key in the SUBMISSIONS namespace
+    if (!/^[A-Za-z0-9_-]{1,80}_file$/.test(fileId)) return json({ error: 'bad file id' }, 400);
     const b64 = await env.SUBMISSIONS.get(fileId);
     if (!b64) return json({ error: 'not found' }, 404);
     return new Response(b64, {
       headers: {
         'Content-Type': 'text/plain',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://jnjarcade.win',
       },
     });
   }

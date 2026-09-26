@@ -25,6 +25,8 @@
      file      File    required  — .stl, max 10 MB
      website   string  honeypot
 */
+import { sameSite } from '../_lib/guard.js';
+
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;  // 10 MB
 const MAX_BODY_BYTES = 11 * 1024 * 1024;  // body overhead on top of the file
@@ -35,7 +37,7 @@ function json(obj, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
     },
   });
 }
@@ -43,7 +45,7 @@ function json(obj, status = 200) {
 export async function onRequestOptions() {
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
@@ -51,6 +53,8 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestPost({ request, env }) {
+  // SECURITY (2026-09-26): only from our own submit pages (blocks cross-site form posts).
+  if (!sameSite(request)) return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   if (!env.SUBMISSIONS) return json({ error: 'server not configured' }, 503);
 
   const cl = parseInt(request.headers.get('Content-Length') || '0', 10);

@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>/* Placer key (2026-09-26 security): saves need X-Placer-Key. Open this tool from Osimo's
+   bookmark link (…?key=…) once; the key is remembered on that device. */
+window.PLACER_KEY=(function(){try{var k=new URLSearchParams(location.search).get('key');
+if(k){localStorage.setItem('jnjPlacerKey',k);return k}return localStorage.getItem('jnjPlacerKey')||''}catch(e){return ''}})();</script>
+
 <meta charset="utf-8">
 <!-- The placer draws the game's own text, so it needs the game's own font. cabinet.css
      is where every @font-face lives; without it Barlow Condensed silently falls back and the
@@ -349,7 +354,7 @@ if (submitBtn) submitBtn.onclick = async () => {
   try {
     const r = await fetch('/api/punters', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'X-Placer-Key': window.PLACER_KEY },
       body: JSON.stringify({
         by: 'osimo', room: ROOM,
         punters: punters.map(p => ({ x: Math.round(p.x), feet: Math.round(p.feet),

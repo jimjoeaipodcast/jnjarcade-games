@@ -11,6 +11,8 @@
    it exists only to rank the cassettes. It is still returned by GET because the
    ranking happens client-side at render time (site Hard Rule 1: never rank from
    file order). */
+import { sameSite, ipKey } from '../_lib/guard.js';
+
 
 const KEY = 'channel-likes';
 
@@ -57,8 +59,19 @@ export async function onRequestPost({ request, env }) {
   }
   if (typeof id !== 'string' || !LIKEABLE.has(id)) return json({ error: 'bad id' }, 400);
   if (op !== 'like' && op !== 'unlike') return json({ error: 'bad op' }, 400);
+  if (!sameSite(request)) return json({ error: 'forbidden' }, 403);
+
+  // SECURITY (2026-09-26): one like per player per channel, enforced HERE — the old check lived
+  // only in the browser's localStorage, so likes were unlimited. Players are keyed by a hashed IP.
+  const who = 'like:' + (await ipKey(request, env)) + ':' + id;
+  const had = !!(await env.PLAYS.get(who));
+  if ((op === 'like') === had) {                       // already liked / nothing to unlike
+    const likes = await readLikes(env);
+    return json({ id, likes: likes[id] || 0 });
+  }
 
   try {
+    if (op === 'like') await env.PLAYS.put(who, '1'); else await env.PLAYS.delete(who);
     const likes = await readLikes(env);
     const next = (likes[id] || 0) + (op === 'like' ? 1 : -1);
     likes[id] = next < 0 ? 0 : next;   // an unlike can never drive a count negative

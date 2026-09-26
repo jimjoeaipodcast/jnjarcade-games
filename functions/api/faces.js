@@ -7,6 +7,8 @@
 
    Storage: same PLAYS KV binding (keys: face:<id>). Deleted = status flag, never hard-removed
    (audit trail). Grid is 44×44; a face is a sparse list of lit dots. */
+import { sameSite, rateLimit } from '../_lib/guard.js';
+
 
 const GRID = 44;
 const MAX_DOTS = 900;          // a full face is ~130; 900 = generous scribble ceiling
@@ -53,8 +55,10 @@ async function listFaces(env, status) {
 export async function onRequest(ctx) {
   const { request, env } = ctx;
   const url = new URL(request.url);
+  const _o = request.headers.get('Origin') || '';
   const cors = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': (sameSite(request) && _o) ? _o : 'https://jnjarcade.win',
+    'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Content-Type': 'application/json',
@@ -66,8 +70,11 @@ export async function onRequest(ctx) {
     const status = url.searchParams.get('status') || 'keeps';
     if (!VALID_STATUS.includes(status)) return new Response(JSON.stringify({ ok: false, error: 'bad status' }), { status: 400, headers: cors });
     // pending/deleted lists are moderation-only
+    // SECURITY (2026-09-26): moderation token preferably in the X-Mod-Token HEADER (a query-string
+    // token ends up in logs); the query form is still accepted for the dashboard until it moves over.
+    const modTok = request.headers.get('X-Mod-Token') || url.searchParams.get('token');
     if ((status === 'pending' || status === 'deleted')
-        && url.searchParams.get('token') !== env.FACELAB_MOD_TOKEN) {
+        && (!env.FACELAB_MOD_TOKEN || modTok !== env.FACELAB_MOD_TOKEN)) {
       return new Response(JSON.stringify({ ok: false, error: 'unauthorised' }), { status: 403, headers: cors });
     }
     const faces = await listFaces(env, status);
@@ -75,6 +82,10 @@ export async function onRequest(ctx) {
   }
 
   if (request.method === 'POST') {
+    // SECURITY (2026-09-26): only from our own pages, max 5 new faces per player per hour.
+    if (!sameSite(request)) return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), { status: 403, headers: cors });
+    if (!(await rateLimit(env, env.PLAYS, request, 'face', 5, 3600)))
+      return new Response(JSON.stringify({ ok: false, error: 'slow down — try again later' }), { status: 429, headers: cors });
     let body;
     try { body = await request.json(); } catch (e) {
       return new Response(JSON.stringify({ ok: false, error: 'bad json' }), { status: 400, headers: cors });

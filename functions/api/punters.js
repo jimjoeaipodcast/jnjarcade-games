@@ -9,6 +9,8 @@
 
    Uses the SUBMISSIONS KV binding that already exists in wrangler.toml. Without
    the binding it degrades the same way plays.js does: GET {}, POST 503. */
+import { sameSite, placerAuthorised, placerBy } from '../_lib/guard.js';
+
 
 // One key per room, so the two arcades cannot overwrite each other. 'hall' keeps the
 // original unsuffixed key so the layout Osimo already submitted is not orphaned.
@@ -36,6 +38,9 @@ export async function onRequestGet({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!env.SUBMISSIONS) return json({ error: 'no storage' }, 503);
+  // SECURITY (2026-09-26): layouts become live-game geometry and are read by Claude as Osimo's
+  // decisions — writes need the placer key (X-Placer-Key) and must come from our own pages.
+  if (!sameSite(request) || !placerAuthorised(request, env)) return json({ error: 'forbidden' }, 403);
 
   let body;
   try {
@@ -63,7 +68,7 @@ export async function onRequestPost({ request, env }) {
   const rec = {
     savedAt: new Date().toISOString(),
     room,
-    by: (typeof body.by === 'string' ? body.by : 'osimo').slice(0, 40),
+    by: placerBy(body.by),
     note: (typeof body.note === 'string' ? body.note : '').slice(0, 300),
     punters: clean,
   };

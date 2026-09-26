@@ -1,28 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>/* Placer key (2026-09-26 security): saves need X-Placer-Key. Open this tool from Osimo's
+   bookmark link (…?key=…) once; the key is remembered on that device. */
+window.PLACER_KEY=(function(){try{var k=new URLSearchParams(location.search).get('key');
+if(k){localStorage.setItem('jnjPlacerKey',k);return k}return localStorage.getItem('jnjPlacerKey')||''}catch(e){return ''}})();</script>
+
 <meta charset="utf-8">
 <link rel="stylesheet" href="../cabinet.css">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>HUD PAINTER</title>
+<title>HUD PLACER</title>
 <!-- ══════════════════════════════════════════════════════════════════════════
   Osimo 2026-09-07, after "the buttons still don't respond" survived a reinstall and a
   widened hit-box: "let me use placer and two colours yellow and grey and let me paint the
-  clickable area and lock it in pixel perfect." Every earlier round guessed a rectangle from
-  a screenshot; this paints the ACTUAL zone on HIS actual device, in the same raw CSS-pixel
-  space the tap handler reads (sxp = tapX - canvas.left), so nothing needs converting and
-  nothing can drift out of sync with a different phone's DPI ever again.
+  clickable area and lock it in pixel perfect." That first version was a PAINT tool (colour
+  in the pressable pixels), because the pause+speaker pair overlapped in a way a plain
+  rectangle hadn't been able to describe correctly by eye.
 
-  This is a HUD painter, not a room painter — press-painter.html's grid is 960x540 WORLD
-  pixels because room hotspots live in the game's 3x-scaled world. The pause/speaker buttons
-  are drawn directly in SCREEN pixels (canvas.clientWidth/Height), never scaled, so this page
-  paints in that same space at 1:1 — the numbers it saves ARE the numbers the game will use,
-  no world<->screen conversion anywhere in the loop.
-
-  Two colours only, GREY = PAUSE, YELLOW = SPEAKER, exactly as asked. The real glyphs are
-  drawn underneath at partial opacity from the game's current numbers, so painting is done
-  against what is actually on screen, not a guess.
+  Osimo 2026-09-09, once pause was removed and only the speaker button was left: "can you
+  show me the colour placer you made for the speaker button... allow me to edit it not as a
+  paint on but as a square." One button doesn't need paint any more — a single drag-and-
+  resize BOX describes it completely, so this is now that: the same BOX shape
+  overlay-placer.html already uses for the studio TV etc, just in SCREEN space instead of
+  the game's 960x540 world (the speaker is drawn in raw CSS pixels, never scaled, so this
+  page paints at 1:1 — the numbers it saves ARE the numbers the tap handler reads, no
+  world<->screen conversion anywhere in the loop).
 ═══════════════════════════════════════════════════════════════════════════ -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -43,10 +46,7 @@
            padding: 10px 13px; border-radius: 9px; border: 1.5px solid #ffffff33;
            background: #1a1409; color: #cfc6b4; cursor: pointer; }
   button.go { background: #e8c35a; color: #241a06; border-color: #e8c35a; }
-  .sw { width: 40px; height: 40px; border-radius: 9px; border: 2px solid #ffffff33;
-        cursor: pointer; padding: 0; }
-  .sw.on { border-color: #fff; box-shadow: 0 0 0 3px #ffffff55; }
-  #sel { font-size: 15px; color: #fff3d0; white-space: nowrap; }
+  #sel { font-size: 14px; color: #fff3d0; white-space: nowrap; }
   #hint { position: fixed; left: 50%; bottom: 56px; transform: translateX(-50%);
           font-size: 13px; color: #cfc6b4; text-align: center; z-index: 4; pointer-events: none; }
   #toast { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
@@ -59,15 +59,18 @@
 <div id="safeProbe"></div>
 <canvas id="c"></canvas>
 <div class="bar" id="top">
-  <div id="sel">PICK A COLOUR, THEN PAINT</div>
+  <div id="sel">SPEAKER BOX</div>
   <span style="flex:1"></span>
-  <button id="erase">ERASE</button>
-  <button id="brush">BRUSH 2</button>
-  <button id="clear">CLEAR</button>
+  <button id="reset">RESET</button>
   <button class="go" id="submit">SUBMIT</button>
 </div>
-<div id="hint">The dim icons are where the game puts them now — paint the pixels you can actually press.</div>
-<div class="bar" id="bot"><div id="swatches" style="display:flex;gap:8px"></div></div>
+<div id="hint">drag to move · − W + W and − H + H (or pinch) to resize · arrow keys to nudge</div>
+<div class="bar" id="bot">
+  <button id="wDown">− W</button>
+  <button id="wUp">+ W</button>
+  <button id="hDown">− H</button>
+  <button id="hUp">+ H</button>
+</div>
 <div id="toast"></div>
 <script>
 (function () {
@@ -76,18 +79,11 @@ const QS = new URLSearchParams(location.search);
 const EDIT = QS.get('edit') === '1';
 // Osimo 2026-09-07: "you also should teach yourself to use a tool like [this]... paint,
 // look, amend, perfect, lock in pixels, publish." For a box that's computable (clear of
-// everything else on the HUD) rather than a subjective call, Claude drives this page itself
-// via Playwright — paint, screenshot, submit — instead of only hand-deriving numbers. Those
-// submissions are tagged 'claude', never 'osimo', so the self-retire rule below (which only
-// fires on Osimo's OWN submission) can't mistake a computed default for his final word, and
-// he can always paint over it later.
+// everything else on the HUD) rather than a subjective call, Claude can drive this page
+// himself via Playwright — drag, screenshot, submit — instead of only hand-deriving numbers.
+// Those submissions are tagged 'claude', never 'osimo', so the self-retire rule below (which
+// only fires on Osimo's OWN submission) can't mistake a computed default for his final word.
 const BY = QS.get('by') === 'claude' ? 'claude' : 'osimo';
-// /api/press clamps cell x/y to 0-255 (built for the 96x54 room grid) — 4px cells keep a
-// typical ~850px-wide phone screen (GX~213) safely under that ceiling while still resolving
-// a ~30px button to within 2px either side, plenty for a fingertip target.
-const CELL = 4;
-// GREY = PAUSE, YELLOW = SPEAKER — Osimo's own choice of colours.
-const LIST = [['PAUSE', '#9a9a9a'], ['SPEAKER', '#ffd75e']];
 
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 const SAFE = { l: 0, t: 0 };
@@ -97,7 +93,7 @@ function readSafe() {
   SAFE.l = parseFloat(cs.paddingLeft) || 0;
   SAFE.t = parseFloat(cs.paddingTop) || 0;
 }
-let DPR = 1, SW = 0, SH = 0, GX = 0, GY = 0, grid = null;
+let DPR = 1, SW = 0, SH = 0;
 function resize() {
   readSafe();
   DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -105,17 +101,6 @@ function resize() {
   SH = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
   canvas.style.width = SW + 'px'; canvas.style.height = SH + 'px';
   canvas.width = Math.round(SW * DPR); canvas.height = Math.round(SH * DPR);
-  // Defensive: /api/press hard-clamps x/y to 0-255 (it was built for a 96x54 room grid).
-  // A 4px cell keeps any real phone width under that, but this caps it either way so a
-  // submit can never silently disagree with what got painted.
-  const nx = Math.min(255, Math.ceil(SW / CELL)), ny = Math.min(255, Math.ceil(SH / CELL));
-  if (nx !== GX || ny !== GY) {
-    const old = grid, oldGX = GX;
-    GX = nx; GY = ny;
-    grid = Array.from({ length: GY }, () => new Int8Array(GX).fill(-1));
-    if (old) for (let y = 0; y < old.length && y < GY; y++)
-      for (let x = 0; x < oldGX && x < GX; x++) grid[y][x] = old[y][x];
-  }
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
@@ -123,43 +108,41 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', resi
 setInterval(resize, 300);
 resize();
 
-// The game's CURRENT numbers, drawn dim underneath so painting starts from what's really
-// on screen. This is a snapshot for reference only — the paint is the source of truth now.
-const REF = { pau0: 2, pau1: 32, snd0: 38, snd1: 68, h: 54 };
+// Opens on the CURRENT shipped box (the-count.html's own HUD_CTRL.snd default) — never
+// starts from nothing. RESET goes back to exactly this.
+const DEFAULT_BOX = { x: 0, y: 0, w: 72, h: 54 };
+let box = { ...DEFAULT_BOX };
+
+// The real glyph + the cash figure it sits next to, drawn dim underneath at the game's own
+// numbers, so the box is dragged against what is actually on screen — same reference layer
+// the paint version had, just carried over (the cash figure is what a first-round paint
+// collided with before, per that version's own history).
 function drawRef() {
   const L = SAFE.l, T = SAFE.t;
   ctx.globalAlpha = 0.55;
   ctx.fillStyle = 'rgba(6,5,4,0.62)';
-  ctx.fillRect(0, 0, SW, REF.h + T);
+  ctx.fillRect(0, 0, SW, 54 + T);
   ctx.font = '20px sans-serif'; ctx.textAlign = 'left';
   ctx.fillStyle = '#ffd75e';
-  ctx.fillText('⏸', L + REF.pau0, 32 + T);
-  ctx.fillText('🔊', L + REF.snd0, 32 + T);
-  // The cash figure sits right next to these two, and a first round of painting put PAUSE
-  // squarely on top of it — drawn here too now so a repaint can see it and steer clear.
+  ctx.fillText('🔊', L + box.x + 16, 32 + T);
   ctx.font = 'bold 25px "Barlow Condensed",sans-serif';
   ctx.fillText('£12.06', L + 78, 32 + T);
   ctx.globalAlpha = 1;
 }
 
-fetch('/api/press?room=hud').then(r => r.json()).then(d => {
-  if (!d || !Array.isArray(d.cells)) return;
-  d.cells.forEach(([x, y, i]) => { if (grid[y]) grid[y][x] = i; });
+// /api/press only knows two shapes server-side — 'paint' (cells[]) and 'points' (items[]) —
+// so a single box rides as ONE 'points' item, exactly the shape overlay-placer's own boxes
+// (the studio TV, the podcast monitors) already use. &kind=points matters: the GET route
+// picks its KV key from the query string, not from room, and defaults to 'paint' — the old
+// hud-painter's own record — without it.
+fetch('/api/press?room=hud&kind=points').then(r => r.json()).then(d => {
+  if (!d || !Array.isArray(d.items) || !d.items.length) return;
+  const it = d.items.find(x => x.id === 'speaker') || d.items[0];
+  if (!it) return;
+  box = { x: it.x, y: it.y || 0, w: it.w || DEFAULT_BOX.w, h: it.h || DEFAULT_BOX.h };
+  updateSel();
   if (d.by === 'osimo' && d.savedAt && !EDIT) retire();
 }).catch(() => {});
-
-let sel = 0, brush = 3, erasing = false;
-function toCell(px, py) {
-  const r = canvas.getBoundingClientRect();
-  return { cx: Math.floor((px - r.left) / CELL), cy: Math.floor((py - r.top) / CELL) };
-}
-function paint(cx, cy) {
-  const rad = brush - 1;
-  for (let y = cy - rad; y <= cy + rad; y++) for (let x = cx - rad; x <= cx + rad; x++) {
-    if (x < 0 || y < 0 || x >= GX || y >= GY) continue;
-    grid[y][x] = erasing ? -1 : sel;
-  }
-}
 
 function frame() {
   requestAnimationFrame(frame);
@@ -167,57 +150,82 @@ function frame() {
   ctx.fillStyle = '#0b0904'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawRef();
-  for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
-    const i = grid[y][x];
-    if (i < 0 || !LIST[i]) continue;
-    ctx.fillStyle = LIST[i][1]; ctx.globalAlpha = 0.55;
-    ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
-  }
-  ctx.globalAlpha = 1;
+  const L = SAFE.l, T = SAFE.t;
+  ctx.fillStyle = 'rgba(255,215,94,0.30)';
+  ctx.fillRect(L + box.x, T + box.y, box.w, box.h);
+  ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 3;
+  ctx.strokeRect(L + box.x, T + box.y, box.w, box.h);
 }
 requestAnimationFrame(frame);
 
-let down = false;
-function at(e) {
-  const t = e.touches ? e.touches[0] : e;
-  const { cx, cy } = toCell(t.clientX, t.clientY);
-  paint(cx, cy);
+// Hit-test + drag, same shape as overlay-placer's box: pick() checks the drawn rect, drag
+// tracks the pointer's offset FROM the box's own x/y so it doesn't jump to re-centre on grab.
+function toLocal(px, py) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (px - r.left) - SAFE.l, y: (py - r.top) - SAFE.t };
 }
-canvas.addEventListener('touchstart', e => { e.preventDefault(); down = true; at(e); }, { passive: false });
-canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (down) at(e); }, { passive: false });
-canvas.addEventListener('touchend',   () => { down = false; });
-canvas.addEventListener('mousedown', e => { down = true; at(e); });
-window.addEventListener('mousemove', e => { if (down) at(e); });
-window.addEventListener('mouseup', () => { down = false; });
+function inBox(p) {
+  return p.x >= box.x - 8 && p.x <= box.x + box.w + 8 && p.y >= box.y - 8 && p.y <= box.y + box.h + 8;
+}
+let drag = null, pinch = null;
+function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
 
-const sw = document.getElementById('swatches');
-LIST.forEach(([name, col], i) => {
-  const b = document.createElement('button');
-  b.className = 'sw' + (i === 0 ? ' on' : '');
-  b.style.background = col; b.title = name;
-  b.onclick = () => {
-    sel = i; erasing = false;
-    [...sw.children].forEach((c, j) => c.classList.toggle('on', j === i));
-    document.getElementById('erase').classList.remove('go');
-    updateSel();
-  };
-  sw.appendChild(b);
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    pinch = { d: dist(e.touches[0], e.touches[1]), w: box.w, h: box.h };
+    drag = null; return;
+  }
+  const p = toLocal(e.touches[0].clientX, e.touches[0].clientY);
+  drag = inBox(p) ? { dx: p.x - box.x, dy: p.y - box.y } : null;
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (pinch && e.touches.length === 2) {
+    const k = dist(e.touches[0], e.touches[1]) / pinch.d;
+    box.w = Math.max(16, Math.min(400, Math.round(pinch.w * k)));
+    box.h = Math.max(16, Math.min(200, Math.round(pinch.h * k)));
+    updateSel(); return;
+  }
+  if (!drag || !e.touches.length) return;
+  const p = toLocal(e.touches[0].clientX, e.touches[0].clientY);
+  box.x = Math.round(p.x - drag.dx); box.y = Math.round(p.y - drag.dy);
+  updateSel();
+}, { passive: false });
+canvas.addEventListener('touchend', e => { if (!e.touches.length) { drag = null; pinch = null; } });
+canvas.addEventListener('mousedown', e => {
+  const p = toLocal(e.clientX, e.clientY);
+  drag = inBox(p) ? { dx: p.x - box.x, dy: p.y - box.y } : null;
 });
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const p = toLocal(e.clientX, e.clientY);
+  box.x = Math.round(p.x - drag.dx); box.y = Math.round(p.y - drag.dy);
+  updateSel();
+});
+window.addEventListener('mouseup', () => { drag = null; });
+window.addEventListener('keydown', e => {
+  const step = e.shiftKey ? 10 : 1;
+  if (e.key === 'ArrowLeft') box.x -= step;
+  else if (e.key === 'ArrowRight') box.x += step;
+  else if (e.key === 'ArrowUp') box.y -= step;
+  else if (e.key === 'ArrowDown') box.y += step;
+  else return;
+  e.preventDefault(); updateSel();
+});
+
 function updateSel() {
   document.getElementById('sel').textContent =
-    erasing ? 'ERASING' : (sel + 1) + '/' + LIST.length + '  ' + LIST[sel][0];
+    'SPEAKER  x' + box.x + ' y' + box.y + ' w' + box.w + ' h' + box.h;
 }
 updateSel();
 
-document.getElementById('erase').onclick = e => {
-  erasing = !erasing; e.target.classList.toggle('go', erasing); updateSel();
-};
-document.getElementById('brush').onclick = e => {
-  brush = brush >= 6 ? 2 : brush + 1; e.target.textContent = 'BRUSH ' + brush;
-};
-document.getElementById('clear').onclick = () => {
-  for (const row of grid) row.fill(-1);
-  toast('Cleared.', 1000);
+document.getElementById('wDown').onclick = () => { box.w = Math.max(16, box.w - 4); updateSel(); };
+document.getElementById('wUp').onclick   = () => { box.w = Math.min(400, box.w + 4); updateSel(); };
+document.getElementById('hDown').onclick = () => { box.h = Math.max(16, box.h - 4); updateSel(); };
+document.getElementById('hUp').onclick   = () => { box.h = Math.min(200, box.h + 4); updateSel(); };
+document.getElementById('reset').onclick = () => {
+  box = { ...DEFAULT_BOX }; updateSel(); toast('Back to the shipped box.', 1400);
 };
 
 let toastT = 0;
@@ -234,17 +242,12 @@ function retire() {
 
 const submitBtn = document.getElementById('submit');
 if (submitBtn) submitBtn.onclick = async () => {
-  const cells = [];
-  for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
-    if (grid[y][x] >= 0) cells.push([x, y, grid[y][x]]);
-  }
-  if (!cells.length) { toast('Nothing painted yet.', 2000); return; }
   submitBtn.disabled = true; submitBtn.textContent = 'SENDING…';
   try {
     const r = await fetch('/api/press', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ by: BY, room: 'hud', cell: CELL,
-                             names: LIST.map(l => l[0]), cells }),
+      method: 'POST', headers: { 'content-type': 'application/json', 'X-Placer-Key': window.PLACER_KEY },
+      body: JSON.stringify({ by: BY, room: 'hud', kind: 'points',
+                             items: [{ id: 'speaker', x: box.x, y: box.y, w: box.w, h: box.h }] }),
     });
     const d = await r.json();
     if (d.ok) { toast('SUBMITTED ✅\nTell Claude and he will wire the taps.', 5000); retire(); }

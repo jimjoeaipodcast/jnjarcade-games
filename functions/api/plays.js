@@ -6,6 +6,10 @@
    binding exists this degrades gracefully: GET returns {}, POST 503,
    and the landing page falls back to local ordering. */
 
+import { json, sameSite, rateLimit, knownGame } from '../_lib/guard.js';
+
+/* SECURITY (2026-09-26): POST must come from our own pages, name a known game (no invented
+   "games" reaching the on-air champions list), and counts once per player per game per 5 min. */
 const KEY = 'counts';
 const ID_RE = /^[a-z0-9-]{1,40}$/;
 
@@ -25,14 +29,17 @@ export async function onRequestGet({ env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!env.PLAYS) return json({ error: 'no storage' }, 503);
+  if (!sameSite(request)) return json({ error: 'forbidden' }, 403);
   let id;
   try {
-    const body = JSON.parse(await request.text());
-    id = body.id;
+    const text = await request.text();
+    if (text.length > 512) return json({ error: 'too large' }, 413);
+    id = JSON.parse(text).id;
   } catch {
     return json({ error: 'bad body' }, 400);
   }
-  if (typeof id !== 'string' || !ID_RE.test(id)) return json({ error: 'bad id' }, 400);
+  if (typeof id !== 'string' || !ID_RE.test(id) || !knownGame(id)) return json({ error: 'bad id' }, 400);
+  if (!(await rateLimit(env, env.PLAYS, request, 'play-' + id, 1, 300))) return json({ ok: true, counted: false });
 
   try {
     const counts = await readCounts(env);
@@ -42,14 +49,4 @@ export async function onRequestPost({ request, env }) {
   } catch {
     return json({ error: 'storage error' }, 500);
   }
-}
-
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-  });
 }

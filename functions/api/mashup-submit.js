@@ -21,6 +21,8 @@
      why      string  optional  — why it works on a phone
      website  string  honeypot
 */
+import { sameSite } from '../_lib/guard.js';
+
 
 const MAX_FIELD = 600;
 
@@ -29,7 +31,7 @@ function json(obj, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
     },
   });
 }
@@ -37,7 +39,7 @@ function json(obj, status = 200) {
 export async function onRequestOptions() {
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://jnjarcade.win',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
@@ -45,6 +47,8 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestPost({ request, env }) {
+  // SECURITY (2026-09-26): only from our own submit pages (blocks cross-site form posts).
+  if (!sameSite(request)) return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   if (!env.SUBMISSIONS) return json({ error: 'server not configured' }, 503);
 
   let formData;
