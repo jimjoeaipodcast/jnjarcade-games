@@ -101,6 +101,29 @@ export async function markRunUsed(kv, nonce) {
   await kv.put('run:' + nonce, '1', { expirationTtl: 13 * 3600 });
 }
 
+/* ---- Cloudflare Turnstile (2026-09-28) ----
+   After the 09-26 guards a script could still fake the Origin header, take a run token, wait,
+   and post a "plausible" score. An invisible Turnstile check before each run token stops
+   scripts: no real browser, no token. Off until env.TURNSTILE_SECRET + TURNSTILE_SITEKEY are
+   set as Pages secrets, so deploying this changes nothing on its own. Free, not metered. */
+export function turnstileOn(env) { return !!(env.TURNSTILE_SECRET && env.TURNSTILE_SITEKEY); }
+
+export async function verifyTurnstile(env, request, token) {
+  if (!token || typeof token !== 'string' || token.length > 2048) return false;
+  const form = new FormData();
+  form.append('secret', env.TURNSTILE_SECRET);
+  form.append('response', token);
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (ip) form.append('remoteip', ip);
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    const d = await r.json();
+    // Test keys report hostname "example.com"; real keys report the page's host.
+    const testKey = env.TURNSTILE_SITEKEY.startsWith('1x0000');
+    return !!d.success && (okHost(d.hostname || '') || (testKey && d.hostname === 'example.com'));
+  } catch { return false; }
+}
+
 /* ---- game allowlist ----
    NOT an asset probe: Pages answers a missing path with an HTML fallback at HTTP 200, so
    "does /games/<slug>.html exist" is true for every slug. Static list, generated from games/. */

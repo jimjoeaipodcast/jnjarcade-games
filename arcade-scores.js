@@ -97,12 +97,64 @@ var SUBMIT_TIMEOUT_MS = 6000;
    load and refreshed after every submit, so a new game on the same page gets a fresh one.
    Games need no change — this file does it for all of them. */
 var RUN = null;
+
+/* TURNSTILE (2026-09-28). When the server wants proof of a real browser it answers /api/run
+   with 403 {challenge:'turnstile', sitekey}; we run Cloudflare's INVISIBLE check (no UI, no
+   puzzle) and ask again with its token. Cloudflare only serves this script from its own
+   origin (it cannot be vendored), so it is loaded lazily and only when the server asks. If it
+   fails to load, the game still plays; the score is kept on the local board. */
+var TS_SITEKEY = null, TS_WIDGET = null, TS_LOADING = null;
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (TS_LOADING) return TS_LOADING;
+  TS_LOADING = new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.async = true;
+    s.onload = function () { window.turnstile ? resolve(window.turnstile) : reject(); };
+    s.onerror = function () { TS_LOADING = null; reject(); };
+    document.head.appendChild(s);
+  });
+  return TS_LOADING;
+}
+function challengeToken(sitekey) {
+  return loadTurnstile().then(function (ts) {
+    return new Promise(function (resolve, reject) {
+      var box = document.getElementById('as-turnstile');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'as-turnstile';
+        box.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;';
+        (document.body || document.documentElement).appendChild(box);
+      }
+      if (TS_WIDGET !== null) { try { ts.remove(TS_WIDGET); } catch (e) {} TS_WIDGET = null; }
+      TS_WIDGET = ts.render(box, {
+        sitekey: sitekey,
+        retry: 'never',
+        callback: resolve,
+        'error-callback': function () { reject(); return true; },
+        'timeout-callback': reject,
+      });
+    });
+  });
+}
+function postRun(ts) {
+  return fetch('/api/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ts ? { ts: ts } : {}),
+  }).then(function (r) { return r.json().catch(function () { return null; }); });
+}
 function fetchRun() {
   try {
-    fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.run) RUN = d.run; })
-      .catch(function () {});
+    var first = TS_SITEKEY ? challengeToken(TS_SITEKEY).then(postRun) : postRun(null);
+    first.then(function (d) {
+      if (d && d.run) { RUN = d.run; return; }
+      if (d && d.challenge === 'turnstile' && d.sitekey) {
+        TS_SITEKEY = d.sitekey;
+        return challengeToken(d.sitekey).then(postRun).then(function (d2) { if (d2 && d2.run) RUN = d2.run; });
+      }
+    }).catch(function () {});
   } catch (e) {}
 }
 fetchRun();
