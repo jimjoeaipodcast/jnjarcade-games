@@ -165,11 +165,18 @@ function rememberName(n) {
   try { localStorage.setItem(NAME_KEY, String(n).toUpperCase()); } catch (e) {}
 }
 
-function nameAllowed(name) {
+/* short initials words (Osimo 2026-10-01) — whole name or any one word, never a substring (BASS, CLASSIC) */
+var SHORT_RE = /^(VAG|DIK|ASS|COK)+$/;
+function flatName(name) {
   var up = String(name).toUpperCase(), flat = '';
   for (var i = 0; i < up.length; i++) flat += LEET[up[i]] || up[i];
-  flat = flat.replace(/[^A-Z]/g, '');
-  return !BLOCK.some(function (b) { return flat.indexOf(b) !== -1; });
+  return flat.replace(/[^A-Z]/g, '');
+}
+function nameAllowed(name) {
+  var flat = flatName(name);
+  if (BLOCK.some(function (b) { return flat.indexOf(b) !== -1; })) return false;
+  if (SHORT_RE.test(flat)) return false;
+  return !String(name).split(/[\s.\-_]+/).some(function (w) { return SHORT_RE.test(flatName(w)); });
 }
 
 var CSS = `

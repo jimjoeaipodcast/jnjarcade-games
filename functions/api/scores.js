@@ -12,13 +12,16 @@
    Degrades gracefully without the binding: GET returns {scores:[]},
    POST returns 503 and the games fall back to local-only boards. */
 
-import { json, sameSite, jsonBody, rateLimit, checkRun, markRunUsed, knownGame } from '../_lib/guard.js';
+import { json, sameSite, jsonBody, rateLimit, checkRun, markRunUsed, knownGame, ipKey } from '../_lib/guard.js';
 
 const GAME_RE = /^[a-z0-9-]{1,40}$/;
 const MIN_RUN_S = 8;
 // Points-per-second ceilings, generous on purpose (a real great run must never be refused).
 // Calibrated against the live boards 2026-09-26; raise a game's cap here if a genuine record trips it.
-const PPS = { 'pin-vaders': 40000, 'pin-vaders-2': 40000, 'the-count': 10000 };
+// flap-fight 600 (2026-10-01): Osimo's own level-15 combo run measured ~78 points/s (38,760 → 40,325 in 20 s),
+// 600 is still 7× that fast stretch (the 146k record would need a run of 4+ minutes), and cuts a scripted
+// wait-and-post from 4,000/s to 600/s. Raise it if a genuine record is ever refused as "implausible score".
+const PPS = { 'pin-vaders': 40000, 'pin-vaders-2': 40000, 'the-count': 10000, 'flap-fight': 600 };
 const PPS_DEFAULT = 4000, SCORE_BASE = 5000;
 const KEEP = 200;   // stored per game
 const SHOW = 100;   // returned per request
@@ -36,6 +39,12 @@ const BLOCKLIST = [
   'HITLER','NAZI','KKK','RAPIST','RAPE','PEDO','PAEDO',
 ];
 
+/* Short arcade-initials words (Osimo 2026-10-01: "VAG DIK ASS COK cant be added as names to any scoreboard").
+   Too short to substring-match ("ASS" is inside BASS, CLASSIC, GLASS), so they block when the WHOLE name, or any
+   one word of it, is the word — repeated or leet-spelled too (A55, D.I.K, ASSASS). */
+const SHORT_BLOCK = ['VAG', 'DIK', 'ASS', 'COK'];
+const SHORT_RE = new RegExp('^(' + SHORT_BLOCK.join('|') + ')+$');
+
 function normalise(name) {
   const up = String(name).toUpperCase();
   let out = '';
@@ -45,7 +54,9 @@ function normalise(name) {
 
 export function nameAllowed(name) {
   const flat = normalise(name);
-  return !BLOCKLIST.some(bad => flat.includes(bad));
+  if (BLOCKLIST.some(bad => flat.includes(bad))) return false;
+  if (SHORT_RE.test(flat)) return false;
+  return !String(name).split(/[\s.\-_]+/).some(w => SHORT_RE.test(normalise(w)));
 }
 
 function cleanName(raw) {
@@ -68,7 +79,10 @@ export async function onRequestGet({ request, env }) {
     // beats his score"). null until it happens.
     const legendRaw = await env.PLAYS.get('legend:' + game);
     return json({
-      scores: (await readScores(env, game)).slice(0, SHOW),
+      // a name the blocklist refuses never shows, even if it was stored before the rule existed;
+      // the audit fields (a = run seconds, h = hashed player) stay server-side
+      scores: (await readScores(env, game)).filter(e => nameAllowed(e.n)).slice(0, SHOW)
+        .map(({ n, s, t }) => ({ n, s, t })),
       legend: legendRaw ? JSON.parse(legendRaw) : null,
     });
   } catch {
@@ -99,7 +113,9 @@ export async function onRequestPost({ request, env }) {
 
   try {
     const scores = await readScores(env, game);
-    const entry = { n: name, s: score, t: Date.now() };
+    // audit trail (2026-10-01, Osimo: brother added fake scores without playing): how long the run lasted and a hashed player
+    // id, so fakes can be found and removed per player. Never returned by GET.
+    const entry = { n: name, s: score, t: Date.now(), a: Math.round(run.ageS), h: (await ipKey(request, env)).slice(0, 10) };
     scores.push(entry);
     scores.sort((a, b) => b.s - a.s || a.t - b.t);
     if (scores.length > KEEP) scores.length = KEEP;
@@ -116,7 +132,7 @@ export async function onRequestPost({ request, env }) {
     return json({
       rank: rank || scores.length,
       total: scores.length,
-      scores: scores.slice(0, SHOW),
+      scores: scores.slice(0, SHOW).map(({ n, s, t }) => ({ n, s, t })),
     });
   } catch {
     return json({ error: 'storage error' }, 500);
