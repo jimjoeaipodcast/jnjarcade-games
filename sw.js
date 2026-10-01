@@ -1,5 +1,5 @@
 /* JnJ Arcade — minimal service worker for PWA installability */
-const CACHE = 'jnj-v4';   // bumped 2026-08-24: added patreon-manifest.json to precache
+const CACHE = 'jnj-v5';   // bumped 2026-08-24: added patreon-manifest.json to precache
 const PRECACHE = [
   '/assets/icons/jnj-logo-192.png',
   '/assets/icons/jnj-logo-512.png',

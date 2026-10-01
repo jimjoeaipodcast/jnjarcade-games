@@ -377,22 +377,7 @@ function buildCabinet(game) {
 
   const play = document.createElement('a');
   play.className = 'cab-play';
-  // LOCKED cabinet — a Patreon game shown on the FREE /arcade as a teaser (Osimo
-  // 2026-07-29: "the most played 3 games from our patreon page... locked behind
-  // patreon"). Same cassette art and attract loop so it still sells itself; the button
-  // goes to Patreon instead of the game, and deliberately does NOT count a play —
-  // nobody played anything, and a fake count would corrupt the very ranking that
-  // chose these three.
-  if (game.locked) {
-    play.href = 'https://www.patreon.com/c/JimmyJoeAiPodcast';
-    play.target = '_blank';
-    play.rel = 'noopener';
-    play.textContent = '🔒 UNLOCK ON PATREON';
-    info.appendChild(play);
-    cab.appendChild(info);
-    startAttract(canvas, world);
-    return cab;
-  }
+  // every cabinet is free to play (Osimo 2026-10-01: Patreon scrapped — "open up the games to everyone")
   // play=1 skips the game's own start screen; v busts any stale cached copy
   play.href = game.url + '?play=1&v=42';
   play.textContent = 'INSERT COIN — PLAY FREE';
@@ -1597,7 +1582,7 @@ function buildNextStrip(games) {
 // now lives inside the channel page, while this row is NETWORK-level — Osimo: "should be
 // something outside of channel one, something that covers all channels, like Kofi and merch
 // can be used by any channel followers". One X account fronts the whole network.
-const COIN_IMGS = { Shop: 'yellow', X: 'red', Patreon: 'orange', KoFi: 'blue' };
+const COIN_IMGS = { Shop: 'yellow', X: 'red', KoFi: 'blue' };
 
 function buildSocials(social) {
   const row = document.getElementById('socialRow');
@@ -1874,10 +1859,9 @@ async function init() {
         // true as a tonne of them are behind a pay wall, adapt"). The free arcade IS
         // free forever; saying so accurately costs nothing and claiming more than we
         // deliver on our own shop front costs trust.
-        : 'Some cabinets are free.<br>'
-          + 'Others help keep the \u{1F4A1} on.<br>'
-          + 'If you\'d like to support us<br>'
-          + 'Patreon &amp; Ko-fi \u{1F517}'
+        : 'Every cabinet is free.<br>'
+          + 'If you\'d like to help keep the \u{1F4A1} on,<br>'
+          + 'buy us a coffee on Ko-fi \u{1F517}'
           + '<span class="hall-arrow">&#x2193;</span>') + '</p>';
     } else {
       live.forEach(g => {

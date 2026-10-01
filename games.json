@@ -21,16 +21,6 @@
       "label": "X"
     },
     {
-      "name": "Patreon",
-      "emoji": "☕",
-      "url": "https://www.patreon.com/c/JimmyJoeAiPodcast",
-      "gradient": [
-        "#FF6E4A",
-        "#E0420B"
-      ],
-      "label": "Patreon"
-    },
-    {
       "name": "Ko-fi",
       "emoji": "☕",
       "url": "https://ko-fi.com/jimmynjoe",

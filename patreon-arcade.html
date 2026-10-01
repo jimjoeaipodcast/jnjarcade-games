@@ -1,123 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Patreon scrapped 2026-10-01 (Osimo): everything is free on the main arcade. This URL stays alive because family
+     members installed the old Patreon app (patreon-manifest.json, start_url /patreon) — it now opens the free site. -->
+<link rel="manifest" href="/patreon-manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="JnJ Patreon">
-<meta name="theme-color" content="#16120c">
-<title>PATREON ARCADE — JnJ Arcade</title>
-<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
-<!-- manifest was index.html-only, then briefly pointed at the shared manifest.json (wrong
-     start_url launched an install-from-here icon into the free arcade instead of back into
-     Patreon) — see patreon.html for the full note. Same fix here: patreon-manifest.json. -->
-<link rel="manifest" href="patreon-manifest.json">
-<link rel="stylesheet" href="cabinet.css">
-<link rel="stylesheet" href="style.css?v=24">
-<style>
-  .pat-head{ text-align:center; padding:30px 18px 6px; }
-  .pat-kicker{ font-size:11px; letter-spacing:.4em; color:#22c55e; opacity:.9; }
-  .pat-head h1{ font-size:30px; font-weight:900; letter-spacing:.05em; margin:6px 0 4px; }
-  .pat-sub{ font-size:13px; opacity:.6; max-width:520px; margin:0 auto; line-height:1.5; }
-  .pat-nav{ display:flex; gap:16px; justify-content:center; margin-top:10px; flex-wrap:wrap; }
-  .pat-nav a{ color:var(--ink,#ffcf3d); text-decoration:none; font-size:12px;
-              letter-spacing:.1em; opacity:.85; }
-  .pat-nav a:hover{ opacity:1; }
-
-  /* Osimo 2026-09-08: "the jingle designated for the arcade cassette" belongs on the hall
-     itself, not the landing page — page-local, matching arcade.html's ambience pattern. */
-  #ambMute {
-    position: fixed; right: 14px; bottom: 14px; z-index: 40;
-    width: 42px; height: 42px; border-radius: 50%;
-    background: rgba(10,8,4,0.72); border: 1.5px solid rgba(255,255,255,0.18);
-    color: var(--cream, #f0e6d2); font-size: 18px; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; backdrop-filter: blur(2px);
-  }
-  #ambMute:active { transform: scale(0.94); }
-  .footer-credit { color: var(--cream-dim); font-size: 12px; opacity: 0.7; margin: 4px 0 0; }
-</style>
-</head>
-<body data-parcade="1">
-  <header class="pat-head">
-    <div class="pat-kicker">JNJ ARCADE — MEMBERS</div>
-    <h1>🕹️ PATREON ARCADE</h1>
-    <p class="pat-sub">Every cabinet, unlocked. Most played first. Thanks for keeping the lights on.</p>
-    <nav class="pat-nav">
-      <a href="/patreon">‹ members</a>
-    </nav>
-  </header>
-
-  <main id="cabinets" aria-label="Arcade games"></main>
-
-  <button id="fsBtn" hidden></button>
-  <button id="a2hsBtn" hidden></button>
-  <div id="a2hsSheet" hidden></div>
-  <div id="toast"></div>
-
-  <footer class="lobby-end">
-    <div class="coin-row" id="socialRow" aria-label="Links"></div>
-    <p class="footer-line">A fan arcade for the <a href="https://www.youtube.com/@JnJAiStudio" target="_blank" rel="noopener">Jimmy &amp; Joe AI Podcast</a>. Two AI hosts. Real arguments.</p>
-    <p class="footer-credit">Music: Freesound.</p>
-  </footer>
-
-  <button id="ambMute" aria-label="Mute sound" title="Mute sound">&#128266;</button>
-
-  <script src="arcade-scores.js?v=25"></script>
-  <script src="vendor/gsap.min.js"></script>
-  <script src="app.js?v=parcade79"></script>
-  <script>
-  /* Osimo 2026-09-08: same arcade-flavoured loop as the free hall — "the jingle that was
-     designated for the arcade cassette" belongs on the hall itself, not a landing page.
-     Also "lower volume another little tad" on the move: 0.15 -> 0.11. */
-  (function () {
-    'use strict';
-    var MUTE_KEY = 'jnj_landing_muted';
-    var btn = document.getElementById('ambMute');
-    var muted = localStorage.getItem(MUTE_KEY) === '1';
-    var music = null;
-
-    function paintBtn() { btn.innerHTML = muted ? '&#128263;' : '&#128266;'; }
-    paintBtn();
-
-    function ensureMusic() {
-      if (music) return music;
-      music = new Audio('assets/audio/site/arcade-loop.mp3?v=1');
-      music.loop = true; music.volume = 0.11; music.preload = 'none';
-      music.onerror = function () { music = null; };
-      return music;
-    }
-
-    // Osimo 2026-09-08: "the jingle starts automatically as you open the arcade" — try
-    // immediately (works for repeat visitors/PWA contexts a browser already trusts);
-    // pointerdown stays as the real fallback every cold visitor actually gets, since no
-    // browser allows JS to force audible autoplay with zero interaction.
-    if (!muted) ensureMusic().play().catch(function () {});
-    document.addEventListener('pointerdown', function () {
-      if (!muted) ensureMusic().play().catch(function () {});
-    }, { once: true, passive: true });
-
-    btn.addEventListener('click', function () {
-      muted = !muted;
-      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
-      paintBtn();
-      if (muted) { if (music) music.pause(); }
-      else { ensureMusic().play().catch(function () {}); }
-    });
-  })();
-  </script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(function(){});
-    }
-  </script>
-  <script src="/assets/js/resume-line.js?v=2"></script>
-</body>
-</html>
+<meta http-equiv="refresh" content="0; url=/arcade">
+<title>JnJ Arcade</title>
+<script>location.replace("/arcade" + location.search + location.hash);</script>
+</head><body style="background:#000;color:#fff;font-family:sans-serif;text-align:center;padding-top:30vh">
+<a href="/arcade" style="color:#22c55e">Opening the JnJ Arcade…</a>
+</body></html>

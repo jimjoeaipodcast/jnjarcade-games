@@ -1,4 +1,4 @@
-/* POST /api/mashup-submit — Patreon cabinet pitches (Osimo 2026-07-29).
+/* POST /api/mashup-submit — cabinet pitches (Osimo 2026-07-29; open to everyone since 2026-10-01).
 
    Patreons pitch a two-game mash-up; the ones that make the cut get BUILT into the arcade
    with the pitcher's name on the cabinet.
@@ -69,7 +69,6 @@ export async function onRequestPost({ request, env }) {
   if (honeypot) return json({ ok: true, id: 'stl_ok' });   // bot: fake success, store nothing
 
   if (!name)    return json({ error: 'name required' }, 400);
-  if (!patreon) return json({ error: 'Patreon email or handle required' }, 400);
   if (!gamea || !gameb) return json({ error: 'name both games' }, 400);
   if (twist.length < 15) {
     return json({ error: 'tell us the twist — that is the part that decides it' }, 400);
