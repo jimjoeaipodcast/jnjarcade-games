@@ -2079,7 +2079,7 @@ function theCountAttract(ctx, w, h, t, world, s) {
   // tools/show/record_thecount_gameplay.py — genuine taps through the game's own tapWorld
   // hook, so the clip is a real first night: punters on the machines, a cabinet emptied
   // into the apron, the walk to the safe, the ledger opening, a second machine bought.
-  videoAttract(ctx, w, h, t, s, 'assets/footage/the-count-attract.mp4?v=1', '#141005');
+  videoAttract(ctx, w, h, t, s, 'assets/footage/the-count-attract.mp4?v=2', '#141005');
 }
 
 function onairAttract(ctx, w, h, t, world, s) {
@@ -2094,6 +2094,7 @@ function onairAttract(ctx, w, h, t, world, s) {
     v.src = 'assets/footage/jnj-on-air-attract.mp4?v=3';   // bump whenever the clip changes
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
+    attachHiddenVideo(v);
     v.play().catch(() => {});
     s.video = v;
   }
@@ -2384,6 +2385,22 @@ function angryWormsAttract(ctx, w, h, t, world, s) {
   ctx.fillText('ANGRY WORMS', w/2, h * 0.92);
 }
 
+// Osimo 2026-09-20: "on iOS iPhone the cassette... showing just as still frames." All three
+// cassette-video sites below create the <video> with document.createElement and never insert
+// it into the page — it only ever existed as a ctx.drawImage() source. Chrome decodes a
+// detached video's frames regardless; Safari/iOS is known to suspend decoding a media element
+// that isn't actually in the render tree, so play()/readyState/videoWidth all report fine and
+// the FIRST frame paints, but it never advances — exactly "a still frame". Fix: really attach
+// it, laid out with real (if tiny, offscreen) dimensions rather than display:none, which is
+// what keeps Safari treating it as a live element instead of one it can freely deprioritise.
+function attachHiddenVideo(v) {
+  v.style.position = 'fixed';
+  v.style.left = '-9999px'; v.style.top = '0';
+  v.style.width = '2px'; v.style.height = '2px';
+  v.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(v);
+  return v;
+}
 /* Shared video-backed attract renderer. Three cabinets now show a real recorded
    playthrough instead of a hand-drawn mini-scene (Osimo: "record some actual game play...
    rather than those moving squares and basic surroundings"). Draws the clip's current
@@ -2397,6 +2414,7 @@ function videoAttract(ctx, w, h, t, s, src, bg) {
     v.src = src;                      // bump the ?v= whenever the clip is re-recorded
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
+    attachHiddenVideo(v);
     v.play().catch(() => {});
     s.video = v;
   }
@@ -2454,6 +2472,7 @@ function pinVadersAttract(ctx, w, h, t, world, s) {
     // pressing the flippers repeatedly with little to no result" complaint on v2.
     v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
     v.preload = 'auto';
+    attachHiddenVideo(v);
     v.play().catch(() => {});
     s.video = v;
   }
