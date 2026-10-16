@@ -26,3 +26,11 @@
 # Game pages change every release
 /games/*
   Cache-Control: no-cache, must-revalidate
+
+# JnJ Noir room — the player page and its story API must never be cached
+/noir
+  Cache-Control: no-cache, must-revalidate
+/noir.html
+  Cache-Control: no-cache, must-revalidate
+/api/noir-story
+  Cache-Control: no-store
